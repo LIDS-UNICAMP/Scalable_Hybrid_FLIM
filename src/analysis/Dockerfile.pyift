@@ -1,0 +1,63 @@
+# Dockerfile.pyift — Ubuntu-based image with LIDS-UNICAMP pyift (C extension).
+#
+# Built automatically by PyiftLoader when the Docker fallback is first needed.
+# --platform linux/amd64 is required because the pyift wheel ships as x86_64 only.
+#
+# Build (done automatically, but can be done manually):
+#   docker build --platform linux/amd64 -t pyift-lab-loader:latest \
+#       -f src/analysis/Dockerfile.pyift src/analysis/
+
+FROM --platform=linux/amd64 python:3.11-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget curl unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies needed by the worker and pyift.
+RUN pip install --no-cache-dir numpy requests
+
+# Download the LIDS-UNICAMP pyift wheel bundle from Google Drive.
+# This is the same source used by the project's Colab notebook.
+RUN python3 - << 'PYEOF'
+import requests
+from io import BytesIO
+from zipfile import ZipFile
+
+url = (
+    "https://drive.usercontent.google.com/download"
+    "?id=1ddlcSqwli4UIFlJvqhVLUc8kduFlsXDj"
+    "&export=download&authuser=0&confirm=yes"
+)
+print("Downloading pyift wheel bundle...", flush=True)
+r = requests.get(url, stream=True, timeout=120)
+r.raise_for_status()
+ZipFile(BytesIO(r.content)).extractall("/opt/pyift_bundle")
+print("Download complete.", flush=True)
+PYEOF
+
+# Install the Python 3.11 wheel.
+RUN pip install --no-cache-dir \
+    /opt/pyift_bundle/pyift_whl/3_11/pyift-0.1-cp311-cp311-linux_x86_64.whl
+
+# Symlink the compiled C extension into the installed package directory.
+# The wheel installs the Python wrapper but the .so lives in the zip separately.
+RUN python3 - << 'PYEOF'
+import glob, shutil, site
+
+sp = site.getsitepackages()[0]
+so_files = glob.glob("/opt/pyift_bundle/pyift_whl/3_11/pyift/_pyift*.so")
+if not so_files:
+    raise RuntimeError("_pyift*.so not found in bundle")
+for so in so_files:
+    dest = f"{sp}/pyift/{so.split('/')[-1]}"
+    shutil.copy(so, dest)
+    print(f"Installed: {dest}", flush=True)
+PYEOF
+
+# Verify the import works before finishing the build.
+RUN python3 -c "import pyift.pyift as ift; print('pyift.pyift OK:', dir(ift)[:5])"
+
+# Copy the worker script.
+COPY _docker_pyift_worker.py /worker.py
+
+ENTRYPOINT ["python3", "/worker.py"]

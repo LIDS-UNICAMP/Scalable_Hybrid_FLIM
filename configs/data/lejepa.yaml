@@ -1,0 +1,12 @@
+# Standard single-view dataset config.
+# Use for MAE pretraining or supervised fine-tuning.
+data:
+  class_path: src.data_modules.LejepaDataModule
+  init_args:
+    data_dir: data/flim
+    batch_size: 1
+    image_size: 224
+    num_workers: 1
+    val_split: 0.1
+    ssl_mode: false   # single view — (image, label)
+    pin_memory: true

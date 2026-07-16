@@ -1,0 +1,47 @@
+# Registro de retry — lote distill_2l (2-layer distillation, proj 1x1 BN2d 256->1280)
+# Estes experimentos foram RELANCADOS (retry) em 2026-06-01: o lote original
+# crashou por disco cheio (OSError: [Errno 28] No space left on device) ao salvar
+# checkpoints. Foram RETOMADOS do inicio interrompido via resume do `last.ckpt`
+# (nao recomecaram do zero). Tag: [retry]
+date: 2026-06-01
+tag: retry
+proj_type: 2l_1x1_bn2d_256_1280
+distillation_type: direct
+
+reason: |
+  Lote original (tmux session `distill_2l`) falhou com "No space left on device"
+  durante o salvamento de checkpoints (/dados a 100%). 17 runs ficaram incompletos
+  (run_metadata.json vazio). Apos liberar disco, foram relancados em retry com resume.
+
+resume:
+  enabled: true
+  source: checkpoints/last.ckpt   # por run, dentro de artifacts/distillation/<run>/
+  code_change: src/modules/distillation_twolayer_module.py  # passa ckpt_path=last.ckpt ao trainer.fit
+  note: |
+    Se o run nao tiver last.ckpt (crash precoce), treina do zero — caso de
+    distillation_protozoan_split3_pct5_2l_1x1_BN2d_256_1280.
+
+launch_command: >-
+  python scripts/distillation_conv_ray.py --proj-type 2l_1x1_bn2d_256_1280
+  --num-gpus 2 --gpu-slots 8,9 --distillation-types direct
+  --retry --skip-existing --wandb-update
+
+# Experimentos relancados (17). Notacao: <dataset>_split<N>_pct<P>
+experiments:
+  - distillation_eggs_split3_pct100_2l_1x1_BN2d_256_1280
+  - distillation_larvae_split2_pct100_2l_1x1_BN2d_256_1280
+  - distillation_larvae_split3_pct100_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split1_pct1_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split1_pct5_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split1_pct25_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split1_pct50_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split1_pct75_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split1_pct100_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split2_pct1_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split2_pct5_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split2_pct25_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split2_pct50_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split2_pct75_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split2_pct100_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split3_pct1_2l_1x1_BN2d_256_1280
+  - distillation_protozoan_split3_pct5_2l_1x1_BN2d_256_1280  # sem last.ckpt — do zero

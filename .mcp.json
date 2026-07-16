@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "drawio": {
+      "command": "/home/paim/.nvm/versions/node/v20.20.2/bin/npx",
+      "args": ["-y", "@drawio/mcp"]
+    }
+  }
+}

@@ -1,0 +1,25 @@
+# SVM evaluation config for lejepa_line_protozoan-cysts_split_3_pct_5_model_he
+# wandb_run_id: 9pw5l8rd
+experiment:
+  wandb_run_id: 9pw5l8rd
+  name: lejepa_line_protozoan-cysts_split_3_pct_5_model_he
+  dataset_name: protozoan-cysts
+  split_id: 3
+  percentage: 5
+  initialization_type: he
+  num_classes: 7
+
+svm:
+  kernel: linear
+  C: 100.0
+  gamma: auto
+  degree: 3
+  max_iter: 10000
+  coef0: 0
+  decision_function_shape: ovo
+
+evaluation:
+  image_size: 200
+  batch_size: 32
+  num_workers: 4
+  loader: ift_lab

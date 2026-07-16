@@ -1,0 +1,14 @@
+# Supervised classification fine-tuning on top of SSL encoder.
+# Pair with: configs/data/flim.yaml (ssl_mode: false)
+# Set checkpoint_path to the .ckpt file from your SSL pretraining run.
+model:
+  class_path: src.modules.ClassificationFinetuneModule
+  init_args:
+    arch: resnet50           # Must match SSL pretraining arch
+    num_classes: 10          # Adjust to your dataset
+    checkpoint_path: null    # e.g. "checkpoints/lejepa-epoch=099.ckpt"
+    freeze_encoder: true     # Linear probe mode
+    unfreeze_norms: true
+    lr: 1.0e-3
+    weight_decay: 1.0e-4
+    max_epochs: 50

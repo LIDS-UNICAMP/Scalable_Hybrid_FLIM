@@ -1,0 +1,14 @@
+run_id: t8z3y5wl
+experiment_name: lejepa_line_protozoan-cysts_split_1_pct_75_model_trunc_normal
+dataset_name: protozoan-cysts
+split: 1
+percentage: 75
+initialization_type: trunc_normal
+freeze_encoder: false
+max_epochs: 1000
+patience: 50
+lr: 0.001
+weight_decay: 0.0001
+batch_size: 32
+hidden_dim: 256
+dropout: 0.3

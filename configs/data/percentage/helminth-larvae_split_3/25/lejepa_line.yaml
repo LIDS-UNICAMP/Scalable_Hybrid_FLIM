@@ -1,0 +1,22 @@
+# Data config for the LeJEPA Line pipeline — single parasite, single split.
+# Parasite : helminth-larvae_split_3
+# Split    : 3
+# Percentage: 25
+#
+# YAML base directory:
+#   configs/data/percentage/helminth-larvae_split_3/25/
+data:
+  class_path: src.data_modules.parasite_data_module_lejepa_splited.ParasiteLejepaDataModuleSplited
+  init_args:
+    parasite_name: helminth-larvae_split_3
+    split: 3
+    percentage: 25
+    batch_size: 32
+    num_workers: 8
+    loader: ift_lab
+    image_size: 200
+    V_train: 12
+    V_eval: 1
+    pin_memory: true
+    persistent_workers: true
+    use_mask: false

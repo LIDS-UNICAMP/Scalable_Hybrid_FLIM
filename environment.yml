@@ -1,0 +1,17 @@
+name: scalable_FLIM
+
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pytorch=2.2
+  - torchvision
+  - pytorch-cuda=12.1
+  - pip
+  # Remaining Python dependencies are installed from requirements.txt via uv
+  # (see setup_env.sh). The PyTorch/CUDA stack stays on the conda layer above
+  # so the correct CUDA-enabled build is used.

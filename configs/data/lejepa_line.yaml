@@ -1,0 +1,18 @@
+# Data config for the LeJEPA Line pipeline.
+# Uses the parasito dataset with FLIM-compatible loading (ift_lab).
+# Multi-view SSL mode.
+data:
+  class_path: src.data_modules.parasite_to_lejepa.ParasiteLejepaDataModule
+  init_args:
+    split: 1
+    percentage: 50          # null = full split; or 1, 5, 25, 50, 75, 100
+    batch_size: 32
+    num_workers: 4
+    loader: ift_lab
+    image_size: 200
+    V_train: 12
+    V_eval: 1
+    pin_memory: true
+    persistent_workers: true
+    use_mask: false         # Set true to apply masks (image = image * mask)
+

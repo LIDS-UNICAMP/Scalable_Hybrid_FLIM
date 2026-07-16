@@ -1,0 +1,59 @@
+seed_everything: 42
+
+# Toggle Weights & Biases logging from config/CLI.
+# Example override: --use_wandb false
+use_wandb: true
+
+trainer:
+  accelerator: gpu
+  devices: 1
+  max_epochs: 1000
+  log_every_n_steps: 1
+  logger:
+    class_path: lightning.pytorch.loggers.WandbLogger
+    init_args:
+      project: flim-ssl
+      save_dir: logs
+      name: flim-ssl
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/loss
+        save_top_k: 1
+        save_last: true
+        mode: min
+        filename: best
+    # NOTE: `best` (above) already saves the lowest-val/loss checkpoint, so it
+    # is the best-model-by-loss artifact. A second ModelCheckpoint on val/loss
+    # would collide with it (Lightning derives the callback state_key from
+    # monitor+mode and forbids duplicates), so we do NOT add a separate one.
+    # Best-by-κ-with-projector checkpoint (highest val/kappa_with_proj).
+    # Mirrors the distillation best_knn_kappa pattern; selects the encoder
+    # whose projector-transformed embeddings score the best downstream κ.
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/kappa_with_proj
+        save_top_k: 1
+        save_last: false
+        mode: max
+        filename: best_model_kappa_with_proj
+    # Best-by-κ-without-projector checkpoint (highest val/kappa_no_proj).
+    # Selects the encoder whose raw backbone embeddings score the best
+    # downstream κ (bypassing the projector).
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/kappa_no_proj
+        save_top_k: 1
+        save_last: false
+        mode: max
+        filename: best_model_kappa_without_proj
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: val/loss
+        patience: 50
+        mode: min
+        verbose: true
+    - class_path: lightning.pytorch.callbacks.LearningRateMonitor
+      init_args:
+        logging_interval: step
+    - class_path: lightning.pytorch.callbacks.RichProgressBar

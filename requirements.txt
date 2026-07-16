@@ -1,0 +1,27 @@
+lightning>=2.0
+torch>=2.2
+torchvision
+timm>=1.0
+transformers>=4.38,<4.46  # 5.x requires torch>=2.4; keep compatible with conda torch 2.2
+albumentations
+wandb>=0.16
+torchmetrics
+jsonargparse[signatures]
+omegaconf
+PyYAML
+pyrootutils
+python-dotenv
+opencv-python-headless
+numpy>=1.24,<2  # torch 2.2 is built against NumPy 1.x; NumPy 2.x breaks its ABI
+scipy
+scikit-learn
+scikit-image
+tqdm
+Pillow
+pandas
+ray[tune]>=2.0
+matplotlib
+seaborn
+notebook
+ipywidgets
+debugpy

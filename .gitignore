@@ -1,0 +1,94 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+CLAUDE.md
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+artifacts_view/
+env/
+ENV/
+example_hawk/
+data_FLIM.zip
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# ML / training artifacts
+wandb/
+lightning_logs/
+checkpoints/
+outputs/
+logs/
+runs/
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.h5
+*.hdf5
+data/flim/
+data/organmnist3d/
+data/to_modules/
+data/to_mateus/
+data/reports_felipe/
+data/coconut/
+features_repository/
+graphify-out/
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# AI tool files
+.claude/
+
+# Environment variables
+.env
+.env.*
+
+# Profiling
+*.prof
+/pyift_whl/
+/data/to_modules/new_split_parasito/helminth-larvae/masks/
+/experiment_report_20260304_182803.log
+/util_experiment_report_20260304_105931.log
+/svm_results.csv
+/plots/
+results/
+artifacts/
+data/images_isic_2028
+# analises_wandb_training — só os arquivos .md são valiosos; o resto é reproduzível
+analises_wandb_training/wandb_training_curves/
+analises_wandb_training/**/*.csv
+analises_wandb_training/**/*.json
+analises_wandb_training/**/*.py
+
+# LaTeX build artifacts
+*.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc

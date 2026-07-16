@@ -1,0 +1,25 @@
+# SVM evaluation config for lejepa_line_helminth-eggs_split_1_pct_1_model_he
+# wandb_run_id: 4lm912tb
+experiment:
+  wandb_run_id: 4lm912tb
+  name: lejepa_line_helminth-eggs_split_1_pct_1_model_he
+  dataset_name: helminth-eggs
+  split_id: 1
+  percentage: 1
+  initialization_type: he
+  num_classes: 9
+
+svm:
+  kernel: linear
+  C: 100.0
+  gamma: auto
+  degree: 3
+  max_iter: 10000
+  coef0: 0
+  decision_function_shape: ovo
+
+evaluation:
+  image_size: 200
+  batch_size: 32
+  num_workers: 4
+  loader: ift_lab

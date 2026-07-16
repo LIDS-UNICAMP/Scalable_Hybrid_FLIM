@@ -1,0 +1,24 @@
+# Large data and model artifacts — mount at runtime with -v $(pwd):/workspace
+logs/
+data/
+results/
+wandb/
+wandb_runs/
+
+# pyift wheel — downloaded inside the Dockerfile from Google Drive
+pyift_whl/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Git
+.git/
+.gitignore
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/

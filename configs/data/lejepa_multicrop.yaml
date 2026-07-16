@@ -1,0 +1,16 @@
+# Multi-crop dataset config for BYOL / LeJEPA pretraining.
+# Returns List[Tensor] views per image instead of a single tensor.
+data:
+  class_path: src.data_modules.LejepaDataModule
+  init_args:
+    data_dir: data/flim
+    batch_size: 1
+    image_size: 224
+    num_workers: 1
+    val_split: 0.1
+    ssl_mode: true    # multi-crop views — (List[Tensor], label)
+    n_global: 2
+    n_local: 6
+    global_size: 224
+    local_size: 9611
+    pin_memory: False

@@ -1,0 +1,14 @@
+run_id: mnbiscld
+experiment_name: lejepa_line_helminth-larvae_split_2_pct_50_model_trunc_normal
+dataset_name: helminth-larvae
+split: 2
+percentage: 50
+initialization_type: trunc_normal
+freeze_encoder: true
+max_epochs: 1000
+patience: 50
+lr: 0.001
+weight_decay: 0.0001
+batch_size: 32
+hidden_dim: 256
+dropout: 0.3
