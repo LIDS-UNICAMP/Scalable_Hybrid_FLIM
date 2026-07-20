@@ -44,6 +44,7 @@ if _ROOT not in sys.path:
 from src.models.distillation import (
     KLDistillationLoss,
     MSEDistillationLoss,
+    CosineDistillationLoss,
     TwoLayer1x1ConvBN2dDistillationProjectionHead,
     FrozenTeacher,
     FrozenTeacherCheckpointMixin,
@@ -70,7 +71,7 @@ _log = logging.getLogger(__name__)
 
 _SIGREG_TYPES      = {"simple": SimpleSIGReg, "real": RealSIGReg}
 ENCODER_INITS      = ("random", "he", "xavier", "trunc_normal", "flim")
-DISTILLATION_TYPES = ("direct", "hybrid")
+DISTILLATION_TYPES = ("direct", "direct_cosine", "hybrid")
 
 _PROJ_LABEL = "Conv1x1(48→256→1280)+BN2d+GELU×2"
 
@@ -175,6 +176,8 @@ class DistillationTwoLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
 
         if distillation_type == "direct":
             self.mse_loss = MSEDistillationLoss()
+        elif distillation_type == "direct_cosine":
+            self.mse_loss = CosineDistillationLoss()
         else:
             self.kd_loss = KLDistillationLoss(temperature=temperature)
             if distillation_type == "hybrid":
@@ -245,7 +248,7 @@ class DistillationTwoLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
 
         self.log("train/lr", self.optimizers().param_groups[0]["lr"], on_step=True, on_epoch=False)
 
-        if self.hparams.distillation_type == "direct":
+        if self.hparams.distillation_type in ("direct", "direct_cosine"):
             loss = self.mse_loss(student_proj, teacher_emb)
             self.log("train/loss_mse", loss, prog_bar=True,  on_step=True, on_epoch=True)
             self.log("train/loss",     loss, prog_bar=False, on_step=True, on_epoch=True)
@@ -272,7 +275,7 @@ class DistillationTwoLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
         student_proj = self.proj_kd(feat_map)
         teacher_emb  = self._teacher_emb(first_view)
 
-        if self.hparams.distillation_type == "direct":
+        if self.hparams.distillation_type in ("direct", "direct_cosine"):
             loss = self.mse_loss(student_proj, teacher_emb)
             self.log("val/loss_mse", loss, on_epoch=True)
             self.log("val/loss",     loss, prog_bar=True, on_epoch=True)

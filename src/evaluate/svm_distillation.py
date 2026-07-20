@@ -63,7 +63,12 @@ if _ROOT not in sys.path:
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
 from src.metrics.classification import compute_metrics
-from src.modules.distillation_module import DistillationModule
+from src.models.lejepa_flim import LeJEPAFLIMModel
+from src.models.models import (
+    parse_architecture,
+    get_actual_channels_from_weights,
+    override_arch_channels,
+)
 
 _ARTIFACTS_DIR = os.path.join(_ROOT, "artifacts", "distillation")
 _RESULTS_DIR   = os.path.join(_ROOT, "results")
@@ -82,6 +87,64 @@ _DATASET_PARASITE_NAME: dict[str, str] = {
     "larvae":    "helminth-larvae_split_2",
     "protozoan": "protozoan-cysts_split_2",
 }
+
+
+# ── Student-only checkpoint loader ─────────────────────────────────────────────
+
+def _load_student_from_ckpt(ckpt_path: str, device: torch.device) -> LeJEPAFLIMModel:
+    """Reconstrói só o student (LeJEPAFLIMModel) do checkpoint, sem o teacher.
+
+    Substitui ``DistillationModule.load_from_checkpoint``, que instanciava o
+    FrozenTeacher (I-JEPA ViT-H/14 ~2.5GB) e fazia strict-load das chaves
+    ``teacher.*`` — o que quebra em checkpoints já enxugados (teacher removido do
+    state_dict). O teacher NÃO é necessário para inferência: só o student vira
+    embeddings para o SVM. Se um dia precisar do teacher (treino), ele é
+    reconstruído a partir do ``teacher_model_id`` nos hparams, não do ckpt.
+
+    Modelado em ``svm_distillation_conv._load_student_from_ckpt``. Carrega tudo na
+    CPU e filtra apenas ``student.*`` (funciona tanto no ckpt enxugado quanto no
+    antigo com teacher embutido — as chaves ``teacher.*``, se houver, são ignoradas).
+    """
+    ckpt = torch.load(ckpt_path, map_location="cpu")
+
+    hparams           = ckpt.get("hyper_parameters", {})
+    arch_json         = hparams.get("arch_json", "")
+    in_channels       = hparams.get("in_channels", 3)
+    proj_dim          = hparams.get("proj_dim", 256)
+    proj_hidden       = hparams.get("proj_hidden", 2048)
+    encoder_init      = hparams.get("encoder_init", "trunc_normal")
+    flim_weights_path = hparams.get("flim_weights_path", None)
+
+    if not arch_json:
+        raise KeyError(
+            f"hyper_parameters['arch_json'] ausente em {ckpt_path} — não dá para "
+            "reconstruir o student sem a arquitetura."
+        )
+
+    arch = parse_architecture(arch_json)
+    if encoder_init == "flim" and flim_weights_path:
+        channels = get_actual_channels_from_weights(flim_weights_path, arch, in_channels)
+        arch = override_arch_channels(arch, channels)
+
+    student = LeJEPAFLIMModel(
+        arch=arch,
+        in_channels=in_channels,
+        proj_dim=proj_dim,
+        proj_hidden=proj_hidden,
+    )
+
+    full_sd = ckpt["state_dict"]
+    student_sd = {
+        k[len("student."):]: v
+        for k, v in full_sd.items()
+        if k.startswith("student.")
+    }
+    if not student_sd:
+        raise KeyError(
+            f"nenhuma chave 'student.*' no state_dict de {ckpt_path} — checkpoint inválido."
+        )
+    student.load_state_dict(student_sd, strict=True)
+    return student.to(device)
 
 
 # ── Dataset helpers ────────────────────────────────────────────────────────────
@@ -352,12 +415,11 @@ def main() -> None:
         parasite_name = _DATASET_PARASITE_NAME.get(dataset, dataset)
 
         try:
-            # ── Load student model from checkpoint ─────────────────────────
-            module = DistillationModule.load_from_checkpoint(
-                ckpt_path, map_location="cpu"
-            )
-            module.eval()
-            student = module.student
+            # ── Load student-only (sem teacher) do checkpoint ──────────────
+            # Carrega apenas student.* — funciona em ckpts enxugados (teacher
+            # removido) e nos antigos. O teacher I-JEPA nunca é instanciado.
+            student = _load_student_from_ckpt(ckpt_path, DEVICE)
+            student.eval()
             for p in student.parameters():
                 p.requires_grad_(False)
 

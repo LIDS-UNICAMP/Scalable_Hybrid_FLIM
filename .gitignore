@@ -45,6 +45,11 @@ data/to_modules/
 data/to_mateus/
 data/reports_felipe/
 data/coconut/
+# symlinks para os dados reais na pasta irma scalable_FLIM_self_supervised (machine-specific)
+/data/flim
+/data/reports_felipe
+/data/to_mateus
+/data/to_modules
 features_repository/
 graphify-out/
 # Editor
@@ -78,6 +83,9 @@ analises_wandb_training/wandb_training_curves/
 analises_wandb_training/**/*.csv
 analises_wandb_training/**/*.json
 analises_wandb_training/**/*.py
+
+# graphify (generated knowledge graph, reproducible via /graphify)
+graphify-out/
 
 # LaTeX build artifacts
 *.pdf

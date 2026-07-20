@@ -725,6 +725,69 @@ def _normalize_distill_2l_400k() -> pd.DataFrame | None:
     return result
 
 
+# ── Source 9: svm_flim_residual_eggs.csv ─────────────────────────────────────
+
+# Long dataset names (SSL naming) → canonical short names used by the plots.
+_LONG_DATASET_MAP: dict[str, str] = {
+    "helminth-eggs":   "eggs",
+    "helminth-larvae": "larvae",
+    "protozoan-cysts": "protozoan",
+}
+
+
+def _normalize_flim_residual() -> pd.DataFrame | None:
+    """Normalize results/svm_flim_residual_eggs.csv — FLIM residual encoders (eggs).
+
+    Keeps the per-variant method names already present in the CSV
+    (SVM_FLIMResidual_1_3 / SVM_FLIMResidual_2_3), aggregating mean ± std across
+    splits per (method, dataset, pretrained_pct). Maps dataset_name
+    (helminth-eggs) to the canonical short name (eggs). Skips non-ok / NaN rows.
+    Returns None if the file is absent.
+    """
+    src = _ROOT / "results" / "svm_flim_residual_eggs.csv"
+    if not src.exists():
+        print("[SKIP] svm_flim_residual_eggs.csv não encontrado — "
+              "rode svm_flim_residual.py --flim_residual_assessment primeiro")
+        return None
+
+    df = pd.read_csv(src)
+    if "status" in df.columns:
+        df = df[df["status"] == "ok"].copy()
+    df = df[df["kappa"].notna()].copy()  # ignore NaN
+    if df.empty:
+        print("[SKIP] svm_flim_residual_eggs.csv has no usable rows")
+        return None
+
+    df["dataset_short"]  = df["dataset_name"].map(
+        lambda d: _LONG_DATASET_MAP.get(d, d)
+    )
+    df["pretrained_pct"] = df["percentage"].astype(int)
+
+    agg_rows: list[dict] = []
+    for (method, dataset_short, pct), grp in df.groupby(
+        ["method", "dataset_short", "pretrained_pct"], sort=False
+    ):
+        n = len(grp)
+        agg_rows.append({
+            "method":         method,
+            "init":           "flim",
+            "dataset_short":  dataset_short,
+            "pretrained_pct": int(pct),
+            "n_splits":       n,
+            "kappa":          grp["kappa"].mean(),
+            "kappa_std":      grp["kappa"].std(ddof=1) if n > 1 else 0.0,
+            "acc":            grp["acc"].mean(),
+            "acc_std":        grp["acc"].std(ddof=1) if n > 1 else 0.0,
+            "f1":             grp["f1"].mean(),
+            "f1_std":         grp["f1"].std(ddof=1) if n > 1 else 0.0,
+        })
+
+    result = pd.DataFrame(agg_rows, columns=_CANONICAL_COLS)
+    print(f"[NORM] FLIM residual (1_3/2_3): {len(result)} rows "
+          f"from results/svm_flim_residual_eggs.csv")
+    return result
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def _safe(fn, partial: bool):
@@ -776,6 +839,7 @@ def main() -> None:
     distil_2l400k_df      = _safe(_normalize_distill_2l_400k, partial)
     distil_2l400k_flim_df = _safe(_normalize_distill_2l_400k_flim, partial)
     distil_2l400k_flim_nonorm_df = _safe(_normalize_distill_2l_400k_flim_nonorm, partial)
+    flim_residual_df  = _safe(_normalize_flim_residual, partial)
 
     # ── Save normalized FLIM SVM aggregated (if available) ────────────────────
     if flim_df is not None:
@@ -807,6 +871,8 @@ def main() -> None:
         dfs.append(distil_2l400k_flim_df)
     if distil_2l400k_flim_nonorm_df is not None:
         dfs.append(distil_2l400k_flim_nonorm_df)
+    if flim_residual_df is not None:
+        dfs.append(flim_residual_df)
 
     if not dfs:
         print("[ERROR] No data sources available. Nothing to save.")

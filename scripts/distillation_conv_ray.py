@@ -102,7 +102,7 @@ except ImportError as _e:
 _ALL_DATASETS      = ["eggs", "larvae", "protozoan"]
 _ALL_SPLITS        = [1, 2, 3]
 _ALL_PCTS          = [1, 5, 25, 50, 75, 100]
-_ALL_DIST_TYPES    = ["direct", "hybrid"]
+_ALL_DIST_TYPES    = ["direct", "direct_cosine", "hybrid"]
 _ALL_INITS         = ["trunc_normal"]
 
 # ── Projection head variants ───────────────────────────────────────────────────
@@ -395,6 +395,7 @@ def build_experiment_grid(
     use_flim_init: bool = False,
     num_workers:   int  = 4,
     no_imagenet_norm: bool = False,
+    run_prefix:    str  = "",
 ) -> tuple[list[dict], list[dict]]:
     valid: list[dict] = []
     skipped: list[dict] = []
@@ -409,6 +410,8 @@ def build_experiment_grid(
                         eff_flim_init = use_flim_init or proj_type in _FLIM_INIT_PROJ_TYPES
                         actual_init = "flim" if eff_flim_init else init
                         run_name = _run_name(dataset, split, pct, dist_type, proj_type, eff_flim_init, no_imagenet_norm=no_imagenet_norm)
+                        if run_prefix:
+                            run_name = f"{run_prefix}{run_name}"
                         ok, reason = validate_experiment(dataset, split, pct)
 
                         base = {
@@ -1048,6 +1051,16 @@ def main() -> None:
             "Normalize on ift_lab inputs (correct for FLIM init — input stays LAB[0,1])."
         ),
     )
+    # ── Run naming ──────────────────────────────────────────────────────────
+    parser.add_argument(
+        "--run-prefix", type=str, default="", metavar="PREFIX",
+        help=(
+            "Prepended to every run_name (and therefore to the W&B display name and "
+            "the local artifacts/distillation/<run_name>/ path). Use this to mark a "
+            "batch as a distinct new set of experiments in W&B, e.g. "
+            "--run-prefix 'cosine_v1_' -> 'cosine_v1_distillation_eggs_split1_pct1_...'."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -1101,6 +1114,7 @@ def main() -> None:
         use_flim_init=args.flim_init,
         num_workers=args.num_workers,
         no_imagenet_norm=args.no_imagenet_norm,
+        run_prefix=args.run_prefix,
     )
 
     n_skip_existing = sum(1 for s in skipped if s.get("status") == "skipped_existing")

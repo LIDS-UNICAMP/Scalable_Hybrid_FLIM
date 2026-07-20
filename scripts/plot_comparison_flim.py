@@ -213,8 +213,13 @@ def _filter(unified: pd.DataFrame) -> pd.DataFrame:
         (unified["method"] == "SVM_Distill_Proj1280") |           # results/svm_distill_proj1280_results.csv
         (unified["method"] == "SVM_Distill_3x3BN") |              # results/svm_proj1280_3x3_BN2d_results.csv (trunc_normal)
         (unified["method"] == "SVM_Distill_1x1BN") |              # results/svm_proj1280_1x1_BN2d_results.csv (trunc_normal)
+        (unified["method"] == "SVM_Distill_1x1BN_nonorm") |
         (unified["method"] == "SVM_Distill_2l400K") |             # results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv
+        (unified["method"] == "SVM_Distill_2l400K_flim_nonorm") |
+        (unified["method"] == "SVM_Distill_1x1BN_flim_frozen_eval_knn") |
         (unified["method"] == "SVM_Distill_1x1BN_flim_frozen_eval_loss") |  # results/svm_distillation_conv_flim_frozen_results.csv
+        (unified["method"] == "SVM_FLIMResidual_1_3") |
+        (unified["method"] == "SVM_FLIMResidual_2_3") |
         ((unified["method"] == "SVM_LeJEPA") & (unified["init"] == "trunc_normal"))  # artifacts/SVM/*/*/metrics_SVM_*.csv
     )
     return unified[mask].copy()

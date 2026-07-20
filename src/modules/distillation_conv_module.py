@@ -71,6 +71,7 @@ if _ROOT not in sys.path:
 from src.models.distillation import (
     KLDistillationLoss,
     MSEDistillationLoss,
+    CosineDistillationLoss,
     ConvDistillationProjectionHead,
     StudentClassificationHead,
     FrozenTeacher,
@@ -97,7 +98,7 @@ _log = logging.getLogger(__name__)
 
 _SIGREG_TYPES      = {"simple": SimpleSIGReg, "real": RealSIGReg}
 ENCODER_INITS      = ("random", "he", "xavier", "trunc_normal", "flim")
-DISTILLATION_TYPES = ("direct", "hybrid")
+DISTILLATION_TYPES = ("direct", "direct_cosine", "hybrid")
 
 
 class DistillationConvModule(pl.LightningModule):
@@ -227,6 +228,10 @@ class DistillationConvModule(pl.LightningModule):
         if distillation_type == "direct":
             self.mse_loss = MSEDistillationLoss()
 
+        # ── direct_cosine: cosine distance between conv-projected student and teacher
+        elif distillation_type == "direct_cosine":
+            self.mse_loss = CosineDistillationLoss()
+
         # ── hybrid: KL distillation + SSL ─────────────────────────────────
         else:
             self.kd_loss = KLDistillationLoss(temperature=temperature)
@@ -270,7 +275,7 @@ class DistillationConvModule(pl.LightningModule):
         opt = self.optimizers()
         self.log("train/lr", opt.param_groups[0]["lr"], on_step=True, on_epoch=False)
 
-        if self.hparams.distillation_type == "direct":
+        if self.hparams.distillation_type in ("direct", "direct_cosine"):
             loss = self.mse_loss(student_proj, teacher_emb)
             self.log("train/loss_mse", loss, prog_bar=True,  on_step=True, on_epoch=True)
             self.log("train/loss",     loss, prog_bar=False, on_step=True, on_epoch=True)
@@ -305,7 +310,7 @@ class DistillationConvModule(pl.LightningModule):
         student_proj = self.proj_kd(feat_map)
         teacher_emb  = self._teacher_emb(first_view)
 
-        if self.hparams.distillation_type == "direct":
+        if self.hparams.distillation_type in ("direct", "direct_cosine"):
             loss = self.mse_loss(student_proj, teacher_emb)
             self.log("val/loss_mse", loss, prog_bar=False, on_epoch=True)
             self.log("val/loss",     loss, prog_bar=True,  on_epoch=True)

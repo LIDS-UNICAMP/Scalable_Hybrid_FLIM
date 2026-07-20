@@ -167,6 +167,137 @@ class Encoder(nn.Module):
         return x
 
 
+# ─── Residual FLIM encoder ────────────────────────────────────────────────────
+#
+# conv1/conv2/conv3 stay byte-identical to the plain FLIM encoder — no new or
+# retrained weights anywhere. The residual variants only differ in which
+# intermediate activation gets concatenated onto conv3's own (untouched)
+# output to form the final embedding: no summation, no gradient, no learning.
+
+
+class _StashConv(nn.Module):
+    """Wraps a conv block and stashes its output into a shared dict.
+
+    Needed because the SVM evaluators (``src/utils/evaluate.py``) call
+    ``model.conv1`` / ``model.conv2`` / ``model.conv3`` *individually*, so the
+    residual conv3 cannot receive conv1's feature map through ``forward``.
+    ``conv1`` therefore stashes its output so the residual conv3 can read it
+    (only needed for ``mode == "1_3"``; conv2's output is already conv3's own
+    input, so no stash is needed for ``mode == "2_3"``).
+    ``__getitem__`` delegates to the wrapped block so ``load_FLIM_encoder`` can
+    still access ``model_block[0]`` transparently.
+    """
+
+    def __init__(self, block: nn.Module, store: dict, key: str):
+        super().__init__()
+        self.block = block
+        self._store = store
+        self._key = key
+
+    def __getitem__(self, idx):
+        return self.block[idx]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.block(x)
+        self._store[self._key] = out
+        return out
+
+
+class _ResidualConv3(nn.Module):
+    """Wraps the unmodified, pretrained FLIM conv3 block.
+
+    Runs the exact original conv3 weights on its normal input (o2) to produce
+    o3, then concatenates a skip activation onto o3's *output* — never into
+    the convolution's input, so the pretrained kernel is never touched:
+
+    * ``mode == "1_3"``: concat(o3, o1) → 48 + 24 = 72 channels. o1 comes from
+      the shared stash written by conv1 (:class:`_StashConv`).
+    * ``mode == "2_3"``: concat(o3, o2) → 48 + 32 = 80 channels. o2 is this
+      block's own input, already available.
+
+    ``__getitem__`` delegates to the wrapped block so ``load_FLIM_encoder``
+    can load the pretrained conv3 kernels exactly like the other layers.
+    """
+
+    def __init__(self, block: nn.Module, store: dict, mode: str):
+        super().__init__()
+        self.block = block
+        self._store = store
+        self._mode = mode
+
+    def __getitem__(self, idx):
+        return self.block[idx]
+
+    def forward(self, o2: torch.Tensor) -> torch.Tensor:
+        o3 = self.block(o2)
+        skip = self._store["o1"] if self._mode == "1_3" else o2
+        skip_resized = nn.functional.adaptive_avg_pool2d(skip, o3.shape[-2:])
+        return torch.cat([o3, skip_resized], dim=1)
+
+
+class FLIMResidualEncoder(nn.Module):
+    """FLIM encoder with output-side residual concatenation (no new weights).
+
+    conv1/conv2/conv3 are the UNMODIFIED, pretrained FLIM blocks — loaded from
+    disk exactly like the plain FLIM baseline, with no reinstantiation and no
+    random initialization anywhere. The "residual" variants differ only in
+    which intermediate activation gets concatenated onto conv3's own,
+    untouched output to form the final embedding fed to the SVM:
+
+    * ``mode == "1_3"``: final = concat(conv3_out[48], conv1_out[24]) → 72 ch.
+    * ``mode == "2_3"``: final = concat(conv3_out[48], conv2_out[32]) → 80 ch.
+
+    ``forward`` returns the (un-pooled) concatenated feature map.
+    """
+
+    def __init__(self, arch: dict, mode: str, in_channels: int = 3):
+        super().__init__()
+        if mode not in ("1_3", "2_3"):
+            raise ValueError(f"mode must be '1_3' or '2_3', got {mode!r}")
+        self.arch = arch
+        self.mode = mode
+        self.n_layers = arch["nlayers"]
+        self._store: dict = {}
+
+        blocks = build_encoder_from_arch(arch, in_channels)
+
+        # conv1 must stash its output only when the skip needs o1 (mode 1_3).
+        if mode == "1_3":
+            self.conv1 = _StashConv(blocks["conv1"], self._store, "o1")
+        else:
+            self.conv1 = blocks["conv1"]
+        self.conv2 = blocks["conv2"]
+        self.conv3 = _ResidualConv3(blocks["conv3"], self._store, mode)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        o1 = self.conv1(x)   # stashes o1 into self._store when mode == "1_3"
+        o2 = self.conv2(o1)
+        o3 = self.conv3(o2)  # unmodified FLIM conv3 + output-side concat
+        return o3
+
+
+def build_flim_residual_encoder(
+    mode: str,
+    arch_json_path: str,
+    weights_path: str,
+    channels: Optional[List[int]] = None,
+    in_channels: int = 3,
+) -> "FLIMResidualEncoder":
+    """Instantiate a :class:`FLIMResidualEncoder` and load FLIM weights.
+
+    All layers (conv1, conv2, conv3) load the pretrained FLIM kernels
+    unchanged — the residual concatenation happens on conv3's output, so its
+    input channel count (and therefore its pretrained kernel shape) is never
+    altered.
+    """
+    arch = parse_architecture(arch_json_path)
+    if channels is None:
+        channels = get_channels_from_arch(arch, in_channels)
+    encoder = FLIMResidualEncoder(arch, mode, in_channels)
+    load_FLIM_encoder(encoder, arch_json_path, weights_path, channels)
+    return encoder
+
+
 # ─── MLP classification head ─────────────────────────────────────────────────
 
 
@@ -208,6 +339,57 @@ class ClassificationModel(nn.Module):
         channels = get_channels_from_arch(arch, in_channels)
         encoder_out_channels = channels[-1]
         self.head = MLPHead(encoder_out_channels, num_classes, hidden_dim, dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        features = self.encoder(x)
+        return self.head(features)
+
+
+# ─── Two-layer Sigmoid classification head ────────────────────────────────────
+
+
+class TwoLayerSigmoidHead(nn.Module):
+    """
+    Minimal 2-layer classification head with a Sigmoid hidden activation:
+
+        AdaptiveAvgPool2d(1) -> flatten -> Linear(in, hidden) -> Sigmoid
+            -> Linear(hidden, num_classes) -> Softmax(dim=1)
+
+    Unlike ``MLPHead`` (3 Linear layers, ReLU, Dropout), this is exactly the
+    2-layer Sigmoid architecture used by the FLIM-init classification
+    experiment: hidden defaults to ``in_features // 2`` (e.g. 48 -> 24).
+
+    ``forward`` returns post-Softmax class probabilities, not raw logits —
+    callers must use ``NLLLoss`` on ``log(probs)`` rather than
+    ``CrossEntropyLoss`` (which expects logits and applies its own softmax).
+    """
+
+    def __init__(self, in_features: int, num_classes: int, hidden_dim: Optional[int] = None):
+        super().__init__()
+        hidden_dim = hidden_dim if hidden_dim is not None else in_features // 2
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.layer1 = nn.Linear(in_features, hidden_dim)
+        self.sigmoid = nn.Sigmoid()
+        self.layer2 = nn.Linear(hidden_dim, num_classes)
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.sigmoid(self.layer1(x))
+        return self.softmax(self.layer2(x))
+
+
+class SigmoidClassificationModel(nn.Module):
+    """FLIM Encoder + TwoLayerSigmoidHead for direct supervised classification."""
+
+    def __init__(self, arch: dict, num_classes: int, in_channels: int = 3,
+                 hidden_dim: Optional[int] = None):
+        super().__init__()
+        self.encoder = Encoder(arch, in_channels)
+        channels = get_channels_from_arch(arch, in_channels)
+        encoder_out_channels = channels[-1]
+        self.head = TwoLayerSigmoidHead(encoder_out_channels, num_classes, hidden_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         features = self.encoder(x)
@@ -297,10 +479,15 @@ class AutoEncoderClassifier(nn.Module):
 
 
 def load_FLIM_encoder(model: nn.Module, arch_json: str, weights_path: str,
-                      channels: List[int]) -> None:
+                      channels: List[int], skip_layers: Optional[set] = None) -> None:
     """
     Load FLIM-trained weights into an encoder.
     The model must have attributes conv1, conv2, ... (each a Sequential starting with Conv2d).
+
+    ``skip_layers`` is an optional set of 1-indexed layer numbers whose FLIM
+    weights should NOT be loaded (e.g. a reinstantiated residual conv3 whose
+    input channel count no longer matches the pretrained kernels). The default
+    ``None`` preserves the original behavior (load every layer).
     """
     with open(arch_json, "r") as f:
         arch_description = json.load(f)
@@ -310,6 +497,10 @@ def load_FLIM_encoder(model: nn.Module, arch_json: str, weights_path: str,
 
     print("[INFO] Loading FLIM Encoder")
     for n in range(1, n_layers + 1):
+        if skip_layers is not None and n in skip_layers:
+            print(f"[INFO] Skipping Layer {n} (FLIM weights not loaded)")
+            in_channels = channels[n]
+            continue
         out_channels = channels[n]
         print(f"[INFO] Loading Layer {n} weights")
 

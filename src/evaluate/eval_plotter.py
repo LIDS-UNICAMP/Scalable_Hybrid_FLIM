@@ -380,8 +380,9 @@ def plot_metric_vs_pct(
 
 # ── Multi-source method comparison (FLIM vs LeJEPA vs I-JEPA) ─────────────────
 
-# Modelos oficiais do experimento — apenas estas 8 chaves aparecem nas curvas/legenda.
-# Ordem = ordem da legenda. Cores contrastivas (8 matizes bem separados).
+# Modelos oficiais do experimento — apenas estas chaves aparecem nas curvas/legenda
+# (8 originais + as 2 variantes FLIM Residual, eggs-only).
+# Ordem = ordem da legenda. Cores contrastivas.
 METHOD_COMPARE_STYLE: dict[str, dict] = {
     "SVM_FLIM":                                {"color": "#0072B2", "ls": "-",  "marker": "o", "zorder": 7},
     "SVM_LeJEPA_trunc_normal":                 {"color": "#9467BD", "ls": "-.", "marker": "P", "zorder": 8},
@@ -391,6 +392,8 @@ METHOD_COMPARE_STYLE: dict[str, dict] = {
     "SVM_Distill_1x1BN":                        {"color": "#17BECF", "ls": "-",  "marker": "s", "zorder": 12},
     "SVM_Distill_2l400K":                       {"color": "#2CA02C", "ls": "--", "marker": "D", "zorder": 13},
     "SVM_Distill_1x1BN_flim_frozen_eval_loss": {"color": "#000000", "ls": ":",  "marker": ">", "zorder": 14},
+    "SVM_FLIMResidual_1_3":                    {"color": "#008080", "ls": "-",  "marker": "d", "zorder": 15},
+    "SVM_FLIMResidual_2_3":                    {"color": "#B22222", "ls": "--", "marker": "H", "zorder": 16},
 }
 
 # Rótulos curtos (inglês) — uma entrada por modelo oficial, mesma ordem da legenda.
@@ -406,6 +409,8 @@ METHOD_COMPARE_LABEL: dict[str, str] = {
     "SVM_Distill_1x1BN":                        "Distill 1 (123K)",            # results/svm_proj1280_1x1_BN2d_results.csv (trunc_normal)
     "SVM_Distill_2l400K":                       "Distill 2 (402K)",            # results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv
     "SVM_Distill_1x1BN_flim_frozen_eval_loss":  "Distill 1 — FLIM init (123K)", # results/svm_distillation_conv_flim_frozen_results.csv (ckpt best-loss)
+    "SVM_FLIMResidual_1_3":                     "FLIM Residual 1→3",           # results/svm_flim_residual_eggs.csv
+    "SVM_FLIMResidual_2_3":                     "FLIM Residual 2→3",           # results/svm_flim_residual_eggs.csv
 }
 
 
@@ -461,7 +466,8 @@ def plot_method_comparison(
                       "SVM_Distill_2l400K", "SVM_Distill_2l400K_flim",
                       "SVM_Distill_2l400K_flim_nonorm",
                       "SVM_Distill_1x1BN_flim_frozen_eval_knn",
-                      "SVM_Distill_1x1BN_flim_frozen_eval_loss"):
+                      "SVM_Distill_1x1BN_flim_frozen_eval_loss",
+                      "SVM_FLIMResidual_1_3", "SVM_FLIMResidual_2_3"):
             return method
         return f"SVM_LeJEPA_{init}"
 
@@ -632,7 +638,8 @@ def plot_merge_comparison(
                       "SVM_Distill_2l400K", "SVM_Distill_2l400K_flim",
                       "SVM_Distill_2l400K_flim_nonorm",
                       "SVM_Distill_1x1BN_flim_frozen_eval_knn",
-                      "SVM_Distill_1x1BN_flim_frozen_eval_loss"):
+                      "SVM_Distill_1x1BN_flim_frozen_eval_loss",
+                      "SVM_FLIMResidual_1_3", "SVM_FLIMResidual_2_3"):
             return method
         return f"SVM_LeJEPA_{init}"
 

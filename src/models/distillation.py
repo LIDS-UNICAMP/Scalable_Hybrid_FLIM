@@ -210,6 +210,20 @@ class MSEDistillationLoss(nn.Module):
         return F.mse_loss(student_proj, teacher_emb.to(student_proj.device))
 
 
+class CosineDistillationLoss(nn.Module):
+    """Cosine distillation loss between projected student embedding and teacher embedding.
+
+        L_cos = 1 - cosine_similarity( proj(student_enc(x)), teacher_enc(x) )
+
+    Averaged over the batch. Unlike MSE, this ignores embedding magnitude and
+    only penalises directional misalignment between student and teacher.
+    """
+
+    def forward(self, student_proj: Tensor, teacher_emb: Tensor) -> Tensor:
+        teacher_emb = teacher_emb.to(student_proj.device)
+        return (1.0 - F.cosine_similarity(student_proj, teacher_emb, dim=-1)).mean()
+
+
 class ConvDistillationProjectionHead(nn.Module):
     """Conv projection head: student_channels → 128 → 256 → 512 → teacher_dim via 1×1 convs.
 
