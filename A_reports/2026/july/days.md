@@ -1,12 +1,12 @@
-# Consagrar o FLIM
+# Exploracao Modelo FLIM (15 de julho de 2026)
 
 - Mateus Oliveira task: classificacao.
 - Foco no journal:
     - Para isso precisamos rodar os resultados em varios datasets.
     - Auto machine learning para achar a melhor a arquitetura
     - Avaliacao durante o treinamento MLP + Sigmoid:
-        - Sem backprop
-        - Com backprop
+        - Freeze
+        - Unfreeze
     - o que aconteceria se ela fosse um sigmoid e nao RELU?
     - possibilidade de usar GeLu
 
@@ -46,3 +46,18 @@ dataset AID enviado no grupo.
 - Adaptacao desses modelos pre-treinados para outros cases.
 - Decoder adaptivo, dynamic tree
 - Modelo weak supervised.
+
+Modelo montado. (FLIM init)
+entrada (3×H×W, LAB)
+   │
+   ├─ Encoder FLIM (3 blocos conv)         ← inicializado com pesos FLIM pré-treinados
+   │     conv1: Conv2d(3→24, 5×5) + ReLU + MaxPool(3×3, s2)
+   │     conv2: Conv2d(24→32, 5×5) + ReLU + MaxPool(3×3, s2)
+   │     conv3: Conv2d(32→48, 5×5) + ReLU + MaxPool(3×3, s2)
+   │  → mapa de features 48 canais
+   │
+   └─ TwoLayerSigmoidHead
+         AdaptiveAvgPool2d(1) → flatten (48)
+         Linear(48 → 24) → Sigmoid
+         Linear(24 → C)  → Softmax
+   → probabilidades por classe (C)

@@ -376,12 +376,18 @@ def run_classification_experiment(
 def run_queue(
     experiments: list[dict], gpu_ids: list[int], max_concurrent_per_gpu: int,
     cpus_per_experiment: int, fail_fast: bool, ray_address: Optional[str],
+    slots_per_gpu: Optional[dict[int, int]] = None,
 ) -> list[dict]:
     if not experiments:
         _log("No experiments to run.", "WARN")
         return []
 
-    total_slots = max_concurrent_per_gpu * len(gpu_ids)
+    if slots_per_gpu:
+        scheduler_arg: "int | dict[int, int]" = slots_per_gpu
+        total_slots = sum(slots_per_gpu.values())
+    else:
+        scheduler_arg = max_concurrent_per_gpu
+        total_slots = max_concurrent_per_gpu * len(gpu_ids)
     ray_kwargs: dict[str, Any] = {"ignore_reinit_error": True, "log_to_driver": True}
     if ray_address:
         ray_kwargs["address"] = ray_address
@@ -393,7 +399,7 @@ def run_queue(
         ray.init(**ray_kwargs)
     _log("Ray initialised.")
 
-    scheduler = GpuSlotScheduler(gpu_ids=gpu_ids, max_per_gpu=max_concurrent_per_gpu)
+    scheduler = GpuSlotScheduler(gpu_ids=gpu_ids, max_per_gpu=scheduler_arg)
     total = len(experiments)
     pending = list(experiments)
     futures: dict[Any, tuple[int, dict, int]] = {}
@@ -594,6 +600,12 @@ def main() -> None:
     parser.add_argument("--max-concurrent-per-gpu", type=int, default=1, metavar="N",
                         help="I-JEPA is not used here (no teacher), but keep 1 unless you have "
                              "verified headroom — FLIM encoders + this head are tiny (~60K params).")
+    parser.add_argument("--gpu-slots", type=str, default=None, metavar="S0,S1,...",
+                        help=(
+                            "Slots por GPU individualmente, separados por vírgula. "
+                            "Ex: '0,0,0,8' com --num-gpus 4 → só a GPU física 3 recebe 8 slots. "
+                            "Sobrescreve --max-concurrent-per-gpu quando especificado."
+                        ))
     parser.add_argument("--cpus-per-experiment", type=int, default=4, metavar="N")
     parser.add_argument("--ray-address", type=str, default=None)
     parser.add_argument("--wandb-update", action="store_true")
@@ -623,6 +635,18 @@ def main() -> None:
 
     t_start = time.time()
     gpu_ids = list(range(args.num_gpus))
+
+    # ── Slots por GPU: --gpu-slots sobrescreve --max-concurrent-per-gpu ──────
+    slots_per_gpu: Optional[dict[int, int]] = None
+    if args.gpu_slots:
+        raw = [s.strip() for s in args.gpu_slots.split(",")]
+        if len(raw) != len(gpu_ids):
+            raise ValueError(
+                f"--gpu-slots tem {len(raw)} valores mas --num-gpus={len(gpu_ids)}. "
+                f"Devem ser iguais. Ex: --num-gpus 4 --gpu-slots 0,0,0,8"
+            )
+        slots_per_gpu = {gid: int(s) for gid, s in enumerate(raw)}
+        _log("[PER-GPU SLOTS] " + ", ".join(f"GPU{gid}={s}" for gid, s in slots_per_gpu.items()))
 
     if args.retry:
         _log("[RETRY] Mode active — will re-run failed/missing experiments.")
@@ -667,6 +691,7 @@ def main() -> None:
         max_concurrent_per_gpu=args.max_concurrent_per_gpu,
         cpus_per_experiment=args.cpus_per_experiment,
         fail_fast=args.fail_fast, ray_address=args.ray_address,
+        slots_per_gpu=slots_per_gpu,
     )
 
     _write_manifest(rows, skipped, retry=args.retry)

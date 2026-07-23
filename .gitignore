@@ -87,6 +87,16 @@ analises_wandb_training/**/*.py
 # graphify (generated knowledge graph, reproducible via /graphify)
 graphify-out/
 
+# Symlinks para dados/artefatos na pasta irmã scalable_FLIM_self_supervised
+# (machine-specific — os padrões com barra final acima não casam com symlinks)
+/.claude
+/artifacts
+/logs
+/results
+/pyift_whl
+/FAPESP_PhD_hawk
+/Presentation_FLIM_unsupervised
+
 # LaTeX build artifacts
 *.pdf
 *.aux

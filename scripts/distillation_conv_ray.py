@@ -117,10 +117,13 @@ _ALL_INITS         = ["trunc_normal"]
 #                            projection trains. Student fed LAB[0,1] (--no-imagenet-norm), teacher
 #                            fed ImageNet-norm (--teacher-imagenet-norm). Checkpoint by val/knn_kappa
 #                            on the 1280d projection (--knn-probe projection).
-_ALL_PROJ_TYPES    = ["conv_next_layers", "3x3_bn2d_1280", "1x1_bn2d_1280", "2l_1x1_bn2d_256_1280", "2l_1x1_init_flim_256_1280", "3x3_init_flim_1280", "next_layers_init_flim", "1x1_init_flim_frozen"]
+# 2l_1x1_init_flim_frozen_256_1280 : two-layer head (~402k) with FLIM encoder init FROZEN — frozen
+#                            counterpart of 2l_1x1_init_flim_256_1280. Same decoupled-norm + freeze +
+#                            projection-probe regime as 1x1_init_flim_frozen, but on the 402k head.
+_ALL_PROJ_TYPES    = ["conv_next_layers", "3x3_bn2d_1280", "1x1_bn2d_1280", "2l_1x1_bn2d_256_1280", "2l_1x1_init_flim_256_1280", "3x3_init_flim_1280", "next_layers_init_flim", "1x1_init_flim_frozen", "2l_1x1_init_flim_frozen_256_1280"]
 
 # Proj types that always train the FLIM-initialised encoder (encoder_init forced to "flim")
-_FLIM_INIT_PROJ_TYPES = {"2l_1x1_init_flim_256_1280", "3x3_init_flim_1280", "next_layers_init_flim", "1x1_init_flim_frozen"}
+_FLIM_INIT_PROJ_TYPES = {"2l_1x1_init_flim_256_1280", "3x3_init_flim_1280", "next_layers_init_flim", "1x1_init_flim_frozen", "2l_1x1_init_flim_frozen_256_1280"}
 
 _NUM_CLASSES: dict[str, int] = {
     "eggs":      9,
@@ -342,6 +345,10 @@ def _run_name(
         # Norm split (student LAB / teacher ImageNet) is forced in the subprocess,
         # so the name does not carry a _no_imagenet_norm suffix.
         return f"distillation_{dataset}_split{split}_pct{pct}_1x1_BN2d_1280_flim_frozen"
+    elif proj_type == "2l_1x1_init_flim_frozen_256_1280":
+        # 402k variant: FLIM encoder FROZEN, only the two-layer projection trains.
+        # Same forced norm split as the 123k frozen head, so no _no_imagenet_norm suffix.
+        return f"distillation_{dataset}_split{split}_pct{pct}_2l_1x1_init_flim_256_1280_flim_frozen"
     else:
         name = f"distillation_{dataset}_split{split}_pct{pct}_next_layers_{dist_type}{suffix}"
     if no_imagenet_norm:
@@ -545,10 +552,10 @@ def run_distillation_experiment(
 
     # ── Select module based on proj_type flag ─────────────────────────────
     proj_type  = exp.get("proj_type", "conv_next_layers")
-    frozen     = proj_type == "1x1_init_flim_frozen"
+    frozen     = proj_type in ("1x1_init_flim_frozen", "2l_1x1_init_flim_frozen_256_1280")
     if proj_type in ("3x3_bn2d_1280", "1x1_bn2d_1280", "3x3_init_flim_1280", "1x1_init_flim_frozen"):
         module_name = "src.modules.distillation_onelayer_module"
-    elif proj_type in ("2l_1x1_bn2d_256_1280", "2l_1x1_init_flim_256_1280"):
+    elif proj_type in ("2l_1x1_bn2d_256_1280", "2l_1x1_init_flim_256_1280", "2l_1x1_init_flim_frozen_256_1280"):
         module_name = "src.modules.distillation_twolayer_module"
     else:
         module_name = "src.modules.distillation_conv_module"
@@ -1022,6 +1029,8 @@ def main() -> None:
             "'next_layers_init_flim': conv_next_layers head (~889k, '800k') with FLIM encoder init forced ON. "
             "'1x1_init_flim_frozen': 1x1 head (~123k) with the FLIM encoder FROZEN — only the projection "
             "trains; student LAB[0,1], teacher ImageNet-norm, checkpoint by val/knn_kappa on the 1280d projection. "
+            "'2l_1x1_init_flim_frozen_256_1280': two-layer head (~402k), frozen counterpart of "
+            "'2l_1x1_init_flim_256_1280' — same FROZEN-encoder + decoupled-norm + projection-probe regime. "
             "Run names: ..._next_layers_<type>, ..._3x3_BN2d_1280_one_layer, "
             "..._1x1_BN2d_1280_one_layer, ..._2l_1x1_BN2d_256_1280, ..._2l_1x1_init_flim_256_1280, "
             "..._3x3_BN2d_1280_one_layer_init_flim, ..._next_layers_init_flim_<type>."
