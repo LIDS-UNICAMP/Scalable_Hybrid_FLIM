@@ -599,13 +599,22 @@ def plot_merge_comparison(
     markersize:            int   = 14,
     fig_height:            int   = 10,
     fig_width_per_dataset: int   = 13,
+    orientation:           str   = "horizontal",
 ) -> None:
     """One subplot-figure per metric, with one panel per dataset.
 
     Produces ``len(metrics)`` files named ``{metric}.png`` (e.g. ``kappa.png``),
-    each containing ``len(datasets)`` side-by-side subplots.  The dataset name
-    is the title above each subplot.  A single horizontal legend (no title) is
-    shared below all panels.
+    each containing ``len(datasets)`` subplots.  The dataset name is the title
+    above each subplot.  A single legend (no title) is shared below all panels.
+
+    ``orientation`` controls the panel arrangement:
+      - ``"horizontal"`` — panels side-by-side (1 row × N cols).  The X axis is
+        repeated on every panel; the Y axis appears only on the leftmost panel
+        (``sharey``).
+      - ``"vertical"``   — panels stacked (N rows × 1 col).  The Y axis is
+        repeated on every panel; the X axis appears only on the bottom panel
+        (``sharex``).  The legend wraps into columns so it never overflows the
+        narrower figure width.
 
     Args:
         df:              Unified filtered DataFrame.
@@ -657,18 +666,34 @@ def plot_merge_comparison(
             rc={"axes.facecolor": "#FAFAFA", "grid.color": "#E0E0E0"},
         )
 
-        fig, axes = plt.subplots(
-            1, len(datasets),
-            figsize=(fig_width_per_dataset * len(datasets), fig_height),
-            sharey=True, squeeze=False,
-        )
+        vertical = orientation == "vertical"
+        n_ds     = len(datasets)
+        if vertical:
+            fig, axes = plt.subplots(
+                n_ds, 1,
+                figsize=(fig_width_per_dataset, fig_height * n_ds * 0.55),
+                sharex=True, squeeze=False,
+            )
+            panel_axes = [axes[row][0] for row in range(n_ds)]
+        else:
+            fig, axes = plt.subplots(
+                1, n_ds,
+                figsize=(fig_width_per_dataset * n_ds, fig_height),
+                sharey=True, squeeze=False,
+            )
+            panel_axes = [axes[0][col] for col in range(n_ds)]
 
         legend_handles: list = []
         legend_labels:  list = []
 
-        for col, dataset in enumerate(datasets):
-            ax    = axes[0][col]
+        for idx, dataset in enumerate(datasets):
+            ax    = panel_axes[idx]
             ds_df = df[df["dataset_short"] == dataset]
+            # Vertical: Y on every row, X only on the bottom row.
+            # Horizontal: X on every col, Y only on the leftmost col.
+            is_last = idx == n_ds - 1
+            show_y  = True if vertical else (idx == 0)
+            show_x  = is_last if vertical else True
 
             # Dataset name as subplot title
             ax.set_title(DATASET_LABEL.get(dataset, dataset),
@@ -711,36 +736,60 @@ def plot_merge_comparison(
 
             pcts_present = sorted({p for p in ds_df[pct_col].unique() if p in PCT_TO_POS})
             ax.set_xticks([PCT_TO_POS[p] for p in pcts_present])
-            ax.set_xticklabels([f"{p}%" for p in pcts_present], fontsize=tick_fontsize)
+            if show_x:
+                ax.set_xticklabels([f"{p}%" for p in pcts_present], fontsize=tick_fontsize)
+            else:
+                ax.set_xticklabels([])
             ax.tick_params(axis="y", labelsize=ytick_fontsize)
             ax.set_ylim(-0.05, 1.05)
             ax.axhline(0, color="#AAAAAA", linewidth=0.6, zorder=0)
 
-            if show_xlabel:
+            if show_xlabel and show_x:
                 ax.set_xlabel("Pre-training Data", fontsize=ylabel_fontsize)
-            if col == 0:
+            if show_y:
                 ax.set_ylabel(METRIC_LABELS.get(metric, metric),
                               fontsize=ylabel_fontsize)
 
         n_handles = len(legend_handles)
-        ncol = (n_handles if legend_ncol == -1 else legend_ncol) or n_handles
+        # Legend columns. -1 = "all in one row" — fine for the wide horizontal
+        # figure, but it would overflow the narrow vertical one, so vertical
+        # falls back to 2 cols: the long labels then have room and never overlap.
+        if legend_ncol == -1:
+            ncol = 2 if vertical else n_handles
+        else:
+            ncol = legend_ncol or n_handles
 
-        # Place the legend below the figure boundary (y < 0 in figure coords).
-        # loc="upper center" means the TOP of the legend box is at the anchor
-        # point, so the legend grows downward — entirely outside the axes area.
-        # bbox_inches="tight" on savefig then expands the canvas to capture it.
-        fig.legend(
+        legend_kw = dict(
             handles=legend_handles, labels=legend_labels,
             title=None,
-            loc="upper center",
             ncol=ncol,
             fontsize=legend_fontsize,
             frameon=True, fancybox=True, edgecolor="#CCCCCC",
             borderpad=0.5, handlelength=2.5, handletextpad=0.6,
-            bbox_to_anchor=(0.5, legend_y),
         )
 
-        plt.tight_layout()
+        if vertical:
+            # Reserve a band at the bottom of the (tall) figure and drop the
+            # legend into it, so it sits fully BELOW the stacked panels instead
+            # of leaking over the bottom one. Band height scales with the number
+            # of legend rows and the chosen font size.
+            nrows_leg = -(-n_handles // ncol)
+            leg_h_in  = nrows_leg * (legend_fontsize * 1.7) / 72.0 + 0.4
+            fig_h_in  = fig.get_size_inches()[1]
+            reserve   = min(0.40, leg_h_in / fig_h_in)
+            fig.tight_layout(rect=(0.0, reserve, 1.0, 1.0))
+            legend_kw.update(
+                loc="center",
+                bbox_to_anchor=(0.5, reserve * 0.5 + legend_y),
+            )
+            fig.legend(**legend_kw)
+        else:
+            # Place the legend below the figure boundary (y ≤ 0 in fig coords).
+            # loc="upper center" puts the TOP of the box at the anchor, so it
+            # grows downward — outside the axes; bbox_inches="tight" captures it.
+            legend_kw.update(loc="upper center", bbox_to_anchor=(0.5, legend_y))
+            fig.legend(**legend_kw)
+            plt.tight_layout()
 
         dst = out_dir / f"{metric}.png"
         fig.savefig(dst, dpi=300, bbox_inches="tight")

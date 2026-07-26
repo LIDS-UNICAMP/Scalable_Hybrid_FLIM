@@ -117,9 +117,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "individual", "merge"],
+        choices=["all", "individual", "merge", "row"],
         default="all",
-        help="Plot type(s) to generate (default: all).",
+        help="Plot type(s) to generate (default: all). "
+             "'merge' = panels side-by-side (horizontal); "
+             "'row' = panels stacked vertically, saved to merge_plots/row/.",
     )
     parser.add_argument(
         "--metrics",
@@ -150,8 +152,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Base output directory (default: artifacts/plots/plots_compare_to_flim).",
     )
 
-    # ── Merge-plot style controls ─────────────────────────────────────────────
-    merge = parser.add_argument_group("merge plot style (--mode merge/all)")
+    # ── Merge/row-plot style controls ─────────────────────────────────────────
+    # Todos os controles de fonte abaixo valem tanto para --mode merge quanto row.
+    merge = parser.add_argument_group("merge/row plot style (--mode merge/row/all)")
     merge.add_argument(
         "--subtitle-fontsize", type=int, default=30, metavar="N",
         help="Titulo do dataset acima de cada subplot (default: 30).",
@@ -218,8 +221,6 @@ def _filter(unified: pd.DataFrame) -> pd.DataFrame:
         (unified["method"] == "SVM_Distill_2l400K_flim_nonorm") |
         (unified["method"] == "SVM_Distill_1x1BN_flim_frozen_eval_knn") |
         (unified["method"] == "SVM_Distill_1x1BN_flim_frozen_eval_loss") |  # results/svm_distillation_conv_flim_frozen_results.csv
-        (unified["method"] == "SVM_FLIMResidual_1_3") |
-        (unified["method"] == "SVM_FLIMResidual_2_3") |
         ((unified["method"] == "SVM_LeJEPA") & (unified["init"] == "trunc_normal"))  # artifacts/SVM/*/*/metrics_SVM_*.csv
     )
     return unified[mask].copy()
@@ -262,25 +263,35 @@ def main() -> None:
                 plot_method_comparison(ds_df, dataset, metric, out_base)
 
     # ── Merged plots: {metric}.png, one file per metric ───────────────────────
+    #   merge → panels side-by-side (horizontal), merge_plots/{metric}.png
+    #   row   → panels stacked vertically,          merge_plots/row/{metric}.png
+    merge_style = dict(
+        show_xlabel=args.show_xlabel,
+        subtitle_fontsize=args.subtitle_fontsize,
+        tick_fontsize=args.tick_fontsize,
+        ytick_fontsize=args.ytick_fontsize,
+        ylabel_fontsize=args.ylabel_fontsize,
+        legend_fontsize=args.legend_fontsize,
+        legend_ncol=args.legend_ncol,
+        legend_y=args.legend_y,
+        linewidth=args.linewidth,
+        markersize=args.markersize,
+        fig_height=args.fig_height,
+        fig_width_per_dataset=args.fig_width_per_dataset,
+    )
+    n = len(metrics) * len(datasets_present)
+
     if mode in ("all", "merge"):
         merge_dir = out_base / "merge_plots"
-        n = len(metrics) * len(datasets_present)
-        print(f"\n[PLOTS] merge_plots/ — {len(metrics)} metrics x {len(datasets_present)} datasets = {n} plots")
-        plot_merge_comparison(
-            filtered, datasets_present, metrics, merge_dir,
-            show_xlabel=args.show_xlabel,
-            subtitle_fontsize=args.subtitle_fontsize,
-            tick_fontsize=args.tick_fontsize,
-            ytick_fontsize=args.ytick_fontsize,
-            ylabel_fontsize=args.ylabel_fontsize,
-            legend_fontsize=args.legend_fontsize,
-            legend_ncol=args.legend_ncol,
-            legend_y=args.legend_y,
-            linewidth=args.linewidth,
-            markersize=args.markersize,
-            fig_height=args.fig_height,
-            fig_width_per_dataset=args.fig_width_per_dataset,
-        )
+        print(f"\n[PLOTS] merge_plots/ (horizontal) — {len(metrics)} metrics x {len(datasets_present)} datasets = {n} plots")
+        plot_merge_comparison(filtered, datasets_present, metrics, merge_dir,
+                              orientation="horizontal", **merge_style)
+
+    if mode in ("all", "row"):
+        row_dir = out_base / "merge_plots" / "row"
+        print(f"\n[PLOTS] merge_plots/row/ (vertical) — {len(metrics)} metrics x {len(datasets_present)} datasets = {n} plots")
+        plot_merge_comparison(filtered, datasets_present, metrics, row_dir,
+                              orientation="vertical", **merge_style)
 
     print(f"\n[DONE] Plots saved to: {out_base}/")
 
