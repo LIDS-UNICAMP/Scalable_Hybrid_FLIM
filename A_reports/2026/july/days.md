@@ -1,3 +1,11 @@
+# Meeting 28 julho.
+- Carta resposta disponivel para avaliacao
+- Correcoes feitas no artigo sibgrapi 2026
+- experimento com relu -> Softmax para 5% e 75% feito!
+- experimento com softplus -> Softmax para 5% e 75% feito!
+- compreensao do problema.
+
+
 # Exploracao Modelo FLIM (15 de julho de 2026)
 
 - Mateus Oliveira task: classificacao.

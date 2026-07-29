@@ -1,8 +1,13 @@
 # `statistics/tools/`: medições para a resposta ao Revisor 3 (SIBGRAPI camera-ready)
 
-Quatro scripts independentes, cada um com um par de saídas (`.csv` com os números brutos,
-`.md` com o relatório legível) no próprio diretório. Consolidação das quatro saídas em
+Cinco scripts independentes, cada um com um par de saídas (`.csv` com os números brutos,
+`.md` com o relatório legível) no próprio diretório. Consolidação das quatro primeiras saídas em
 [`reports_sibgrapi_camera_ready.md`](../../reports_sibgrapi_camera_ready.md) na raiz do repo.
+
+Os quatro primeiros scripts responderam ao Revisor 3. O quinto (`wilcoxon_flim_init.py`) é
+posterior e tem outro desenho: não é um-contra-todos com o FLIM como baseline, é a **comparação
+controlada de um fator** que sustenta a tese *flyweight* — init FLIM congelada vs. init aleatória
+com a **mesma** cabeça de 123K.
 
 Os 8 modelos oficiais são os mesmos das figuras do artigo: FLIM (59.504), LeJEPA (59.504),
 I-JEPA (632M), Distill 4 (889K), Distill 3 (615K), Distill 1 (123K), Distill 2 (402K) e
@@ -40,6 +45,7 @@ CUDA 12.1.
 | `wilcoxon_f1.py` | Wilcoxon pareado de sinais na coluna `f1`, um-contra-todos, baseline `SVM_FLIM`, n = 18 células `(dataset, fração)`, p exato, Holm + Bonferroni, rank-biserial e IC95% bootstrap. Inclui tabela secundária exploratória por dataset (n = 6). | `$PY statistics/tools/wilcoxon_f1.py` | `wilcoxon_f1.csv`, `wilcoxon_f1.md` |
 | `wilcoxon_acc.py` | Idem na coluna `acc`. | `$PY statistics/tools/wilcoxon_acc.py` | `wilcoxon_acc.csv`, `wilcoxon_acc.md` |
 | `wilcoxon_kappa.py` | Idem na coluna `kappa` (kappa de Cohen). | `$PY statistics/tools/wilcoxon_kappa.py` | `wilcoxon_kappa.csv`, `wilcoxon_kappa.md` |
+| `wilcoxon_flim_init.py` | **Desenho diferente:** comparação controlada de um fator entre dois modelos de params idênticos (123.504 = backbone FLIM 59.504 + cabeça 1×1 BN2d 64.000), variando só a origem dos pesos do encoder — `SVM_Distill_1x1BN` (`trunc_normal`, treinável) vs. `SVM_Distill_1x1BN_flim_frozen_eval_loss` (FLIM real, congelado). Wilcoxon pareado nas 3 métricas (f1/kappa/acc), n = 18 células, Holm + Bonferroni sobre a família de 3. Secundárias: por dataset (n = 6), robustez do braço FLIM (ckpt knn vs. best-loss; encoder congelado vs. liberado) e descritiva por fração de rótulos. | `$PY statistics/tools/wilcoxon_flim_init.py` | `wilcoxon_flim_init.csv`, `wilcoxon_flim_init.md` |
 
 Os três scripts de Wilcoxon aceitam `--csv` (entrada, padrão
 `artifacts/normalized/unified_svm_comparison.csv`), `--baseline` (padrão `SVM_FLIM`) e `--alpha`
@@ -62,6 +68,8 @@ for M in f1 acc kappa; do $PY statistics/tools/wilcoxon_${M}.py; done
 | `compute_cost.md` | Tabela principal, metodologia (hardware, resolução por modelo, repetições, convenção de FLOPs, definição das duas grandezas de memória), grafo exato medido por linha e ressalvas. |
 | `wilcoxon_f1.csv` | Uma linha por comparação (7). Medianas e médias das diferenças com IC95%, contagem de vitórias, W/W+/W−, p bruto, p Holm, p Bonferroni, rank-biserial, flags de significância e conclusão. |
 | `wilcoxon_f1.md` | Tabela principal, tabela de sinais e médias, tabela secundária por dataset, leitura dos resultados e comando de reprodução. Contém a nota que explica as quatro linhas com W = 51 e p bruto idêntico. |
+| `wilcoxon_flim_init.csv` | Uma linha por (análise, métrica, escopo): 3 da tabela principal + 3 por dataset + 2 de robustez + 1 colapsada (n = 3). Colunas `analise` (`principal`/`por_dataset`/`robustez`/`colapsado_n3`), `escopo`, `baseline_params`/`model_params` e `sign_convention` explícita. `p_holm`/`p_bonferroni` ficam vazios fora da família principal, de propósito. |
+| `wilcoxon_flim_init.md` | Tabela principal nas 3 métricas, medianas por braço, F1 médio por fração de rótulos, tabela por dataset, robustez do braço FLIM, leitura dos resultados, seção "o que este teste NÃO diz", derivação do `p` (2/2¹⁸, piso do teste exato) e ressalvas — incluindo a **não-independência** das 18 células. |
 | `wilcoxon_acc.csv` / `wilcoxon_acc.md` | Idem para acurácia. |
 | `wilcoxon_kappa.csv` / `wilcoxon_kappa.md` | Idem para kappa. O CSV traz também `baseline_mean`/`model_mean` e `sign_convention` explícita. |
 
@@ -74,14 +82,23 @@ sinal são os mesmos nos três.
 
 ## 4. Entrada e procedência
 
-Os três testes de Wilcoxon leem `artifacts/normalized/unified_svm_comparison.csv`, montado por
+Os quatro testes de Wilcoxon leem `artifacts/normalized/unified_svm_comparison.csv`, montado por
 `scripts/normalize_reports.py`. Cada célula pareada é a média sobre os 3 splits, e o pareamento é
 feito pela chave `(dataset_short, pretrained_pct)`, com aborto se as chaves de dois modelos não
 coincidirem.
 
-Filtro obrigatório aplicado nos três scripts: `SVM_LeJEPA` aparece no CSV com cinco
-inicializações (`flim`, `he`, `random`, `trunc_normal`, `xavier`), e somente `trunc_normal` entra
-no artigo. Sem esse filtro o teste fica errado.
+Filtro obrigatório aplicado nos três scripts um-contra-todos: `SVM_LeJEPA` aparece no CSV com
+cinco inicializações (`flim`, `he`, `random`, `trunc_normal`, `xavier`), e somente `trunc_normal`
+entra no artigo. Sem esse filtro o teste fica errado. O `wilcoxon_flim_init.py` não usa o LeJEPA,
+mas aplica o mesmo tipo de filtro em `SVM_Distill_1x1BN` (`init == "trunc_normal"`).
+
+**Nomenclatura de `pretrained_pct`:** essa coluna é o **% de dados rotulados usados para treinar o
+SVM linear**, não uma fração de pré-treino (o teacher I-JEPA é frozen) — seção 3 de
+[`data_provenance.md`](../../metrics_distillation/data_provenance.md). Os relatórios
+`wilcoxon_f1.md`, `wilcoxon_acc.md` e `wilcoxon_kappa.md` chamam esse eixo de "pré-treino", o que
+é impreciso; `wilcoxon_flim_init.md` usa o termo correto. Consequência prática para redação: os
+valores de F1 0,42 → 0,83 dessa comparação são de **100% dos rótulos**, não de 5% (a 5% são
+0,25 → 0,55).
 
 Como cada CSV de origem foi gerado (treino → checkpoint → SVM eval → CSV):
 [`metrics_distillation/data_provenance.md`](../../metrics_distillation/data_provenance.md).

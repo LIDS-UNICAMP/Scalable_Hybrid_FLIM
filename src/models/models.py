@@ -359,6 +359,58 @@ class TwoLayerSigmoidHead(nn.Module):
     2-layer Sigmoid architecture used by the FLIM-init classification
     experiment: hidden defaults to ``in_features // 2`` (e.g. 48 -> 24).
 
+    With ``output_relu=True`` a ReLU is inserted between the output Linear and
+    the Softmax (``... -> Linear(hidden, num_classes) -> ReLU -> Softmax``),
+    clamping negative logits to 0 before normalisation.
+
+    ``forward`` returns post-Softmax class probabilities, not raw logits —
+    callers must use ``NLLLoss`` on ``log(probs)`` rather than
+    ``CrossEntropyLoss`` (which expects logits and applies its own softmax).
+    """
+
+    def __init__(self, in_features: int, num_classes: int, hidden_dim: Optional[int] = None,
+                 output_relu: bool = False):
+        super().__init__()
+        hidden_dim = hidden_dim if hidden_dim is not None else in_features // 2
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.layer1 = nn.Linear(in_features, hidden_dim)
+        self.sigmoid = nn.Sigmoid()
+        self.layer2 = nn.Linear(hidden_dim, num_classes)
+        self.output_relu = nn.ReLU() if output_relu else None
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.sigmoid(self.layer1(x))
+        x = self.layer2(x)
+        if self.output_relu is not None:
+            x = self.output_relu(x)
+        return self.softmax(x)
+
+
+class TwoLayerSoftplusHead(nn.Module):
+    """
+    Variant of ``TwoLayerSigmoidHead`` with a Softplus output activation:
+
+        AdaptiveAvgPool2d(1) -> flatten -> Linear(in, hidden) -> Sigmoid
+            -> Linear(hidden, num_classes) -> Softplus -> Softmax(dim=1)
+
+    Softplus replaces the ReLU of ``TwoLayerSigmoidHead(output_relu=True)``.
+    ReLU clamps every negative logit to exactly 0 and its derivative there is
+    also exactly 0, so the whole negative half-space stops receiving gradient
+    and training dies. ``Softplus(z) = log(1 + e^z)`` has derivative
+    ``sigmoid(z)``, which is ~0.47 in the operating range actually observed in
+    these models (z ≈ -0.13) against 0.0 for ReLU; it is strictly positive
+    everywhere, so no unit is ever permanently frozen. It is also nearly
+    transparent once the model gains confidence, since ``softplus(z) ≈ z`` for
+    large z.
+
+    Submodule names are deliberately identical to ``TwoLayerSigmoidHead``
+    (``pool``, ``layer1``, ``sigmoid``, ``layer2``, ``softmax``). Softplus has
+    no parameters, so the ``state_dict`` of both heads matches exactly and
+    checkpoints remain interchangeable for comparative analysis.
+
     ``forward`` returns post-Softmax class probabilities, not raw logits —
     callers must use ``NLLLoss`` on ``log(probs)`` rather than
     ``CrossEntropyLoss`` (which expects logits and applies its own softmax).
@@ -371,25 +423,47 @@ class TwoLayerSigmoidHead(nn.Module):
         self.layer1 = nn.Linear(in_features, hidden_dim)
         self.sigmoid = nn.Sigmoid()
         self.layer2 = nn.Linear(hidden_dim, num_classes)
+        self.output_softplus = nn.Softplus()
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.pool(x)
         x = x.view(x.size(0), -1)
         x = self.sigmoid(self.layer1(x))
-        return self.softmax(self.layer2(x))
+        x = self.layer2(x)
+        x = self.output_softplus(x)
+        return self.softmax(x)
 
 
 class SigmoidClassificationModel(nn.Module):
-    """FLIM Encoder + TwoLayerSigmoidHead for direct supervised classification."""
+    """
+    FLIM Encoder + two-layer Sigmoid classification head.
+
+    The output activation of the head is selected by two mutually exclusive
+    flags: ``output_relu=True`` uses ``TwoLayerSigmoidHead`` with a ReLU before
+    the Softmax, ``output_softplus=True`` swaps the head for
+    ``TwoLayerSoftplusHead``, and with both ``False`` the plain
+    ``TwoLayerSigmoidHead`` is used. Either way the attribute is ``self.head``
+    and the ``state_dict`` keys are the same across all three variants.
+    """
 
     def __init__(self, arch: dict, num_classes: int, in_channels: int = 3,
-                 hidden_dim: Optional[int] = None):
+                 hidden_dim: Optional[int] = None, output_relu: bool = False,
+                 output_softplus: bool = False):
         super().__init__()
+        if output_relu and output_softplus:
+            raise ValueError(
+                "output_relu and output_softplus are mutually exclusive: "
+                "pick at most one output activation for the classification head."
+            )
         self.encoder = Encoder(arch, in_channels)
         channels = get_channels_from_arch(arch, in_channels)
         encoder_out_channels = channels[-1]
-        self.head = TwoLayerSigmoidHead(encoder_out_channels, num_classes, hidden_dim)
+        if output_softplus:
+            self.head = TwoLayerSoftplusHead(encoder_out_channels, num_classes, hidden_dim)
+        else:
+            self.head = TwoLayerSigmoidHead(encoder_out_channels, num_classes, hidden_dim,
+                                            output_relu=output_relu)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         features = self.encoder(x)

@@ -102,6 +102,10 @@ class ClassificationFlimModule(pl.LightningModule):
         freeze_encoder:      If True, the FLIM encoder is frozen after init (requires_grad=False)
                               and only the TwoLayerSigmoidHead is trained. Mirrors the freeze/unfreeze
                               distinction already used by the MLP probe configs (configs/evaluate/mlp/).
+        output_relu:         If True, inserts a ReLU between ``Linear(hidden, C)`` and the Softmax.
+        output_softplus:     If True, inserts a Softplus in the same position — the smooth
+                              counterpart of ``output_relu`` (non-zero gradient everywhere).
+                              Mutually exclusive with ``output_relu``.
     """
 
     def __init__(
@@ -118,6 +122,8 @@ class ClassificationFlimModule(pl.LightningModule):
         warmup_epochs: int = 10,
         seed: int = 42,
         freeze_encoder: bool = False,
+        output_relu: bool = False,
+        output_softplus: bool = False,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -137,6 +143,7 @@ class ClassificationFlimModule(pl.LightningModule):
 
         self.model = SigmoidClassificationModel(
             arch=arch, num_classes=num_classes, in_channels=in_channels, hidden_dim=hidden_dim,
+            output_relu=output_relu, output_softplus=output_softplus,
         )
         self.encoder_out_channels: int = channels[-1]
 
@@ -260,6 +267,13 @@ def _build_parser():
     p.add_argument("--freeze-encoder", action="store_true", default=False,
                    help="Freeze the FLIM encoder (requires_grad=False); train only the "
                         "TwoLayerSigmoidHead. Default trains encoder+head end-to-end.")
+    p.add_argument("--output-relu", action="store_true", default=False,
+                   help="Insert a ReLU between Linear(hidden,C) and the Softmax "
+                        "(head becomes ...->Sigmoid->Linear(24,C)->ReLU->Softmax).")
+    p.add_argument("--output-softplus", action="store_true", default=False,
+                   help="Insert a Softplus between Linear(hidden,C) and the Softmax "
+                        "(head becomes ...->Sigmoid->Linear(24,C)->Softplus->Softmax). "
+                        "Smooth counterpart of --output-relu; mutually exclusive with it.")
     p.add_argument("--image-size", type=int, default=200)
     p.add_argument("--output-dir", default=None)
     p.add_argument("--wandb", action="store_true", default=False)
@@ -277,12 +291,28 @@ def _dataset_short_to_parasite_name(dataset: str) -> str:
     }[dataset]
 
 
+def _head_str(output_relu: bool, output_softplus: bool) -> str:
+    """Human-readable head topology, shared by the W&B config and run_metadata.json."""
+    if output_softplus:
+        return "Linear(48,24)->Sigmoid->Linear(24,n_classes)->Softplus->Softmax"
+    if output_relu:
+        return "Linear(48,24)->Sigmoid->Linear(24,n_classes)->ReLU->Softmax"
+    return "Linear(48,24)->Sigmoid->Linear(24,n_classes)->Softmax"
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
                         stream=sys.stdout)
 
     args = _build_parser().parse_args()
+
+    if args.output_relu and args.output_softplus:
+        _log.error("--output-relu and --output-softplus are mutually exclusive: the head can "
+                   "carry only one activation between Linear(hidden,C) and the Softmax. "
+                   "Pick one (or neither, for the plain sigmoid2l head).")
+        return 1
+
     pl.seed_everything(args.seed, workers=True)
 
     output_dir = args.output_dir or os.path.join(_ROOT, "artifacts", "classification_flim", args.run_name)
@@ -310,6 +340,8 @@ def main() -> int:
         lr=args.lr, weight_decay=args.weight_decay,
         max_epochs=args.max_epochs, warmup_epochs=args.warmup_epochs,
         seed=args.seed, freeze_encoder=args.freeze_encoder,
+        output_relu=args.output_relu,
+        output_softplus=args.output_softplus,
     )
 
     checkpoint_kappa = ModelCheckpoint(
@@ -327,8 +359,14 @@ def main() -> int:
                 name=args.run_name, save_dir=output_dir,
             )
             freeze_tag = "frozen" if args.freeze_encoder else "unfrozen"
+            if args.output_softplus:
+                head_tag = "softplus2l"
+            elif args.output_relu:
+                head_tag = "relu2l"
+            else:
+                head_tag = "sigmoid2l"
             wandb_logger.experiment.tags = tuple(dict.fromkeys(
-                list(wandb_logger.experiment.tags or ()) + ["classification_flim", "sigmoid2l", freeze_tag]
+                list(wandb_logger.experiment.tags or ()) + ["classification_flim", head_tag, freeze_tag]
             ))
             wandb_logger.log_hyperparams({
                 "dataset": args.dataset, "split": args.split,
@@ -337,7 +375,12 @@ def main() -> int:
                 "hidden_dim": args.hidden_dim or module.encoder_out_channels // 2,
                 "arch_json": args.arch_json,
                 "flim_weights_path": args.flim_weights_path,
-                "head": "Linear(48,24)->Sigmoid->Linear(24,n_classes)->Softmax",
+                "head": _head_str(args.output_relu, args.output_softplus),
+                "head_variant": head_tag,
+                "output_activation": ("softplus" if args.output_softplus else
+                                      "relu" if args.output_relu else "none"),
+                "output_relu": args.output_relu,
+                "output_softplus": args.output_softplus,
                 "loss": "NLLLoss(log(softmax_probs))",
                 "freeze_encoder": args.freeze_encoder,
             })
@@ -408,7 +451,10 @@ def _save_metadata(args, module, output_dir, ckpt_dir,
         "freeze_encoder": freeze_encoder,
         "num_classes": args.num_classes,
         "hidden_dim": args.hidden_dim or module.encoder_out_channels // 2,
-        "head": "Linear(48,24)->Sigmoid->Linear(24,n_classes)->Softmax",
+        "head": _head_str(getattr(args, "output_relu", False),
+                          getattr(args, "output_softplus", False)),
+        "output_relu": getattr(args, "output_relu", False),
+        "output_softplus": getattr(args, "output_softplus", False),
         "arch_json": args.arch_json,
         "flim_weights_path": args.flim_weights_path,
         "image_size": args.image_size, "max_epochs": args.max_epochs,

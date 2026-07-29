@@ -21,6 +21,14 @@ Example runs::
         --num-gpus 1 --max-concurrent-per-gpu 1 \\
         --wandb-update --skip-existing --check-wandb
 
+    # Variante Softplus da cabeça (...->Sigmoid->Linear(24,C)->Softplus->Softmax);
+    # única diferença em relação ao grupo relu2l. Runs ganham o sufixo '_softplus2l'.
+    python scripts/classification_flim_ray.py \\
+        --datasets eggs larvae protozoan --splits 1 2 3 --percentages 1 75 \\
+        --output-softplus \\
+        --num-gpus 1 --max-concurrent-per-gpu 1 \\
+        --wandb-update --skip-existing --check-wandb
+
     # Dry-run
     python scripts/classification_flim_ray.py --dry-run
 
@@ -182,8 +190,15 @@ def _split_json(dataset: str, split: int, pct: int) -> str:
     )
 
 
-def _run_name(dataset: str, split: int, pct: int, run_prefix: str = "", freeze_encoder: bool = False) -> str:
-    name = f"classhead_{dataset}_split{split}_pct{pct}_sigmoid2l"
+def _run_name(dataset: str, split: int, pct: int, run_prefix: str = "", freeze_encoder: bool = False,
+              output_relu: bool = False, output_softplus: bool = False) -> str:
+    if output_softplus:
+        head_tag = "softplus2l"
+    elif output_relu:
+        head_tag = "relu2l"
+    else:
+        head_tag = "sigmoid2l"
+    name = f"classhead_{dataset}_split{split}_pct{pct}_{head_tag}"
     if freeze_encoder:
         name += "_frozen"
     return f"{run_prefix}{name}" if run_prefix else name
@@ -232,6 +247,8 @@ def build_experiment_grid(
     no_imagenet_norm: bool = False,
     run_prefix: str = "",
     freeze_encoder: bool = False,
+    output_relu: bool = False,
+    output_softplus: bool = False,
 ) -> tuple[list[dict], list[dict]]:
     valid: list[dict] = []
     skipped: list[dict] = []
@@ -239,7 +256,7 @@ def build_experiment_grid(
     for dataset in datasets:
         for split in splits:
             for pct in percentages:
-                run_name = _run_name(dataset, split, pct, run_prefix, freeze_encoder)
+                run_name = _run_name(dataset, split, pct, run_prefix, freeze_encoder, output_relu, output_softplus)
                 ok, reason = validate_experiment(dataset, split, pct)
 
                 base = {
@@ -254,6 +271,8 @@ def build_experiment_grid(
                     "num_workers":       num_workers,
                     "no_imagenet_norm":  no_imagenet_norm,
                     "freeze_encoder":    freeze_encoder,
+                    "output_relu":       output_relu,
+                    "output_softplus":   output_softplus,
                     "key":               run_name,
                 }
 
@@ -278,31 +297,57 @@ def build_experiment_grid(
 # ── GPU slot scheduler (identical to distillation_conv_ray.py) ─────────────────
 
 class GpuSlotScheduler:
-    def __init__(self, gpu_ids: list[int], max_per_gpu: "int | dict[int, int]") -> None:
+    """Concurrency slots per GPU, optionally capped by a per-GPU experiment quota.
+
+    ``max_per_gpu`` limits how many experiments run *at the same time* on a GPU.
+    ``quota`` (``--gpu-experiments``) limits how many experiments that GPU receives
+    *in total* over the whole queue; a GPU whose quota is exhausted is never picked
+    again. Without ``quota`` the queue is drained greedily (whoever frees up first
+    takes the next experiment).
+    """
+
+    def __init__(self, gpu_ids: list[int], max_per_gpu: "int | dict[int, int]",
+                 quota: Optional[dict[int, int]] = None) -> None:
         if isinstance(max_per_gpu, int):
             self._limits: dict[int, int] = {gid: max_per_gpu for gid in gpu_ids}
         else:
             self._limits = dict(max_per_gpu)
         self._running: dict[int, int] = {gid: 0 for gid in gpu_ids}
+        self._quota: Optional[dict[int, int]] = dict(quota) if quota else None
+        self._assigned: dict[int, int] = {gid: 0 for gid in gpu_ids}
 
     @property
     def gpu_ids(self) -> list[int]:
         return sorted(self._running)
 
+    def _available(self, gid: int) -> bool:
+        if self._running[gid] >= self._limits[gid]:
+            return False
+        if self._quota is not None and self._assigned[gid] >= self._quota.get(gid, 0):
+            return False
+        return True
+
     def pick_gpu(self) -> Optional[int]:
-        candidates = [(count, gid) for gid, count in self._running.items() if count < self._limits[gid]]
+        candidates = [(self._running[gid], gid) for gid in self._running if self._available(gid)]
         return min(candidates)[1] if candidates else None
 
     def acquire(self, gpu_id: int) -> None:
         self._running[gpu_id] += 1
+        self._assigned[gpu_id] += 1
 
     def release(self, gpu_id: int) -> None:
         self._running[gpu_id] = max(0, self._running[gpu_id] - 1)
 
     def has_free_slot(self) -> bool:
-        return any(self._running[gid] < self._limits[gid] for gid in self._running)
+        return any(self._available(gid) for gid in self._running)
 
     def status_line(self) -> str:
+        if self._quota is not None:
+            return " | ".join(
+                f"GPU {gid}: {self._running[gid]}/{self._limits[gid]} "
+                f"({self._assigned[gid]}/{self._quota.get(gid, 0)})"
+                for gid in self.gpu_ids
+            )
         return " | ".join(f"GPU {gid}: {self._running[gid]}/{self._limits[gid]}" for gid in self.gpu_ids)
 
 
@@ -337,6 +382,10 @@ def run_classification_experiment(
         cmd.append("--no-imagenet-norm")
     if exp.get("freeze_encoder"):
         cmd.append("--freeze-encoder")
+    if exp.get("output_relu"):
+        cmd.append("--output-relu")
+    if exp.get("output_softplus"):
+        cmd.append("--output-softplus")
     if exp.get("wandb_update"):
         cmd.append("--wandb")
 
@@ -377,6 +426,7 @@ def run_queue(
     experiments: list[dict], gpu_ids: list[int], max_concurrent_per_gpu: int,
     cpus_per_experiment: int, fail_fast: bool, ray_address: Optional[str],
     slots_per_gpu: Optional[dict[int, int]] = None,
+    quota_per_gpu: Optional[dict[int, int]] = None,
 ) -> list[dict]:
     if not experiments:
         _log("No experiments to run.", "WARN")
@@ -399,7 +449,7 @@ def run_queue(
         ray.init(**ray_kwargs)
     _log("Ray initialised.")
 
-    scheduler = GpuSlotScheduler(gpu_ids=gpu_ids, max_per_gpu=scheduler_arg)
+    scheduler = GpuSlotScheduler(gpu_ids=gpu_ids, max_per_gpu=scheduler_arg, quota=quota_per_gpu)
     total = len(experiments)
     pending = list(experiments)
     futures: dict[Any, tuple[int, dict, int]] = {}
@@ -532,19 +582,28 @@ def _print_summary(rows: list[dict], skipped: list[dict], t_start: float, gpu_id
     print(f"{'=' * 70}\n")
 
 
-def _print_dry_run(experiments: list[dict], skipped: list[dict], gpu_ids: list[int], max_per_gpu: int, cpus_per: int, retry: bool = False) -> None:
+def _print_dry_run(experiments: list[dict], skipped: list[dict], gpu_ids: list[int], max_per_gpu: int, cpus_per: int, retry: bool = False,
+                   slots_per_gpu: Optional[dict[int, int]] = None,
+                   quota_per_gpu: Optional[dict[int, int]] = None) -> None:
     n_skip_existing = sum(1 for s in skipped if s.get("status") == "skipped_existing")
     n_skip_invalid  = len(skipped) - n_skip_existing
     total = len(experiments) + len(skipped)
-    max_concurrent = max_per_gpu * len(gpu_ids)
+    if slots_per_gpu:
+        slots_desc = ", ".join(f"GPU{gid}={n}" for gid, n in slots_per_gpu.items())
+        max_concurrent = sum(slots_per_gpu.values())
+    else:
+        slots_desc = str(max_per_gpu)
+        max_concurrent = max_per_gpu * len(gpu_ids)
     title = "DRY RUN [RETRY]" if retry else "DRY RUN"
 
     print(f"\n{'=' * 70}")
     print(f"{title} — classification_flim experiment queue")
     print(f"{'=' * 70}")
     print(f"  GPUs                  : {len(gpu_ids)}  (IDs: {gpu_ids})")
-    print(f"  Slots per GPU         : {max_per_gpu}")
+    print(f"  Slots per GPU         : {slots_desc}")
     print(f"  Max concurrent total  : {max_concurrent}")
+    if quota_per_gpu:
+        print(f"  Experiments per GPU   : " + ", ".join(f"GPU{gid}={n}" for gid, n in quota_per_gpu.items()))
     print(f"  CPUs per experiment   : {cpus_per}")
     print(f"  Experiments queued    : {len(experiments)}")
     print(f"  Skipped (existing)    : {n_skip_existing}")
@@ -596,7 +655,20 @@ def main() -> None:
     parser.add_argument("--datasets", nargs="+", choices=_ALL_DATASETS, default=_ALL_DATASETS)
     parser.add_argument("--splits", nargs="+", type=int, choices=_ALL_SPLITS, default=_ALL_SPLITS)
     parser.add_argument("--percentages", nargs="+", type=int, choices=_ALL_PCTS, default=_ALL_PCTS)
-    parser.add_argument("--num-gpus", type=int, default=1, metavar="N")
+    parser.add_argument("--num-gpus", type=int, default=1, metavar="N",
+                        help="Usa as GPUs 0..N-1. Ignorado quando --gpus é passado.")
+    parser.add_argument("--gpus", nargs="+", type=int, default=None, metavar="ID",
+                        help=(
+                            "IDs físicos das GPUs a usar, ex: --gpus 0 2 3. "
+                            "Só essas recebem experimentos; sobrescreve --num-gpus."
+                        ))
+    parser.add_argument("--gpu-experiments", nargs="+", type=int, default=None, metavar="N",
+                        help=(
+                            "Quantos experimentos no TOTAL cada GPU recebe, na mesma ordem de "
+                            "--gpus. Ex: --gpus 0 2 3 --gpu-experiments 4 6 8. Um 0 deixa a GPU "
+                            "de fora. A soma deve bater com o nº de experimentos da grade. "
+                            "Diferente de --gpu-slots, que é quantos rodam SIMULTANEAMENTE."
+                        ))
     parser.add_argument("--max-concurrent-per-gpu", type=int, default=1, metavar="N",
                         help="I-JEPA is not used here (no teacher), but keep 1 unless you have "
                              "verified headroom — FLIM encoders + this head are tiny (~60K params).")
@@ -622,6 +694,14 @@ def main() -> None:
                         help="Disable ImageNet RGB Normalize on ift_lab inputs (correct for FLIM init).")
     parser.add_argument("--run-prefix", type=str, default="", metavar="PREFIX",
                         help="Prepended to every run_name / W&B display name / artifacts path.")
+    parser.add_argument("--output-relu", action="store_true", default=False,
+                        help="Insert a ReLU between Linear(24,C) and the Softmax; runs are named "
+                             "..._relu2l instead of ..._sigmoid2l.")
+    parser.add_argument("--output-softplus", action="store_true", default=False,
+                        help="Insert a Softplus between Linear(24,C) and the Softmax — head becomes "
+                             "...->Sigmoid->Linear(24,C)->Softplus->Softmax. Smooth counterpart of "
+                             "--output-relu (no dead-gradient region); runs are named ..._softplus2l "
+                             "instead of ..._sigmoid2l. Mutually exclusive with --output-relu.")
     parser.add_argument("--freeze-encoder", action="store_true", default=False,
                         help="Freeze the FLIM encoder; train only the classification head. "
                              "Run names get a '_frozen' suffix so they don't collide with the "
@@ -630,11 +710,21 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if args.output_relu and args.output_softplus:
+        parser.error(
+            "--output-relu e --output-softplus são mutuamente exclusivos: a cabeça só admite "
+            "UMA não-linearidade antes do Softmax. Escolha uma (ou nenhuma, para a "
+            "..._sigmoid2l padrão) e faça duas invocações separadas se quiser as duas grades."
+        )
+
     global _current_log_level
     _current_log_level = _LOG_LEVELS[args.log_level]
 
     t_start = time.time()
-    gpu_ids = list(range(args.num_gpus))
+    gpu_ids = list(args.gpus) if args.gpus else list(range(args.num_gpus))
+    if len(set(gpu_ids)) != len(gpu_ids):
+        raise ValueError(f"--gpus tem IDs repetidos: {gpu_ids}")
+    _log(f"[GPUS] Usando as GPUs físicas {gpu_ids}")
 
     # ── Slots por GPU: --gpu-slots sobrescreve --max-concurrent-per-gpu ──────
     slots_per_gpu: Optional[dict[int, int]] = None
@@ -642,11 +732,30 @@ def main() -> None:
         raw = [s.strip() for s in args.gpu_slots.split(",")]
         if len(raw) != len(gpu_ids):
             raise ValueError(
-                f"--gpu-slots tem {len(raw)} valores mas --num-gpus={len(gpu_ids)}. "
-                f"Devem ser iguais. Ex: --num-gpus 4 --gpu-slots 0,0,0,8"
+                f"--gpu-slots tem {len(raw)} valores mas há {len(gpu_ids)} GPU(s) {gpu_ids}. "
+                f"Devem ser iguais. Ex: --gpus 0 2 3 --gpu-slots 1,1,1"
             )
-        slots_per_gpu = {gid: int(s) for gid, s in enumerate(raw)}
+        slots_per_gpu = {gid: int(s) for gid, s in zip(gpu_ids, raw)}
         _log("[PER-GPU SLOTS] " + ", ".join(f"GPU{gid}={s}" for gid, s in slots_per_gpu.items()))
+
+    # ── Cota de experimentos por GPU: --gpu-experiments ──────────────────────
+    quota_per_gpu: Optional[dict[int, int]] = None
+    if args.gpu_experiments:
+        if len(args.gpu_experiments) != len(gpu_ids):
+            raise ValueError(
+                f"--gpu-experiments tem {len(args.gpu_experiments)} valores mas há "
+                f"{len(gpu_ids)} GPU(s) {gpu_ids}. Devem ser iguais e na mesma ordem. "
+                f"Ex: --gpus 0 2 3 --gpu-experiments 4 6 8"
+            )
+        if any(n < 0 for n in args.gpu_experiments):
+            raise ValueError(f"--gpu-experiments não aceita valores negativos: {args.gpu_experiments}")
+        quota_per_gpu = {gid: n for gid, n in zip(gpu_ids, args.gpu_experiments)}
+        _log("[PER-GPU QUOTA] " + ", ".join(f"GPU{gid}={n}" for gid, n in quota_per_gpu.items()))
+        if slots_per_gpu is None:
+            # Sem --gpu-slots explícito, a cota também vira concorrência: os N experimentos
+            # de cada GPU sobem todos de uma vez. Use --gpu-slots para serializar.
+            slots_per_gpu = dict(quota_per_gpu)
+            _log("[PER-GPU SLOTS] (= cota) " + ", ".join(f"GPU{gid}={n}" for gid, n in slots_per_gpu.items()))
 
     if args.retry:
         _log("[RETRY] Mode active — will re-run failed/missing experiments.")
@@ -665,7 +774,8 @@ def main() -> None:
         check_wandb=args.check_wandb, wandb_entity=args.wandb_entity,
         wandb_project=args.wandb_project, num_workers=args.num_workers,
         no_imagenet_norm=args.no_imagenet_norm, run_prefix=args.run_prefix,
-        freeze_encoder=args.freeze_encoder,
+        freeze_encoder=args.freeze_encoder, output_relu=args.output_relu,
+        output_softplus=args.output_softplus,
     )
 
     n_skip_existing = sum(1 for s in skipped if s.get("status") == "skipped_existing")
@@ -676,8 +786,18 @@ def main() -> None:
         f"{len(args.datasets) * len(args.splits) * len(args.percentages)} runs."
     )
 
+    if quota_per_gpu is not None and experiments:
+        total_quota = sum(quota_per_gpu.values())
+        if total_quota != len(experiments):
+            raise ValueError(
+                f"--gpu-experiments soma {total_quota} mas há {len(experiments)} experimento(s) "
+                f"a rodar. As cotas devem somar exatamente isso, senão sobram experimentos sem "
+                f"GPU designada (ou cotas sem uso). GPUs: {gpu_ids}."
+            )
+
     if args.dry_run:
-        _print_dry_run(experiments, skipped, gpu_ids, args.max_concurrent_per_gpu, args.cpus_per_experiment, retry=args.retry)
+        _print_dry_run(experiments, skipped, gpu_ids, args.max_concurrent_per_gpu, args.cpus_per_experiment,
+                       retry=args.retry, slots_per_gpu=slots_per_gpu, quota_per_gpu=quota_per_gpu)
         _write_manifest([], skipped, retry=args.retry)
         return
 
@@ -691,7 +811,7 @@ def main() -> None:
         max_concurrent_per_gpu=args.max_concurrent_per_gpu,
         cpus_per_experiment=args.cpus_per_experiment,
         fail_fast=args.fail_fast, ray_address=args.ray_address,
-        slots_per_gpu=slots_per_gpu,
+        slots_per_gpu=slots_per_gpu, quota_per_gpu=quota_per_gpu,
     )
 
     _write_manifest(rows, skipped, retry=args.retry)

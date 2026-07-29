@@ -82,6 +82,17 @@ graphify-out/
 statistics/**/plots/
 statistics/**/*.png
 
+# Arquivos temporarios / rascunho / backup de merge
+*.bak
+*.orig
+*.rej
+*.tmp
+tmp/
+scratch/
+scratchpad/
+nohup.out
+core.[0-9]*
+
 # Profiling
 *.prof
 /pyift_whl/
