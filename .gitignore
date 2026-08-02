@@ -106,6 +106,10 @@ artifacts/
 data/images_isic_2028
 # figuras de merge geradas por plot_comparison_flim.py (reproduzíveis)
 new_hope_jepa/
+# CSV é dado gerado e não entra no repo. Exceção: os números do paper em
+# statistics/, versionados junto com o .py que os gera (ver bloco statistics/ abaixo).
+*.csv
+!statistics/**/*.csv
 # analises_wandb_training — só os arquivos .md são valiosos; o resto é reproduzível
 analises_wandb_training/wandb_training_curves/
 analises_wandb_training/**/*.csv
