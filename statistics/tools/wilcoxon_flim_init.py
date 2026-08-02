@@ -625,6 +625,12 @@ def main() -> int:
         "- Nao mede custo de inferencia: params, FLOPs, latencia e memoria estao em "
         "`compute_cost.md`."
     )
+    L.append(
+        "- **Nao diz nada sobre os outros pares de modelos.** Para FLIM vs I-JEPA, Distill 3 vs "
+        "Distill 4 e os demais 28 pares — e, principalmente, para separar \"nao detectei "
+        "diferenca\" de \"demonstrei que a diferenca e pequena\" (teste de equivalencia TOST) — "
+        "ver `wilcoxon_equivalence.md`."
+    )
     L.append("")
 
     L.append("### De onde vem o p, e o que ele NAO mede")

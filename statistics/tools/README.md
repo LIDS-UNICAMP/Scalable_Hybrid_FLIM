@@ -1,13 +1,25 @@
 # `statistics/tools/`: medições para a resposta ao Revisor 3 (SIBGRAPI camera-ready)
 
-Cinco scripts independentes, cada um com um par de saídas (`.csv` com os números brutos,
+Seis scripts independentes, cada um com um par de saídas (`.csv` com os números brutos,
 `.md` com o relatório legível) no próprio diretório. Consolidação das quatro primeiras saídas em
 [`reports_sibgrapi_camera_ready.md`](../../reports_sibgrapi_camera_ready.md) na raiz do repo.
 
-Os quatro primeiros scripts responderam ao Revisor 3. O quinto (`wilcoxon_flim_init.py`) é
-posterior e tem outro desenho: não é um-contra-todos com o FLIM como baseline, é a **comparação
-controlada de um fator** que sustenta a tese *flyweight* — init FLIM congelada vs. init aleatória
-com a **mesma** cabeça de 123K.
+Os quatro primeiros scripts responderam ao Revisor 3 (um-contra-todos, baseline FLIM). Os dois
+últimos são posteriores e têm desenhos próprios:
+
+- `wilcoxon_flim_init.py` — **comparação controlada de um fator** que sustenta a tese *flyweight*:
+  init FLIM congelada vs. init aleatória com a **mesma** cabeça de 123K.
+- `wilcoxon_equivalence.py` — **par-a-par + equivalência (TOST)**. Cobre os 28 pares (os quatro
+  primeiros scripts cobrem só 7) e, sobretudo, distingue *"não detectei diferença"* de
+  *"demonstrei que a diferença é pequena"*. Necessário porque o texto do artigo faz afirmações de
+  empate que a ausência de significância não sustenta.
+
+> **Resultado que afeta a redação do artigo:** sobre as 18 células completas não há empate
+> demonstrado em nenhum dos 28 pares. Mas descartando a fração de 1% (regime em que o FLIM
+> colapsa), **FLIM e I-JEPA tornam-se equivalentes em F1 e acurácia dentro de ±0.024** — empate
+> demonstrado, não apenas não-refutado. Toda afirmação de equivalência precisa declarar o regime
+> de supervisão a que se aplica. Ver §3 de
+> [`wilcoxon_equivalence.md`](wilcoxon_equivalence.md).
 
 Os 8 modelos oficiais são os mesmos das figuras do artigo: FLIM (59.504), LeJEPA (59.504),
 I-JEPA (632M), Distill 4 (889K), Distill 3 (615K), Distill 1 (123K), Distill 2 (402K) e
@@ -45,6 +57,7 @@ CUDA 12.1.
 | `wilcoxon_f1.py` | Wilcoxon pareado de sinais na coluna `f1`, um-contra-todos, baseline `SVM_FLIM`, n = 18 células `(dataset, fração)`, p exato, Holm + Bonferroni, rank-biserial e IC95% bootstrap. Inclui tabela secundária exploratória por dataset (n = 6). | `$PY statistics/tools/wilcoxon_f1.py` | `wilcoxon_f1.csv`, `wilcoxon_f1.md` |
 | `wilcoxon_acc.py` | Idem na coluna `acc`. | `$PY statistics/tools/wilcoxon_acc.py` | `wilcoxon_acc.csv`, `wilcoxon_acc.md` |
 | `wilcoxon_kappa.py` | Idem na coluna `kappa` (kappa de Cohen). | `$PY statistics/tools/wilcoxon_kappa.py` | `wilcoxon_kappa.csv`, `wilcoxon_kappa.md` |
+| `wilcoxon_equivalence.py` | **Desenho diferente:** todos os 28 pares entre os 8 modelos oficiais, nas 3 métricas. Cada par recebe **dois** testes — superioridade (Wilcoxon bilateral) e **equivalência (TOST)** com margem pré-especificada δ = 0.05, mais `delta_min` (menor margem em que a equivalência se sustenta). Duas famílias de correção: focal (5 pares que sustentam afirmações de empate no texto) e completa (28 pares). | `$PY statistics/tools/wilcoxon_equivalence.py` | `wilcoxon_equivalence.csv`, `wilcoxon_equivalence.md` |
 | `wilcoxon_flim_init.py` | **Desenho diferente:** comparação controlada de um fator entre dois modelos de params idênticos (123.504 = backbone FLIM 59.504 + cabeça 1×1 BN2d 64.000), variando só a origem dos pesos do encoder — `SVM_Distill_1x1BN` (`trunc_normal`, treinável) vs. `SVM_Distill_1x1BN_flim_frozen_eval_loss` (FLIM real, congelado). Wilcoxon pareado nas 3 métricas (f1/kappa/acc), n = 18 células, Holm + Bonferroni sobre a família de 3. Secundárias: por dataset (n = 6), robustez do braço FLIM (ckpt knn vs. best-loss; encoder congelado vs. liberado) e descritiva por fração de rótulos. | `$PY statistics/tools/wilcoxon_flim_init.py` | `wilcoxon_flim_init.csv`, `wilcoxon_flim_init.md` |
 
 Os três scripts de Wilcoxon aceitam `--csv` (entrada, padrão
@@ -68,6 +81,8 @@ for M in f1 acc kappa; do $PY statistics/tools/wilcoxon_${M}.py; done
 | `compute_cost.md` | Tabela principal, metodologia (hardware, resolução por modelo, repetições, convenção de FLOPs, definição das duas grandezas de memória), grafo exato medido por linha e ressalvas. |
 | `wilcoxon_f1.csv` | Uma linha por comparação (7). Medianas e médias das diferenças com IC95%, contagem de vitórias, W/W+/W−, p bruto, p Holm, p Bonferroni, rank-biserial, flags de significância e conclusão. |
 | `wilcoxon_f1.md` | Tabela principal, tabela de sinais e médias, tabela secundária por dataset, leitura dos resultados e comando de reprodução. Contém a nota que explica as quatro linhas com W = 51 e p bruto idêntico. |
+| `wilcoxon_equivalence.csv` | Uma linha por (família, métrica, par): 15 focais + 15 focais sem a fração de 1% (`familia = focal_sem_1pct`, coluna `pcts`) + 84 da matriz completa. Traz `p_sup_*` e `p_tost_*` (bruto/Holm/Bonferroni), `delta`, `delta_min`, `veredito` (4 categorias), `afirmacao_sustentada` nos pares focais e `sign_convention` explícita. |
+| `wilcoxon_equivalence.md` | Desenho e tabela 2×2 dos vereditos, justificativa da margem δ (com o piso de ruído entre splits), tabela da família focal por métrica, **decomposição por fração de rótulos (§1b)**, **família focal sem a fração de 1% (§1c)**, **consistência por dataset (§1d)**, matriz completa dos 28 pares, **§3 "o que isso muda no texto do artigo"** com redação sugerida por afirmação, e ressalvas. |
 | `wilcoxon_flim_init.csv` | Uma linha por (análise, métrica, escopo): 3 da tabela principal + 3 por dataset + 2 de robustez + 1 colapsada (n = 3). Colunas `analise` (`principal`/`por_dataset`/`robustez`/`colapsado_n3`), `escopo`, `baseline_params`/`model_params` e `sign_convention` explícita. `p_holm`/`p_bonferroni` ficam vazios fora da família principal, de propósito. |
 | `wilcoxon_flim_init.md` | Tabela principal nas 3 métricas, medianas por braço, F1 médio por fração de rótulos, tabela por dataset, robustez do braço FLIM, leitura dos resultados, seção "o que este teste NÃO diz", derivação do `p` (2/2¹⁸, piso do teste exato) e ressalvas — incluindo a **não-independência** das 18 células. |
 | `wilcoxon_acc.csv` / `wilcoxon_acc.md` | Idem para acurácia. |

@@ -99,6 +99,7 @@ O ganho existe em **todos** os regimes de supervisao, mas cresce com a quantidad
 - Nao compara a init FLIM com o **FLIM puro** nem com o teacher: para isso ver `wilcoxon_f1.md` (baseline FLIM), onde `Distill 1 - FLIM init (123K)` fica *abaixo* do FLIM de 59.504 params (mediana -0.157, inconclusivo apos Holm).
 - Nao estabelece um limiar de capacidade. Pela descritiva de `unified_svm_comparison.csv`, o menor braco de init aleatoria que escapa do colapso e o **Distill 2** (402.608 params, cabeca 5,77x o backbone, F1 medio 0,86 a 100%), nao o Distill 3/4. O que a init FLIM entrega com 123K, a init aleatoria so alcanca com 402K-615K.
 - Nao mede custo de inferencia: params, FLOPs, latencia e memoria estao em `compute_cost.md`.
+- **Nao diz nada sobre os outros pares de modelos.** Para FLIM vs I-JEPA, Distill 3 vs Distill 4 e os demais 28 pares — e, principalmente, para separar "nao detectei diferenca" de "demonstrei que a diferenca e pequena" (teste de equivalencia TOST) — ver `wilcoxon_equivalence.md`.
 
 ### De onde vem o p, e o que ele NAO mede
 
