@@ -42,6 +42,7 @@ import time
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from sklearn import svm
 from torch.utils.data import DataLoader, Dataset
@@ -152,7 +153,11 @@ IMAGE_SIZE = 200
 # ─── Experiment name parsing ──────────────────────────────────────────────────
 
 _CANONICAL_RE = re.compile(
-    r"^lejepa_line_([a-z\-]+)_split_(\d+)_pct_(\d+)_model_(xavier|random|he|flim|trunc_normal)$"
+    r"^lejepa_line_([a-z\-]+)_split_(\d+)_pct_(\d+)_model_"
+    r"(xavier|random|he|flim|trunc_normal)"
+    # Sufixo opcional de variante (batch size / config de treino), documentado no
+    # README como `[_bs<batch>]` — ex.: `_bs256`, `_bs256_mc2g8l`, `_bs150_mc8g8l_3lproj`.
+    r"(?:_(.+))?$"
 )
 _OLD_RE = re.compile(r"^line_p(\d+)_(xavier|random|he|flim|trunc_normal)$")
 
@@ -229,12 +234,33 @@ def find_best_checkpoint(run_id: str) -> str:
     )
 
 
+# ─── Feature pooling ──────────────────────────────────────────────────────────
+
+# Global average pooling applied to the conv3 feature map before flattening.
+# Matches the convention used by the classification heads (``MLPHead.forward``,
+# ``TwoLayerSigmoidHead``) and by ``src/evaluate/svm_classification_flim.py``,
+# so the SVM sees the same ``channels[-1]``-d embedding the heads see instead of
+# a spatially flattened map.
+_POOL = nn.AdaptiveAvgPool2d(1)
+
+
+def _encode_pooled(model, inputs: torch.Tensor) -> torch.Tensor:
+    """Run conv1→conv2→conv3, global-average-pool and flatten to ``[B, C]``."""
+    out = model.conv1(inputs)
+    out = model.conv2(out)
+    out = model.conv3(out)
+    return _POOL(out).flatten(start_dim=1).detach().cpu()
+
+
 # ─── SVM training ─────────────────────────────────────────────────────────────
 
 
 @torch.no_grad()
 def train_svm(model, dataloader, max_iter: int = 10000, C: float = 1e2, degree: int = 3):
     """Fit a linear SVM on frozen encoder features.
+
+    Features are the conv3 feature map reduced by ``AdaptiveAvgPool2d(1)`` and
+    flattened, i.e. one value per output channel (``channels[-1]``-d).
 
     *dataloader* must yield ``(inputs, one_hot_labels)`` where one_hot_labels
     has shape ``(B, num_classes)``.  Labels returned by the fitted SVM are
@@ -260,10 +286,7 @@ def train_svm(model, dataloader, max_iter: int = 10000, C: float = 1e2, degree: 
     print("[INFO] Preparing data for SVM")
     for inputs, labels in tqdm(dataloader):
         inputs = inputs.to(DEVICE)
-        out = model.conv1(inputs)
-        out = model.conv2(out)
-        out = model.conv3(out).detach().cpu()
-        all_feats = torch.cat((all_feats, out))
+        all_feats = torch.cat((all_feats, _encode_pooled(model, inputs)))
 
         labels_np = np.argmax(labels.cpu().numpy(), axis=1) + 1  # 1-indexed
         all_y = torch.cat((all_y, torch.from_numpy(labels_np).long()))
@@ -278,7 +301,7 @@ def train_svm(model, dataloader, max_iter: int = 10000, C: float = 1e2, degree: 
 
     _thread = threading.Thread(target=_progress, daemon=True)
     _thread.start()
-    clf.fit(all_feats.flatten(start_dim=1), all_y)
+    clf.fit(all_feats, all_y)
     _stop.set()
     _thread.join()
     return clf
@@ -314,12 +337,16 @@ class _OneHotDataset(Dataset):
 def extract_features(model, dataloader):
     """Extract conv1→conv2→conv3 features from *model* for every batch.
 
+    The conv3 feature map is reduced by ``AdaptiveAvgPool2d(1)`` and flattened,
+    so each sample yields one value per output channel (``channels[-1]``-d) —
+    the same embedding the classification heads consume.
+
     Args:
         model:      FLIM Encoder with ``.conv1``, ``.conv2``, ``.conv3``.
         dataloader: Yields ``(inputs, int_labels)``.
 
     Returns:
-        features: ``np.ndarray`` of shape ``(N, D)`` — flattened conv3 outputs.
+        features: ``np.ndarray`` of shape ``(N, channels[-1])`` — pooled conv3.
         y_true:   ``np.ndarray`` of shape ``(N,)``  — 0-indexed class labels.
     """
     model.eval()
@@ -330,10 +357,7 @@ def extract_features(model, dataloader):
 
     for inputs, labels in tqdm(dataloader, desc="  Extracting test features"):
         inputs = inputs.to(DEVICE)
-        out = model.conv1(inputs)
-        out = model.conv2(out)
-        out = model.conv3(out).detach().cpu()
-        all_feats.append(out.flatten(start_dim=1).numpy())
+        all_feats.append(_encode_pooled(model, inputs).numpy())
 
         if isinstance(labels, torch.Tensor):
             all_labels.extend(labels.tolist())
