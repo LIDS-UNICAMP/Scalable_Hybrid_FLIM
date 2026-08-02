@@ -104,6 +104,8 @@ core.[0-9]*
 results/
 artifacts/
 data/images_isic_2028
+# figuras de merge geradas por plot_comparison_flim.py (reproduzíveis)
+new_hope_jepa/
 # analises_wandb_training — só os arquivos .md são valiosos; o resto é reproduzível
 analises_wandb_training/wandb_training_curves/
 analises_wandb_training/**/*.csv
