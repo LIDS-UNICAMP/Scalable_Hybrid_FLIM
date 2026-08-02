@@ -18,7 +18,7 @@ Baseline: SVM_FLIM (rotulo do artigo "FLIM (59.504)"). O artigo e uma
 comparacao contra o FLIM, logo a familia de testes tem 7 comparacoes
 (FLIM vs cada um dos outros 7 modelos oficiais).
 
-Filtro obrigatorio: SVM_LeJEPA aparece no CSV com 5 inicializacoes
+Filtro obrigatorio: SVM_lejepa_view aparece no CSV com 5 inicializacoes
 (flim, he, random, trunc_normal, xavier). Somente init == "trunc_normal" entra
 no artigo; sem esse filtro o teste fica errado.
 
@@ -78,7 +78,7 @@ METRIC_LABEL = "Acuracia"
 # method -> (rotulo do artigo, filtro extra de init ou None)
 OFFICIAL_MODELS: dict[str, tuple[str, str | None]] = {
     "SVM_FLIM": ("FLIM (59.504)", None),
-    "SVM_LeJEPA": ("LeJEPA (59.504)", "trunc_normal"),
+    "SVM_lejepa_view": ("lejepa_view", "trunc_normal"),
     "SVM_IJEPA": ("I-JEPA (632M)", None),
     "SVM_Distill_Proj1280": ("Distill 4 (889K)", None),
     "SVM_Distill_3x3BN": ("Distill 3 (615K)", None),

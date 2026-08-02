@@ -89,7 +89,7 @@ def load_lejepa() -> ModelData:
             "f1":    float(r["f1"]),
         }
         for r in rows
-        if r["method"] == "SVM_LeJEPA" and r["init"] == "trunc_normal"
+        if r["method"] == "SVM_lejepa_view" and r["init"] == "trunc_normal"
     }
 
 

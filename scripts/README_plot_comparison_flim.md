@@ -125,7 +125,7 @@ vem de um CSV de origem diferente:
 | Rótulo na legenda            | `method` (chave)                            | CSV de origem |
 |------------------------------|---------------------------------------------|---------------|
 | FLIM (59.504)                | `SVM_FLIM`                                   | `data/reports_felipe/svm/report_svm_*.csv` |
-| LeJEPA (59.504)              | `SVM_LeJEPA` (init `trunc_normal`)           | `artifacts/SVM/*/*/metrics_SVM_*.csv` |
+| lejepa_view                  | `SVM_lejepa_view` (init `trunc_normal`)      | `artifacts/SVM/*/*/metrics_SVM_*.csv` |
 | I-JEPA (632M)                | `SVM_IJEPA`                                   | `results/ijepa_svm_aggregated.csv` |
 | Distill 4 (889K)             | `SVM_Distill_Proj1280`                        | `results/svm_distill_proj1280_results.csv` |
 | Distill 3 (615K)             | `SVM_Distill_3x3BN`                            | `results/svm_proj1280_3x3_BN2d_results.csv` |

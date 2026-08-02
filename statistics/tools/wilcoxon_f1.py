@@ -16,7 +16,7 @@ cada modelo contra um baseline, com correcao para multiplas comparacoes.
 * Baseline: ``SVM_FLIM`` (rotulo do artigo "FLIM (59.504)"). O artigo e uma comparacao
   *contra o FLIM*, portanto o desenho e um-contra-todos: 7 comparacoes
   (FLIM vs cada um dos outros 7 modelos oficiais).
-* ``SVM_LeJEPA`` aparece no CSV com 5 inicializacoes diferentes (90 linhas). Somente
+* ``SVM_lejepa_view`` aparece no CSV com 5 inicializacoes diferentes (90 linhas). Somente
   ``init == "trunc_normal"`` entra no artigo; o filtro esta codificado em MODELS.
 * Teste: ``scipy.stats.wilcoxon(baseline, modelo, alternative="two-sided",
   zero_method="wilcox")``. Tenta ``method="exact"`` primeiro (n <= 18 permite) e cai
@@ -79,7 +79,7 @@ METRIC_LABEL = "F1"
 # method -> (rotulo do artigo, filtro de init ou None)
 MODELS: dict[str, tuple[str, str | None]] = {
     "SVM_FLIM": ("FLIM (59.504)", None),
-    "SVM_LeJEPA": ("LeJEPA (59.504)", "trunc_normal"),
+    "SVM_lejepa_view": ("lejepa_view", "trunc_normal"),
     "SVM_IJEPA": ("I-JEPA (632M)", None),
     "SVM_Distill_Proj1280": ("Distill 4 (889K)", None),
     "SVM_Distill_3x3BN": ("Distill 3 (615K)", None),

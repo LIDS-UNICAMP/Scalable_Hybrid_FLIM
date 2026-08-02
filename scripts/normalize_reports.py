@@ -155,7 +155,12 @@ def load_lejepa_svm_metrics() -> pd.DataFrame:
 
     Schema: model_type, dataset_short, pretrained_pct, init,
             n_splits, kappa, kappa_std, acc, acc_std, f1, f1_std
-    Returns canonical DataFrame with method=SVM_LeJEPA.
+    Returns canonical DataFrame with method=SVM_lejepa_view.
+
+    Nota: a curva se chamava `SVM_LeJEPA` (legenda "LeJEPA (59.504)"); foi
+    renomeada para `SVM_lejepa_view` / legenda `lejepa_view`. Consumidores do CSV
+    unificado (plot_comparison_flim.py, plot_parameters_vs_metrics.py,
+    statistics/tools/wilcoxon_*.py) já usam a chave nova.
     """
     artifacts_svm = _ROOT / "artifacts" / "SVM"
     rows: list[dict] = []
@@ -167,7 +172,7 @@ def load_lejepa_svm_metrics() -> pd.DataFrame:
         row = df.iloc[0]
         try:
             rows.append({
-                "method":        "SVM_LeJEPA",
+                "method":        "SVM_lejepa_view",
                 "init":          str(row["init"]),
                 "dataset_short": str(row["dataset_short"]),
                 "pretrained_pct": int(row["pretrained_pct"]),
@@ -186,7 +191,7 @@ def load_lejepa_svm_metrics() -> pd.DataFrame:
         return None  # caller handles missing gracefully
 
     result = pd.DataFrame(rows, columns=_CANONICAL_COLS)
-    print(f"[NORM] SVM_LeJEPA: {len(result)} rows from artifacts/SVM/")
+    print(f"[NORM] SVM_lejepa_view: {len(result)} rows from artifacts/SVM/")
     return result
 
 

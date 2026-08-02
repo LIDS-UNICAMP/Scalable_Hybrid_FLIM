@@ -385,7 +385,7 @@ def plot_metric_vs_pct(
 # Ordem = ordem da legenda. Cores contrastivas.
 METHOD_COMPARE_STYLE: dict[str, dict] = {
     "SVM_FLIM":                                {"color": "#0072B2", "ls": "-",  "marker": "o", "zorder": 7},
-    "SVM_LeJEPA_trunc_normal":                 {"color": "#9467BD", "ls": "-.", "marker": "P", "zorder": 8},
+    "lejepa_view_trunc_normal":                {"color": "#9467BD", "ls": "-.", "marker": "P", "zorder": 8},
     "SVM_IJEPA":                               {"color": "#E69F00", "ls": "-.", "marker": "*", "zorder": 9},
     "SVM_Distill_Proj1280":                    {"color": "#D62728", "ls": "--", "marker": "v", "zorder": 10},
     "SVM_Distill_3x3BN":                       {"color": "#E377C2", "ls": "--", "marker": "^", "zorder": 11},
@@ -402,7 +402,7 @@ METHOD_COMPARE_STYLE: dict[str, dict] = {
 # metrics_distillation/data_provenance.md (como cada CSV de origem é gerado).
 METHOD_COMPARE_LABEL: dict[str, str] = {
     "SVM_FLIM":                                 "FLIM (59.504)",               # data/reports_felipe/svm/report_svm_*.csv
-    "SVM_LeJEPA_trunc_normal":                  "LeJEPA (59.504)",             # artifacts/SVM/*/*/metrics_SVM_*.csv (init=trunc_normal)
+    "lejepa_view_trunc_normal":                 "lejepa_view",                 # artifacts/SVM/*/*/metrics_SVM_*.csv (init=trunc_normal)
     "SVM_IJEPA":                                "I-JEPA (632M)",               # results/ijepa_svm_aggregated.csv
     "SVM_Distill_Proj1280":                     "Distill 4 (889K)",            # results/svm_distill_proj1280_results.csv
     "SVM_Distill_3x3BN":                        "Distill 3 (615K)",            # results/svm_proj1280_3x3_BN2d_results.csv (trunc_normal)
@@ -430,10 +430,10 @@ def plot_method_comparison(
 ) -> None:
     """Line plot: metric vs pct, one line per (method, init) combination.
 
-    Compares SVM_FLIM, SVM_LeJEPA (all inits), and SVM_IJEPA on the same axes.
+    Compares SVM_FLIM, SVM_lejepa_view (all inits), and SVM_IJEPA on the same axes.
 
     Expected DataFrame columns:
-        method         — "SVM_FLIM", "SVM_LeJEPA", or "SVM_IJEPA"
+        method         — "SVM_FLIM", "SVM_lejepa_view", or "SVM_IJEPA"
         init           — "flim", "he", "xavier", "random", or "ijepa"
         pretrained_pct — integer percentage
         {metric}       — mean metric value
@@ -469,6 +469,9 @@ def plot_method_comparison(
                       "SVM_Distill_1x1BN_flim_frozen_eval_loss",
                       "SVM_FLIMResidual_1_3", "SVM_FLIMResidual_2_3"):
             return method
+        if method == "SVM_lejepa_view":          # curva LeJEPA (renomeada p/ lejepa_view)
+            return f"lejepa_view_{init}"
+        # Legado: MLP_FLIM de scripts/plot_svm_vs_mlp_pct.py usa init=frozen/unfrozen
         return f"SVM_LeJEPA_{init}"
 
     line_df = df.copy()
@@ -650,6 +653,9 @@ def plot_merge_comparison(
                       "SVM_Distill_1x1BN_flim_frozen_eval_loss",
                       "SVM_FLIMResidual_1_3", "SVM_FLIMResidual_2_3"):
             return method
+        if method == "SVM_lejepa_view":          # curva LeJEPA (renomeada p/ lejepa_view)
+            return f"lejepa_view_{init}"
+        # Legado: MLP_FLIM de scripts/plot_svm_vs_mlp_pct.py usa init=frozen/unfrozen
         return f"SVM_LeJEPA_{init}"
 
     df = df.copy()

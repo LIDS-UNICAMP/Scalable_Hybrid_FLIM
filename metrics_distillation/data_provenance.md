@@ -39,7 +39,7 @@ Distill ── distillation_conv_ray.py ──► ckpt ── svm_distill_with_p
 | # | Curva | método (chave) | CSV de origem | gerador |
 |---|---|---|---|---|
 | 1 | FLIM | `SVM_FLIM` | `data/reports_felipe/svm/report_svm_*.csv` | **externo** (não há gerador no repo) |
-| 2 | LeJEPA | `SVM_LeJEPA` (`trunc_normal`) | `artifacts/SVM/*/lejepa_pct_*/metrics_SVM_*.csv` | `src/evaluate/unified_eval.py` |
+| 2 | lejepa_view | `SVM_lejepa_view` (`trunc_normal`) | `artifacts/SVM/*/lejepa_pct_*/metrics_SVM_*.csv` | `src/evaluate/unified_eval.py` |
 | 3 | I-JEPA | `SVM_IJEPA` | `results/ijepa_svm_aggregated.csv` | `src/evaluate/svm_ijepa.py` |
 | 4 | Distill 4 | `SVM_Distill_Proj1280` | `results/svm_distill_proj1280_results.csv` | `src/evaluate/svm_distill_with_projection.py` |
 | 5 | Distill 3 | `SVM_Distill_3x3BN` | `results/svm_proj1280_3x3_BN2d_results.csv` | `src/evaluate/svm_distill_with_projection.py` |
@@ -60,7 +60,10 @@ Distill ── distillation_conv_ray.py ──► ckpt ── svm_distill_with_p
   `test_cohen_kappa→kappa`, `test_accuracy→acc`, `test_f1_weighted→f1`, agrega por `(dataset, percentage)`.
 - **Regenerar:** ❌ não existe no repo (fonte externa). Para atualizar, basta recolocar os CSVs em `data/reports_felipe/svm/`.
 
-## 2. LeJEPA — `SVM_LeJEPA` (init `trunc_normal`)
+## 2. lejepa_view — `SVM_lejepa_view` (init `trunc_normal`)
+
+> Renomeada: a curva era rotulada `LeJEPA (59.504)` com `method=SVM_LeJEPA`; hoje a legenda é
+> `lejepa_view` e a chave `method` é `SVM_lejepa_view`.
 
 Gerado em **2 estágios** dentro do repo:
 
@@ -74,7 +77,7 @@ Gerado em **2 estágios** dentro do repo:
 
 - **`init`** = inicialização dos pesos do encoder LeJEPA **antes** do SSL (`trunc_normal`, `flim`, `he`, `xavier`, `random`).
   O baseline oficial usa **`trunc_normal`** (filtrado em `plot_comparison_flim.py::_filter`).
-- **Normalização:** `load_lejepa_svm_metrics()` (`normalize_reports.py:153-190`), glob `*/*/metrics_SVM_*.csv`, `method="SVM_LeJEPA"`.
+- **Normalização:** `load_lejepa_svm_metrics()` (`normalize_reports.py:153-195`), glob `*/*/metrics_SVM_*.csv`, `method="SVM_lejepa_view"`.
 - **Colunas (já agregadas):** `model_type, dataset_short, pretrained_pct, init, n_splits, kappa, kappa_std, acc, acc_std, f1, f1_std`.
 
 ## 3. I-JEPA — `SVM_IJEPA`

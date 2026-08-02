@@ -20,7 +20,7 @@
 
 Filters the unified SVM CSV to keep:
   - SVM_FLIM
-  - SVM_LeJEPA (trunc_normal init)
+  - SVM_lejepa_view (trunc_normal init)  → legenda "lejepa_view"
   - SVM_IJEPA
   - SVM_Distill_Proj1280 / SVM_Distill_3x3BN / SVM_Distill_1x1BN / SVM_Distill_2l400K
 
@@ -66,8 +66,8 @@ from src.evaluate.eval_plotter import plot_method_comparison, plot_merge_compari
 #   FLIM
 #     SVM_FLIM                       → normalize_felipe_svm()
 #       data/reports_felipe/svm/report_svm_{ds}_split{N}_perc{pct}.csv   (encoder_mode==frozen)
-#   LeJEPA
-#     SVM_LeJEPA_trunc_normal        → load_lejepa_svm_metrics()
+#   lejepa_view  (ex-"LeJEPA")
+#     lejepa_view_trunc_normal       → load_lejepa_svm_metrics()  [method=SVM_lejepa_view]
 #       artifacts/SVM/*/*/metrics_SVM_*.csv                              (init==trunc_normal; filtro no _filter() abaixo)
 #   I-JEPA
 #     SVM_IJEPA                      → normalize_ijepa_svm()
@@ -96,7 +96,7 @@ from src.evaluate.eval_plotter import plot_method_comparison, plot_merge_compari
 # Apenas estas 8 chaves devem aparecer nas curvas/legenda.
 eval_plotter.METHOD_COMPARE_LABEL = {
     "SVM_FLIM":                                 "FLIM (59.504)",               # data/reports_felipe/svm/report_svm_*.csv
-    "SVM_LeJEPA_trunc_normal":                  "LeJEPA (59.504)",             # artifacts/SVM/*/*/metrics_SVM_*.csv
+    "lejepa_view_trunc_normal":                 "lejepa_view",                 # artifacts/SVM/*/*/metrics_SVM_*.csv
     "SVM_IJEPA":                                "I-JEPA (632M)",               # results/ijepa_svm_aggregated.csv
     "SVM_Distill_Proj1280":                     "Distill 4 (889K)",            # results/svm_distill_proj1280_results.csv
     "SVM_Distill_3x3BN":                        "Distill 3 (615K)",            # results/svm_proj1280_3x3_BN2d_results.csv
@@ -221,7 +221,7 @@ def _filter(unified: pd.DataFrame) -> pd.DataFrame:
         (unified["method"] == "SVM_Distill_2l400K_flim_nonorm") |
         (unified["method"] == "SVM_Distill_1x1BN_flim_frozen_eval_knn") |
         (unified["method"] == "SVM_Distill_1x1BN_flim_frozen_eval_loss") |  # results/svm_distillation_conv_flim_frozen_results.csv
-        ((unified["method"] == "SVM_LeJEPA") & (unified["init"] == "trunc_normal"))  # artifacts/SVM/*/*/metrics_SVM_*.csv
+        ((unified["method"] == "SVM_lejepa_view") & (unified["init"] == "trunc_normal"))  # artifacts/SVM/*/*/metrics_SVM_*.csv
     )
     return unified[mask].copy()
 

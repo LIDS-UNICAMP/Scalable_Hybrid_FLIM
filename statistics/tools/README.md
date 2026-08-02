@@ -87,7 +87,7 @@ Os quatro testes de Wilcoxon leem `artifacts/normalized/unified_svm_comparison.c
 feito pela chave `(dataset_short, pretrained_pct)`, com aborto se as chaves de dois modelos não
 coincidirem.
 
-Filtro obrigatório aplicado nos três scripts um-contra-todos: `SVM_LeJEPA` aparece no CSV com
+Filtro obrigatório aplicado nos três scripts um-contra-todos: `SVM_lejepa_view` (ex-`SVM_LeJEPA`) aparece no CSV com
 cinco inicializações (`flim`, `he`, `random`, `trunc_normal`, `xavier`), e somente `trunc_normal`
 entra no artigo. Sem esse filtro o teste fica errado. O `wilcoxon_flim_init.py` não usa o LeJEPA,
 mas aplica o mesmo tipo de filtro em `SVM_Distill_1x1BN` (`init == "trunc_normal"`).
