@@ -32,7 +32,7 @@ Sugestao lista de datsets:
 2. food101
 3. face expression 2013
 4. parasito
-5. patologia Felipe
+5. patologia Felipe??
 6. dermotologico ISIC
 7. Coqueiros
 8. remoting sensing classification
@@ -48,7 +48,7 @@ O Leornado conseguiu conseguiu um espaco de cores melhor que o LAB, chjamado OK-
 
 ## Bases
 
-[hawk] Rodar base 5% e 75%, solicitacao de uma base pequena e uma base grande.
+[hawk] Rodar base 5% e 75%, solicitacao de uma base pequena e uma base grande. relacionado a (sigmoid experiment)
 
 dataset AID enviado no grupo.
 * https://captain-whu.github.io/AID/
