@@ -129,6 +129,9 @@ graphify-out/
 /FAPESP_PhD_hawk
 /Presentation_FLIM_unsupervised
 
+# Auditoria da figura de 8 modelos (kappa.png) — 2026-08-03
+A_reports/2026/august/report_auditoria_figura_kappa_2026-08-03.md
+
 # LaTeX build artifacts
 *.pdf
 *.aux
