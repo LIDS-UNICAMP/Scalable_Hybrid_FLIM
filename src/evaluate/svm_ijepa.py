@@ -57,6 +57,8 @@ from src.metrics.classification import compute_metrics
 from src.models.ijepa_encoder import IJEPAEncoder
 from src.utils.evaluate import (
     DATASET_NUM_CLASSES,
+    SVM_DIAG_MISSING,
+    fit_svm_with_diagnostics,
     _OneHotDataset,
     _ROOT,
 )
@@ -116,7 +118,7 @@ def _extract_features_ijepa(
 def _train_svm_ijepa(
     encoder: IJEPAEncoder,
     dataloader: DataLoader,
-    max_iter: int = 10_000,
+    max_iter: int = -1,
     C: float = 1e2,
 ) -> object:
     """Fit a linear SVM on I-JEPA embeddings.
@@ -125,12 +127,18 @@ def _train_svm_ijepa(
     ``_OneHotDataset`` wrapper.  Internally converts to 1-indexed integers
     (consistent with ``train_svm`` from ``utils/evaluate``).
 
+    ``max_iter`` defaults to ``-1`` (unbounded solver); pass the old cap
+    explicitly only to reproduce a historical CSV.
+
     Returns:
-        Fitted ``sklearn.svm.SVC`` classifier (labels are 1-indexed).
+        Fitted ``sklearn.svm.SVC`` classifier (labels are 1-indexed); solver
+        diagnostics are attached as ``fit_diagnostics_``.
     """
     from sklearn import svm as _svm  # noqa: PLC0415
 
     clf = _svm.SVC(
+        # Unbounded solver: results are deliberately NOT comparable with the
+        # CSVs produced under the old max_iter cap.
         max_iter=max_iter,
         C=C,
         gamma="auto",
@@ -161,7 +169,7 @@ def _train_svm_ijepa(
 
     _thread = threading.Thread(target=_progress, daemon=True)
     _thread.start()
-    clf.fit(X, y)
+    fit_svm_with_diagnostics(clf, X, y, tag="SVM_IJEPA")
     _stop.set()
     _thread.join()
     return clf
@@ -351,13 +359,16 @@ def main() -> None:
                     y_pred = clf.predict(feats) - 1
 
                     metrics = compute_metrics(y_true=y_true, y_pred=y_pred, num_classes=num_classes)
+                    # Solver diagnostics ride on the classifier (fit_svm_with_diagnostics).
+                    diag = getattr(clf, "fit_diagnostics_", SVM_DIAG_MISSING)
 
                     print(
                         f"  [RESULT] kappa={metrics['kappa']:.4f}  "
-                        f"acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}"
+                        f"acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}  "
+                        f"fit_status={diag['svm_fit_status']}  n_sv={diag['svm_n_sv']}"
                     )
 
-                    rows.append({**base_row, **metrics, "status": "ok", "error": ""})
+                    rows.append({**base_row, **metrics, **diag, "status": "ok", "error": ""})
 
                     # ── Optional W&B logging ───────────────────────────────
                     if args.wandb:
@@ -380,6 +391,7 @@ def main() -> None:
                         "kappa": float("nan"),
                         "acc": float("nan"),
                         "f1": float("nan"),
+                        **SVM_DIAG_MISSING,
                         "status": "error",
                         "error": str(exc),
                     })
@@ -404,6 +416,8 @@ def main() -> None:
                 "kappa": r.get("kappa", float("nan")),
                 "f1":    r.get("f1", float("nan")),
             },
+            # New keys only — existing ones above are untouched.
+            "svm": {k: r.get(k, SVM_DIAG_MISSING[k]) for k in SVM_DIAG_MISSING},
         })
     with open(json_path, "w", encoding="utf-8") as fh:
         json.dump(json_rows, fh, indent=2)
@@ -413,7 +427,9 @@ def main() -> None:
     _col_order = [
         "wandb_run_id", "run_name", "model_type", "dataset", "dataset_short",
         "split", "pretrained_pct", "embedding", "freeze_status", "ckpt_source",
-        "kappa", "acc", "f1", "status", "error",
+        "kappa", "acc", "f1",
+        *SVM_DIAG_MISSING,   # new columns, appended — nothing renamed
+        "status", "error",
     ]
     df = pd.DataFrame(rows)
     remaining = [c for c in df.columns if c not in _col_order]

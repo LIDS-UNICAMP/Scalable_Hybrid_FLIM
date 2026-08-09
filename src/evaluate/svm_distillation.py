@@ -69,6 +69,7 @@ from src.models.models import (
     get_actual_channels_from_weights,
     override_arch_channels,
 )
+from src.utils.evaluate import SVM_DIAG_MISSING, fit_svm_with_diagnostics
 
 _ARTIFACTS_DIR = os.path.join(_ROOT, "artifacts", "distillation")
 _RESULTS_DIR   = os.path.join(_ROOT, "results")
@@ -208,7 +209,7 @@ def extract_features_distillation(
 def train_svm_distillation(
     student_model,
     dataloader: DataLoader,
-    max_iter: int = 10_000,
+    max_iter: int = -1,
     C: float = 1e2,
 ) -> object:
     """Fit a linear SVM on distilled student embeddings (1-indexed labels).
@@ -216,13 +217,18 @@ def train_svm_distillation(
     Args:
         student_model: ``LeJEPAFLIMModel`` with ``encode()`` interface.
         dataloader:    Yields ``(inputs, one_hot_labels)`` — labels shape ``(B, C)``.
-        max_iter:      SVM solver iteration cap.
+        max_iter:      SVM solver iteration cap; ``-1`` = unbounded (default).
+                       Pass the old cap explicitly only to reproduce a
+                       historical CSV.
         C:             SVM regularisation parameter.
 
     Returns:
-        Fitted ``sklearn.svm.SVC`` (predictions are 1-indexed).
+        Fitted ``sklearn.svm.SVC`` (predictions are 1-indexed); solver
+        diagnostics are attached as ``fit_diagnostics_``.
     """
     clf = sk_svm.SVC(
+        # Unbounded solver: results are deliberately NOT comparable with the
+        # CSVs produced under the old max_iter cap.
         max_iter=max_iter,
         C=C,
         gamma="auto",
@@ -256,7 +262,7 @@ def train_svm_distillation(
 
     _thr = threading.Thread(target=_progress, daemon=True)
     _thr.start()
-    clf.fit(X, y)
+    fit_svm_with_diagnostics(clf, X, y, tag="SVM_Distillation")
     _stop.set()
     _thr.join()
     return clf
@@ -462,11 +468,14 @@ def main() -> None:
             y_pred = clf.predict(feats) - 1
 
             metrics = compute_metrics(y_true=y_true, y_pred=y_pred, num_classes=num_classes)
-            rows.append({**base_row, **metrics, "status": "ok", "error": ""})
+            # Solver diagnostics travel on the classifier (fit_svm_with_diagnostics).
+            diag = getattr(clf, "fit_diagnostics_", SVM_DIAG_MISSING)
+            rows.append({**base_row, **metrics, **diag, "status": "ok", "error": ""})
 
             print(
                 f"  [RESULT] kappa={metrics['kappa']:.4f}  "
-                f"acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}"
+                f"acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}  "
+                f"fit_status={diag['svm_fit_status']}  n_sv={diag['svm_n_sv']}"
             )
 
             # ── Optional W&B logging ───────────────────────────────────────
@@ -493,6 +502,7 @@ def main() -> None:
                 "kappa": float("nan"),
                 "acc":   float("nan"),
                 "f1":    float("nan"),
+                **SVM_DIAG_MISSING,
                 "status": "error",
                 "error":  str(exc),
             })
@@ -505,8 +515,9 @@ def main() -> None:
         "teacher_model",
     ]
     _metric_cols = ["kappa", "acc", "f1"]
+    _diag_cols   = list(SVM_DIAG_MISSING)   # new columns, appended — nothing renamed
     _extra_cols  = ["status", "error", "ckpt_path"]
-    _col_order   = _meta_cols + _metric_cols + _extra_cols
+    _col_order   = _meta_cols + _metric_cols + _diag_cols + _extra_cols
 
     df = pd.DataFrame(rows)
     remaining = [c for c in df.columns if c not in _col_order]

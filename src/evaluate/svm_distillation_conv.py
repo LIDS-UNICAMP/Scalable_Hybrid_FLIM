@@ -60,6 +60,7 @@ from src.evaluate.svm_distillation import (
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
 from src.metrics.classification import compute_metrics
+from src.utils.evaluate import SVM_DIAG_MISSING, fit_svm_with_diagnostics
 
 # ── Carrega só o student do checkpoint, sem instanciar o teacher (I-JEPA) ─────
 from src.models.lejepa_flim import LeJEPAFLIMModel
@@ -198,11 +199,15 @@ def _extract_proj_features(student, proj_kd, dataloader: DataLoader):
 
 
 def _train_svm_proj(student, proj_kd, dataloader: DataLoader,
-                    max_iter: int = 10_000, C: float = 1e2):
+                    max_iter: int = -1, C: float = 1e2):
     """Treina um SVM linear sobre o embedding 1280d (labels 1-indexed).
 
     Espelha ``train_svm_distillation`` mas com a feature de projeção.
     Loader yields ``(inputs, one_hot_labels)``.
+
+    ``max_iter=-1`` (padrão) = solver sem limite; passe o cap antigo
+    explicitamente só para reproduzir um CSV histórico. Os diagnósticos do
+    solver ficam em ``clf.fit_diagnostics_``.
     """
     import threading  # noqa: PLC0415
     import numpy as np  # noqa: PLC0415
@@ -210,6 +215,8 @@ def _train_svm_proj(student, proj_kd, dataloader: DataLoader,
     from tqdm import tqdm  # noqa: PLC0415
 
     clf = sk_svm.SVC(
+        # Unbounded solver: results are deliberately NOT comparable with the
+        # CSVs produced under the old max_iter cap.
         max_iter=max_iter, C=C, gamma="auto",
         decision_function_shape="ovo", kernel="linear",
     )
@@ -242,7 +249,7 @@ def _train_svm_proj(student, proj_kd, dataloader: DataLoader,
 
     _thr = threading.Thread(target=_progress, daemon=True)
     _thr.start()
-    clf.fit(X, y)
+    fit_svm_with_diagnostics(clf, X, y, tag="SVM_Distill_Proj1280_conv")
     _stop.set()
     _thr.join()
     return clf
@@ -489,8 +496,11 @@ def main() -> None:
                 y_pred = clf.predict(feats) - 1  # volta para 0-indexed
 
                 metrics = compute_metrics(y_true=y_true, y_pred=y_pred, num_classes=num_classes)
-                rows.append({**base, **metrics, "status": "ok", "error": ""})
-                print(f"   kappa={metrics['kappa']:.4f}  acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}")
+                # Diagnósticos do solver viajam no classificador (fit_svm_with_diagnostics).
+                diag = getattr(clf, "fit_diagnostics_", SVM_DIAG_MISSING)
+                rows.append({**base, **metrics, **diag, "status": "ok", "error": ""})
+                print(f"   kappa={metrics['kappa']:.4f}  acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}"
+                      f"  fit_status={diag['svm_fit_status']}  n_sv={diag['svm_n_sv']}")
 
                 if args.wandb_update:
                     try:
@@ -508,7 +518,8 @@ def main() -> None:
             except Exception as exc:
                 print(f"   [ERROR] {exc}")
                 rows.append({**base, "kappa": float("nan"), "acc": float("nan"),
-                             "f1": float("nan"), "status": "error", "error": str(exc)})
+                             "f1": float("nan"), **SVM_DIAG_MISSING,
+                             "status": "error", "error": str(exc)})
 
     # ── CSV ────────────────────────────────────────────────────────────────
     if args.output_csv:

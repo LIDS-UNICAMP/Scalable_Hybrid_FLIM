@@ -76,6 +76,7 @@ from src.evaluate.svm_distillation import (
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
 from src.metrics.classification import compute_metrics
+from src.utils.evaluate import SVM_DIAG_MISSING, fit_svm_with_diagnostics
 from src.models.lejepa_flim import LeJEPAFLIMModel
 from src.models.distillation import (
     ConvDistillationProjectionHead,
@@ -209,12 +210,22 @@ def _train_svm_proj(
     proj_kd:  ConvDistillationProjectionHead,
     loader:   DataLoader,
     C:        float = 1e2,
-    max_iter: int   = 20_000,
+    max_iter: int   = -1,
 ) -> Pipeline:
-    # StandardScaler é necessário com 1280 dims para convergência do SVM linear
+    """Treina o SVM da arm Proj1280 (labels 1-indexed).
+
+    ``max_iter=-1`` (padrão) = solver sem limite; passe o cap antigo
+    explicitamente só para reproduzir um CSV histórico. Diagnósticos do solver
+    ficam em ``clf.fit_diagnostics_`` (leem do step ``svm`` do Pipeline).
+    """
+    # StandardScaler é necessário com 1280 dims para convergência do SVM linear.
+    # Esta arm escala, outras não — a assimetria NÃO é unificada aqui, apenas
+    # registrada na coluna svm_protocol.
     clf = Pipeline([
         ("scaler", StandardScaler()),
         ("svm",    sk_svm.SVC(
+            # Unbounded solver: results are deliberately NOT comparable with the
+            # CSVs produced under the old max_iter cap.
             C=C, gamma="auto", kernel="linear",
             decision_function_shape="ovo", max_iter=max_iter,
         )),
@@ -239,7 +250,7 @@ def _train_svm_proj(
             while not stop.wait(1.0): pb.update(1)
     t = threading.Thread(target=_prog, daemon=True)
     t.start()
-    clf.fit(X, y)
+    fit_svm_with_diagnostics(clf, X, y, tag="SVM_Distill_Proj1280")
     stop.set(); t.join()
     return clf
 
@@ -362,12 +373,15 @@ def main() -> None:
             y_pred = clf.predict(feats) - 1  # volta para 0-indexed
 
             metrics = compute_metrics(y_true=y_true, y_pred=y_pred, num_classes=num_classes)
-            row = {**base, **metrics, "status": "ok", "error": ""}
+            # Diagnósticos do solver viajam no Pipeline (fit_svm_with_diagnostics).
+            diag = getattr(clf, "fit_diagnostics_", SVM_DIAG_MISSING)
+            row = {**base, **metrics, **diag, "status": "ok", "error": ""}
             rows.append(row)
             pd.DataFrame([row]).to_csv(
                 os.path.join(partial_dir, f"{run_name}.csv"), index=False
             )
-            print(f"   kappa={metrics['kappa']:.4f}  acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}")
+            print(f"   kappa={metrics['kappa']:.4f}  acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}"
+                  f"  fit_status={diag['svm_fit_status']}  n_sv={diag['svm_n_sv']}")
 
             if args.wandb_update:
                 try:
@@ -385,7 +399,8 @@ def main() -> None:
         except Exception as exc:
             print(f"   [ERROR] {exc}")
             row = {**base, "kappa": float("nan"), "acc": float("nan"),
-                   "f1": float("nan"), "status": "error", "error": str(exc)}
+                   "f1": float("nan"), **SVM_DIAG_MISSING,
+                   "status": "error", "error": str(exc)}
             rows.append(row)
             pd.DataFrame([row]).to_csv(
                 os.path.join(partial_dir, f"{run_name}.csv"), index=False

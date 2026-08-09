@@ -31,6 +31,7 @@ Usage:
 from __future__ import annotations
 
 import glob
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -45,6 +46,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn import svm
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
@@ -252,11 +254,101 @@ def _encode_pooled(model, inputs: torch.Tensor) -> torch.Tensor:
     return _POOL(out).flatten(start_dim=1).detach().cpu()
 
 
+# ─── SVM solver diagnostics ───────────────────────────────────────────────────
+
+# Values written by every SVM arm when the fit itself never happened (the cell
+# raised before ``fit``), so error rows keep the same columns as ok rows.
+SVM_DIAG_MISSING: dict = {
+    "svm_protocol":    "",
+    "svm_fit_status":  -1,
+    "svm_n_iter_max":  -1,
+    "svm_n_iter_sum":  -1,
+    "svm_n_sv":        -1,
+    "svm_fit_seconds": float("nan"),
+}
+
+
+def _svc_step(estimator):
+    """Return the ``SVC`` inside *estimator* — itself, or the step of a Pipeline.
+
+    ``fit_status_`` / ``n_iter_`` / ``support_`` live on the ``SVC``, never on
+    the wrapping ``Pipeline``.
+    """
+    steps = getattr(estimator, "named_steps", None)
+    if steps is None:
+        return estimator
+    for step in steps.values():
+        if isinstance(step, svm.SVC):
+            return step
+    return estimator
+
+
+def svm_protocol(estimator) -> str:
+    """One-line, auditable description of the SVM protocol of *estimator*.
+
+    Derived from the estimator itself (never hardcoded), so the string cannot
+    drift from the code.  Recorded in every result CSV so two experiment arms
+    can be checked for pairing without reading the source — the scaler is
+    deliberately NOT unified across arms, only reported.
+    """
+    svc   = _svc_step(estimator)
+    steps = getattr(estimator, "named_steps", None) or {}
+    scaler = "standard" if any(isinstance(s, StandardScaler) for s in steps.values()) else "none"
+    return (
+        f"scaler={scaler};kernel={svc.kernel};C={svc.C:g};"
+        f"{svc.decision_function_shape};max_iter={svc.max_iter}"
+    )
+
+
+def fit_svm_with_diagnostics(estimator, X, y, tag: str = "SVM") -> dict:
+    """Fit *estimator* on ``(X, y)`` and record how the libsvm solver terminated.
+
+    Persisting this is the whole point: ``fit_status_=1`` (solver hit the
+    iteration cap) went undetected for months because nothing in the repo ever
+    saved it.  A non-zero status is logged as a WARNING.
+
+    The returned dict is also stashed on the estimator as ``fit_diagnostics_``
+    so callers that only receive the fitted classifier back can still write the
+    columns without a signature change.
+
+    Returns:
+        dict with the ``svm_*`` columns (see ``SVM_DIAG_MISSING``).
+    """
+    _t0 = time.perf_counter()
+    estimator.fit(X, y)
+    elapsed = time.perf_counter() - _t0
+
+    svc = _svc_step(estimator)
+    n_iter = np.asarray(getattr(svc, "n_iter_", []))
+    diag = {
+        "svm_protocol":    svm_protocol(estimator),
+        "svm_fit_status":  int(getattr(svc, "fit_status_", -1)),
+        "svm_n_iter_max":  int(n_iter.max()) if n_iter.size else -1,
+        "svm_n_iter_sum":  int(n_iter.sum()) if n_iter.size else -1,
+        "svm_n_sv":        int(len(getattr(svc, "support_", ()))),
+        "svm_fit_seconds": round(elapsed, 3),
+    }
+
+    msg = (
+        f"[{tag}] {diag['svm_protocol']}  fit_status={diag['svm_fit_status']}  "
+        f"n_iter(max/sum)={diag['svm_n_iter_max']}/{diag['svm_n_iter_sum']}  "
+        f"n_sv={diag['svm_n_sv']}  fit={diag['svm_fit_seconds']:.1f}s"
+    )
+    if diag["svm_fit_status"] != 0:
+        logging.warning("%s  <- SOLVER DID NOT CONVERGE (fit_status != 0)", msg)
+        print(f"  [WARN] {msg}  <- SOLVER DID NOT CONVERGE")
+    else:
+        print(f"  {msg}")
+
+    estimator.fit_diagnostics_ = diag
+    return diag
+
+
 # ─── SVM training ─────────────────────────────────────────────────────────────
 
 
 @torch.no_grad()
-def train_svm(model, dataloader, max_iter: int = 10000, C: float = 1e2, degree: int = 3):
+def train_svm(model, dataloader, max_iter: int = -1, C: float = 1e2, degree: int = 3):
     """Fit a linear SVM on frozen encoder features.
 
     Features are the conv3 feature map reduced by ``AdaptiveAvgPool2d(1)`` and
@@ -265,9 +357,15 @@ def train_svm(model, dataloader, max_iter: int = 10000, C: float = 1e2, degree: 
     *dataloader* must yield ``(inputs, one_hot_labels)`` where one_hot_labels
     has shape ``(B, num_classes)``.  Labels returned by the fitted SVM are
     1-indexed (matching the ``+1`` applied here).
+
+    ``max_iter`` defaults to ``-1`` (unbounded solver); pass the old cap
+    explicitly only to reproduce a historical CSV.  Solver diagnostics are left
+    on the returned classifier as ``fit_diagnostics_``.
     """
     print("[INFO] Initializing SVM")
     clf = svm.SVC(
+        # Unbounded solver: results are deliberately NOT comparable with the
+        # CSVs produced under the old max_iter cap.
         max_iter=max_iter,
         C=C,
         degree=degree,
@@ -301,7 +399,7 @@ def train_svm(model, dataloader, max_iter: int = 10000, C: float = 1e2, degree: 
 
     _thread = threading.Thread(target=_progress, daemon=True)
     _thread.start()
-    clf.fit(all_feats, all_y)
+    fit_svm_with_diagnostics(clf, all_feats, all_y, tag="SVM_FLIM")
     _stop.set()
     _thread.join()
     return clf
@@ -459,10 +557,14 @@ def main() -> None:
                 num_classes=num_classes,
             )
 
-            rows.append({**base_row, **metrics, "status": "ok", "error": ""})
+            # Solver diagnostics come along with the metrics (see
+            # fit_svm_with_diagnostics); missing only if the fit never ran.
+            diag = getattr(clf, "fit_diagnostics_", SVM_DIAG_MISSING)
+            rows.append({**base_row, **metrics, **diag, "status": "ok", "error": ""})
             print(
                 f"  [RESULT] kappa={metrics['kappa']:.4f}  "
-                f"acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}"
+                f"acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}  "
+                f"fit_status={diag['svm_fit_status']}  n_sv={diag['svm_n_sv']}"
             )
 
         except Exception as exc:
@@ -472,6 +574,7 @@ def main() -> None:
                 "kappa": float("nan"),
                 "acc": float("nan"),
                 "f1": float("nan"),
+                **SVM_DIAG_MISSING,
                 "status": "error",
                 "error": str(exc),
             })
@@ -484,8 +587,9 @@ def main() -> None:
     _meta = ["wandb_run_id", "experiment_name", "dataset_name",
              "split_id", "percentage", "initialization_type"]
     _metrics = ["kappa", "acc", "f1"]
+    _diag = list(SVM_DIAG_MISSING)   # new columns, appended — nothing renamed
     _extra = ["status", "error"]
-    _col_order = _meta + _metrics + _extra
+    _col_order = _meta + _metrics + _diag + _extra
 
     df = pd.DataFrame(rows)
     remaining = [c for c in df.columns if c not in _col_order]
