@@ -82,6 +82,12 @@ graphify-out/
 statistics/**/plots/
 statistics/**/*.png
 
+# tools/diag_*.py — scripts de diagnostico descartaveis, escritos para responder uma
+# pergunta pontual e nao para fazer parte do pipeline (os proprios docstrings dizem
+# "SCRIPT DE DIAGNOSTICO DESCARTAVEL"). Os experimentos de tools/ que sao versionados
+# e re-executaveis nao usam esse prefixo e continuam entrando no repo.
+tools/diag_*.py
+
 # Arquivos temporarios / rascunho / backup de merge
 *.bak
 *.orig
