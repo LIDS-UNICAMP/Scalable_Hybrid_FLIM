@@ -16,23 +16,77 @@
 # ║  ⠀⠀⠀⠈⣿⣿⣿⡆⠀⠀⠀⣿⣿⣿⡟⣼⡿⠁⢹⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀                                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
 """
-Ray queue for the unsupervised AutoEncoder grid (Experiment Day 5).
+Ray queue for the unsupervised AutoEncoder grid (Experiment Day 5), two-stage protocol.
 
-Fans the 3 datasets x {5%, 75%} x 3 splits = 18 runs over the available GPUs, one
-subprocess per run (``python -m src.modules.autoencoder_flim_module``). Same queue
-semantics as ``classification_flim_ray.py``: per-GPU concurrency slots, greedy drain,
-``--skip-existing`` / ``--check-wandb`` resume, manifest, ``--dry-run``.
+The grid is 3 datasets x {5%, 75%} x 3 splits = **18 cells**, and each cell is trained
+twice — stage 1 then stage 2 — so the experiment is **36 runs**, one subprocess each
+(``python -m src.modules.autoencoder_flim_module``):
 
-    # the 18 runs of the experiment, 4 GPUs
-    python scripts/autoencoder_flim_ray.py \\
+    stage 1  ``--freeze-encoder``   FLIM encoder frozen, the ResNet decoder learns to
+                                    invert it. Checkpoint selected on val/recon_loss
+                                    (min) -> ``best_recon.ckpt``.
+    stage 2  ``--init-ckpt <s1>``   both halves unfrozen, warm-started from stage 1.
+                                    Checkpoint selected on val/svm_kappa (max) ->
+                                    ``best_kappa.ckpt``.
+
+The 18 cells do **not** collapse to 9 stage-1 runs shared by both percentages: the
+``percentage`` argument selects a different ``data_descriptor_perc{p}.json``
+(``config.py:193-201``) that repartitions train **and** validation — validation is the
+complement of train, so pct5 and pct75 disagree on both halves. A stage-1 checkpoint is
+therefore only valid for the percentage it was fit and model-selected on. 18 cells,
+36 runs.
+
+Same queue semantics as ``classification_flim_ray.py``: per-GPU concurrency slots, greedy
+drain, ``--skip-existing`` / ``--check-wandb`` resume, manifest, ``--dry-run``.
+
+**Input normalisation — the default changed.** The FLIM kernels were estimated on LAB
+images in [0, 1], so feeding the encoder an ImageNet-normalised input evaluates those
+kernels off the distribution they were built for; the report measures ~0.33 of kappa lost
+that way (``docs/relatorio_kappa_estagio1_estagio2.md`` §8.1). This queue therefore runs
+**LAB [0, 1] by default** and passes ``--no-imagenet-norm`` to every child explicitly, so
+the flag is visible in the logged command line. ``--imagenet-norm`` opts back in and
+reproduces the legacy behaviour. This is a *local* decision for the FLIM-init autoencoder
+grid only: the distillation and I-JEPA arms still **require** ImageNet normalisation,
+because their teacher was trained with it, and nothing here should be copied there.
+
+Because the two normalisations are different experiments that must not share a name, the
+LAB default appends a ``_lab`` marker to the run name (see ``_run_name``). Without it,
+``--skip-existing`` would match the 36 legacy ImageNet-normalised runs already on disk and
+the grid would exit in seconds looking like a success.
+
+    # both stages chained inside one queue entry per cell — 18 entries, 36 runs
+    # (LAB [0, 1] input; run names end in ``_lab``)
+    python scripts/autoencoder_flim_ray.py --stage both \\
         --num-gpus 4 --max-concurrent-per-gpu 1 \\
         --wandb-update --skip-existing --check-wandb
 
-    # see the plan without running anything
-    python scripts/autoencoder_flim_ray.py --dry-run
+    # or as two explicit waves (wave 2 only queues cells whose stage-1 ckpt exists)
+    python scripts/autoencoder_flim_ray.py --stage 1 --num-gpus 4 --wandb-update
+    python scripts/autoencoder_flim_ray.py --stage 2 --num-gpus 4 --wandb-update
+
+    # legacy arm: ImageNet Normalize on the LAB input, legacy run names (no ``_lab``)
+    python scripts/autoencoder_flim_ray.py --stage both --imagenet-norm \\
+        --num-gpus 4 --wandb-update
+
+    # see the plan (run names + the exact child command lines) without running anything
+    python scripts/autoencoder_flim_ray.py --stage both --dry-run
 
     # re-queue only what failed
-    python scripts/autoencoder_flim_ray.py --retry --skip-existing --check-wandb --wandb-update
+    python scripts/autoencoder_flim_ray.py --stage both --retry \\
+        --skip-existing --check-wandb --wandb-update
+
+Every child's stderr is persisted to ``<run_dir>/child_stderr.log`` **always**, not only
+when the subprocess fails, and any warning line in it is echoed into this queue's log even
+on a clean exit — that is how the truncated-SVM ``ConvergenceWarning`` stayed invisible for
+36 runs (§8.8).
+
+W&B note: the child module now prefixes its stage-1/stage-2 metric keys with the stage
+(``stage1/…`` / ``stage2/…``), so dashboard panels built on the old flat keys must be
+repointed.
+
+``--stage both`` is the cheaper schedule: the two waves impose a global barrier (every
+cell waits on the slowest stage-1 run of the whole grid) that ``both`` removes, because
+each cell's stage 2 depends only on its own stage 1.
 
 Architecture per dataset: eggs/larvae ``ch24_32_48``, protozoan ``ch24_30_48``. The FLIM
 **weights** always come from the ``ch24_32_48_a0.5_f5`` tree — it is the only one with a
@@ -45,6 +99,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import shlex
 import sys
 import time
 from typing import Any, Optional
@@ -104,7 +159,7 @@ _ARTIFACT_ROOT = os.path.join(_ROOT, "artifacts", _ARTIFACT_SUBDIR)
 _MANIFEST_PATH = os.path.join(_ARTIFACT_ROOT, "run_manifest.csv")
 _MANIFEST_RETRY_PATH = os.path.join(_ARTIFACT_ROOT, "run_manifest_retry.csv")
 _MANIFEST_FIELDS = [
-    "run_name", "dataset", "split", "percentage", "architecture",
+    "run_name", "dataset", "split", "percentage", "stage", "architecture",
     "status", "skip_reason", "checkpoint_path",
 ]
 
@@ -205,8 +260,39 @@ def _split_json(dataset: str, split: int, pct: int) -> str:
     )
 
 
-def _run_name(dataset: str, split: int, pct: int, run_prefix: str = "") -> str:
-    return f"{run_prefix}encoder_decoder_FLIM_{dataset}_split{split}_pct{pct}"
+_STAGE_SUFFIX: dict[int, str] = {1: "stage1_frozen", 2: "stage2_fine_tune"}
+
+# Stage 1 selects its checkpoint on val/recon_loss (its encoder never moves, so the kappa
+# curve is fit noise); stage 2 selects on val/svm_kappa.
+_STAGE_CKPT: dict[int, str] = {1: "best_recon.ckpt", 2: "best_kappa.ckpt"}
+
+
+# The input normalisation is part of the experiment's identity, not a detail: the 36 runs
+# already on disk were trained with ImageNet Normalize and carry the bare name. If the LAB
+# default reused that name, `--skip-existing` (and `--check-wandb`, which matches on the
+# same string) would report the whole grid as done without training anything. The `_lab`
+# marker is what keeps the two arms apart on disk and on the dashboard.
+_LAB_MARKER = "_lab"
+
+
+def _run_name(dataset: str, split: int, pct: int, stage: int = 1, run_prefix: str = "",
+              imagenet_norm: bool = True) -> str:
+    """Run name for a cell. ``imagenet_norm=True`` reproduces the legacy name exactly."""
+    return (f"{run_prefix}ae_resnet_flim_{dataset}_split{split}_pct{pct}"
+            f"_{_STAGE_SUFFIX[stage]}{'' if imagenet_norm else _LAB_MARKER}")
+
+
+def _run_dir(run_name: str) -> str:
+    return os.path.join(_ARTIFACT_ROOT, run_name)
+
+
+def _stage_ckpt(dataset: str, split: int, pct: int, stage: int, run_prefix: str = "",
+                imagenet_norm: bool = True) -> str:
+    """Checkpoint a given stage writes — this is what the next wave consumes."""
+    return os.path.join(
+        _run_dir(_run_name(dataset, split, pct, stage, run_prefix, imagenet_norm)),
+        "checkpoints", _STAGE_CKPT[stage],
+    )
 
 
 # ── Pre-flight validation ──────────────────────────────────────────────────────
@@ -240,43 +326,84 @@ def validate_output_dir() -> tuple[bool, str]:
     return True, ""
 
 
+# ── Child command builder ──────────────────────────────────────────────────────
+
+def _child_cmd_tail(exp: dict, stage: int, run_name: str, init_ckpt: str) -> list[str]:
+    """Argv for one child run, *without* the interpreter (the worker prepends its own).
+
+    Built on the driver and carried in the stage plan so that ``--dry-run`` prints the
+    literal argv the worker will execute — there is no second, hand-mirrored copy of this
+    command to drift out of sync.
+    """
+    cmd = [
+        "-m", "src.modules.autoencoder_flim_module",
+        "--dataset", exp["dataset"],
+        "--split", str(exp["split"]),
+        "--percentage", str(exp["pct"]),
+        "--arch-json", exp["arch_json"],
+        "--flim-weights-path", exp["flim_weights_path"],
+        "--recon-loss", "bce_logits",
+        "--run-name", run_name,
+        "--max-epochs", str(exp["max_epochs"]),
+        "--warmup-epochs", str(exp["warmup_epochs"]),
+        "--patience", str(exp["patience"]),
+        "--batch-size", str(exp["batch_size"]),
+        "--num-workers", str(exp.get("num_workers", 4)),
+        "--svm-probe-every", str(exp["svm_probe_every"]),
+        "--log-recon-every", str(exp["log_recon_every"]),
+    ]
+
+    if stage == 1:
+        cmd.append("--freeze-encoder")
+    else:
+        cmd += ["--init-ckpt", init_ckpt]
+
+    # Passed in both directions rather than relying on the child's default: the flag is
+    # the whole point of this arm, so it belongs in the logged command line where anyone
+    # reading a queue log can see which normalisation produced the numbers.
+    cmd.append("--imagenet-norm" if exp.get("imagenet_norm") else "--no-imagenet-norm")
+
+    if exp.get("wandb_update"):
+        cmd += ["--wandb",
+                "--wandb-project", exp["wandb_project"],
+                "--wandb-entity", exp["wandb_entity"]]
+    return cmd
+
+
 # ── Experiment grid builder ────────────────────────────────────────────────────
 
 def build_experiment_grid(
     datasets: list[str], splits: list[int], pcts: list[int],
-    num_workers: int, max_epochs: int, warmup_epochs: int, batch_size: int,
+    num_workers: int, max_epochs: int, warmup_epochs: int, patience: int, batch_size: int,
     svm_probe_every: int, log_recon_every: int,
-    no_imagenet_norm: bool, wandb_update: bool, wandb_project: str,
+    imagenet_norm: bool, wandb_update: bool, wandb_project: str,
     run_prefix: str, skip_existing: bool, check_wandb: bool, wandb_entity: str,
+    stage: str = "1",
 ) -> tuple[list[dict], list[dict]]:
     experiments: list[dict] = []
     skipped: list[dict] = []
 
+    stages = [1, 2] if str(stage) == "both" else [int(stage)]
+
     for dataset in datasets:
         for pct in pcts:
             for split in splits:
-                run_name = _run_name(dataset, split, pct, run_prefix)
                 key = f"{dataset}/split{split}/pct{pct}"
 
+                # The data on disk is the same for both stages, so validate the cell once.
                 ok, reason = validate_experiment(dataset, split, pct)
                 if not ok:
                     _log(f"SKIP (preflight) {key}: {reason}", "WARN")
-                    skipped.append({"key": key, "run_name": run_name, "dataset": dataset,
-                                    "split": split, "pct": pct, "reason": f"preflight:{reason}"})
+                    skipped.append({"key": key, "stage": stages[0],
+                                    "run_name": _run_name(dataset, split, pct, stages[0],
+                                                          run_prefix, imagenet_norm),
+                                    "dataset": dataset, "split": split, "pct": pct,
+                                    "reason": f"preflight:{reason}"})
                     continue
 
-                if skip_existing:
-                    should_skip, why = _should_skip_experiment(
-                        run_name, check_wandb, wandb_entity, wandb_project)
-                    if should_skip:
-                        _log(f"SKIP (done) {key}: {why}")
-                        skipped.append({"key": key, "run_name": run_name, "dataset": dataset,
-                                        "split": split, "pct": pct, "reason": why})
-                        continue
-
-                experiments.append({
-                    "key": key,
-                    "run_name": run_name,
+                # Everything the child needs that does not depend on the stage. Built once
+                # per cell so the stage plan and the experiment entry cannot disagree.
+                common = {
                     "dataset": dataset,
                     "split": split,
                     "pct": pct,
@@ -287,13 +414,67 @@ def build_experiment_grid(
                     "num_workers": num_workers,
                     "max_epochs": max_epochs,
                     "warmup_epochs": warmup_epochs,
+                    "patience": patience,
                     "batch_size": batch_size,
                     "svm_probe_every": svm_probe_every,
                     "log_recon_every": log_recon_every,
-                    "no_imagenet_norm": no_imagenet_norm,
+                    "imagenet_norm": imagenet_norm,
                     "wandb_update": wandb_update,
                     "wandb_project": wandb_project,
                     "wandb_entity": wandb_entity,
+                }
+
+                # One queue entry carries the whole stage chain for this cell. Chaining
+                # inside a single Ray task is what removes the barrier between the two
+                # waves: cell A can already be fine-tuning while cell B is still frozen.
+                # Running `--stage 1` and then `--stage 2` as separate invocations would
+                # make every cell wait on the slowest stage-1 run of the entire grid.
+                plan: list[dict] = []
+                for st in stages:
+                    run_name = _run_name(dataset, split, pct, st, run_prefix, imagenet_norm)
+                    init_ckpt = (_stage_ckpt(dataset, split, pct, 1, run_prefix, imagenet_norm)
+                                 if st == 2 else "")
+
+                    # Only a stage-2-only invocation can check the checkpoint now. In
+                    # `both` mode stage 1 has not run yet, so the file is expected to be
+                    # missing at build time — the Ray task re-checks it after stage 1.
+                    if len(stages) == 1 and st == 2 and not os.path.isfile(init_ckpt):
+                        _log(f"SKIP (no stage-1 ckpt) {key}: {init_ckpt}", "WARN")
+                        skipped.append({"key": key, "stage": st, "run_name": run_name,
+                                        "dataset": dataset, "split": split, "pct": pct,
+                                        "reason": f"missing stage-1 ckpt:{init_ckpt}"})
+                        continue
+
+                    # Resume is per stage: a finished stage 1 must not force its stage 2
+                    # to be re-run, nor the other way round.
+                    if skip_existing:
+                        should_skip, why = _should_skip_experiment(
+                            run_name, check_wandb, wandb_entity, wandb_project)
+                        if should_skip:
+                            _log(f"SKIP (done) {key} stage{st}: {why}")
+                            skipped.append({"key": key, "stage": st, "run_name": run_name,
+                                            "dataset": dataset, "split": split, "pct": pct,
+                                            "reason": why})
+                            continue
+
+                    plan.append({
+                        "stage": st, "run_name": run_name, "init_ckpt": init_ckpt,
+                        "run_dir": _run_dir(run_name),
+                        "cmd_tail": _child_cmd_tail(common, st, run_name, init_ckpt),
+                    })
+
+                if not plan:
+                    continue
+
+                experiments.append({
+                    # A single-stage entry says which stage it is; a chained one does not,
+                    # because it covers both.
+                    "key": key if len(plan) > 1 else f"{key}/stage{plan[0]['stage']}",
+                    "stage_plan": plan,
+                    "run_name": plan[0]["run_name"],
+                    "stage": plan[0]["stage"],
+                    "init_ckpt": plan[0]["init_ckpt"],
+                    **common,
                 })
 
     return experiments, skipped
@@ -360,39 +541,25 @@ def run_autoencoder_experiment(
     import os as _os
     import subprocess as _sp
     import sys as _sys
+    from collections import deque as _deque
 
     _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     _os.environ["OMP_NUM_THREADS"] = str(cpus)
     _os.environ["WANDB_CONSOLE"] = "off"
     _os.environ["WANDB_MODE"] = "online"
 
-    cmd = [
-        _sys.executable, "-m", "src.modules.autoencoder_flim_module",
-        "--dataset", exp["dataset"],
-        "--split", str(exp["split"]),
-        "--percentage", str(exp["pct"]),
-        "--arch-json", exp["arch_json"],
-        "--flim-weights-path", exp["flim_weights_path"],
-        "--recon-loss", "bce_logits",
-        "--run-name", exp["run_name"],
-        "--max-epochs", str(exp["max_epochs"]),
-        "--warmup-epochs", str(exp["warmup_epochs"]),
-        "--batch-size", str(exp["batch_size"]),
-        "--num-workers", str(exp.get("num_workers", 4)),
-        "--svm-probe-every", str(exp["svm_probe_every"]),
-        "--log-recon-every", str(exp["log_recon_every"]),
-    ]
-    if exp.get("no_imagenet_norm"):
-        cmd.append("--no-imagenet-norm")
-    if exp.get("wandb_update"):
-        cmd += ["--wandb",
-                "--wandb-project", exp["wandb_project"],
-                "--wandb-entity", exp["wandb_entity"]]
+    # One queue entry = one cell = one or two sequential runs on the same GPU slot.
+    plan = exp.get("stage_plan") or [{"stage": exp.get("stage", 1),
+                                      "run_name": exp["run_name"],
+                                      "init_ckpt": exp.get("init_ckpt", ""),
+                                      "run_dir": exp.get("run_dir", ""),
+                                      "cmd_tail": exp.get("cmd_tail", [])}]
 
     result: dict = {
         "key": exp["key"], "run_name": exp["run_name"], "gpu_id": gpu_id,
         "queue_index": queue_index, "dataset": exp["dataset"],
         "split": exp["split"], "pct": exp["pct"], "architecture": exp["architecture"],
+        "stage": plan[0]["stage"], "runs": [],
     }
 
     if not _os.path.isfile(exp["arch_json"]):
@@ -401,21 +568,89 @@ def run_autoencoder_experiment(
         result["error"] = f"PREFLIGHT FAIL — arch JSON not found: {exp['arch_json']}"
         return result
 
-    try:
-        proc = _sp.run(cmd, cwd=project_root, stdout=None, stderr=_sp.PIPE, text=True)
-        result["returncode"] = proc.returncode
-        if proc.returncode == 0:
-            result["status"] = "ok"
-        else:
-            stderr = (proc.stderr or "").strip()
-            if len(stderr) > 2000:
-                stderr = stderr[:1000] + "\n...[truncated]...\n" + stderr[-1000:]
-            result["status"] = "error"
-            result["error"] = f"returncode={proc.returncode}\n{stderr}"
-    except Exception as exc:
-        result["status"] = "error"
-        result["returncode"] = -1
-        result["error"] = str(exc)
+    for step in plan:
+        run_row: dict = {"stage": step["stage"], "run_name": step["run_name"]}
+
+        # The argv was built on the driver (`_child_cmd_tail`) and travels inside the plan,
+        # so the worker never re-derives it and `--dry-run` shows the real thing.
+        if not step.get("cmd_tail") or not step.get("run_dir"):
+            run_row["status"] = "error"
+            run_row["returncode"] = -1
+            run_row["error"] = "malformed stage plan: missing cmd_tail/run_dir"
+            result["runs"].append(run_row)
+            break
+
+        # In `both` mode this path only exists once stage 1 has written it, which is why
+        # it is checked here and not at build time.
+        if step["stage"] == 2 and not _os.path.isfile(step["init_ckpt"]):
+            run_row["status"] = "error"
+            run_row["returncode"] = -1
+            run_row["error"] = f"stage-1 checkpoint not found: {step['init_ckpt']}"
+            result["runs"].append(run_row)
+            break
+
+        cmd = [_sys.executable] + list(step["cmd_tail"])
+
+        # stderr is written to disk on *every* run, not only on failure. The previous
+        # version piped it and threw it away on returncode 0, which is how 36 runs' worth
+        # of sklearn ConvergenceWarnings — the truncated SVM probe behind the kappa
+        # numbers — were emitted and never seen. stdout stays inherited, as before: Ray
+        # forwards it to the driver.
+        _os.makedirs(step["run_dir"], exist_ok=True)
+        log_path = _os.path.join(step["run_dir"], "child_stderr.log")
+        run_row["stderr_log"] = log_path
+
+        try:
+            with open(log_path, "w", encoding="utf-8", errors="replace") as log_fh:
+                proc = _sp.run(cmd, cwd=project_root, stdout=None, stderr=log_fh, text=True)
+            run_row["returncode"] = proc.returncode
+
+            # Re-read the file rather than buffering the stream: only the last 40 lines and
+            # at most 10 distinct warning messages are ever held in memory, whatever the
+            # child printed.
+            tail = _deque(maxlen=40)
+            warn_hits = 0
+            distinct: list[str] = []
+            with open(log_path, encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    # "Warning" subsumes ConvergenceWarning / RuntimeWarning / UserWarning.
+                    if "Warning" in line:
+                        warn_hits += 1
+                        msg = line.strip()
+                        if msg not in distinct and len(distinct) < 10:
+                            distinct.append(msg)
+                    tail.append(line)
+
+            if warn_hits:
+                # Surfaced even on a clean exit: a ConvergenceWarning here means the kappa
+                # this run reported came out of a solver that never converged.
+                run_row["warnings"] = warn_hits
+                print(f"[queue][{step['run_name']}] {warn_hits} warning line(s) in child "
+                      f"stderr -> {log_path}", flush=True)
+                for msg in distinct:
+                    print(f"[queue][{step['run_name']}]   {msg}", flush=True)
+
+            if proc.returncode == 0:
+                run_row["status"] = "ok"
+            else:
+                run_row["status"] = "error"
+                run_row["error"] = (f"returncode={proc.returncode} (full stderr: {log_path})\n"
+                                    + "".join(tail).strip())
+        except Exception as exc:
+            run_row["status"] = "error"
+            run_row["returncode"] = -1
+            run_row["error"] = str(exc)
+
+        result["runs"].append(run_row)
+        # No point fine-tuning from a stage that died — it left no checkpoint to start from.
+        if run_row["status"] != "ok":
+            break
+
+    failed = [r for r in result["runs"] if r["status"] != "ok"]
+    result["status"] = "ok" if (not failed and len(result["runs"]) == len(plan)) else "error"
+    result["returncode"] = failed[0]["returncode"] if failed else 0
+    if failed:
+        result["error"] = f"stage {failed[0]['stage']}: {failed[0].get('error', '')}"
 
     return result
 
@@ -496,10 +731,12 @@ def run_queue(
         try:
             result = ray.get(ref)
         except Exception as exc:
+            # No "runs" key here — the task died before reporting any. Carry the entry's
+            # first stage so the manifest row is not silently labelled stage 1.
             result = {"key": exp["key"], "gpu_id": gpu_id, "queue_index": idx,
                       "status": "ray_error", "error": str(exc), "run_name": exp["run_name"],
                       "dataset": exp["dataset"], "split": exp["split"], "pct": exp["pct"],
-                      "architecture": exp["architecture"]}
+                      "architecture": exp["architecture"], "stage": exp.get("stage", 1)}
 
         rows.append(result)
 
@@ -528,28 +765,38 @@ def _write_manifest(rows: list[dict], skipped: list[dict], retry: bool = False) 
     os.makedirs(os.path.dirname(path), exist_ok=True)
     records: list[dict] = []
 
+    # One row per *run*, not per queue entry: a chained cell produced two W&B runs and two
+    # checkpoints, and the manifest is what downstream evaluation joins against.
     for r in rows:
-        run_name = r.get("run_name", r.get("key", ""))
-        ckpt = os.path.join(_ARTIFACT_ROOT, run_name, "checkpoints", "best_kappa.ckpt")
-        records.append({
-            "run_name": run_name,
-            "dataset": r.get("dataset", ""),
-            "split": r.get("split", ""),
-            "percentage": r.get("pct", ""),
-            "architecture": r.get("architecture", ""),
-            "status": r.get("status", ""),
-            "skip_reason": "",
-            "checkpoint_path": ckpt if os.path.isfile(ckpt) else "",
-        })
+        steps = r.get("runs") or [{"stage": r.get("stage", 1),
+                                   "run_name": r.get("run_name", r.get("key", "")),
+                                   "status": r.get("status", "")}]
+        for step in steps:
+            stage = step.get("stage", 1)
+            run_name = step.get("run_name", "")
+            ckpt = os.path.join(_run_dir(run_name), "checkpoints", _STAGE_CKPT[stage])
+            records.append({
+                "run_name": run_name,
+                "dataset": r.get("dataset", ""),
+                "split": r.get("split", ""),
+                "percentage": r.get("pct", ""),
+                "stage": stage,
+                "architecture": r.get("architecture", ""),
+                "status": step.get("status", r.get("status", "")),
+                "skip_reason": "",
+                "checkpoint_path": ckpt if os.path.isfile(ckpt) else "",
+            })
 
     for s in skipped:
         run_name = s.get("run_name", "")
-        ckpt = os.path.join(_ARTIFACT_ROOT, run_name, "checkpoints", "best_kappa.ckpt")
+        stage = s.get("stage", 1)
+        ckpt = os.path.join(_run_dir(run_name), "checkpoints", _STAGE_CKPT[stage])
         records.append({
             "run_name": run_name,
             "dataset": s.get("dataset", ""),
             "split": s.get("split", ""),
             "percentage": s.get("pct", ""),
+            "stage": stage,
             "architecture": _ARCH_TAG.get(s.get("dataset", ""), ""),
             "status": "skipped",
             "skip_reason": s.get("reason", ""),
@@ -599,7 +846,10 @@ def _print_summary(rows: list[dict], skipped: list[dict], t_start: float,
     if ok:
         print("\n  Best val/svm_kappa per run (vs the untouched FLIM encoder):")
         for r in sorted(ok, key=lambda x: x.get("key", "")):
-            print(f"    {r['key']:<34} {_best_kappa(r.get('run_name', ''))}")
+            # For a chained cell the number that matters is the last stage's — stage 1's
+            # kappa is a frozen-encoder probe, not the result of the protocol.
+            last = (r.get("runs") or [{"run_name": r.get("run_name", "")}])[-1]
+            print(f"    {r['key']:<34} {_best_kappa(last.get('run_name', ''))}")
 
     if bad:
         print("\n  Failures:")
@@ -611,7 +861,7 @@ def _print_summary(rows: list[dict], skipped: list[dict], t_start: float,
 
 def _print_dry_run(experiments: list[dict], skipped: list[dict],
                    gpu_ids: list[int], max_per_gpu: int, cpus_per: int,
-                   retry: bool = False) -> None:
+                   imagenet_norm: bool = False, retry: bool = False) -> None:
     total_slots = max_per_gpu * len(gpu_ids)
     print("\n" + "=" * 78)
     print(f"  DRY-RUN {'(retry) ' if retry else ''}— nothing will be executed")
@@ -619,20 +869,25 @@ def _print_dry_run(experiments: list[dict], skipped: list[dict],
     print(f"  GPUs           : {gpu_ids}  ({max_per_gpu} concurrent/GPU "
           f"= {total_slots} slots, {cpus_per} CPU each)")
     print(f"  artifacts      : {_ARTIFACT_ROOT}")
+    print(f"  input norm     : {'imagenet' if imagenet_norm else 'lab[0,1] (default)'}")
+    print(f"  run-name form  : ...{_STAGE_SUFFIX[1]}{'' if imagenet_norm else _LAB_MARKER}")
     print(f"  to run         : {len(experiments)}")
     print(f"  skipped        : {len(skipped)}")
     if experiments:
         print("\n  Queue:")
         for i, e in enumerate(experiments):
-            print(f"    [{i + 1:>3}] {e['run_name']:<44} {e['architecture']}  "
+            plan = e.get("stage_plan") or [{"stage": e.get("stage", 1)}]
+            chain = "->".join(f"s{s['stage']}" for s in plan)
+            print(f"    [{i + 1:>3}] {e['key']:<34} {chain:<7} {e['architecture']}  "
                   f"{e['num_classes']}cls  {e['max_epochs']}ep")
-        print("\n  Sample command:")
-        e = experiments[0]
-        print(f"    python -m src.modules.autoencoder_flim_module \\\n"
-              f"      --dataset {e['dataset']} --split {e['split']} --percentage {e['pct']} \\\n"
-              f"      --arch-json {e['arch_json']} \\\n"
-              f"      --flim-weights-path {e['flim_weights_path']} \\\n"
-              f"      --recon-loss bce_logits --run-name {e['run_name']}")
+            for s in plan:
+                exists = " [DIR EXISTS]" if os.path.isdir(_run_dir(s["run_name"])) else ""
+                print(f"          {s['run_name']}{exists}")
+        # The literal argv the worker will run — same list, not a hand-written mirror.
+        print("\n  Child command lines (first queue entry, one per stage):")
+        for s in experiments[0].get("stage_plan", []):
+            argv = " ".join(shlex.quote(a) for a in s.get("cmd_tail", []))
+            print(f"    [s{s['stage']}] python {argv}")
     if skipped:
         print("\n  Skipped:")
         for s in skipped:
@@ -656,6 +911,12 @@ def main() -> None:
     parser.add_argument("--percentages", nargs="+", type=int, choices=_ALL_PCTS,
                         default=_DEFAULT_PCTS,
                         help="Default is the experiment grid: 5 and 75.")
+    parser.add_argument("--stage", choices=["1", "2", "both"], required=True,
+                        help="1 = frozen FLIM encoder, decoder learns to invert it. "
+                             "2 = both unfrozen, starting from the stage-1 checkpoint "
+                             "(skips cells whose stage-1 ckpt is absent). "
+                             "both = chain 1 then 2 per cell in one queue entry, so no "
+                             "cell waits on any other cell's stage 1.")
     parser.add_argument("--num-gpus", type=int, default=4, metavar="N",
                         help="Use GPUs 0..N-1. Overridden by --gpus.")
     parser.add_argument("--gpus", nargs="+", type=int, default=None, metavar="ID",
@@ -668,7 +929,9 @@ def main() -> None:
     parser.add_argument("--cpus-per-experiment", type=int, default=4, metavar="N")
     parser.add_argument("--ray-address", type=str, default=None)
 
-    parser.add_argument("--max-epochs", type=int, default=100)
+    parser.add_argument("--max-epochs", type=int, default=1000)
+    parser.add_argument("--patience", type=int, default=50, metavar="N",
+                        help="EarlyStopping patience on val/svm_kappa, passed to each run.")
     parser.add_argument("--warmup-epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=4, metavar="N")
@@ -676,8 +939,14 @@ def main() -> None:
                         help="Run the one-vs-one SVM probe every N validation epochs.")
     parser.add_argument("--log-recon-every", type=int, default=10,
                         help="Log the LAB->RGB reconstruction preview every N epochs.")
-    parser.add_argument("--no-imagenet-norm", action="store_true", default=False,
-                        help="Disable ImageNet Normalize on the LAB input (and on the target).")
+    parser.add_argument("--imagenet-norm", action="store_true", default=False,
+                        help="Opt back in to ImageNet Normalize on the LAB input. OFF by "
+                             "default: the FLIM kernels were estimated on LAB in [0, 1] and "
+                             "normalising costs ~0.33 of kappa here (report §8.1). Runs "
+                             "with the default carry a '_lab' suffix in the run name, so "
+                             "they never collide with the legacy ImageNet-normalised runs. "
+                             "The distillation / I-JEPA arms still require normalisation — "
+                             "this default is local to this grid.")
 
     parser.add_argument("--wandb-update", action="store_true",
                         help="Log runs to W&B (required for the experiment's signature).")
@@ -735,17 +1004,18 @@ def main() -> None:
     experiments, skipped = build_experiment_grid(
         datasets=args.datasets, splits=args.splits, pcts=args.percentages,
         num_workers=args.num_workers, max_epochs=args.max_epochs,
-        warmup_epochs=args.warmup_epochs, batch_size=args.batch_size,
+        warmup_epochs=args.warmup_epochs, patience=args.patience, batch_size=args.batch_size,
         svm_probe_every=args.svm_probe_every, log_recon_every=args.log_recon_every,
-        no_imagenet_norm=args.no_imagenet_norm, wandb_update=args.wandb_update,
+        imagenet_norm=args.imagenet_norm, wandb_update=args.wandb_update,
         wandb_project=args.wandb_project, run_prefix=args.run_prefix,
         skip_existing=skip_existing, check_wandb=args.check_wandb,
-        wandb_entity=args.wandb_entity,
+        wandb_entity=args.wandb_entity, stage=args.stage,
     )
 
     if args.dry_run:
         _print_dry_run(experiments, skipped, gpu_ids, args.max_concurrent_per_gpu,
-                       args.cpus_per_experiment, retry=args.retry)
+                       args.cpus_per_experiment, imagenet_norm=args.imagenet_norm,
+                       retry=args.retry)
         return
 
     if not experiments:

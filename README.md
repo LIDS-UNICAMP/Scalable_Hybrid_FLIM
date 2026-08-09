@@ -485,6 +485,118 @@ O I-JEPA **não é carregado** durante o SVM — só os pesos `student.*` são e
 
 ---
 
+## AutoEncoder não-supervisionado — encoder FLIM + decoder ResNet
+
+Nenhum rótulo entra na loss. O encoder FLIM é treinado só reconstruindo a própria entrada, e
+o decoder ResNet é descartado no fim. A pergunta que o experimento responde é se o encoder
+**sai melhor do que entrou**.
+
+### Como o veredito é medido
+
+Um probe SVM one-vs-one linear (`C=1e2`, sem scaler) sobre o embedding pooled de 48-d,
+ajustado no train rotulado e pontuado **só na validação**. O test nunca é tocado.
+
+A baseline não vem de CSV: `on_fit_start` roda o probe no encoder FLIM **intocado, antes do
+primeiro passo de gradiente**, no mesmo run, mesmo split, mesma seed, mesmo dataloader, mesmo
+probe. Isso é deliberado — os CSVs de baseline do repo pontuam o SVM no **test**
+(`src/evaluate/svm.py:123-137`), enquanto este probe pontua na **validação**, então os dois
+números não são comparáveis. Medindo dentro do run, o veredito fica sólido:
+
+```
+Δκ = val/svm_kappa (melhor época)  −  baseline/svm_kappa (época −1, FLIM puro)
+```
+
+| Δκ | Leitura |
+|---|---|
+| > 0 | reconstrução é auto-supervisão útil para este encoder pequeno |
+| ≈ 0 | o embedding FLIM já está saturado |
+| < 0 | reconstrução puxa o embedding para informação de baixo nível (textura, cromaticidade a/b, fundo) — o risco conhecido |
+
+Os dois números ficam lado a lado em `run_metadata.json` (`best_val_svm_kappa` e
+`baseline_flim_svm`) e no W&B a baseline é replicada como série plana, para o painel mostrar
+de relance se o treino subiu ou desceu em relação ao ponto de partida.
+
+### Seleção e parada
+
+| | Valor |
+|---|---|
+| Checkpoint | `best_kappa.ckpt`, monitor `val/svm_kappa` (max) |
+| EarlyStopping | `val/svm_kappa` (max), `patience=50`, `strict=False` |
+| Teto de épocas | `--max-epochs 1000` |
+
+Os dois olham `val/svm_kappa`, **não** `val/recon_loss` — o melhor *encoder* é o entregável,
+não a menor reconstrução. O `strict=False` existe porque com `--svm-probe-every > 1` a kappa
+não é logada nas épocas em que o probe é pulado, e um callback estrito abortaria o run em vez
+de esperar a próxima.
+
+⚠️ **`val/recon_loss` quase não se move, e isso é esperado.** BCE sobre alvo contínuo tem piso
+de entropia: a loss mínima alcançável não é 0, é `−p·log p − (1−p)·log(1−p)` do próprio alvo,
+≈ **0.466** para o LAB destes datasets. Os runs pousam em 0.465–0.469, ou seja, o sinal real
+de reconstrução são ~0.002 em cima de uma constante. Não leia essa curva como convergência, e
+não a use como critério de parada.
+
+### Rodar o grid
+
+```bash
+# Preview — mostra o plano, não executa nada
+python scripts/autoencoder_flim_ray.py --dry-run
+
+# Grid completo: 3 datasets × {5%, 75%} × 3 splits = 18 runs
+python scripts/autoencoder_flim_ray.py \
+    --num-gpus 4 --max-concurrent-per-gpu 5 \
+    --num-workers 8 --max-epochs 1000 --patience 50 \
+    --wandb-update
+
+# Retry após falha parcial — pula concluídos, refaz só os que falharam
+python scripts/autoencoder_flim_ray.py \
+    --retry --skip-existing --check-wandb --wandb-update
+```
+
+Em tmux, num comando só:
+
+```bash
+tmux new -s ae_flim "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python scripts/autoencoder_flim_ray.py --num-gpus 4 --max-concurrent-per-gpu 5 --num-workers 8 --max-epochs 1000 --patience 50 --wandb-update 2>&1 | tee /tmp/ae_flim_$(date +%F_%H%M).log; exec bash"
+```
+
+Use o path direto do python do env, **não** `conda activate`: o shell que o tmux abre não tem
+o hook do conda carregado e a sessão morre em silêncio.
+
+### Grade
+
+3 datasets × {5%, 75%} × 3 splits = **18 runs**.
+
+`percentage` seleciona um `data_descriptor_perc{p}.json` diferente, que reparticiona **train
+e validação as duas** — então cada percentual tem a sua própria baseline, medida numa
+validação diferente. O percentual não entra na loss de reconstrução; ele decide quantas
+imagens rotuladas o *probe* enxerga.
+
+Arquitetura por dataset: eggs/larvae `ch24_32_48`, protozoan `ch24_30_48`. Os **pesos** FLIM
+sempre vêm da árvore `ch24_32_48_a0.5_f5` (a única com subdiretório `models/`); para
+protozoan as contagens reais de kernel lá são 24/30/48, que `get_actual_channels_from_weights`
+recupera no load.
+
+### Convenção de nome
+
+```
+encoder_decoder_FLIM_<dataset>_split<N>_pct<P>
+```
+
+### Layout de saída
+
+```
+artifacts/autoencoder_resnet_init_flim/
+  encoder_decoder_FLIM_<dataset>_split<N>_pct<P>/
+    checkpoints/
+      best_kappa.ckpt      ← o encoder entregável
+      last.ckpt
+    run_metadata.json      ← best_val_svm_kappa + baseline_flim_svm lado a lado
+    wandb/
+  run_manifest.csv
+  run_manifest_retry.csv
+```
+
+---
+
 ## Classical Classifiers Evaluation (kNN / RF / LightGBM / GP / QDA)
 
 Evaluates frozen LeJEPA encoder embeddings with classical classifiers.
