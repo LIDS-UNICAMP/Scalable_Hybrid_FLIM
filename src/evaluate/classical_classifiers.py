@@ -45,12 +45,11 @@ from tqdm import tqdm
 
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
+from src.evaluate.constants import DATASET_NUM_CLASSES, IMAGE_SIZE
 from src.metrics.classification import compute_metrics
 from src.modules.lejepa_line_module import LejepaLineModule
 from src.utils.evaluate import (
-    DATASET_NUM_CLASSES,
     DEVICE,
-    IMAGE_SIZE,
     _ROOT,
     extract_features,
     find_best_checkpoint,

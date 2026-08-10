@@ -71,14 +71,14 @@ if _ROOT not in sys.path:
 # ── Reutiliza o pipeline de SVM já existente ──────────────────────────────────
 from src.evaluate.svm_distillation import (  # noqa: E402
     _OneHotDataset,
-    extract_features_distillation,
     train_svm_distillation,
     _RESULTS_DIR,
     DEVICE,
-    IMAGE_SIZE,
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
 )
+from src.evaluate.constants import IMAGE_SIZE  # noqa: E402
+from src.utils.evaluate import extract_features_encode  # noqa: E402
 from src.data_modules.datasets.dataset import DatasetParasite  # noqa: E402
 from src.data_modules.datasets.lejepa_dataset import _build_test  # noqa: E402
 from src.modules.classification_flim_module import ClassificationFlimModule  # noqa: E402
@@ -90,7 +90,7 @@ _DEFAULT_PATTERN = "classhead_*_softplus2l"
 class _EncoderProbe(nn.Module):
     """Adaptador: expõe ``encode()`` sobre o encoder de ``ClassificationFlimModule``.
 
-    ``extract_features_distillation`` e ``train_svm_distillation`` esperam um objeto
+    ``extract_features_encode`` e ``train_svm_distillation`` esperam um objeto
     com ``.encode(x) -> [B, D]``; o encoder FLIM devolve um mapa espacial
     ``[B, C, H, W]``. Este adaptador aplica o mesmo ``AdaptiveAvgPool2d(1)`` que a
     cabeça de classificação usa, de modo que o SVM enxerga exatamente as features
@@ -257,7 +257,7 @@ def main() -> int:
                 test_ds, batch_size=args.batch_size, shuffle=False,
                 num_workers=args.num_workers, pin_memory=True,
             )
-            feats, y_true = extract_features_distillation(probe, test_loader)
+            feats, y_true = extract_features_encode(probe, test_loader)
 
             # O SVM é treinado com rótulos 1-indexed → volta para 0-indexed.
             y_pred = clf.predict(feats) - 1

@@ -15,7 +15,7 @@
 # ║  ⠀⠀⠀⢻⣿⣦⡓⢿⣿⣿⡆⣿⣿⣿⣿⢃⣶⡸⣿⣿⣿⡇⠀⠉⠉⠁⠀⠀⠀⠀                                            ║
 # ║  ⠀⠀⠀⠈⣿⣿⣿⡆⠀⠀⠀⣿⣿⣿⡟⣼⡿⠁⢹⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀                                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
-"""svm_real_flim.py — SVM do pipeline de destilacao aplicado ao encoder FLIM CRU.
+"""svm_real_flim.py — SVM do pipeline de destilacao aplicado ao encoder FLIM RAW.
 
 Pergunta: quanto o FLIM real (pesos dos marcadores, sem destilacao, sem checkpoint
 nenhum) entrega sob EXATAMENTE o mesmo protocolo de avaliacao que produziu o
@@ -35,7 +35,7 @@ O que e reaproveitado sem alteracao de ``src/evaluate/svm_distill_with_projectio
 O que muda e so o extrator de features:
 
     Distill 4:  input -> student FLIM (ckpt destilado) -> proj_kd -> [B, 1280]
-    aqui:       input -> encoder FLIM cru              -> AvgPool -> [B, 48]
+    aqui:       input -> encoder FLIM raw              -> AvgPool -> [B, 48]
 
 O pooling final e ``src.utils.evaluate._encode_pooled`` (``nn.AdaptiveAvgPool2d(1)``
 sobre o mapa da conv3), ou seja: average pooling, um valor por canal de saida.
@@ -64,15 +64,12 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import threading
 import warnings
 
 import numpy as np
 import pandas as pd
 import torch
-from sklearn import svm as sk_svm
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -89,9 +86,9 @@ from src.evaluate.svm_distillation import (            # noqa: E402
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
     DEVICE,
-    IMAGE_SIZE,
     _RESULTS_DIR,
 )
+from src.evaluate.constants import IMAGE_SIZE                      # noqa: E402
 from src.data_modules.datasets.dataset import DatasetParasite      # noqa: E402
 from src.data_modules.datasets.lejepa_dataset import _build_test   # noqa: E402
 from src.metrics.classification import compute_metrics             # noqa: E402
@@ -99,7 +96,7 @@ from src.modules.autoencoder_flim_module import (                  # noqa: E402
     NUM_CLASSES, AutoEncoderFlimModule,
 )
 from src.utils.evaluate import (                                   # noqa: E402
-    SVM_DIAG_MISSING, _encode_pooled, fit_svm_with_diagnostics,
+    SVM_DIAG_MISSING, _encode_pooled, fit_svm,
 )
 from autoencoder_flim_ray import _arch_json, _flim_weights_path    # noqa: E402
 
@@ -113,7 +110,7 @@ _SPLITS      = [1, 2, 3]
 _PERCENTAGES = [1, 5, 25, 50, 75, 100]
 
 
-# ── Encoder FLIM cru — mesmo caminho de AutoEncoderFlimModule.__init__ ────────
+# ── Encoder FLIM raw — mesmo caminho de AutoEncoderFlimModule.__init__ ────────
 
 def _build_encoder(dataset: str, split: int):
     """Encoder FLIM construido do architecture.json + pesos dos marcadores.
@@ -175,28 +172,7 @@ def _fit_svm(X: np.ndarray, y: np.ndarray, C: float = 1e2,
     """
     # O StandardScaler vem do Distill 4 e e mantido; a assimetria de scaler
     # entre as arms NAO e unificada aqui, so registrada em svm_protocol.
-    clf = Pipeline([
-        ("scaler", StandardScaler()),
-        ("svm",    sk_svm.SVC(
-            # Unbounded solver: results are deliberately NOT comparable with the
-            # CSVs produced under the old max_iter cap.
-            C=C, gamma="auto", kernel="linear",
-            decision_function_shape="ovo", max_iter=max_iter,
-        )),
-    ])
-    stop = threading.Event()
-
-    def _prog():
-        with tqdm(desc="  SVM fit", unit="s", bar_format="{desc}: {elapsed}") as pb:
-            while not stop.wait(1.0):
-                pb.update(1)
-
-    t = threading.Thread(target=_prog, daemon=True)
-    t.start()
-    fit_svm_with_diagnostics(clf, X, y, tag=_METHOD)
-    stop.set()
-    t.join()
-    return clf
+    return fit_svm(X, y, max_iter=max_iter, C=C, scaler=True, tag=_METHOD)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -210,7 +186,7 @@ def main() -> None:
     ap.add_argument("--splits",      nargs="+", type=int, default=_SPLITS)
     ap.add_argument("--percentages", nargs="+", type=int, default=_PERCENTAGES)
     ap.add_argument("--imagenet-norm", choices=["true", "false", "both"], default="both",
-                    help="'true' = mesmo transform do Distill 4; 'false' = LAB[0,1] cru.")
+                    help="'true' = mesmo transform do Distill 4; 'false' = LAB[0,1] raw.")
     ap.add_argument("--num-workers", type=int, default=8)
     ap.add_argument("--out-dir",     default=_OUT_DIR)
     ap.add_argument("--csv-stem",    default=_CSV_STEM)
@@ -224,7 +200,7 @@ def main() -> None:
 
     total = len(args.datasets) * len(args.splits) * len(args.percentages) * len(norms)
     print(f"\n{'=' * 78}")
-    print(f"{_METHOD}  |  encoder FLIM cru -> AvgPool -> [B, C]  |  SVM do Distill 4")
+    print(f"{_METHOD}  |  encoder FLIM raw -> AvgPool -> [B, C]  |  SVM do Distill 4")
     print(f"device={DEVICE}  image_size={IMAGE_SIZE}  celulas={total}")
     print(f"imagenet_norm={norms}   saida={args.out_dir}")
     print(f"{'=' * 78}")

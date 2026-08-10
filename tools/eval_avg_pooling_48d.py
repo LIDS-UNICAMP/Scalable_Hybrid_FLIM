@@ -15,7 +15,7 @@
 # ║  ⠀⠀⠀⢻⣿⣦⡓⢿⣿⣿⡆⣿⣿⣿⣿⢃⣶⡸⣿⣿⣿⡇⠀⠉⠉⠁⠀⠀⠀⠀                                            ║
 # ║  ⠀⠀⠀⠈⣿⣿⣿⡆⠀⠀⠀⣿⣿⣿⡟⣼⡿⠁⢹⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀                                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
-"""eval_48d_norm_off.py — 48-d + LAB[0,1] cru + solver convergido.
+"""eval_avg_pooling_48d.py — 48-d + LAB[0,1] raw + solver convergido.
 
 EXPERIMENTO VERSIONADO (nao e script descartavel). Re-executavel.
 
@@ -39,14 +39,14 @@ O avaliador oficial e IMPORTADO, nunca reescrito:
   * compute_metrics  src/metrics/classification.py:31
   * rotulos          1-indexed no fit, predict(feats)-1  (src/evaluate/svm.py:135)
 
-Encoder: FLIM cru, sem checkpoint — mesmo caminho que o estagio 1 congela
+Encoder: FLIM raw, sem checkpoint — mesmo caminho que o estagio 1 congela
 (src/modules/autoencoder_flim_module.py:155-168).
 
 Uso:
-    python tools/eval_48d_norm_off.py --dry-run
+    python tools/eval_avg_pooling_48d.py --dry-run
     OMP_NUM_THREADS=2 OMP_WAIT_POLICY=PASSIVE CUDA_VISIBLE_DEVICES=0 \
       conda run -n scalable_FLIM --no-capture-output \
-      python tools/eval_48d_norm_off.py --splits 1 2 3 --percentages 1 5 25 50 75 100
+      python tools/eval_avg_pooling_48d.py --splits 1 2 3 --percentages 1 5 25 50 75 100
 """
 
 import argparse
@@ -74,8 +74,9 @@ from src.metrics.classification import compute_metrics                  # noqa: 
 from src.modules.autoencoder_flim_module import (                       # noqa: E402
     NUM_CLASSES, AutoEncoderFlimModule,
 )
+from src.evaluate.constants import IMAGE_SIZE                           # noqa: E402
 from src.utils.evaluate import (                                        # noqa: E402
-    DEVICE, IMAGE_SIZE, _OneHotDataset, extract_features, train_svm,
+    DEVICE, _OneHotDataset, extract_features, train_svm,
 )
 from autoencoder_flim_ray import _arch_json, _flim_weights_path         # noqa: E402
 
@@ -94,7 +95,7 @@ _FIELDS = ["method", "dataset", "split", "percentage", "n_train", "n_test",
 
 
 def _build_encoder(dataset: str, split: int):
-    """Encoder FLIM cru — o mesmo que o estagio 1 congela, sem checkpoint."""
+    """Encoder FLIM raw — o mesmo que o estagio 1 congela, sem checkpoint."""
     mod = AutoEncoderFlimModule(
         arch_json=_arch_json(dataset, split),
         dataset=dataset,

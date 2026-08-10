@@ -43,7 +43,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import threading
 
 import numpy as np
 import pandas as pd
@@ -53,12 +52,12 @@ from tqdm import tqdm
 
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
+from src.evaluate.constants import DATASET_NUM_CLASSES, PERCENTAGES as PCTS, SPLITS
 from src.metrics.classification import compute_metrics
 from src.models.ijepa_encoder import IJEPAEncoder
 from src.utils.evaluate import (
-    DATASET_NUM_CLASSES,
     SVM_DIAG_MISSING,
-    fit_svm_with_diagnostics,
+    fit_svm,
     _OneHotDataset,
     _ROOT,
 )
@@ -66,8 +65,6 @@ from src.utils.evaluate import (
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 DATASETS = ["helminth-eggs", "helminth-larvae", "protozoan-cysts"]
-SPLITS = [1, 2, 3]
-PCTS = [1, 5, 25, 50, 75, 100]
 
 _RESULTS_DIR = os.path.join(_ROOT, "results")
 
@@ -134,18 +131,6 @@ def _train_svm_ijepa(
         Fitted ``sklearn.svm.SVC`` classifier (labels are 1-indexed); solver
         diagnostics are attached as ``fit_diagnostics_``.
     """
-    from sklearn import svm as _svm  # noqa: PLC0415
-
-    clf = _svm.SVC(
-        # Unbounded solver: results are deliberately NOT comparable with the
-        # CSVs produced under the old max_iter cap.
-        max_iter=max_iter,
-        C=C,
-        gamma="auto",
-        decision_function_shape="ovo",
-        kernel="linear",
-    )
-
     all_feats: list[np.ndarray] = []
     all_y: list[int] = []
 
@@ -159,20 +144,7 @@ def _train_svm_ijepa(
     X = np.concatenate(all_feats, axis=0)   # (N, 1280)
     y = np.array(all_y, dtype=np.int64)
 
-    _stop = threading.Event()
-
-    def _progress():
-        with tqdm(desc="SVM fit", unit="s", bar_format="{desc}: {elapsed} [{postfix}]") as pbar:
-            while not _stop.wait(1.0):
-                pbar.update(1)
-            pbar.set_postfix_str("done")
-
-    _thread = threading.Thread(target=_progress, daemon=True)
-    _thread.start()
-    fit_svm_with_diagnostics(clf, X, y, tag="SVM_IJEPA")
-    _stop.set()
-    _thread.join()
-    return clf
+    return fit_svm(X, y, max_iter=max_iter, C=C, tag="SVM_IJEPA")
 
 
 # ── Aggregation ───────────────────────────────────────────────────────────────

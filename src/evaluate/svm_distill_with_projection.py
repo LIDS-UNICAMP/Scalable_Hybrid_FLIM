@@ -47,14 +47,11 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import threading
 
 import numpy as np
 import pandas as pd
 import torch
-from sklearn import svm as sk_svm
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -69,14 +66,14 @@ from src.evaluate.svm_distillation import (
     _ARTIFACTS_DIR,
     _RESULTS_DIR,
     DEVICE,
-    IMAGE_SIZE,
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
 )
+from src.evaluate.constants import IMAGE_SIZE
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
 from src.metrics.classification import compute_metrics
-from src.utils.evaluate import SVM_DIAG_MISSING, fit_svm_with_diagnostics
+from src.utils.evaluate import SVM_DIAG_MISSING, extract_proj_features, fit_svm
 from src.models.lejepa_flim import LeJEPAFLIMModel
 from src.models.distillation import (
     ConvDistillationProjectionHead,
@@ -179,30 +176,6 @@ def _load_student_and_proj(
     return student.to(device), proj_kd.to(device)
 
 
-# ── Feature extraction — encoder + proj head [B, 1280] ───────────────────────
-
-@torch.no_grad()
-def _extract_proj(
-    student:  LeJEPAFLIMModel,
-    proj_kd:  ConvDistillationProjectionHead,
-    loader:   DataLoader,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Extrai embeddings [B, 1280] mantendo a Red Projection ativa."""
-    student.eval()
-    proj_kd.eval()
-    student.to(DEVICE)
-    proj_kd.to(DEVICE)
-
-    feats, labels = [], []
-    for x, y in tqdm(loader, desc="  features [1280]", leave=False):
-        feat_map = student.encoder(x.to(DEVICE))   # [B, 48, H', W']
-        emb      = proj_kd(feat_map)                # [B, 1280]
-        feats.append(emb.cpu().numpy())
-        labels.extend(y.tolist() if isinstance(y, torch.Tensor) else y)
-
-    return np.concatenate(feats), np.array(labels, dtype=np.int64)
-
-
 # ── SVM ────────────────────────────────────────────────────────────────────────
 
 def _train_svm_proj(
@@ -218,18 +191,6 @@ def _train_svm_proj(
     explicitamente só para reproduzir um CSV histórico. Diagnósticos do solver
     ficam em ``clf.fit_diagnostics_`` (leem do step ``svm`` do Pipeline).
     """
-    # StandardScaler é necessário com 1280 dims para convergência do SVM linear.
-    # Esta arm escala, outras não — a assimetria NÃO é unificada aqui, apenas
-    # registrada na coluna svm_protocol.
-    clf = Pipeline([
-        ("scaler", StandardScaler()),
-        ("svm",    sk_svm.SVC(
-            # Unbounded solver: results are deliberately NOT comparable with the
-            # CSVs produced under the old max_iter cap.
-            C=C, gamma="auto", kernel="linear",
-            decision_function_shape="ovo", max_iter=max_iter,
-        )),
-    ])
     student.eval()
     proj_kd.eval()
     student.to(DEVICE)
@@ -244,15 +205,10 @@ def _train_svm_proj(
 
     X, y = np.concatenate(feats), np.array(ys, dtype=np.int64)
 
-    stop = threading.Event()
-    def _prog():
-        with tqdm(desc="  SVM fit", unit="s", bar_format="{desc}: {elapsed}") as pb:
-            while not stop.wait(1.0): pb.update(1)
-    t = threading.Thread(target=_prog, daemon=True)
-    t.start()
-    fit_svm_with_diagnostics(clf, X, y, tag="SVM_Distill_Proj1280")
-    stop.set(); t.join()
-    return clf
+    # StandardScaler é necessário com 1280 dims para convergência do SVM linear.
+    # Esta arm escala, outras não — a assimetria NÃO é unificada aqui, apenas
+    # registrada na coluna svm_protocol.
+    return fit_svm(X, y, C=C, max_iter=max_iter, scaler=True, tag="SVM_Distill_Proj1280")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -369,7 +325,7 @@ def main() -> None:
             test_loader = DataLoader(
                 test_ds, batch_size=32, shuffle=False, num_workers=4, pin_memory=True,
             )
-            feats, y_true = _extract_proj(student, proj_kd, test_loader)
+            feats, y_true = extract_proj_features(student, proj_kd, test_loader)
             y_pred = clf.predict(feats) - 1  # volta para 0-indexed
 
             metrics = compute_metrics(y_true=y_true, y_pred=y_pred, num_classes=num_classes)

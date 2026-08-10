@@ -42,43 +42,17 @@ import seaborn as sns
 
 # ── Visual config (mirroring plot_svm_results.py) ─────────────────────────────
 
-INIT_ORDER = ["flim", "he", "xavier", "random", "trunc_normal"]
-
-# One colour per method — same palette as plot_svm_results.py init colours
-METHOD_COLOR: dict[str, str] = {
-    "SVM":          "#0072B2",   # blue
-    "MLP_freeze":   "#D55E00",   # orange-red
-    "MLP_unfreeze": "#009E73",   # green
-}
-
-METHOD_LABEL: dict[str, str] = {
-    "SVM":          "SVM",
-    "MLP_freeze":   "MLP freeze",
-    "MLP_unfreeze": "MLP unfreeze",
-}
-
-METHOD_HATCH: dict[str, str] = {
-    "SVM":          "",
-    "MLP_freeze":   "//",
-    "MLP_unfreeze": "..",
-}
-
-DATASET_LABEL: dict[str, str] = {
-    "eggs":      "Helminth Eggs",
-    "larvae":    "Helminth Larvae",
-    "protozoan": "Protozoan Cysts",
-    "helminth-eggs":   "Helminth Eggs",
-    "helminth-larvae": "Helminth Larvae",
-    "protozoan-cysts": "Protozoan Cysts",
-}
-
-METRIC_LABELS: dict[str, str] = {
-    "kappa": "Cohen's Kappa ($\\kappa$)",
-    "acc":   "Accuracy",
-    "f1":    "F1-score",
-}
-
-METRICS = ["kappa", "acc", "f1"]
+from src.evaluate.constants import (
+    INIT_ORDER,
+    METHOD_COLOR,
+    METHOD_LABEL,
+    METHOD_HATCH,
+    DATASET_LABEL,
+    METRIC_LABELS,
+    INIT_LINE_STYLE,
+    METRICS,
+    PERCENTAGES,
+)
 
 
 # ── Core plotting function ─────────────────────────────────────────────────────
@@ -248,16 +222,7 @@ def plot_composite(
 
 # ── SVM-style line plot (across all percentages, per init) ────────────────────
 
-PERCENTAGES = [1, 5, 25, 50, 75, 100]
 PCT_TO_POS = {p: i for i, p in enumerate(PERCENTAGES)}
-
-INIT_LINE_STYLE: dict[str, dict] = {
-    "flim":         {"color": "#0072B2", "ls": "-",   "marker": "o", "zorder": 5},
-    "random":       {"color": "#009E73", "ls": "-",   "marker": "s", "zorder": 4},
-    "he":           {"color": "#D55E00", "ls": "--",  "marker": "^", "zorder": 3},
-    "xavier":       {"color": "#CC79A7", "ls": "--",  "marker": "D", "zorder": 2},
-    "trunc_normal": {"color": "#F0E442", "ls": "-.",  "marker": "P", "zorder": 6},
-}
 
 
 def plot_metric_vs_pct(

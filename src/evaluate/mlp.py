@@ -52,6 +52,7 @@ from tqdm import tqdm
 
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
+from src.evaluate.constants import DATASET_NUM_CLASSES, IMAGE_SIZE
 from src.metrics.classification import compute_metrics
 from src.models.models import (
     ClassificationModel,
@@ -62,11 +63,10 @@ from src.models.models import (
     unfreeze_encoder,
 )
 from src.modules.lejepa_line_module import LejepaLineModule
-from src.utils.evaluate import DATASET_NUM_CLASSES, _ROOT, find_best_checkpoint, parse_experiment_name, resolve_available_experiments
+from src.utils.evaluate import _ROOT, find_best_checkpoint, parse_experiment_name, resolve_available_experiments
 from src.utils.get_names_wandb import ENTITY, PROJECT, build_finetune_name_dict
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-IMAGE_SIZE = 200
 
 _CONFIGS_DIR = os.path.join(_ROOT, "configs", "evaluate", "mlp")
 _RESULTS_DIR = os.path.join(_ROOT, "results")

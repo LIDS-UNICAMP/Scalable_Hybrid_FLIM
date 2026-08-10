@@ -40,8 +40,8 @@ import yaml as _yaml
 
 import wandb
 
+from src.evaluate.constants import DATASET_NUM_CLASSES
 from src.utils.evaluate import (
-    DATASET_NUM_CLASSES,
     find_best_checkpoint,
     get_local_run_ids,
     parse_experiment_name,

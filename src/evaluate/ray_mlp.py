@@ -65,15 +65,14 @@ except ImportError as _ray_err:
 
 from src.evaluate.mlp import (
     DEVICE,
-    IMAGE_SIZE,
     _CONFIGS_DIR,
     _RESULTS_DIR,
     get_experiment_configs,
     load_classification_model,
     train_and_evaluate,
 )
+from src.evaluate.constants import DATASET_NUM_CLASSES, IMAGE_SIZE
 from src.utils.evaluate import (
-    DATASET_NUM_CLASSES,
     parse_experiment_name,
 )
 from src.data_modules.datasets.dataset import DatasetParasite
@@ -148,10 +147,11 @@ def run_ray_experiment(
     if _ROOT not in sys.path:
         sys.path.insert(0, _ROOT)
 
-    from src.evaluate.mlp import load_classification_model, train_and_evaluate, IMAGE_SIZE
+    from src.evaluate.mlp import load_classification_model, train_and_evaluate
+    from src.evaluate.constants import IMAGE_SIZE, DATASET_NUM_CLASSES
     from src.data_modules.datasets.dataset import DatasetParasite
     from src.data_modules.datasets.lejepa_dataset import _build_test
-    from src.utils.evaluate import DATASET_NUM_CLASSES, parse_experiment_name
+    from src.utils.evaluate import parse_experiment_name
     from src.utils.get_names_wandb import ENTITY, PROJECT
     import wandb as _wandb
 

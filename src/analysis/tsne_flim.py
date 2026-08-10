@@ -53,6 +53,13 @@ from torchvision.transforms import v2
 from tqdm import tqdm
 
 from src.analysis.pyift_strategy import PyiftLoader
+from src.evaluate.constants import (
+    DATASET_NUM_CLASSES,
+    DATASETS as PROBLEMS,
+    IMAGE_SIZE,
+    PERCENTAGES,
+    SPLITS,
+)
 
 # ── Project root ──────────────────────────────────────────────────────────────
 _HERE = Path(__file__).resolve()
@@ -92,8 +99,6 @@ log = logging.getLogger(__name__)
 FLIM_BASE   = _ROOT / "data" / "to_mateus" / "model" / "ch24_32_48_a0.5_f5"
 OUTPUT_BASE = _ROOT / "tsne_analisys"
 
-PROBLEMS = ["eggs", "larvae", "protozoan"]
-
 # Maps FLIM model problem folder → full parasite name used in the data registry.
 PROBLEM_MAP: dict[str, str] = {
     "eggs":      "helminth-eggs",
@@ -101,17 +106,6 @@ PROBLEM_MAP: dict[str, str] = {
     "protozoan": "protozoan-cysts",
 }
 
-# Number of classes per dataset — mirrors src/utils/constant.py.
-DATASET_NUM_CLASSES: dict[str, int] = {
-    "helminth-eggs":    9,
-    "helminth-larvae":  2,
-    "protozoan-cysts":  7,
-}
-
-SPLITS      = [1, 2, 3]
-PERCENTAGES = [1, 5, 25, 50, 75, 100]
-
-IMAGE_SIZE  = 200
 BATCH_SIZE  = 32
 # num_workers=0 avoids macOS multiprocessing issues with C extensions.
 NUM_WORKERS = 0

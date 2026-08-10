@@ -46,21 +46,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn import svm
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
+from src.evaluate.constants import DATASET_NUM_CLASSES, IMAGE_SIZE
 from src.metrics.classification import compute_metrics
 from src.modules.lejepa_line_module import LejepaLineModule
-
-DATASET_NUM_CLASSES: dict[str, int] = {
-    "helminth-eggs": 9,
-    "helminth-larvae": 2,
-    "protozoan-cysts": 7,
-    "parasito": 9,
-}
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -150,7 +145,6 @@ def resolve_available_experiments(update_wandb: bool = False) -> dict[str, str]:
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-IMAGE_SIZE = 200
 
 # ─── Experiment name parsing ──────────────────────────────────────────────────
 
@@ -245,12 +239,26 @@ def find_best_checkpoint(run_id: str) -> str:
 # a spatially flattened map.
 _POOL = nn.AdaptiveAvgPool2d(1)
 
+# Como o mapa conv3 é reduzido: ``"avgpool2d"`` (GAP, ``channels[-1]``-d) ou
+# ``"flatten"`` (mapa raw achatado, ``C*H*W``-d — o protocolo original).
+# ponytail: chave de módulo em vez de parâmetro — nenhum chamador precisa
+# alternar no meio de uma avaliação, então quem quiser o outro modo rebinda
+# ``src.utils.evaluate.EMBED_MODE`` antes de rodar. Teto: não é thread-safe e
+# não viaja para workers em processos separados.
+EMBED_MODE = "avgpool2d"
+
 
 def _encode_pooled(model, inputs: torch.Tensor) -> torch.Tensor:
-    """Run conv1→conv2→conv3, global-average-pool and flatten to ``[B, C]``."""
+    """Run conv1→conv2→conv3, global-average-pool and flatten to ``[B, C]``.
+
+    Com ``EMBED_MODE == "flatten"`` o pooling é pulado e o mapa conv3 raw é
+    achatado direto, devolvendo ``[B, C*H*W]``.
+    """
     out = model.conv1(inputs)
     out = model.conv2(out)
     out = model.conv3(out)
+    if EMBED_MODE == "flatten":
+        return out.flatten(start_dim=1).detach().cpu()
     return _POOL(out).flatten(start_dim=1).detach().cpu()
 
 
@@ -347,6 +355,70 @@ def fit_svm_with_diagnostics(estimator, X, y, tag: str = "SVM") -> dict:
 # ─── SVM training ─────────────────────────────────────────────────────────────
 
 
+def fit_svm(X, y, *, max_iter: int = -1, C: float = 1e2, scaler: bool = False,
+            tag: str = "SVM"):
+    """Build the repo's canonical linear SVM, fit it on ``(X, y)`` and return it.
+
+    Every SVM in this repository uses exactly these hyperparameters, so they
+    live here once instead of being retyped per call site.  ``degree`` and
+    ``coef0`` are inert under ``kernel="linear"`` but are pinned anyway so the
+    estimator repr matches the historical CSVs.
+
+    *scaler* is the ONLY knob beyond the solver cap and ``C``: two arms (the
+    1280-d projection ones) genuinely need ``StandardScaler`` to converge.  That
+    asymmetry is deliberate — it is recorded per row by ``svm_protocol`` and
+    must NOT be unified across arms.
+
+    This function takes an already-built feature matrix; it does not extract
+    features and it does not touch label indexing.  The ``+1`` / 0-indexed
+    convention stays the caller's business, on purpose.
+
+    Args:
+        X:        Feature matrix ``(N, D)``.
+        y:        Label vector ``(N,)`` — whatever indexing the caller chose.
+        max_iter: Solver cap; ``-1`` = unbounded (default).
+        C:        Regularisation parameter.
+        scaler:   Wrap the SVC in ``Pipeline([StandardScaler, SVC])``.
+        tag:      Prefix for the diagnostics line printed by
+                  ``fit_svm_with_diagnostics``.
+
+    Returns:
+        The fitted estimator (``SVC`` or ``Pipeline``); solver diagnostics are
+        attached as ``fit_diagnostics_``.
+    """
+    clf = svm.SVC(
+        # Unbounded solver: results are deliberately NOT comparable with the
+        # CSVs produced under the old max_iter cap.
+        max_iter=max_iter,
+        C=C,
+        degree=3,
+        gamma="auto",
+        coef0=0,
+        decision_function_shape="ovo",
+        kernel="linear",
+    )
+    estimator = Pipeline([("scaler", StandardScaler()), ("svm", clf)]) if scaler else clf
+
+    # Barra de progresso viva durante o fit: libsvm não reporta nada e um fit
+    # longo parece travado.  Fica aqui para não ser reescrita em cada arm.
+    _stop = threading.Event()
+
+    def _progress():
+        with tqdm(desc="SVM fit", unit="s", bar_format="{desc}: {elapsed} [{postfix}]") as pbar:
+            while not _stop.wait(1.0):
+                pbar.update(1)
+            pbar.set_postfix_str("done")
+
+    _thread = threading.Thread(target=_progress, daemon=True)
+    _thread.start()
+    try:
+        fit_svm_with_diagnostics(estimator, X, y, tag=tag)
+    finally:
+        _stop.set()
+        _thread.join()
+    return estimator
+
+
 @torch.no_grad()
 def train_svm(model, dataloader, max_iter: int = -1, C: float = 1e2, degree: int = 3):
     """Fit a linear SVM on frozen encoder features.
@@ -363,17 +435,11 @@ def train_svm(model, dataloader, max_iter: int = -1, C: float = 1e2, degree: int
     on the returned classifier as ``fit_diagnostics_``.
     """
     print("[INFO] Initializing SVM")
-    clf = svm.SVC(
-        # Unbounded solver: results are deliberately NOT comparable with the
-        # CSVs produced under the old max_iter cap.
-        max_iter=max_iter,
-        C=C,
-        degree=degree,
-        gamma="auto",
-        coef0=0,
-        decision_function_shape="ovo",
-        kernel="linear",
-    )
+    # ponytail: *degree* continua na assinatura só por compatibilidade — o
+    # kernel é linear, então libsvm ignora o grau, ``fit_svm`` fixa degree=3 e
+    # nenhum call site passa outro valor.  Teto: se algum dia alguém quiser
+    # kernel polinomial, isto vira um parâmetro de verdade em ``fit_svm``.
+    del degree
 
     model.eval()
     model.to(DEVICE)
@@ -389,20 +455,7 @@ def train_svm(model, dataloader, max_iter: int = -1, C: float = 1e2, degree: int
         labels_np = np.argmax(labels.cpu().numpy(), axis=1) + 1  # 1-indexed
         all_y = torch.cat((all_y, torch.from_numpy(labels_np).long()))
 
-    _stop = threading.Event()
-
-    def _progress():
-        with tqdm(desc="SVM fit", unit="s", bar_format="{desc}: {elapsed} [{postfix}]") as pbar:
-            while not _stop.wait(1.0):
-                pbar.update(1)
-            pbar.set_postfix_str("done")
-
-    _thread = threading.Thread(target=_progress, daemon=True)
-    _thread.start()
-    fit_svm_with_diagnostics(clf, all_feats, all_y, tag="SVM_FLIM")
-    _stop.set()
-    _thread.join()
-    return clf
+    return fit_svm(all_feats, all_y, max_iter=max_iter, C=C, tag="SVM_FLIM")
 
 
 # ─── One-hot label wrapper ─────────────────────────────────────────────────────
@@ -465,11 +518,93 @@ def extract_features(model, dataloader):
     return np.concatenate(all_feats, axis=0), np.array(all_labels, dtype=np.int64)
 
 
+@torch.no_grad()
+def extract_features_encode(model, dataloader: DataLoader) -> tuple[np.ndarray, np.ndarray]:
+    """Extract pooled embeddings via ``model.encode()`` for every batch.
+
+    Serves every model that exposes the ``encode()`` interface (the distilled
+    students, among others) — nothing here is distillation-specific.  The
+    embedding returned is the pooled 1-D vector that training optimises.
+
+    The file's other extractor, ``extract_features`` (above), serves the
+    conv1→conv2→conv3 family instead: it reaches into the spatial feature maps
+    and pools them itself.  The two cannot be merged because the model
+    interfaces genuinely differ — one has ``.encode()``, the other has
+    ``.conv1``/``.conv2``/``.conv3``.
+
+    Args:
+        model:      Any model with an ``encode()`` method.
+        dataloader: Yields ``(inputs, int_labels)``.
+
+    Returns:
+        features: ``np.ndarray`` of shape ``(N, embed_dim)``.
+        y_true:   ``np.ndarray`` of shape ``(N,)`` — 0-indexed class labels.
+    """
+    model.eval()
+    model.to(DEVICE)
+
+    all_feats:  list[np.ndarray] = []
+    all_labels: list[int]        = []
+
+    for inputs, labels in tqdm(dataloader, desc="  Extracting features"):
+        feats = model.encode(inputs.to(DEVICE)).detach().cpu().numpy()
+        all_feats.append(feats)
+        if isinstance(labels, torch.Tensor):
+            all_labels.extend(labels.tolist())
+        else:
+            all_labels.extend(labels)
+
+    return np.concatenate(all_feats, axis=0), np.array(all_labels, dtype=np.int64)
+
+
+@torch.no_grad()
+def extract_proj_features(student, proj_kd, dataloader: DataLoader) -> tuple[np.ndarray, np.ndarray]:
+    """Extract ``proj_kd(student.encoder(x))`` embeddings over *dataloader*.
+
+    A projeção treinável fica ativa, ao contrário de ``extract_features_encode``
+    (que usa ``student.encode`` e devolve o embedding raw do encoder).
+
+    Args:
+        student:    ``LeJEPAFLIMModel`` (usa-se ``.encoder``, não ``.encode``).
+        proj_kd:    Cabeça de projeção da destilação.
+        dataloader: Yields ``(inputs, int_labels)``.
+
+    Returns:
+        features: ``np.ndarray`` of shape ``(N, proj_dim)``.
+        y_true:   ``np.ndarray`` of shape ``(N,)`` — 0-indexed class labels.
+    """
+    # ponytail: as duas cópias originais só divergiam no texto da barra do tqdm
+    # (``leave=False`` em uma delas); adotei uma descrição só.  Teto: se algum
+    # dia o texto da barra importar para alguém, vira parâmetro.
+    student.eval()
+    proj_kd.eval()
+    student.to(DEVICE)
+    proj_kd.to(DEVICE)
+
+    all_feats:  list[np.ndarray] = []
+    all_labels: list[int]        = []
+
+    for inputs, labels in tqdm(dataloader, desc="  Extracting proj features"):
+        emb = proj_kd(student.encoder(inputs.to(DEVICE))).detach().cpu().numpy()
+        all_feats.append(emb)
+        if isinstance(labels, torch.Tensor):
+            all_labels.extend(labels.tolist())
+        else:
+            all_labels.extend(labels)
+
+    return np.concatenate(all_feats, axis=0), np.array(all_labels, dtype=np.int64)
+
+
 # ─── Main evaluation loop ──────────────────────────────────────────────────────
 
 
 def main() -> None:
-    transform = _build_test(IMAGE_SIZE)
+    # Contrato do protocolo original: LAB[0,1] raw, sem Normalize(ImageNet) —
+    # ver artifacts/plots/comparacao_flim_protocolo_original/pipelines.md.
+    # ponytail: hardcoded em vez de flag — este main() só existe para rodar o
+    # protocolo oficial; quem precisa alternar usa --no-imagenet-norm nos
+    # scripts de src/evaluate/ que já expõem a opção.
+    transform = _build_test(IMAGE_SIZE, imagenet_norm=False)
     rows: list[dict] = []
 
     for run_id, run_name in resolve_available_experiments().items():

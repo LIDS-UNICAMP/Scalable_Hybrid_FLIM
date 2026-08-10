@@ -51,9 +51,9 @@ from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
 from src.metrics.classification import compute_metrics
 from src.models.models import build_flim_residual_encoder
+from src.evaluate.constants import IMAGE_SIZE
 from src.utils.evaluate import (
     DEVICE,
-    IMAGE_SIZE,
     _OneHotDataset,
     _ROOT,
     extract_features,

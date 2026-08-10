@@ -47,20 +47,24 @@ if _ROOT not in sys.path:
 # ── Reutiliza tudo do script de distillation original ─────────────────────────
 from src.evaluate.svm_distillation import (
     _OneHotDataset,
-    extract_features_distillation,
     find_distillation_runs,
     train_svm_distillation,
     _ARTIFACTS_DIR,
     _RESULTS_DIR,
     DEVICE,
-    IMAGE_SIZE,
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
 )
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
+from src.evaluate.constants import IMAGE_SIZE
 from src.metrics.classification import compute_metrics
-from src.utils.evaluate import SVM_DIAG_MISSING, fit_svm_with_diagnostics
+from src.utils.evaluate import (
+    SVM_DIAG_MISSING,
+    extract_features_encode,
+    extract_proj_features,
+    fit_svm,
+)
 
 # ── Carrega só o student do checkpoint, sem instanciar o teacher (I-JEPA) ─────
 from src.models.lejepa_flim import LeJEPAFLIMModel
@@ -168,36 +172,6 @@ def _load_student_and_proj_from_ckpt(ckpt_path: str, device: torch.device):
     return student, proj_kd.to(device)
 
 
-@torch.no_grad()
-def _extract_proj_features(student, proj_kd, dataloader: DataLoader):
-    """Extrai o embedding 1280d ``proj_kd(student.encoder(x))`` sobre um loader.
-
-    Espelha ``extract_features_distillation`` (que usa ``student.encode`` → 48d),
-    mas usa a projeção treinável. Loader yields ``(inputs, labels)``.
-
-    Returns:
-        (features [N, 1280], y_true [N]) — labels 0-indexed.
-    """
-    import numpy as np  # noqa: PLC0415
-
-    student.eval()
-    proj_kd.eval()
-    student.to(DEVICE)
-    proj_kd.to(DEVICE)
-
-    all_feats: list = []
-    all_labels: list = []
-    from tqdm import tqdm  # noqa: PLC0415
-    for inputs, labels in tqdm(dataloader, desc="  Extracting proj features"):
-        emb = proj_kd(student.encoder(inputs.to(DEVICE))).detach().cpu().numpy()
-        all_feats.append(emb)
-        if isinstance(labels, torch.Tensor):
-            all_labels.extend(labels.tolist())
-        else:
-            all_labels.extend(labels)
-    return np.concatenate(all_feats, axis=0), np.array(all_labels, dtype=np.int64)
-
-
 def _train_svm_proj(student, proj_kd, dataloader: DataLoader,
                     max_iter: int = -1, C: float = 1e2):
     """Treina um SVM linear sobre o embedding 1280d (labels 1-indexed).
@@ -209,17 +183,9 @@ def _train_svm_proj(student, proj_kd, dataloader: DataLoader,
     explicitamente só para reproduzir um CSV histórico. Os diagnósticos do
     solver ficam em ``clf.fit_diagnostics_``.
     """
-    import threading  # noqa: PLC0415
     import numpy as np  # noqa: PLC0415
-    from sklearn import svm as sk_svm  # noqa: PLC0415
     from tqdm import tqdm  # noqa: PLC0415
 
-    clf = sk_svm.SVC(
-        # Unbounded solver: results are deliberately NOT comparable with the
-        # CSVs produced under the old max_iter cap.
-        max_iter=max_iter, C=C, gamma="auto",
-        decision_function_shape="ovo", kernel="linear",
-    )
     student.eval()
     proj_kd.eval()
     student.to(DEVICE)
@@ -238,21 +204,7 @@ def _train_svm_proj(student, proj_kd, dataloader: DataLoader,
     X = np.concatenate(all_feats, axis=0)
     y = np.array(all_y, dtype=np.int64)
 
-    _stop = threading.Event()
-
-    def _progress():
-        with tqdm(desc="SVM fit", unit="s",
-                  bar_format="{desc}: {elapsed} [{postfix}]") as pbar:
-            while not _stop.wait(1.0):
-                pbar.update(1)
-            pbar.set_postfix_str("done")
-
-    _thr = threading.Thread(target=_progress, daemon=True)
-    _thr.start()
-    fit_svm_with_diagnostics(clf, X, y, tag="SVM_Distill_Proj1280_conv")
-    _stop.set()
-    _thr.join()
-    return clf
+    return fit_svm(X, y, max_iter=max_iter, C=C, tag="SVM_Distill_Proj1280_conv")
 
 
 # ── Descoberta de checkpoints: best.ckpt (knn) + best_loss.ckpt (loss) ─────────
@@ -473,7 +425,7 @@ def main() -> None:
                     test_loader = DataLoader(
                         test_ds, batch_size=32, shuffle=False, num_workers=4, pin_memory=True,
                     )
-                    feats, y_true = _extract_proj_features(student, proj_kd, test_loader)
+                    feats, y_true = extract_proj_features(student, proj_kd, test_loader)
                 else:
                     # ── Avaliação no encoder 48d (comportamento existente) ──
                     student = _load_student_from_ckpt(ckpt_path, DEVICE)
@@ -491,7 +443,7 @@ def main() -> None:
                     test_loader = DataLoader(
                         test_ds, batch_size=32, shuffle=False, num_workers=4, pin_memory=True,
                     )
-                    feats, y_true = extract_features_distillation(student, test_loader)
+                    feats, y_true = extract_features_encode(student, test_loader)
 
                 y_pred = clf.predict(feats) - 1  # volta para 0-indexed
 

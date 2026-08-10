@@ -64,6 +64,7 @@ from tqdm import tqdm
 
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
+from src.evaluate.constants import DATASET_NUM_CLASSES, IMAGE_SIZE
 from src.evaluate.eval_plotter import plot_composite, plot_metric_vs_pct
 from src.evaluate.wandb_resolver import (
     DATASET_SHORT_TO_FULL,
@@ -74,8 +75,8 @@ from src.evaluate.wandb_resolver import (
 )
 from src.metrics.classification import compute_metrics
 from src.modules.lejepa_line_module import LejepaLineModule
+import src.utils.evaluate as _ev  # módulo, para rebindar EMBED_MODE em main()
 from src.utils.evaluate import (
-    DATASET_NUM_CLASSES,
     _OneHotDataset,
     _ROOT,
     extract_features,
@@ -84,7 +85,6 @@ from src.utils.evaluate import (
 )
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-IMAGE_SIZE = 200
 
 DATASETS_ALL = ["eggs", "protozoan", "larvae"]
 MODELS_ALL = ["svm", "mlp_unfreeze", "mlp_freeze"]  # execution order per SDD 5.2
@@ -147,7 +147,11 @@ def run_svm(
     Returns:
         DataFrame with per-run results (one row per run).
     """
-    transform = _build_test(IMAGE_SIZE)
+    # Contrato do protocolo original: LAB[0,1] raw, sem Normalize(ImageNet) —
+    # ver artifacts/plots/comparacao_flim_protocolo_original/pipelines.md.
+    # ponytail: hardcoded em vez de flag — o braço SVM ajusta e avalia com o
+    # mesmo transform, então não há peso treinado exigindo a norma ligada.
+    transform = _build_test(IMAGE_SIZE, imagenet_norm=False)
     rows: list[dict] = []
 
     for run_info in ssl_runs:
@@ -292,6 +296,10 @@ def run_mlp(
     """
     from src.evaluate.mlp import load_classification_model  # noqa: PLC0415
 
+    # NÃO desligar imagenet_norm aqui: ao contrário do braço SVM, este caminho é
+    # só inferência com pesos já ajustados, e o fine-tune rodou com
+    # ParasiteLejepaDataModuleSplited(imagenet_norm=True) (o default, que nenhum
+    # config sobrescreve). Desligar criaria descasamento treino/teste.
     transform = _build_test(IMAGE_SIZE)
     rows: list[dict] = []
 
@@ -676,6 +684,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--max-runs", type=int, default=None,
                    help="Cap on number of usable runs (for debugging).")
+    p.add_argument(
+        "--embed-mode",
+        choices=["avgpool2d", "flatten"],
+        default="avgpool2d",
+        help=(
+            "How the conv3 map is reduced into the SVM embedding. "
+            "'avgpool2d' = AdaptiveAvgPool2d(1) → 48-d (default). "
+            "'flatten' = raw conv3 map flattened → 27648-d (original protocol)."
+        ),
+    )
     # ── Resume / restart / resume_id ──────────────────────────────────────────
     p.add_argument(
         "--resume",
@@ -709,6 +727,8 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     logging.basicConfig(level=logging.WARNING)
     args = _build_parser().parse_args()
+
+    _ev.EMBED_MODE = args.embed_mode  # antes de qualquer extract_features()
 
     output_root = Path(args.output_root)
     output_root.mkdir(parents=True, exist_ok=True)

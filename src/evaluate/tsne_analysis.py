@@ -61,7 +61,6 @@ from src.data_modules.datasets.lejepa_dataset import _build_test
 from src.evaluate.svm_distillation import (
     _ARTIFACTS_DIR,
     find_distillation_runs,
-    IMAGE_SIZE,
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
 )
@@ -73,7 +72,7 @@ from src.models.models import (
     load_FLIM_encoder, Encoder,
 )
 from src.modules.lejepa_line_module import LejepaLineModule
-from src.evaluate.constants import CLASS_NAMES
+from src.evaluate.constants import CLASS_NAMES, IMAGE_SIZE
 from src.utils.evaluate import resolve_available_experiments, find_best_checkpoint, parse_experiment_name
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

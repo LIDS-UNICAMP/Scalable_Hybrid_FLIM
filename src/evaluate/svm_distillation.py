@@ -46,13 +46,11 @@ import glob
 import json
 import os
 import sys
-import threading
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from sklearn import svm as sk_svm
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
@@ -62,6 +60,7 @@ if _ROOT not in sys.path:
 
 from src.data_modules.datasets.dataset import DatasetParasite
 from src.data_modules.datasets.lejepa_dataset import _build_test
+from src.evaluate.constants import IMAGE_SIZE
 from src.metrics.classification import compute_metrics
 from src.models.lejepa_flim import LeJEPAFLIMModel
 from src.models.models import (
@@ -69,13 +68,12 @@ from src.models.models import (
     get_actual_channels_from_weights,
     override_arch_channels,
 )
-from src.utils.evaluate import SVM_DIAG_MISSING, fit_svm_with_diagnostics
+from src.utils.evaluate import SVM_DIAG_MISSING, extract_features_encode, fit_svm
 
 _ARTIFACTS_DIR = os.path.join(_ROOT, "artifacts", "distillation")
 _RESULTS_DIR   = os.path.join(_ROOT, "results")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-IMAGE_SIZE = 200  # student input size
 
 _DATASET_NUM_CLASSES: dict[str, int] = {
     "eggs":      9,
@@ -167,45 +165,6 @@ class _OneHotDataset(Dataset):
         return img, one_hot
 
 
-# ── Feature extraction for distilled student ───────────────────────────────────
-
-
-@torch.no_grad()
-def extract_features_distillation(
-    student_model,
-    dataloader: DataLoader,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Extract raw student encoder embeddings (global avg pool output).
-
-    Unlike the FLIM SVM pipeline (which accesses .conv1/.conv2/.conv3 spatial
-    tensors), this function uses ``student_model.encode()`` to obtain the
-    pooled 1-D embedding, which is what the distillation training optimises.
-
-    Args:
-        student_model: ``LeJEPAFLIMModel`` instance.
-        dataloader:    Yields ``(inputs, int_labels)``.
-
-    Returns:
-        features: ``np.ndarray`` shape ``(N, embed_dim)``
-        y_true:   ``np.ndarray`` shape ``(N,)`` — 0-indexed labels.
-    """
-    student_model.eval()
-    student_model.to(DEVICE)
-
-    all_feats:  list[np.ndarray] = []
-    all_labels: list[int]        = []
-
-    for inputs, labels in tqdm(dataloader, desc="  Extracting features"):
-        feats = student_model.encode(inputs.to(DEVICE)).detach().cpu().numpy()
-        all_feats.append(feats)
-        if isinstance(labels, torch.Tensor):
-            all_labels.extend(labels.tolist())
-        else:
-            all_labels.extend(labels)
-
-    return np.concatenate(all_feats, axis=0), np.array(all_labels, dtype=np.int64)
-
-
 def train_svm_distillation(
     student_model,
     dataloader: DataLoader,
@@ -226,16 +185,6 @@ def train_svm_distillation(
         Fitted ``sklearn.svm.SVC`` (predictions are 1-indexed); solver
         diagnostics are attached as ``fit_diagnostics_``.
     """
-    clf = sk_svm.SVC(
-        # Unbounded solver: results are deliberately NOT comparable with the
-        # CSVs produced under the old max_iter cap.
-        max_iter=max_iter,
-        C=C,
-        gamma="auto",
-        decision_function_shape="ovo",
-        kernel="linear",
-    )
-
     student_model.eval()
     student_model.to(DEVICE)
 
@@ -252,20 +201,7 @@ def train_svm_distillation(
     X = np.concatenate(all_feats, axis=0)
     y = np.array(all_y, dtype=np.int64)
 
-    _stop = threading.Event()
-
-    def _progress():
-        with tqdm(desc="SVM fit", unit="s", bar_format="{desc}: {elapsed} [{postfix}]") as pbar:
-            while not _stop.wait(1.0):
-                pbar.update(1)
-            pbar.set_postfix_str("done")
-
-    _thr = threading.Thread(target=_progress, daemon=True)
-    _thr.start()
-    fit_svm_with_diagnostics(clf, X, y, tag="SVM_Distillation")
-    _stop.set()
-    _thr.join()
-    return clf
+    return fit_svm(X, y, max_iter=max_iter, C=C, tag="SVM_Distillation")
 
 
 # ── Checkpoint / run discovery ─────────────────────────────────────────────────
@@ -462,7 +398,7 @@ def main() -> None:
             test_loader = DataLoader(
                 test_ds, batch_size=32, shuffle=False, num_workers=4, pin_memory=True,
             )
-            feats, y_true = extract_features_distillation(student, test_loader)
+            feats, y_true = extract_features_encode(student, test_loader)
 
             # SVM trained with 1-indexed labels → convert predictions to 0-indexed
             y_pred = clf.predict(feats) - 1
