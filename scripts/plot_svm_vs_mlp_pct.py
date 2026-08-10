@@ -51,7 +51,18 @@ from pathlib import Path
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-_ROOT_STR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# scripts/ é o sys.path[0] quando se roda `python scripts/plot_svm_vs_mlp_pct.py`;
+# tem de vir antes do bloco abaixo, que usa PROJECT_ROOT.
+from constants import (  # noqa: E402
+    ARTIFACTS_PLOTS_DIR,
+    DATASETS,
+    DATASET_ALIASES as DATASET_MAP,
+    FELIPE_COLUMN_RENAME,
+    METRICS,
+    PROJECT_ROOT as _ROOT_STR,
+    REPORTS_FELIPE_DIR,
+)
+
 if _ROOT_STR not in sys.path:
     sys.path.insert(0, _ROOT_STR)
 
@@ -59,11 +70,6 @@ import pandas as pd
 
 import src.evaluate.eval_plotter as eval_plotter
 from src.evaluate.eval_plotter import plot_merge_comparison, plot_method_comparison
-
-_ROOT = Path(_ROOT_STR)
-
-DATASET_MAP = {"eggs": "eggs", "larvae": "larvae", "cistos": "protozoan", "protozoan": "protozoan"}
-METRICS = ["kappa", "acc", "f1"]
 
 # ── As três curvas ────────────────────────────────────────────────────────────
 # O _line_key do eval_plotter devolve `method` para a whitelist e `SVM_LeJEPA_{init}`
@@ -83,7 +89,7 @@ eval_plotter.METHOD_COMPARE_LABEL = {
 
 
 def _load(subdir: str) -> pd.DataFrame:
-    files = sorted(glob.glob(str(_ROOT / "data" / "reports_felipe" / subdir / "*.csv")))
+    files = sorted(glob.glob(str(Path(REPORTS_FELIPE_DIR) / subdir / "*.csv")))
     if not files:
         raise SystemExit(f"[plot] Nenhum CSV em data/reports_felipe/{subdir}/")
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
@@ -105,12 +111,7 @@ def build_dataframe() -> pd.DataFrame:
     mlp["init"] = mlp["encoder_mode"]          # vira o sufixo do _line_key
 
     df = pd.concat([svm, mlp], ignore_index=True)
-    df = df.rename(columns={
-        "test_cohen_kappa": "kappa",
-        "test_accuracy": "acc",
-        "test_f1_weighted": "f1",
-        "percentage": "pretrained_pct",
-    })
+    df = df.rename(columns=FELIPE_COLUMN_RENAME)
 
     g = df.groupby(["method", "init", "dataset_short", "pretrained_pct"], as_index=False)
     agg = g.agg(
@@ -129,13 +130,13 @@ def main() -> int:
     ap.add_argument("--mode", choices=["all", "individual", "merge", "row"], default="all")
     ap.add_argument("--metrics", nargs="+", default=METRICS, metavar="METRIC")
     ap.add_argument("--datasets", nargs="+", default=None, metavar="DS")
-    ap.add_argument("--out", default=str(_ROOT / "artifacts" / "plots" / "svm_vs_mlp_pct"))
+    ap.add_argument("--out", default=str(Path(ARTIFACTS_PLOTS_DIR) / "svm_vs_mlp_pct"))
     args = ap.parse_args()
 
     df = build_dataframe()
     if args.datasets:
         df = df[df["dataset_short"].isin(args.datasets)]
-    datasets = [d for d in ("eggs", "larvae", "protozoan") if d in set(df["dataset_short"])]
+    datasets = [d for d in DATASETS if d in set(df["dataset_short"])]
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

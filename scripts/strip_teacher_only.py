@@ -41,8 +41,7 @@ Uso:
 """
 import argparse, glob as globlib, os, sys, time
 
-TEACHER_PREFIX = "teacher."
-KEEP_STUDENT_PREFIXES = ("student.", "proj_kd.")
+from constants import KEEP_STUDENT_PREFIXES, TEACHER_PREFIX
 
 
 def human(n):
@@ -55,6 +54,8 @@ def human(n):
 
 def main():
     ap = argparse.ArgumentParser()
+    # Default RELATIVO ao cwd de propósito: absolutizar via ARTIFACTS_DISTILLATION_DIR
+    # faria o script reescrever checkpoints rodado de fora da raiz — bug fix, não refactor.
     ap.add_argument("--glob", default="artifacts/distillation/*/checkpoints/*.ckpt")
     ap.add_argument("--min-gb", type=float, default=1.5,
                     help="só processa ckpts maiores que isto (evita re-processar já-stripados)")

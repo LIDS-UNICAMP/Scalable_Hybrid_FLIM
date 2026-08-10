@@ -107,7 +107,50 @@ from typing import Any, Optional
 
 import yaml
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# This module is *also* imported from outside scripts/ — src/evaluate/{eval_avg_pooling_48d,
+# eval_svm_flim_flatten,svm_real_flim}.py and tools/check_probe_matches_evaluator.py all pull
+# `_arch_json` / `_flim_weights_path` out of it. On that path sys.path[0] is the repo root,
+# not scripts/, so `from constants import ...` below would not resolve. Put our own directory
+# on sys.path first. Do not remove.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from constants import (  # noqa: E402
+    ARCH_JSON_FILENAME,
+    ARCH_TAG as _ARCH_TAG,
+    ARTIFACTS_DIR,
+    CHECKPOINTS_SUBDIR,
+    CUDA_ENV_VAR,
+    DATASET_SPLITS_ROOT as _DEFAULT_DATA_ROOT,
+    DATASETS as _ALL_DATASETS,
+    DEFAULT_CONFIG_YAML,
+    DEFAULT_NUM_WORKERS,
+    FLIM_ARCH_BASE as _ARCH_JSON_BASE,
+    FLIM_WEIGHTS_BASE as _WEIGHTS_BASE,
+    LOG_LEVEL_DEFAULT,
+    LOG_LEVELS as _LOG_LEVELS,
+    LOG_TIME_FMT,
+    MODELS_SUBDIR,
+    NUM_CLASSES as _NUM_CLASSES,
+    OMP_ENV_VAR,
+    PARASITE_DIR as _PARASITE_DIR,
+    PERCENTAGES as _ALL_PCTS,
+    PROJECT_ROOT as _ROOT,
+    RAY_INIT_KWARGS,
+    RUN_METADATA_FILENAME,
+    SEP_WIDTH,
+    SPLITS as _ALL_SPLITS,
+    SPLITS_INCREMENTAL_SUBDIR,
+    WANDB_CHILD_ENV,
+    WANDB_ENTITY,
+    WANDB_FAILED_STATES as _WANDB_FAILED_STATES,
+    WANDB_PROJECT_AUTOENCODER as _DEFAULT_WANDB_PROJECT,
+    data_descriptor_filename,
+    split_dir,
+    train_dir,
+)
+
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
@@ -119,54 +162,21 @@ except ImportError as _e:
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-_ALL_DATASETS = ["eggs", "larvae", "protozoan"]
-_ALL_SPLITS = [1, 2, 3]
-# The brief fixes the grid at 5% and 75%; the others stay reachable for follow-ups.
-_ALL_PCTS = [1, 5, 25, 50, 75, 100]
+# The brief fixes the grid at 5% and 75%; the other _ALL_PCTS stay reachable for follow-ups.
 _DEFAULT_PCTS = [5, 75]
-
-_NUM_CLASSES: dict[str, int] = {"eggs": 9, "larvae": 2, "protozoan": 7}
 
 # EarlyStopping patience is a property of the training protocol, not of the tmux line that
 # happens to launch it: it is read from configs/default.yaml so nobody has to type it.
 # ponytail: one key from one known file, no config layer — a missing/renamed key raises
 # StopIteration here, at import, instead of silently training with a different patience.
-with open(os.path.join(_ROOT, "configs", "default.yaml"), encoding="utf-8") as _fh:
+with open(DEFAULT_CONFIG_YAML, encoding="utf-8") as _fh:
     _PATIENCE: int = next(cb["init_args"]["patience"]
                           for cb in yaml.safe_load(_fh)["trainer"]["callbacks"]
                           if cb["class_path"].endswith("EarlyStopping"))
 
-_ARCH_TAG: dict[str, str] = {
-    "eggs": "ch24_32_48",
-    "larvae": "ch24_32_48",
-    "protozoan": "ch24_30_48",
-}
-
-_MODEL_ROOT = os.path.join(_ROOT, "data", "to_mateus", "model")
-
-# arch JSON: the directory that declares the *correct* widths (protozoan -> 30).
-# weights:   always ch24_32_48, the only tree with models/ on disk.
-_ARCH_JSON_BASE: dict[str, str] = {
-    "eggs": os.path.join(_MODEL_ROOT, "ch24_32_48_a0.5_f5", "eggs"),
-    "larvae": os.path.join(_MODEL_ROOT, "ch24_32_48_a0.5_f5", "larvae"),
-    "protozoan": os.path.join(_MODEL_ROOT, "ch24_30_48_a0.5_f5", "protozoan"),
-}
-_WEIGHTS_BASE: dict[str, str] = {
-    "eggs": os.path.join(_MODEL_ROOT, "ch24_32_48_a0.5_f5", "eggs"),
-    "larvae": os.path.join(_MODEL_ROOT, "ch24_32_48_a0.5_f5", "larvae"),
-    "protozoan": os.path.join(_MODEL_ROOT, "ch24_32_48_a0.5_f5", "protozoan"),
-}
-
-_PARASITE_DIR: dict[str, str] = {
-    "eggs": "helminth-eggs",
-    "larvae": "helminth-larvae",
-    "protozoan": "protozoan-cysts",
-}
-_DEFAULT_DATA_ROOT = os.path.join(_ROOT, "data", "to_modules", "new_split_parasito")
-
 # Substring the Group 3 evaluator matches on (--run-filter autoencoder_resnet_init_flim).
 _ARTIFACT_SUBDIR = "autoencoder_resnet_init_flim"
-_ARTIFACT_ROOT = os.path.join(_ROOT, "artifacts", _ARTIFACT_SUBDIR)
+_ARTIFACT_ROOT = os.path.join(ARTIFACTS_DIR, _ARTIFACT_SUBDIR)
 
 _MANIFEST_PATH = os.path.join(_ARTIFACT_ROOT, "run_manifest.csv")
 _MANIFEST_RETRY_PATH = os.path.join(_ARTIFACT_ROOT, "run_manifest_retry.csv")
@@ -177,25 +187,19 @@ _MANIFEST_FIELDS = [
     "status", "skip_reason", "checkpoint_path",
 ]
 
-_DEFAULT_WANDB_PROJECT = "journal_02_2026_hybrid_FLIM"
-
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 
-_LOG_LEVELS = {"DEBUG": 0, "INFO": 1, "WARN": 2}
-_current_log_level = _LOG_LEVELS["INFO"]
+_current_log_level = _LOG_LEVELS[LOG_LEVEL_DEFAULT]
 
 
 def _log(msg: str, level: str = "INFO") -> None:
     if _LOG_LEVELS.get(level, 1) >= _current_log_level:
-        ts = time.strftime("%H:%M:%S")
+        ts = time.strftime(LOG_TIME_FMT)
         print(f"[{ts}][{level}] {msg}", flush=True)
 
 
 # ── W&B / local state check ────────────────────────────────────────────────────
-
-_WANDB_FAILED_STATES = {"crashed", "failed", "killed"}
-
 
 def _query_wandb_state(run_name: str, entity: str, project: str) -> tuple[str, str]:
     try:
@@ -219,7 +223,7 @@ def _query_wandb_state(run_name: str, entity: str, project: str) -> tuple[str, s
 
 
 def _meta_path(run_name: str) -> str:
-    return os.path.join(_ARTIFACT_ROOT, run_name, "run_metadata.json")
+    return os.path.join(_ARTIFACT_ROOT, run_name, RUN_METADATA_FILENAME)
 
 
 def _should_skip_experiment(run_name: str, check_wandb: bool,
@@ -260,17 +264,17 @@ def _should_skip_experiment(run_name: str, check_wandb: bool,
 # ── Path resolution ────────────────────────────────────────────────────────────
 
 def _arch_json(dataset: str, split: int) -> str:
-    return os.path.join(_ARCH_JSON_BASE[dataset], f"train{split}", "architecture.json")
+    return os.path.join(_ARCH_JSON_BASE[dataset], train_dir(split), ARCH_JSON_FILENAME)
 
 
 def _flim_weights_path(dataset: str, split: int) -> str:
-    return os.path.join(_WEIGHTS_BASE[dataset], f"train{split}", "models")
+    return os.path.join(_WEIGHTS_BASE[dataset], train_dir(split), MODELS_SUBDIR)
 
 
 def _split_json(dataset: str, split: int, pct: int) -> str:
     return os.path.join(
-        _DEFAULT_DATA_ROOT, _PARASITE_DIR[dataset], "splits_incremental",
-        f"split{split}", f"data_descriptor_perc{pct}.json",
+        _DEFAULT_DATA_ROOT, _PARASITE_DIR[dataset], SPLITS_INCREMENTAL_SUBDIR,
+        split_dir(split), data_descriptor_filename(pct),
     )
 
 
@@ -313,7 +317,7 @@ def _stage_ckpt(dataset: str, split: int, pct: int, stage: int, run_prefix: str 
     """Checkpoint a given stage writes — this is what the next wave consumes."""
     return os.path.join(
         _run_dir(_run_name(dataset, split, pct, stage, run_prefix, imagenet_norm, embed_mode)),
-        "checkpoints", _STAGE_CKPT[stage],
+        CHECKPOINTS_SUBDIR, _STAGE_CKPT[stage],
     )
 
 
@@ -370,7 +374,7 @@ def _child_cmd_tail(exp: dict, stage: int, run_name: str, init_ckpt: str) -> lis
         "--warmup-epochs", str(exp["warmup_epochs"]),
         "--patience", str(exp["patience"]),
         "--batch-size", str(exp["batch_size"]),
-        "--num-workers", str(exp.get("num_workers", 4)),
+        "--num-workers", str(exp.get("num_workers", DEFAULT_NUM_WORKERS)),
         "--svm-probe-every", str(exp["svm_probe_every"]),
         "--log-recon-every", str(exp["log_recon_every"]),
         "--embed-mode", exp["embed_mode"],
@@ -569,10 +573,9 @@ def run_autoencoder_experiment(
     import sys as _sys
     from collections import deque as _deque
 
-    _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    _os.environ["OMP_NUM_THREADS"] = str(cpus)
-    _os.environ["WANDB_CONSOLE"] = "off"
-    _os.environ["WANDB_MODE"] = "online"
+    _os.environ[CUDA_ENV_VAR] = str(gpu_id)
+    _os.environ[OMP_ENV_VAR] = str(cpus)
+    _os.environ.update(WANDB_CHILD_ENV)
 
     # One queue entry = one cell = one or two sequential runs on the same GPU slot.
     plan = exp.get("stage_plan") or [{"stage": exp.get("stage", 1),
@@ -691,7 +694,7 @@ def _cpus(exp: dict) -> int:
     Teto: ignora as threads de BLAS acima de OMP_NUM_THREADS, que ja e fixado com
     este mesmo numero no filho.
     """
-    return int(exp.get("num_workers", 4)) + 1
+    return int(exp.get("num_workers", DEFAULT_NUM_WORKERS)) + 1
 
 
 def run_queue(
@@ -711,12 +714,15 @@ def run_queue(
         scheduler_arg = max_concurrent_per_gpu
         total_slots = max_concurrent_per_gpu * len(gpu_ids)
 
-    ray_kwargs: dict[str, Any] = {"ignore_reinit_error": True, "log_to_driver": True}
+    # RAY_INIT_KWARGS carries num_gpus=0 (GPU pinning is manual, via CUDA_VISIBLE_DEVICES).
+    # Ray rejects num_cpus/num_gpus when the driver attaches to an existing cluster, so the
+    # --ray-address branch drops it.
+    ray_kwargs: dict[str, Any] = dict(RAY_INIT_KWARGS)
     if ray_address:
+        del ray_kwargs["num_gpus"]
         ray_kwargs["address"] = ray_address
     else:
         ray_kwargs["num_cpus"] = max(_cpus(e) for e in experiments) * total_slots
-        ray_kwargs["num_gpus"] = 0
 
     if not ray.is_initialized():
         ray.init(**ray_kwargs)
@@ -733,7 +739,7 @@ def run_queue(
 
     _log(f"Queue: {total} experiment(s) | {len(gpu_ids)} GPU(s) x "
          f"{max_concurrent_per_gpu} slots = {total_slots} max concurrent")
-    _log("=" * 70)
+    _log("=" * SEP_WIDTH)
 
     def _submit_next() -> bool:
         nonlocal global_index
@@ -811,7 +817,7 @@ def _write_manifest(rows: list[dict], skipped: list[dict], retry: bool = False) 
         for step in steps:
             stage = step.get("stage", 1)
             run_name = step.get("run_name", "")
-            ckpt = os.path.join(_run_dir(run_name), "checkpoints", _STAGE_CKPT[stage])
+            ckpt = os.path.join(_run_dir(run_name), CHECKPOINTS_SUBDIR, _STAGE_CKPT[stage])
             records.append({
                 "run_name": run_name,
                 "dataset": r.get("dataset", ""),
@@ -827,7 +833,7 @@ def _write_manifest(rows: list[dict], skipped: list[dict], retry: bool = False) 
     for s in skipped:
         run_name = s.get("run_name", "")
         stage = s.get("stage", 1)
-        ckpt = os.path.join(_run_dir(run_name), "checkpoints", _STAGE_CKPT[stage])
+        ckpt = os.path.join(_run_dir(run_name), CHECKPOINTS_SUBDIR, _STAGE_CKPT[stage])
         records.append({
             "run_name": run_name,
             "dataset": s.get("dataset", ""),
@@ -981,7 +987,7 @@ def main() -> None:
                              "stage 1 and stage2/svm_kappa (max) in stage 2.")
     parser.add_argument("--warmup-epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--num-workers", type=int, default=4, metavar="N")
+    parser.add_argument("--num-workers", type=int, default=DEFAULT_NUM_WORKERS, metavar="N")
     parser.add_argument("--svm-probe-every", type=int, default=1,
                         help="Run the one-vs-one SVM probe every N validation epochs.")
     parser.add_argument("--log-recon-every", type=int, default=10,
@@ -997,7 +1003,7 @@ def main() -> None:
 
     parser.add_argument("--wandb-update", action="store_true",
                         help="Log runs to W&B (required for the experiment's signature).")
-    parser.add_argument("--wandb-entity", default="ophira-ai")
+    parser.add_argument("--wandb-entity", default=WANDB_ENTITY)
     parser.add_argument("--wandb-project", default=_DEFAULT_WANDB_PROJECT)
     parser.add_argument("--run-prefix", type=str, default="", metavar="PREFIX")
 
@@ -1007,7 +1013,7 @@ def main() -> None:
                         help="Queue only runs whose local metadata is missing or not ok.")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARN"], default="INFO")
+    parser.add_argument("--log-level", choices=list(_LOG_LEVELS), default=LOG_LEVEL_DEFAULT)
 
     args = parser.parse_args()
     _current_log_level = _LOG_LEVELS[args.log_level]

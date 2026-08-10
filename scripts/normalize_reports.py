@@ -44,31 +44,32 @@ from pathlib import Path
 
 os.environ.setdefault("MPLBACKEND", "Agg")  # headless-safe matplotlib
 
+# scripts/ é o sys.path[0] quando se roda `python scripts/normalize_reports.py`;
+# tem de vir antes do bloco abaixo, que usa PROJECT_ROOT.
+from constants import (  # noqa: E402
+    ARTIFACTS_NORMALIZED_DIR,
+    ARTIFACTS_PLOTS_DIR,
+    CANONICAL_COLS as _CANONICAL_COLS,
+    DATASET_ALIASES as DATASET_MAP,
+    DATASET_LONG_TO_SHORT as _LONG_DATASET_MAP,
+    METRICS,
+    PROJECT_ROOT as _ROOT_STR,
+    REPORTS_FELIPE_SVM_DIR,
+    RESULTS_DIR,
+    UNIFIED_SVM_COMPARISON_CSV,
+)
+
 # Allow running directly: python scripts/normalize_reports.py
-_ROOT_STR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT_STR not in sys.path:
     sys.path.insert(0, _ROOT_STR)
 
 import numpy as np
 import pandas as pd
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = Path(_ROOT_STR)
+_RESULTS = Path(RESULTS_DIR)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-
-DATASET_MAP: dict[str, str] = {
-    "eggs":      "eggs",
-    "larvae":    "larvae",
-    "cistos":    "protozoan",
-    "protozoan": "protozoan",
-}
-
-METRICS = ["kappa", "acc", "f1"]
-
-_CANONICAL_COLS = [
-    "method", "init", "dataset_short", "pretrained_pct",
-    "n_splits", "kappa", "kappa_std", "acc", "acc_std", "f1", "f1_std",
-]
 
 _FELIPE_SVM_RE = re.compile(
     r"^report_svm_([a-z]+)_split(\d+)_perc(\d+)\.csv$"
@@ -84,7 +85,7 @@ def normalize_felipe_svm() -> pd.DataFrame:
     Metrics: test_cohen_kappa, test_accuracy, test_f1_weighted
     Returns canonical DataFrame with method=SVM_FLIM, init=flim.
     """
-    svm_dir = _ROOT / "data" / "reports_felipe" / "svm"
+    svm_dir = Path(REPORTS_FELIPE_SVM_DIR)
     raw_rows: list[dict] = []
 
     for csv_file in sorted(svm_dir.glob("*.csv")):
@@ -204,7 +205,7 @@ def normalize_ijepa_svm() -> pd.DataFrame:
                     embedding, kappa, kappa_std, acc, acc_std, f1, f1_std
     Returns canonical DataFrame with method=SVM_IJEPA, init=ijepa.
     """
-    src = _ROOT / "results" / "ijepa_svm_aggregated.csv"
+    src = _RESULTS / "ijepa_svm_aggregated.csv"
     if not src.exists():
         raise FileNotFoundError(f"ijepa_svm_aggregated.csv not found at {src}")
 
@@ -236,7 +237,7 @@ def normalize_distillation_conv_svm() -> pd.DataFrame | None:
     Returns canonical DataFrame with method=SVM_Distillation_Conv, init=trunc_normal.
     Returns None if the file does not exist yet.
     """
-    src = _ROOT / "results" / "svm_distillation_conv_results.csv"
+    src = _RESULTS / "svm_distillation_conv_results.csv"
     if not src.exists():
         print(f"[SKIP] svm_distillation_conv_results.csv not found — skipping distillation conv")
         return None
@@ -283,7 +284,7 @@ def _normalize_distill_flim_frozen() -> pd.DataFrame | None:
     (partial runs are fine — whatever is available gets plotted). Returns None if
     the file is absent.
     """
-    src = _ROOT / "results" / "svm_distillation_conv_flim_frozen_results.csv"
+    src = _RESULTS / "svm_distillation_conv_flim_frozen_results.csv"
     if not src.exists():
         print("[SKIP] svm_distillation_conv_flim_frozen_results.csv not found — "
               "rode svm_distillation_conv.py --run-filter 1x1_BN2d_1280_flim_frozen "
@@ -334,7 +335,7 @@ def _normalize_distill_proj1280() -> pd.DataFrame | None:
     method=SVM_Distill_Proj1280, init=trunc_normal.
     Returns None se o arquivo ainda não existir.
     """
-    src = _ROOT / "results" / "svm_distill_proj1280_results.csv"
+    src = _RESULTS / "svm_distill_proj1280_results.csv"
     if not src.exists():
         print("[SKIP] svm_distill_proj1280_results.csv não encontrado — rode svm_distill_with_projection.py primeiro")
         return None
@@ -378,7 +379,7 @@ def _normalize_distill_3x3bn() -> pd.DataFrame | None:
     method=SVM_Distill_3x3BN, init=trunc_normal.
     Returns None se o arquivo ainda não existir.
     """
-    src = _ROOT / "results" / "svm_proj1280_3x3_BN2d_results.csv"
+    src = _RESULTS / "svm_proj1280_3x3_BN2d_results.csv"
     if not src.exists():
         print("[SKIP] svm_proj1280_3x3_BN2d_results.csv não encontrado — rode svm_distill_with_projection.py --run-filter 3x3_BN2d_1280_one_layer primeiro")
         return None
@@ -422,7 +423,7 @@ def _normalize_distill_1x1bn() -> pd.DataFrame | None:
     method=SVM_Distill_1x1BN, init=trunc_normal.
     Returns None se o arquivo ainda não existir ou não tiver rows ok.
     """
-    src = _ROOT / "results" / "svm_proj1280_1x1_BN2d_results.csv"
+    src = _RESULTS / "svm_proj1280_1x1_BN2d_results.csv"
     if not src.exists():
         print("[SKIP] svm_proj1280_1x1_BN2d_results.csv não encontrado — rode svm_distill_with_projection.py --run-filter 1x1_BN2d_1280_one_layer --output-csv svm_proj1280_1x1_BN2d_results primeiro")
         return None
@@ -465,7 +466,7 @@ def _normalize_distill_1x1bn_nonorm() -> pd.DataFrame | None:
     method=SVM_Distill_1x1BN_nonorm, init=flim. Linha separada para comparar
     "com norm" (SVM_Distill_1x1BN) vs "sem norm".
     """
-    src = _ROOT / "results" / "svm_proj1280_1x1_BN2d_1280_one_layer_flim_init_no_imagenet_norm_results.csv"
+    src = _RESULTS / "svm_proj1280_1x1_BN2d_1280_one_layer_flim_init_no_imagenet_norm_results.csv"
     if not src.exists():
         print("[SKIP] svm_proj1280_1x1_BN2d_1280_one_layer_flim_init_no_imagenet_norm_results.csv não encontrado "
               "— rode svm_distill_with_projection.py --run-filter 1x1_BN2d_1280_one_layer_flim_init_no_imagenet_norm "
@@ -511,7 +512,7 @@ def _normalize_distill_2l_400k_flim() -> pd.DataFrame | None:
     method=SVM_Distill_2l400K_flim, init=flim.
     Returns None se o arquivo ainda não existir ou não tiver rows ok.
     """
-    src = _ROOT / "results" / "svm_2l_1x1_init_flim_256_1280_results.csv"
+    src = _RESULTS / "svm_2l_1x1_init_flim_256_1280_results.csv"
     if not src.exists():
         print("[SKIP] svm_2l_1x1_init_flim_256_1280_results.csv não encontrado")
         return None
@@ -558,7 +559,7 @@ def _normalize_distill_2l_400k_flim_nonorm() -> pd.DataFrame | None:
     ruler mismatch (antes era o encoder 48d puro).
     Returns None se o arquivo ainda não existir ou não tiver rows ok.
     """
-    src = _ROOT / "results" / "svm_2l_1x1_init_flim_256_1280_nonorm_proj1280.csv"
+    src = _RESULTS / "svm_2l_1x1_init_flim_256_1280_nonorm_proj1280.csv"
     if not src.exists():
         print("[SKIP] svm_2l_1x1_init_flim_256_1280_nonorm_proj1280.csv não encontrado")
         return None
@@ -604,7 +605,7 @@ def _normalize_distill_1x1bn_flim() -> pd.DataFrame | None:
     avoiding dependence on a separate split file that rsync can overwrite.
     Returns None se o arquivo não existir ou não tiver rows flim ok.
     """
-    src = _ROOT / "results" / "svm_proj1280_1x1_BN2d_results.csv"
+    src = _RESULTS / "svm_proj1280_1x1_BN2d_results.csv"
     if not src.exists():
         print("[SKIP] svm_proj1280_1x1_BN2d_results.csv não encontrado (1x1BN flim)")
         return None
@@ -650,7 +651,7 @@ def _normalize_distill_3x3bn_flim() -> pd.DataFrame | None:
     avoiding dependence on a separate split file that rsync can overwrite.
     Returns None se o arquivo não existir ou não tiver rows flim ok.
     """
-    src = _ROOT / "results" / "svm_proj1280_3x3_BN2d_results.csv"
+    src = _RESULTS / "svm_proj1280_3x3_BN2d_results.csv"
     if not src.exists():
         print("[SKIP] svm_proj1280_3x3_BN2d_results.csv não encontrado (3x3BN flim)")
         return None
@@ -694,7 +695,7 @@ def _normalize_distill_2l_400k() -> pd.DataFrame | None:
     method=SVM_Distill_2l400K, init=trunc_normal.
     Returns None se o arquivo ainda não existir ou não tiver rows ok.
     """
-    src = _ROOT / "results" / "svm_proj1280_2l_1x1_BN2d_256_1280_results.csv"
+    src = _RESULTS / "svm_proj1280_2l_1x1_BN2d_256_1280_results.csv"
     if not src.exists():
         print("[SKIP] svm_proj1280_2l_1x1_BN2d_256_1280_results.csv não encontrado — rode svm_distill_with_projection.py --run-filter 2l_1x1_BN2d_256_1280 primeiro")
         return None
@@ -732,14 +733,6 @@ def _normalize_distill_2l_400k() -> pd.DataFrame | None:
 
 # ── Source 9: svm_flim_residual_eggs.csv ─────────────────────────────────────
 
-# Long dataset names (SSL naming) → canonical short names used by the plots.
-_LONG_DATASET_MAP: dict[str, str] = {
-    "helminth-eggs":   "eggs",
-    "helminth-larvae": "larvae",
-    "protozoan-cysts": "protozoan",
-}
-
-
 def _normalize_flim_residual() -> pd.DataFrame | None:
     """Normalize results/svm_flim_residual_eggs.csv — FLIM residual encoders (eggs).
 
@@ -749,7 +742,7 @@ def _normalize_flim_residual() -> pd.DataFrame | None:
     (helminth-eggs) to the canonical short name (eggs). Skips non-ok / NaN rows.
     Returns None if the file is absent.
     """
-    src = _ROOT / "results" / "svm_flim_residual_eggs.csv"
+    src = _RESULTS / "svm_flim_residual_eggs.csv"
     if not src.exists():
         print("[SKIP] svm_flim_residual_eggs.csv não encontrado — "
               "rode svm_flim_residual.py --flim_residual_assessment primeiro")
@@ -825,9 +818,9 @@ def main() -> None:
 
     from src.evaluate.eval_plotter import plot_method_comparison  # noqa: PLC0415
 
-    out_dir = _ROOT / "artifacts" / "normalized"
+    out_dir = Path(ARTIFACTS_NORMALIZED_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
-    plots_dir = _ROOT / "artifacts" / "plots" / "comparison"
+    plots_dir = Path(ARTIFACTS_PLOTS_DIR) / "comparison"
 
     # ── Normalize each source (all optional in --partial mode) ────────────────
     flim_df           = _safe(normalize_felipe_svm, partial)
@@ -884,7 +877,7 @@ def main() -> None:
         return
 
     unified = pd.concat(dfs, ignore_index=True)
-    unified_path = out_dir / "unified_svm_comparison.csv"
+    unified_path = Path(UNIFIED_SVM_COMPARISON_CSV)
     unified.to_csv(unified_path, index=False)
     print(f"[SAVE] {unified_path.relative_to(_ROOT)}  ({len(unified)} rows)")
 

@@ -48,14 +48,17 @@ import os
 import re
 import sys
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from constants import (
+    ARTIFACTS_DISTILLATION_DIR as _ARTIFACTS,
+    CHECKPOINTS_SUBDIR,
+    LAST_CKPT_FILENAME,
+    PROJECT_ROOT as _ROOT,
+    RUN_METADATA_FILENAME,
+    WANDB_ENTITY as _ENTITY,
+    WANDB_PROJECT as _PROJECT,
+)
+
 sys.path.insert(0, _ROOT)
-
-_ARTIFACTS = os.path.join(_ROOT, "artifacts", "distillation")
-_RESULTS   = os.path.join(_ROOT, "results")
-
-_ENTITY  = "ophira-ai"
-_PROJECT = "flim-ssl"
 
 
 # ── Helpers de disco ────────────────────────────────────────────────────────────
@@ -95,12 +98,12 @@ def _find_checkpoints(run_dir: str) -> tuple[str | None, str | None]:
     O PL salva o best com 'val/loss' no nome, criando um subdir
     'best-epoch=NNN-val/loss=X.ckpt' — por isso busca recursiva.
     """
-    ckpt_root = os.path.join(run_dir, "checkpoints")
+    ckpt_root = os.path.join(run_dir, CHECKPOINTS_SUBDIR)
     if not os.path.isdir(ckpt_root):
         return None, None
     all_ckpts = glob.glob(os.path.join(ckpt_root, "**", "*.ckpt"), recursive=True)
-    last = next((c for c in all_ckpts if os.path.basename(c) == "last.ckpt"), None)
-    bests = [c for c in all_ckpts if os.path.basename(c) != "last.ckpt"]
+    last = next((c for c in all_ckpts if os.path.basename(c) == LAST_CKPT_FILENAME), None)
+    bests = [c for c in all_ckpts if os.path.basename(c) != LAST_CKPT_FILENAME]
     best = min(bests, key=_loss_from_name) if bests else None
     return best, last
 
@@ -115,7 +118,7 @@ def _file_size(path: str | None) -> int:
 
 
 def _local_meta(run_dir: str) -> dict:
-    path = os.path.join(run_dir, "run_metadata.json")
+    path = os.path.join(run_dir, RUN_METADATA_FILENAME)
     if not os.path.isfile(path):
         return {}
     try:

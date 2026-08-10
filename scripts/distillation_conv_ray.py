@@ -88,7 +88,47 @@ import sys
 import time
 from typing import Any, Optional
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# This script runs as `python scripts/distillation_conv_ray.py`, so scripts/ is already
+# sys.path[0] and `constants` resolves to the file next to this one.
+from constants import (  # noqa: E402
+    ARCH_JSON_FILENAME,
+    ARTIFACTS_DISTILLATION_DIR,
+    CHECKPOINTS_SUBDIR,
+    CUDA_ENV_VAR,
+    DATASET_SPLITS_ROOT as _DEFAULT_DATA_ROOT,
+    DATASETS as _ALL_DATASETS,
+    DEFAULT_CPUS_PER_EXPERIMENT,
+    DEFAULT_NUM_WORKERS,
+    FLIM_ARCH_BASE as _ARCH_BASE,
+    FLIM_WEIGHTS_BASE as _ARCH_BASE_FLIM,
+    LOG_LEVEL_DEFAULT,
+    LOG_LEVELS as _LOG_LEVELS,
+    LOG_TIME_FMT,
+    MODELS_SUBDIR,
+    NUM_CLASSES as _NUM_CLASSES,
+    OMP_ENV_VAR,
+    PARASITE_DIR as _PARASITE_DIR,
+    PERCENTAGES as _ALL_PCTS,
+    PROJECT_ROOT as _ROOT,
+    RAY_INIT_KWARGS,
+    RUN_METADATA_FILENAME,
+    SEP_WIDTH,
+    SPLITS as _ALL_SPLITS,
+    SPLITS_INCREMENTAL_SUBDIR,
+    STDERR_TRUNCATE_HEAD,
+    STDERR_TRUNCATE_MAX_CHARS,
+    STDERR_TRUNCATE_TAIL,
+    WANDB_CHILD_ENV,
+    WANDB_ENTITY,
+    WANDB_FAILED_STATES as _WANDB_FAILED_STATES,
+    WANDB_PROJECT,
+    WANDB_SKIP_STATES as _WANDB_SKIP_STATES,  # noqa: F401 — documenta a maquina de estados
+    WRITE_TEST_FILENAME,
+    data_descriptor_filename,
+    split_dir,
+    train_dir,
+)
+
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
@@ -99,9 +139,6 @@ except ImportError as _e:
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-_ALL_DATASETS      = ["eggs", "larvae", "protozoan"]
-_ALL_SPLITS        = [1, 2, 3]
-_ALL_PCTS          = [1, 5, 25, 50, 75, 100]
 _ALL_DIST_TYPES    = ["direct", "direct_cosine", "hybrid"]
 _ALL_INITS         = ["trunc_normal"]
 
@@ -125,39 +162,13 @@ _ALL_PROJ_TYPES    = ["conv_next_layers", "3x3_bn2d_1280", "1x1_bn2d_1280", "2l_
 # Proj types that always train the FLIM-initialised encoder (encoder_init forced to "flim")
 _FLIM_INIT_PROJ_TYPES = {"2l_1x1_init_flim_256_1280", "3x3_init_flim_1280", "next_layers_init_flim", "1x1_init_flim_frozen", "2l_1x1_init_flim_frozen_256_1280"}
 
-_NUM_CLASSES: dict[str, int] = {
-    "eggs":      9,
-    "larvae":    2,
-    "protozoan": 7,
-}
+# _ARCH_BASE declares the *correct* widths (protozoan -> 30); _ARCH_BASE_FLIM points every
+# dataset at the tree that actually has a models/ subdirectory with trained FLIM weights —
+# for protozoan those live in ch24_32_48 (layer2=32ch), not ch24_30_48. Both come from
+# constants.py (FLIM_ARCH_BASE / FLIM_WEIGHTS_BASE).
 
-_DEFAULT_DATA_ROOT = os.path.join(
-    _ROOT, "data", "to_modules", "new_split_parasito"
-)
-
-_ARCH_BASE: dict[str, str] = {
-    "eggs":      os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "eggs"),
-    "larvae":    os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "larvae"),
-    "protozoan": os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_30_48_a0.5_f5", "protozoan"),
-}
-
-# Paths used when use_flim_init=True — points every dataset to the directory
-# that actually contains a models/ subdirectory with trained FLIM weights.
-# For protozoan the weights live in ch24_32_48 (layer2=32ch), not ch24_30_48.
-_ARCH_BASE_FLIM: dict[str, str] = {
-    "eggs":      os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "eggs"),
-    "larvae":    os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "larvae"),
-    "protozoan": os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "protozoan"),
-}
-
-_PARASITE_DIR: dict[str, str] = {
-    "eggs":      "helminth-eggs",
-    "larvae":    "helminth-larvae",
-    "protozoan": "protozoan-cysts",
-}
-
-_MANIFEST_PATH         = os.path.join(_ROOT, "artifacts", "distillation", "run_manifest_conv.csv")
-_MANIFEST_RETRY_PATH   = os.path.join(_ROOT, "artifacts", "distillation", "run_manifest_conv_retry.csv")
+_MANIFEST_PATH         = os.path.join(ARTIFACTS_DISTILLATION_DIR, "run_manifest_conv.csv")
+_MANIFEST_RETRY_PATH   = os.path.join(ARTIFACTS_DISTILLATION_DIR, "run_manifest_conv_retry.csv")
 _MANIFEST_FIELDS = [
     "run_name", "dataset", "split", "percentage", "distillation_type",
     "encoder_init", "status", "skip_reason", "checkpoint_path",
@@ -166,13 +177,12 @@ _MANIFEST_FIELDS = [
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 
-_LOG_LEVELS = {"DEBUG": 0, "INFO": 1, "WARN": 2}
-_current_log_level = _LOG_LEVELS["INFO"]
+_current_log_level = _LOG_LEVELS[LOG_LEVEL_DEFAULT]
 
 
 def _log(msg: str, level: str = "INFO") -> None:
     if _LOG_LEVELS.get(level, 1) >= _current_log_level:
-        ts = time.strftime("%H:%M:%S")
+        ts = time.strftime(LOG_TIME_FMT)
         print(f"[{ts}][{level}] {msg}", flush=True)
 
 
@@ -184,9 +194,7 @@ def _log(msg: str, level: str = "INFO") -> None:
 #   "failed"    → crashed / failed / killed → QUEUE (re-run)
 #   "not_found" → no W&B record             → fall back to local
 #   "error"     → W&B API error             → QUEUE (safe default)
-
-_WANDB_FAILED_STATES = {"crashed", "failed", "killed"}
-_WANDB_SKIP_STATES   = {"finished", "running"}
+# The two state sets live in constants.py (WANDB_FAILED_STATES / WANDB_SKIP_STATES).
 
 
 def _query_wandb_state(
@@ -259,7 +267,7 @@ def _should_skip_experiment(
         if wb_state == "failed":
             # Se W&B crashou mas local está ok, treino terminou — não re-rodar
             local_meta = os.path.join(
-                _ROOT, "artifacts", "distillation", run_name, "run_metadata.json"
+                ARTIFACTS_DISTILLATION_DIR, run_name, RUN_METADATA_FILENAME
             )
             if os.path.isfile(local_meta):
                 try:
@@ -278,7 +286,7 @@ def _should_skip_experiment(
 
     # ── Step 2: local metadata fallback ───────────────────────────────────
     meta_path = os.path.join(
-        _ROOT, "artifacts", "distillation", run_name, "run_metadata.json"
+        ARTIFACTS_DISTILLATION_DIR, run_name, RUN_METADATA_FILENAME
     )
     if not os.path.isfile(meta_path):
         return False, "no_metadata"
@@ -300,11 +308,11 @@ def _should_skip_experiment(
 
 def _arch_json(dataset: str, split: int, use_flim_init: bool = False) -> str:
     base = _ARCH_BASE_FLIM[dataset] if use_flim_init else _ARCH_BASE[dataset]
-    return os.path.join(base, f"train{split}", "architecture.json")
+    return os.path.join(base, train_dir(split), ARCH_JSON_FILENAME)
 
 
 def _flim_weights_path(dataset: str, split: int) -> str:
-    return os.path.join(_ARCH_BASE_FLIM[dataset], f"train{split}", "models")
+    return os.path.join(_ARCH_BASE_FLIM[dataset], train_dir(split), MODELS_SUBDIR)
 
 
 def _split_json(dataset: str, split: int, pct: int) -> str:
@@ -312,9 +320,9 @@ def _split_json(dataset: str, split: int, pct: int) -> str:
     return os.path.join(
         _DEFAULT_DATA_ROOT,
         parasite_dir,
-        "splits_incremental",
-        f"split{split}",
-        f"data_descriptor_perc{pct}.json",
+        SPLITS_INCREMENTAL_SUBDIR,
+        split_dir(split),
+        data_descriptor_filename(pct),
     )
 
 
@@ -371,10 +379,10 @@ def validate_experiment(dataset: str, split: int, pct: int) -> tuple[bool, str]:
 
 
 def validate_output_dir() -> tuple[bool, str]:
-    out = os.path.join(_ROOT, "artifacts", "distillation")
+    out = ARTIFACTS_DISTILLATION_DIR
     try:
         os.makedirs(out, exist_ok=True)
-        test = os.path.join(out, ".write_test")
+        test = os.path.join(out, WRITE_TEST_FILENAME)
         with open(test, "w") as fh:
             fh.write("ok")
         os.remove(test)
@@ -396,11 +404,11 @@ def build_experiment_grid(
     wandb_update:  bool,
     skip_existing: bool = False,
     check_wandb:   bool = False,
-    wandb_entity:  str  = "ophira-ai",
-    wandb_project: str  = "flim-ssl",
+    wandb_entity:  str  = WANDB_ENTITY,
+    wandb_project: str  = WANDB_PROJECT,
     proj_type:     str  = "conv_next_layers",
     use_flim_init: bool = False,
-    num_workers:   int  = 4,
+    num_workers:   int  = DEFAULT_NUM_WORKERS,
     no_imagenet_norm: bool = False,
     run_prefix:    str  = "",
 ) -> tuple[list[dict], list[dict]]:
@@ -537,18 +545,17 @@ def run_distillation_experiment(
     project_root: str,
     queue_index:  int = -1,
     total:        int = -1,
-    cpus:         int = 4,
+    cpus:         int = DEFAULT_CPUS_PER_EXPERIMENT,
 ) -> dict:
     """Run one next_layers distillation experiment as a subprocess."""
     import os as _os
     import subprocess as _sp
     import sys as _sys
 
-    _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    _os.environ["OMP_NUM_THREADS"]       = str(cpus)
+    _os.environ[CUDA_ENV_VAR] = str(gpu_id)
+    _os.environ[OMP_ENV_VAR]  = str(cpus)
     # W&B: força modo online e desabilita captura de console (capture_output=True é pipe)
-    _os.environ["WANDB_CONSOLE"] = "off"
-    _os.environ["WANDB_MODE"]    = "online"
+    _os.environ.update(WANDB_CHILD_ENV)
 
     # ── Select module based on proj_type flag ─────────────────────────────
     proj_type  = exp.get("proj_type", "conv_next_layers")
@@ -578,7 +585,7 @@ def run_distillation_experiment(
     if exp.get("flim_weights_path"):
         cmd += ["--flim-weights-path", exp["flim_weights_path"]]
 
-    cmd += ["--num-workers", str(exp.get("num_workers", 4))]
+    cmd += ["--num-workers", str(exp.get("num_workers", DEFAULT_NUM_WORKERS))]
     # Sinaliza o tipo do experimento no W&B (tag/config) — ex.: 1x1_init_flim_frozen.
     cmd += ["--proj-type", proj_type]
     # Frozen variant forces the decoupled-norm + freeze + projection-probe regime
@@ -623,8 +630,9 @@ def run_distillation_experiment(
             result["status"] = "ok"
         else:
             stderr = (proc.stderr or "").strip()
-            if len(stderr) > 2000:
-                stderr = stderr[:1000] + "\n...[truncated]...\n" + stderr[-1000:]
+            if len(stderr) > STDERR_TRUNCATE_MAX_CHARS:
+                stderr = (stderr[:STDERR_TRUNCATE_HEAD] + "\n...[truncated]...\n"
+                          + stderr[-STDERR_TRUNCATE_TAIL:])
             result["status"] = "error"
             result["error"]  = f"returncode={proc.returncode}\n{stderr}"
     except Exception as exc:
@@ -658,13 +666,16 @@ def run_queue(
         scheduler_arg = max_concurrent_per_gpu
         total_slots   = max_concurrent_per_gpu * len(gpu_ids)
 
-    ray_kwargs: dict[str, Any] = {"ignore_reinit_error": True, "log_to_driver": True}
+    # RAY_INIT_KWARGS carries num_gpus=0 (GPU pinning is manual, via CUDA_VISIBLE_DEVICES).
+    # Ray rejects num_cpus/num_gpus when the driver attaches to an existing cluster, so the
+    # --ray-address branch drops it.
+    ray_kwargs: dict[str, Any] = dict(RAY_INIT_KWARGS)
     if ray_address:
+        del ray_kwargs["num_gpus"]
         ray_kwargs["address"] = ray_address
     else:
         total_cpus = cpus_per_experiment * total_slots
         ray_kwargs["num_cpus"] = total_cpus
-        ray_kwargs["num_gpus"] = 0
 
     if not ray.is_initialized():
         ray.init(**ray_kwargs)
@@ -688,7 +699,7 @@ def run_queue(
             f"{len(gpu_ids)} GPU(s) × {max_concurrent_per_gpu} slots = "
             f"{total_slots} max concurrent"
         )
-    _log("=" * 70)
+    _log("=" * SEP_WIDTH)
 
     def _submit_next() -> bool:
         nonlocal global_index
@@ -766,7 +777,7 @@ def _write_manifest(rows_ok: list[dict], skipped: list[dict], retry: bool = Fals
 
     for r in rows_ok:
         run_name = r.get("run_name", r.get("key", ""))
-        ckpt_dir = os.path.join(_ROOT, "artifacts", "distillation", run_name, "checkpoints")
+        ckpt_dir = os.path.join(ARTIFACTS_DISTILLATION_DIR, run_name, CHECKPOINTS_SUBDIR)
         all_records.append({
             "run_name":          run_name,
             "dataset":           r.get("dataset", ""),
@@ -830,9 +841,9 @@ def _print_summary(
     title = "RETRY SUMMARY" if retry else "QUEUE SUMMARY"
     manifest = _MANIFEST_RETRY_PATH if retry else _MANIFEST_PATH
 
-    print(f"\n{'=' * 70}")
+    print(f"\n{'=' * SEP_WIDTH}")
     print(f"{title} — next_layers distillation experiments")
-    print(f"{'=' * 70}")
+    print(f"{'=' * SEP_WIDTH}")
     print(f"  Succeeded           : {n_ok}")
     print(f"  Failed              : {n_err}")
     print(f"  Skipped (existing)  : {n_skip_existing}")
@@ -867,7 +878,7 @@ def _print_summary(
             if r.get("status") != "ok":
                 print(f"    - {r.get('key', '?')}: {str(r.get('error', ''))[:200]}")
     print(f"  Manifest       : {manifest}")
-    print(f"{'=' * 70}\n")
+    print(f"{'=' * SEP_WIDTH}\n")
 
 
 def _print_dry_run(
@@ -888,9 +899,9 @@ def _print_dry_run(
         max_concurrent = max_per_gpu * len(gpu_ids)
     title = "DRY RUN [RETRY]" if retry else "DRY RUN"
 
-    print(f"\n{'=' * 70}")
+    print(f"\n{'=' * SEP_WIDTH}")
     print(f"{title} — next_layers distillation experiment queue")
-    print(f"{'=' * 70}")
+    print(f"{'=' * SEP_WIDTH}")
     print(f"  GPUs                  : {len(gpu_ids)}  (IDs: {gpu_ids})")
     if slots_per_gpu:
         for gid, s in sorted(slots_per_gpu.items()):
@@ -934,7 +945,7 @@ def _print_dry_run(
         if len(invalid) > 5:
             print(f"    … and {len(invalid) - 5} more")
 
-    print(f"{'=' * 70}\n")
+    print(f"{'=' * SEP_WIDTH}\n")
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
@@ -974,12 +985,13 @@ def main() -> None:
                             "Ex: '7,3' → GPU0=7 slots, GPU1=3 slots. "
                             "Sobrescreve --max-concurrent-per-gpu quando especificado."
                         ))
-    parser.add_argument("--cpus-per-experiment",    type=int, default=4, metavar="N")
+    parser.add_argument("--cpus-per-experiment",    type=int,
+                        default=DEFAULT_CPUS_PER_EXPERIMENT, metavar="N")
     parser.add_argument("--ray-address", type=str, default=None)
     parser.add_argument("--wandb-update",  action="store_true")
     parser.add_argument("--fail-fast",     action="store_true")
     parser.add_argument("--dry-run",       action="store_true")
-    parser.add_argument("--log-level",     choices=["DEBUG", "INFO", "WARN"], default="INFO")
+    parser.add_argument("--log-level",     choices=list(_LOG_LEVELS), default=LOG_LEVEL_DEFAULT)
     # ── Retry / skip-existing flags ────────────────────────────────────────
     parser.add_argument(
         "--retry",
@@ -1010,8 +1022,8 @@ def main() -> None:
             "non-fatal: the experiment will be re-queued instead of silently skipped."
         ),
     )
-    parser.add_argument("--wandb-entity",  default="ophira-ai")
-    parser.add_argument("--wandb-project", default="flim-ssl")
+    parser.add_argument("--wandb-entity",  default=WANDB_ENTITY)
+    parser.add_argument("--wandb-project", default=WANDB_PROJECT)
     # ── Projection head variant ────────────────────────────────────────────
     parser.add_argument(
         "--proj-type",
@@ -1044,13 +1056,13 @@ def main() -> None:
         help=(
             "Initialize backbone encoder with pre-trained FLIM weights instead of "
             "trunc_normal. For protozoan uses ch24_32_48 (PROTOZOAN_FLIM_ARCH), "
-            "others use ch24_32_48 from _ARCH_BASE_FLIM. "
+            "others use ch24_32_48 from constants.FLIM_WEIGHTS_BASE. "
             "Run names get a '_flim_init' suffix."
         ),
     )
     # ── DataLoader / normalization passthrough ─────────────────────────────
     parser.add_argument(
-        "--num-workers", type=int, default=4, metavar="N",
+        "--num-workers", type=int, default=DEFAULT_NUM_WORKERS, metavar="N",
         help="DataLoader workers forwarded to each training subprocess (--num-workers).",
     )
     parser.add_argument(

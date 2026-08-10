@@ -57,8 +57,33 @@ import sys
 import time
 from typing import Any, Optional
 
-# ─── Project root ──────────────────────────────────────────────────────────────
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# ─── Constantes compartilhadas ────────────────────────────────────────────────
+# Rodando como ``python scripts/run_ssl_ray.py``, scripts/ é o sys.path[0] —
+# constants.py importa direto. Este arquivo fala a chave LONGA de dataset
+# ("helminth-eggs"); DATASET_LONG_TO_SHORT faz a ponte para a chave curta que
+# constants.py usa nos dicionários de caminho.
+from constants import (
+    ARCH_JSON_FILENAME,
+    CUDA_ENV_VAR,
+    DATASET_LONG_TO_SHORT,
+    DATASETS_LONG as _ALL_DATASETS,
+    DEFAULT_CONFIG_YAML,
+    DEFAULT_CPUS_PER_EXPERIMENT,
+    FLIM_ARCH_BASE,
+    LOG_LEVEL_DEFAULT,
+    LOG_LEVELS as _LOG_LEVELS,
+    LOG_TIME_FMT,
+    OMP_ENV_VAR,
+    PROJECT_ROOT as _ROOT,
+    RAY_INIT_KWARGS,
+    RESULTS_DIR,
+    SEP_WIDTH,
+    STDERR_TRUNCATE_HEAD,
+    STDERR_TRUNCATE_MAX_CHARS,
+    STDERR_TRUNCATE_TAIL,
+    train_dir,
+)
+
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
@@ -69,31 +94,24 @@ except ImportError as _e:
     raise ImportError("ray is not installed.  Run: pip install 'ray[tune]'") from _e
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-_ALL_DATASETS = ["helminth-eggs", "helminth-larvae", "protozoan-cysts"]
+
+# Local: a lista de inits deste launcher tem 5 entradas (as outras grades têm
+# vocabulários diferentes de init — não unificar).
 _ALL_INITS    = ["xavier", "random", "he", "flim", "trunc_normal"]
 
-_STATE_FILE_DEFAULT = os.path.join(_ROOT, "results", "ssl_missing_state.json")
-_RESULTS_DIR        = os.path.join(_ROOT, "results")
+_STATE_FILE_DEFAULT = os.path.join(RESULTS_DIR, "ssl_missing_state.json")
 
-# Arch JSON base paths per dataset (used to build absolute paths for flim override)
+# Arch JSON base paths per dataset (used to build absolute paths for flim
+# override) — é FLIM_ARCH_BASE, só que rechaveado para o nome longo do dataset.
 _ARCH_BASE: dict[str, str] = {
-    "helminth-eggs":    os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "eggs"),
-    "helminth-larvae":  os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "larvae"),
-    "protozoan-cysts":  os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_30_48_a0.5_f5", "protozoan"),
-}
-
-# Short dataset alias used in config directory names
-_DATASET_CONFIG_ALIAS: dict[str, str] = {
-    "helminth-eggs":   "eggs",
-    "helminth-larvae": "larvae",
-    "protozoan-cysts": "protozoan",
+    long_name: FLIM_ARCH_BASE[short] for long_name, short in DATASET_LONG_TO_SHORT.items()
 }
 
 
 # ─── Config resolution ────────────────────────────────────────────────────────
 
 def _model_config(dataset: str, init: str, split: int) -> str:
-    alias = _DATASET_CONFIG_ALIAS[dataset]
+    alias = DATASET_LONG_TO_SHORT[dataset]
     if init == "flim":
         return f"configs/model/lejepa_line_flim_{alias}_train{split}.yaml"
     if dataset == "protozoan-cysts":
@@ -112,7 +130,7 @@ def _arch_json_abs(dataset: str, split: int) -> Optional[str]:
     base = _ARCH_BASE.get(dataset)
     if base is None:
         return None
-    return os.path.join(base, f"train{split}", "architecture.json")
+    return os.path.join(base, train_dir(split), ARCH_JSON_FILENAME)
 
 
 # ─── Hyperparameter introspection ─────────────────────────────────────────────
@@ -284,13 +302,12 @@ def find_missing_experiments(
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 
-_LOG_LEVELS = {"DEBUG": 0, "INFO": 1, "WARN": 2}
-_current_log_level = _LOG_LEVELS["INFO"]
+_current_log_level = _LOG_LEVELS[LOG_LEVEL_DEFAULT]
 
 
 def _log(msg: str, level: str = "INFO") -> None:
     if _LOG_LEVELS.get(level, 1) >= _current_log_level:
-        ts = time.strftime("%H:%M:%S")
+        ts = time.strftime(LOG_TIME_FMT)
         print(f"[{ts}][{level}] {msg}", flush=True)
 
 
@@ -374,19 +391,19 @@ def run_ssl_experiment(
     project_root: str,
     queue_index:  int = -1,
     total:        int = -1,
-    cpus:         int = 4,
+    cpus:         int = DEFAULT_CPUS_PER_EXPERIMENT,
 ) -> dict:
     """Run one SSL training experiment as a subprocess on the assigned GPU."""
     import os as _os
     import subprocess as _sp
     import sys as _sys
 
-    _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    _os.environ["OMP_NUM_THREADS"]       = str(cpus)
+    _os.environ[CUDA_ENV_VAR] = str(gpu_id)
+    _os.environ[OMP_ENV_VAR]  = str(cpus)
 
     cmd = [
         _sys.executable, "src/main.py", "fit",
-        "--config", "configs/default.yaml",
+        "--config", DEFAULT_CONFIG_YAML,
         "--config", exp["data_config"],
         "--config", exp["model_config"],
         f"--trainer.logger.init_args.name={exp['canonical_name']}",
@@ -457,8 +474,9 @@ def run_ssl_experiment(
             result["status"] = "ok"
         else:
             stderr = (proc.stderr or "").strip()
-            if len(stderr) > 2000:
-                stderr = stderr[:1000] + "\n...[truncated]...\n" + stderr[-1000:]
+            if len(stderr) > STDERR_TRUNCATE_MAX_CHARS:
+                stderr = (stderr[:STDERR_TRUNCATE_HEAD] + "\n...[truncated]...\n"
+                          + stderr[-STDERR_TRUNCATE_TAIL:])
             result["status"] = "error"
             result["error"]  = f"returncode={proc.returncode}\n{stderr}"
     except Exception as exc:
@@ -484,15 +502,17 @@ def run_queue(
         _log("No experiments to run.", "WARN")
         return []
 
-    os.makedirs(_RESULTS_DIR, exist_ok=True)
+    os.makedirs(RESULTS_DIR, exist_ok=True)
 
-    ray_kwargs: dict[str, Any] = {"ignore_reinit_error": True, "log_to_driver": True}
+    # num_gpus=0 vem de RAY_INIT_KWARGS: a GPU é fixada na mão via CUDA_VISIBLE_DEVICES.
+    ray_kwargs: dict[str, Any] = dict(RAY_INIT_KWARGS)
     if ray_address:
+        # Ray recusa num_cpus/num_gpus ao conectar num cluster já existente.
+        ray_kwargs.pop("num_gpus")
         ray_kwargs["address"] = ray_address
     else:
         total_cpus = cpus_per_experiment * max_concurrent_per_gpu * len(gpu_ids)
         ray_kwargs["num_cpus"] = total_cpus
-        ray_kwargs["num_gpus"] = 0
 
     if not ray.is_initialized():
         ray.init(**ray_kwargs)
@@ -513,7 +533,7 @@ def run_queue(
         f"{len(gpu_ids)} GPU(s) × {max_concurrent_per_gpu} slots = "
         f"{len(gpu_ids) * max_concurrent_per_gpu} max concurrent"
     )
-    _log("=" * 70)
+    _log("=" * SEP_WIDTH)
 
     def _submit_next() -> bool:
         nonlocal global_index
@@ -599,9 +619,9 @@ def _print_summary(
         if gid in gpu_stats:
             gpu_stats[gid]["ok" if r.get("status") == "ok" else "error"] += 1
 
-    print(f"\n{'=' * 70}")
+    print(f"\n{'=' * SEP_WIDTH}")
     print("QUEUE SUMMARY — missing SSL re-training")
-    print(f"{'=' * 70}")
+    print(f"{'=' * SEP_WIDTH}")
     print(f"  Succeeded      : {n_ok}")
     print(f"  Failed         : {n_err}")
     print(f"  Skipped (done) : {len(skipped)}")
@@ -622,7 +642,7 @@ def _print_summary(
         for r in rows:
             if r.get("status") != "ok":
                 print(f"    - {r.get('key', '?')}: {r.get('error', '')[:200]}")
-    print(f"{'=' * 70}\n")
+    print(f"{'=' * SEP_WIDTH}\n")
 
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
@@ -648,7 +668,7 @@ def main() -> None:
         help="Maximum experiments running simultaneously on each GPU.",
     )
     parser.add_argument(
-        "--cpus-per-experiment", type=int, default=4, metavar="N",
+        "--cpus-per-experiment", type=int, default=DEFAULT_CPUS_PER_EXPERIMENT, metavar="N",
         help="CPU cores (OMP_NUM_THREADS) per experiment.",
     )
     parser.add_argument(
@@ -734,7 +754,7 @@ def main() -> None:
         help="Ray cluster address. Omit to start a local Ray instance.",
     )
     parser.add_argument(
-        "--log-level", choices=["DEBUG", "INFO", "WARN"], default="INFO",
+        "--log-level", choices=list(_LOG_LEVELS), default=LOG_LEVEL_DEFAULT,
     )
     args = parser.parse_args()
 
@@ -799,9 +819,9 @@ def main() -> None:
     # ── Dry run ───────────────────────────────────────────────────────────────
     if args.dry_run:
         max_concurrent = args.max_concurrent_per_gpu * len(gpu_ids)
-        print(f"\n{'=' * 70}")
+        print(f"\n{'=' * SEP_WIDTH}")
         print("DRY RUN — missing SSL re-training queue")
-        print(f"{'=' * 70}")
+        print(f"{'=' * SEP_WIDTH}")
         print(f"  GPUs                   : {len(gpu_ids)}  (IDs: {gpu_ids})")
         print(f"  Slots per GPU          : {args.max_concurrent_per_gpu}")
         print(f"  Max concurrent total   : {max_concurrent}")
@@ -828,7 +848,7 @@ def main() -> None:
             )
             if arch_note:
                 print(f"       {arch_note}")
-        print(f"{'=' * 70}\n")
+        print(f"{'=' * SEP_WIDTH}\n")
         return
 
     if not experiments:

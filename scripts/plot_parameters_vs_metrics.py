@@ -44,9 +44,15 @@ import matplotlib.ticker as mticker
 import numpy as np
 from adjustText import adjust_text
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESULTS = os.path.join(ROOT, "results")
-NORM = os.path.join(ROOT, "artifacts", "normalized")
+from constants import (
+    ARTIFACTS_NORMALIZED_DIR as NORM,
+    DATASETS,
+    PERCENTAGES,
+    PROJECT_ROOT as ROOT,
+    RESULTS_DIR as RESULTS,
+    UNIFIED_SVM_COMPARISON_CSV,
+)
+
 OUT = os.path.join(ROOT, "artifacts", "parameters_metrics")
 
 # ── Model metadata ────────────────────────────────────────────────────────────
@@ -60,13 +66,13 @@ MODELS: list[tuple[str, int, str, str]] = [
     ("I-JEPA",       630_762_240, "I-JEPA",         "#6A0572"),
 ]
 
-DATASETS = ["eggs", "larvae", "protozoan"]
 DATASET_LABELS = {
     "eggs":      "Helminth Eggs",
     "larvae":    "Helminth Larvae",
     "protozoan": "Protozoan Cysts",
 }
-PERCENTAGES = [1, 5, 25, 50, 75, 100]
+# Ordem propositalmente diferente da canonica de constants.METRICS
+# (["kappa","acc","f1"]): aqui ela define a ordem em que as figuras saem.
 METRICS = ["f1", "kappa", "acc"]
 METRIC_LABELS = {
     "f1":    "F1 Score",
@@ -98,7 +104,7 @@ def load_flim() -> ModelData:
 
 
 def load_lejepa() -> ModelData:
-    rows = _read_csv(os.path.join(NORM, "unified_svm_comparison.csv"))
+    rows = _read_csv(UNIFIED_SVM_COMPARISON_CSV)
     return {
         (r["dataset_short"], int(float(r["pretrained_pct"]))): {
             "kappa": float(r["kappa"]),

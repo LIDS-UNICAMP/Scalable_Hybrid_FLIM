@@ -48,31 +48,19 @@ from pathlib import Path
 
 import pandas as pd
 
+from constants import (
+    CANONICAL_COLS as _OUT_COLS,
+    DATASET_ALIASES as _DATASET_SHORT,
+    METRICS as _METRICS,
+    PROJECT_ROOT,
+    RESULTS_DIR,
+)
+
 # ── Repo root ──────────────────────────────────────────────────────────────────
-_HERE = Path(__file__).resolve().parent
-_ROOT = _HERE.parent
+_ROOT = Path(PROJECT_ROOT)
 sys.path.insert(0, str(_ROOT))
 
-_RESULTS_DIR = _ROOT / "results"
-
-# ── Dataset name normalisation ─────────────────────────────────────────────────
-_DATASET_SHORT: dict[str, str] = {
-    "helminth-eggs":   "eggs",
-    "helminth-larvae": "larvae",
-    "protozoan-cysts": "protozoan",
-    "parasito":        "parasito",
-    # pass-through for names already short
-    "eggs":            "eggs",
-    "larvae":          "larvae",
-    "protozoan":       "protozoan",
-}
-
-_METRICS = ["kappa", "acc", "f1"]
-
-_OUT_COLS = [
-    "method", "init", "dataset_short", "pretrained_pct", "n_splits",
-    "kappa", "kappa_std", "acc", "acc_std", "f1", "f1_std",
-]
+_RESULTS_DIR = Path(RESULTS_DIR)
 
 
 def _method_label(row: pd.Series) -> str:

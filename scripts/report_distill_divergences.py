@@ -46,10 +46,9 @@ import os
 import sys
 from collections import Counter
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _ROOT)
+from constants import PROJECT_ROOT as _ROOT, RESULTS_DIR as _RESULTS
 
-_RESULTS = os.path.join(_ROOT, "results")
+sys.path.insert(0, _ROOT)
 
 
 def _is_divergent(wandb_state: str, local_status: str) -> bool:

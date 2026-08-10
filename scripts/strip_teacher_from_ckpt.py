@@ -39,7 +39,8 @@ Uso:
 """
 import argparse, glob as globlib, json, os, sys, time
 
-KEEP_PREFIXES = ("student.", "proj_kd.")
+from constants import KEEP_STUDENT_PREFIXES as KEEP_PREFIXES, RUN_METADATA_FILENAME
+
 KEEP_TOP = ("hyper_parameters", "epoch", "global_step",
             "pytorch-lightning_version", "loops", "state_dict")
 
@@ -58,7 +59,9 @@ def bar(done, total, width=24):
 
 def collect_from_metadata():
     out = []
-    for m in globlib.glob("artifacts/distillation/*/run_metadata.json"):
+    # Glob RELATIVO ao cwd de propósito: absolutizar via ARTIFACTS_DISTILLATION_DIR
+    # faria o script passar a achar checkpoints rodado de fora da raiz — bug fix, não refactor.
+    for m in globlib.glob(os.path.join("artifacts", "distillation", "*", RUN_METADATA_FILENAME)):
         try:
             best = json.load(open(m)).get("best_checkpoint", "")
         except Exception:
@@ -105,7 +108,7 @@ def main():
         if args.skip_running and args.skip_running in p and "no_imagenet_norm" in p:
             # só pula se o run ainda não tem metadata (sinal de treino em andamento)
             run = os.path.dirname(os.path.dirname(p))
-            if not os.path.exists(os.path.join(run, "run_metadata.json")):
+            if not os.path.exists(os.path.join(run, RUN_METADATA_FILENAME)):
                 return "treino em andamento"
         return None
 

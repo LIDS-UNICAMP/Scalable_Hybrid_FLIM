@@ -31,10 +31,10 @@ Thin wrapper: the LightningModule, the argument parser and ``main()`` live in
 
 from __future__ import annotations
 
-import os
 import sys
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from constants import PROJECT_ROOT as _ROOT
+
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

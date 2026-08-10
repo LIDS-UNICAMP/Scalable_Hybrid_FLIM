@@ -70,7 +70,49 @@ import sys
 import time
 from typing import Any, Optional
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Rodando como ``python scripts/classification_flim_ray.py``, scripts/ é o
+# sys.path[0] — constants.py importa direto. Os alias preservam os nomes locais
+# já usados no arquivo. FLIM_WEIGHTS_BASE (e não FLIM_ARCH_BASE) porque aqui a
+# arquitetura e os pesos saem do mesmo diretório ch24_32_48, o que tem models/;
+# para protozoan, ClassificationFlimModule ignora --arch-json e reconstrói a
+# arquitetura do dict PROTOZOAN_FLIM_ARCH (ch24_30_48 não tem pesos em disco).
+from constants import (
+    ARCH_JSON_FILENAME,
+    ARTIFACTS_CLASSIFICATION_FLIM_DIR,
+    CHECKPOINTS_SUBDIR,
+    CUDA_ENV_VAR,
+    DATASET_SPLITS_ROOT as _DEFAULT_DATA_ROOT,
+    DATASETS as _ALL_DATASETS,
+    DEFAULT_CPUS_PER_EXPERIMENT,
+    DEFAULT_NUM_WORKERS,
+    FLIM_WEIGHTS_BASE as _ARCH_BASE_FLIM,
+    LOG_LEVEL_DEFAULT,
+    LOG_LEVELS as _LOG_LEVELS,
+    LOG_TIME_FMT,
+    MODELS_SUBDIR,
+    NUM_CLASSES as _NUM_CLASSES,
+    OMP_ENV_VAR,
+    PARASITE_DIR as _PARASITE_DIR,
+    PERCENTAGES as _ALL_PCTS,
+    PROJECT_ROOT as _ROOT,
+    RAY_INIT_KWARGS,
+    RUN_METADATA_FILENAME,
+    SEP_WIDTH,
+    SPLITS as _ALL_SPLITS,
+    SPLITS_INCREMENTAL_SUBDIR,
+    STDERR_TRUNCATE_HEAD,
+    STDERR_TRUNCATE_MAX_CHARS,
+    STDERR_TRUNCATE_TAIL,
+    WANDB_CHILD_ENV,
+    WANDB_ENTITY,
+    WANDB_FAILED_STATES as _WANDB_FAILED_STATES,
+    WANDB_PROJECT,
+    WRITE_TEST_FILENAME,
+    data_descriptor_filename,
+    split_dir,
+    train_dir,
+)
+
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
@@ -81,37 +123,8 @@ except ImportError as _e:
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-_ALL_DATASETS = ["eggs", "larvae", "protozoan"]
-_ALL_SPLITS   = [1, 2, 3]
-_ALL_PCTS     = [1, 5, 25, 50, 75, 100]
-
-_NUM_CLASSES: dict[str, int] = {
-    "eggs":      9,
-    "larvae":    2,
-    "protozoan": 7,
-}
-
-_DEFAULT_DATA_ROOT = os.path.join(_ROOT, "data", "to_modules", "new_split_parasito")
-
-# Always FLIM-init: arch + weights both come from the ch24_32_48 directory (the
-# one with a models/ subdirectory), matching the convention already used by
-# distillation_conv_ray.py's _ARCH_BASE_FLIM. For protozoan, ClassificationFlimModule
-# ignores --arch-json and rebuilds the architecture from the hardcoded
-# PROTOZOAN_FLIM_ARCH dict (ch24_30_48 has no trained FLIM weights on disk).
-_ARCH_BASE_FLIM: dict[str, str] = {
-    "eggs":      os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "eggs"),
-    "larvae":    os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "larvae"),
-    "protozoan": os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "protozoan"),
-}
-
-_PARASITE_DIR: dict[str, str] = {
-    "eggs":      "helminth-eggs",
-    "larvae":    "helminth-larvae",
-    "protozoan": "protozoan-cysts",
-}
-
-_MANIFEST_PATH       = os.path.join(_ROOT, "artifacts", "classification_flim", "run_manifest.csv")
-_MANIFEST_RETRY_PATH = os.path.join(_ROOT, "artifacts", "classification_flim", "run_manifest_retry.csv")
+_MANIFEST_PATH       = os.path.join(ARTIFACTS_CLASSIFICATION_FLIM_DIR, "run_manifest.csv")
+_MANIFEST_RETRY_PATH = os.path.join(ARTIFACTS_CLASSIFICATION_FLIM_DIR, "run_manifest_retry.csv")
 _MANIFEST_FIELDS = [
     "run_name", "dataset", "split", "percentage",
     "status", "skip_reason", "checkpoint_path",
@@ -119,19 +132,16 @@ _MANIFEST_FIELDS = [
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 
-_LOG_LEVELS = {"DEBUG": 0, "INFO": 1, "WARN": 2}
-_current_log_level = _LOG_LEVELS["INFO"]
+_current_log_level = _LOG_LEVELS[LOG_LEVEL_DEFAULT]
 
 
 def _log(msg: str, level: str = "INFO") -> None:
     if _LOG_LEVELS.get(level, 1) >= _current_log_level:
-        ts = time.strftime("%H:%M:%S")
+        ts = time.strftime(LOG_TIME_FMT)
         print(f"[{ts}][{level}] {msg}", flush=True)
 
 
 # ── W&B / local state check (identical semantics to distillation_conv_ray.py) ──
-
-_WANDB_FAILED_STATES = {"crashed", "failed", "killed"}
 
 
 def _query_wandb_state(run_name: str, entity: str, project: str) -> tuple[str, str]:
@@ -161,7 +171,7 @@ def _should_skip_experiment(run_name: str, check_wandb: bool, wandb_entity: str,
         if wb_state == "finished":
             return True, f"wandb:finished({wb_id})"
         if wb_state == "failed":
-            local_meta = os.path.join(_ROOT, "artifacts", "classification_flim", run_name, "run_metadata.json")
+            local_meta = os.path.join(ARTIFACTS_CLASSIFICATION_FLIM_DIR, run_name, RUN_METADATA_FILENAME)
             if os.path.isfile(local_meta):
                 try:
                     with open(local_meta, encoding="utf-8") as fh:
@@ -175,7 +185,7 @@ def _should_skip_experiment(run_name: str, check_wandb: bool, wandb_entity: str,
             return False, "wandb:api_error"
         # not_found → fall through to local check
 
-    meta_path = os.path.join(_ROOT, "artifacts", "classification_flim", run_name, "run_metadata.json")
+    meta_path = os.path.join(ARTIFACTS_CLASSIFICATION_FLIM_DIR, run_name, RUN_METADATA_FILENAME)
     if not os.path.isfile(meta_path):
         return False, "no_metadata"
     try:
@@ -192,18 +202,18 @@ def _should_skip_experiment(run_name: str, check_wandb: bool, wandb_entity: str,
 # ── Path resolution ────────────────────────────────────────────────────────────
 
 def _arch_json(dataset: str, split: int) -> str:
-    return os.path.join(_ARCH_BASE_FLIM[dataset], f"train{split}", "architecture.json")
+    return os.path.join(_ARCH_BASE_FLIM[dataset], train_dir(split), ARCH_JSON_FILENAME)
 
 
 def _flim_weights_path(dataset: str, split: int) -> str:
-    return os.path.join(_ARCH_BASE_FLIM[dataset], f"train{split}", "models")
+    return os.path.join(_ARCH_BASE_FLIM[dataset], train_dir(split), MODELS_SUBDIR)
 
 
 def _split_json(dataset: str, split: int, pct: int) -> str:
     parasite_dir = _PARASITE_DIR[dataset]
     return os.path.join(
-        _DEFAULT_DATA_ROOT, parasite_dir, "splits_incremental",
-        f"split{split}", f"data_descriptor_perc{pct}.json",
+        _DEFAULT_DATA_ROOT, parasite_dir, SPLITS_INCREMENTAL_SUBDIR,
+        split_dir(split), data_descriptor_filename(pct),
     )
 
 
@@ -237,10 +247,10 @@ def validate_experiment(dataset: str, split: int, pct: int) -> tuple[bool, str]:
 
 
 def validate_output_dir() -> tuple[bool, str]:
-    out = os.path.join(_ROOT, "artifacts", "classification_flim")
+    out = ARTIFACTS_CLASSIFICATION_FLIM_DIR
     try:
         os.makedirs(out, exist_ok=True)
-        test = os.path.join(out, ".write_test")
+        test = os.path.join(out, WRITE_TEST_FILENAME)
         with open(test, "w") as fh:
             fh.write("ok")
         os.remove(test)
@@ -258,9 +268,9 @@ def build_experiment_grid(
     wandb_update: bool,
     skip_existing: bool = False,
     check_wandb: bool = False,
-    wandb_entity: str = "ophira-ai",
-    wandb_project: str = "flim-ssl",
-    num_workers: int = 4,
+    wandb_entity: str = WANDB_ENTITY,
+    wandb_project: str = WANDB_PROJECT,
+    num_workers: int = DEFAULT_NUM_WORKERS,
     no_imagenet_norm: bool = False,
     run_prefix: str = "",
     freeze_encoder: bool = False,
@@ -373,16 +383,15 @@ class GpuSlotScheduler:
 @ray.remote
 def run_classification_experiment(
     exp: dict, gpu_id: int, project_root: str,
-    queue_index: int = -1, total: int = -1, cpus: int = 4,
+    queue_index: int = -1, total: int = -1, cpus: int = DEFAULT_CPUS_PER_EXPERIMENT,
 ) -> dict:
     import os as _os
     import subprocess as _sp
     import sys as _sys
 
-    _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    _os.environ["OMP_NUM_THREADS"]       = str(cpus)
-    _os.environ["WANDB_CONSOLE"] = "off"
-    _os.environ["WANDB_MODE"]    = "online"
+    _os.environ[CUDA_ENV_VAR] = str(gpu_id)
+    _os.environ[OMP_ENV_VAR]  = str(cpus)
+    _os.environ.update(WANDB_CHILD_ENV)
 
     cmd = [
         _sys.executable, "-m", "src.modules.classification_flim_module",
@@ -393,7 +402,7 @@ def run_classification_experiment(
         "--flim-weights-path",  exp["flim_weights_path"],
         "--run-name",           exp["run_name"],
         "--num-classes",        str(exp["num_classes"]),
-        "--num-workers",        str(exp.get("num_workers", 4)),
+        "--num-workers",        str(exp.get("num_workers", DEFAULT_NUM_WORKERS)),
     ]
     if exp.get("no_imagenet_norm"):
         cmd.append("--no-imagenet-norm")
@@ -425,8 +434,9 @@ def run_classification_experiment(
             result["status"] = "ok"
         else:
             stderr = (proc.stderr or "").strip()
-            if len(stderr) > 2000:
-                stderr = stderr[:1000] + "\n...[truncated]...\n" + stderr[-1000:]
+            if len(stderr) > STDERR_TRUNCATE_MAX_CHARS:
+                stderr = (stderr[:STDERR_TRUNCATE_HEAD] + "\n...[truncated]...\n"
+                          + stderr[-STDERR_TRUNCATE_TAIL:])
             result["status"] = "error"
             result["error"] = f"returncode={proc.returncode}\n{stderr}"
     except Exception as exc:
@@ -455,12 +465,13 @@ def run_queue(
     else:
         scheduler_arg = max_concurrent_per_gpu
         total_slots = max_concurrent_per_gpu * len(gpu_ids)
-    ray_kwargs: dict[str, Any] = {"ignore_reinit_error": True, "log_to_driver": True}
+    ray_kwargs: dict[str, Any] = dict(RAY_INIT_KWARGS)
     if ray_address:
+        # Ray recusa num_cpus/num_gpus ao conectar num cluster já existente.
+        ray_kwargs.pop("num_gpus")
         ray_kwargs["address"] = ray_address
     else:
         ray_kwargs["num_cpus"] = cpus_per_experiment * total_slots
-        ray_kwargs["num_gpus"] = 0
 
     if not ray.is_initialized():
         ray.init(**ray_kwargs)
@@ -476,7 +487,7 @@ def run_queue(
     had_failure = False
 
     _log(f"Queue: {total} experiment(s) | {len(gpu_ids)} GPU(s) × {max_concurrent_per_gpu} slots = {total_slots} max concurrent")
-    _log("=" * 70)
+    _log("=" * SEP_WIDTH)
 
     def _submit_next() -> bool:
         nonlocal global_index
@@ -539,7 +550,7 @@ def _write_manifest(rows_ok: list[dict], skipped: list[dict], retry: bool = Fals
 
     for r in rows_ok:
         run_name = r.get("run_name", r.get("key", ""))
-        ckpt_dir = os.path.join(_ROOT, "artifacts", "classification_flim", run_name, "checkpoints")
+        ckpt_dir = os.path.join(ARTIFACTS_CLASSIFICATION_FLIM_DIR, run_name, CHECKPOINTS_SUBDIR)
         all_records.append({
             "run_name":        run_name,
             "dataset":         r.get("dataset", ""),
@@ -581,9 +592,9 @@ def _print_summary(rows: list[dict], skipped: list[dict], t_start: float, gpu_id
     title = "RETRY SUMMARY" if retry else "QUEUE SUMMARY"
     manifest = _MANIFEST_RETRY_PATH if retry else _MANIFEST_PATH
 
-    print(f"\n{'=' * 70}")
+    print(f"\n{'=' * SEP_WIDTH}")
     print(f"{title} — classification_flim (FLIM-init + 2-layer Sigmoid head) experiments")
-    print(f"{'=' * 70}")
+    print(f"{'=' * SEP_WIDTH}")
     print(f"  Succeeded          : {n_ok}")
     print(f"  Failed             : {n_err}")
     print(f"  Skipped (existing) : {n_skip_existing}")
@@ -596,7 +607,7 @@ def _print_summary(rows: list[dict], skipped: list[dict], t_start: float, gpu_id
             if r.get("status") != "ok":
                 print(f"    - {r.get('key', '?')}: {str(r.get('error', ''))[:200]}")
     print(f"  Manifest           : {manifest}")
-    print(f"{'=' * 70}\n")
+    print(f"{'=' * SEP_WIDTH}\n")
 
 
 def _print_dry_run(experiments: list[dict], skipped: list[dict], gpu_ids: list[int], max_per_gpu: int, cpus_per: int, retry: bool = False,
@@ -613,9 +624,9 @@ def _print_dry_run(experiments: list[dict], skipped: list[dict], gpu_ids: list[i
         max_concurrent = max_per_gpu * len(gpu_ids)
     title = "DRY RUN [RETRY]" if retry else "DRY RUN"
 
-    print(f"\n{'=' * 70}")
+    print(f"\n{'=' * SEP_WIDTH}")
     print(f"{title} — classification_flim experiment queue")
-    print(f"{'=' * 70}")
+    print(f"{'=' * SEP_WIDTH}")
     print(f"  GPUs                  : {len(gpu_ids)}  (IDs: {gpu_ids})")
     print(f"  Slots per GPU         : {slots_desc}")
     print(f"  Max concurrent total  : {max_concurrent}")
@@ -653,7 +664,7 @@ def _print_dry_run(experiments: list[dict], skipped: list[dict], gpu_ids: list[i
         if len(invalid) > 5:
             print(f"    … and {len(invalid) - 5} more")
 
-    print(f"{'=' * 70}\n")
+    print(f"{'=' * SEP_WIDTH}\n")
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
@@ -695,18 +706,18 @@ def main() -> None:
                             "Ex: '0,0,0,8' com --num-gpus 4 → só a GPU física 3 recebe 8 slots. "
                             "Sobrescreve --max-concurrent-per-gpu quando especificado."
                         ))
-    parser.add_argument("--cpus-per-experiment", type=int, default=4, metavar="N")
+    parser.add_argument("--cpus-per-experiment", type=int, default=DEFAULT_CPUS_PER_EXPERIMENT, metavar="N")
     parser.add_argument("--ray-address", type=str, default=None)
     parser.add_argument("--wandb-update", action="store_true")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARN"], default="INFO")
+    parser.add_argument("--log-level", choices=list(_LOG_LEVELS), default=LOG_LEVEL_DEFAULT)
     parser.add_argument("--retry", action="store_true")
     parser.add_argument("--skip-existing", action="store_true")
     parser.add_argument("--check-wandb", action="store_true")
-    parser.add_argument("--wandb-entity", default="ophira-ai")
-    parser.add_argument("--wandb-project", default="flim-ssl")
-    parser.add_argument("--num-workers", type=int, default=4, metavar="N")
+    parser.add_argument("--wandb-entity", default=WANDB_ENTITY)
+    parser.add_argument("--wandb-project", default=WANDB_PROJECT)
+    parser.add_argument("--num-workers", type=int, default=DEFAULT_NUM_WORKERS, metavar="N")
     parser.add_argument("--no-imagenet-norm", action="store_true", default=False,
                         help="Disable ImageNet RGB Normalize on ift_lab inputs (correct for FLIM init).")
     parser.add_argument("--run-prefix", type=str, default="", metavar="PREFIX",

@@ -45,7 +45,14 @@ import sys
 import pandas as pd
 import torch
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from constants import (
+    ARTIFACTS_CLASSIFICATION_FLIM_DIR as _ARTIFACTS,
+    CHECKPOINTS_SUBDIR,
+    PROJECT_ROOT as _ROOT,
+    RESULTS_DIR,
+    RUN_METADATA_FILENAME,
+)
+
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
@@ -58,8 +65,6 @@ from src.modules.classification_flim_module import (  # noqa: E402
     _dataset_short_to_parasite_name,
 )
 
-_ARTIFACTS = os.path.join(_ROOT, "artifacts", "classification_flim")
-
 
 def _first_view(views):
     if isinstance(views, (list, tuple)):
@@ -71,8 +76,8 @@ def _first_view(views):
 
 @torch.no_grad()
 def _evaluate_run(run_dir: str, device: torch.device, image_size: int) -> dict | None:
-    meta_path = os.path.join(run_dir, "run_metadata.json")
-    ckpt_path = os.path.join(run_dir, "checkpoints", "best_kappa.ckpt")
+    meta_path = os.path.join(run_dir, RUN_METADATA_FILENAME)
+    ckpt_path = os.path.join(run_dir, CHECKPOINTS_SUBDIR, "best_kappa.ckpt")
     run_name = os.path.basename(run_dir)
 
     if not os.path.exists(meta_path):
@@ -136,7 +141,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Compute TEST metrics for sigmoid2l_ checkpoints.")
     ap.add_argument("--pattern", default="sigmoid2l_classhead_*",
                     help="glob of run dirs under artifacts/classification_flim/")
-    ap.add_argument("--out", default=os.path.join(_ROOT, "results", "sigmoid2l_test_results.csv"))
+    ap.add_argument("--out", default=os.path.join(RESULTS_DIR, "sigmoid2l_test_results.csv"))
     ap.add_argument("--image-size", type=int, default=200)
     args = ap.parse_args()
 

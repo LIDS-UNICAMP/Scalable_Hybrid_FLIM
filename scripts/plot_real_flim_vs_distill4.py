@@ -54,18 +54,25 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-_ROOT = Path(__file__).resolve().parent.parent
+from constants import (
+    DATASETS,
+    DATASET_ALIASES as _FELIPE_DATASET,
+    METRICS,
+    PERCENTAGES as PCTS,
+    PROJECT_ROOT,
+    REPORTS_FELIPE_SVM_DIR,
+    RESULTS_DIR,
+)
 
-METRICS = ["kappa", "acc", "f1"]
+_ROOT = Path(PROJECT_ROOT)
+
+# Rotulos em sentence case, divergentes de propositio dos de constants
+# (Title Case / "Cohen's Kappa"): trocar mudaria os PNGs ja publicados.
 METRIC_LABEL = {"kappa": "Cohen's kappa", "acc": "Accuracy", "f1": "F1 (weighted)"}
-DATASETS = ["eggs", "larvae", "protozoan"]
 DATASET_LABEL = {"eggs": "Helminth eggs", "larvae": "Helminth larvae",
                  "protozoan": "Protozoan cysts"}
-PCTS = [1, 5, 25, 50, 75, 100]
 PCT_TO_POS = {p: i for i, p in enumerate(PCTS)}
 
-# Nome do dataset nos relatorios do Felipe -> nome curto do repo.
-_FELIPE_DATASET = {"cistos": "protozoan", "eggs": "eggs", "larvae": "larvae"}
 _FELIPE_RE = re.compile(r"report_svm_(\w+)_split(\d+)_perc(\d+)\.csv$")
 
 # Cor + linestyle + marker: identidade nunca fica so na cor (CVD / impressao P&B).
@@ -182,9 +189,9 @@ def main() -> None:
     ap.add_argument("--real-flim-csv", type=Path,
                     default=_ROOT / "artifacts" / "real_FLIM" / "real_FLIM_results.csv")
     ap.add_argument("--distill4-csv", type=Path,
-                    default=_ROOT / "results" / "svm_distill_proj1280_results.csv")
+                    default=Path(RESULTS_DIR) / "svm_distill_proj1280_results.csv")
     ap.add_argument("--felipe-dir", type=Path,
-                    default=_ROOT / "data" / "reports_felipe" / "svm")
+                    default=Path(REPORTS_FELIPE_SVM_DIR))
     ap.add_argument("--out-dir", type=Path,
                     default=_ROOT / "artifacts" / "real_FLIM")
     args = ap.parse_args()

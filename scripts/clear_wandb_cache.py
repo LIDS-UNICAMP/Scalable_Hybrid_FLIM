@@ -36,8 +36,11 @@ import shutil
 
 import wandb
 
+from constants import WANDB_PROJECT_LEGACY as WANDB_PROJECT
+
 # ── configuration ────────────────────────────────────────────────────────────
-WANDB_PROJECT = "flim-ssl_old"
+# Paths RELATIVOS ao cwd de propósito: hoje este script só funciona rodado da raiz.
+# Trocar por LOGS_DIR (absoluto) seria correção de bug, não refactor — fica assim.
 MODEL_CHECKPOINT_PATH = os.path.join("logs", WANDB_PROJECT)
 LOG_PATH = os.path.join("logs", "wandb")
 WHITELIST: list[str] = [

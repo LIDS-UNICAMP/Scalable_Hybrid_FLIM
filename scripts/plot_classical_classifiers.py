@@ -55,7 +55,19 @@ from pathlib import Path
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-_ROOT_STR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# scripts/ é o sys.path[0] quando se roda `python scripts/plot_classical_classifiers.py`;
+# tem de vir antes do bloco abaixo, que usa PROJECT_ROOT.
+from constants import (  # noqa: E402
+    ARTIFACTS_PLOTS_DIR,
+    DATASETS as ALL_DATASETS,
+    DATASET_LONG_TO_SHORT as DATASET_NAME_MAP,
+    METRICS,
+    PERCENTAGES as ALL_PCTS,
+    PROJECT_ROOT as _ROOT_STR,
+    RESULTS_DIR,
+    SPLITS as ALL_SPLITS,
+)
+
 if _ROOT_STR not in sys.path:
     sys.path.insert(0, _ROOT_STR)
 
@@ -66,19 +78,10 @@ import seaborn as sns
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = Path(_ROOT_STR)
 
-ALL_DATASETS  = ["eggs", "larvae", "protozoan"]
+# A ordem vira ordem de legenda e diverge da de outros scripts: fica local.
 ALL_INITS     = ["flim", "he", "random", "xavier", "trunc_normal"]
-ALL_PCTS      = [1, 5, 25, 50, 75, 100]
-ALL_SPLITS    = [1, 2, 3]
-METRICS       = ["kappa", "acc", "f1"]
-
-DATASET_NAME_MAP = {
-    "helminth-eggs":   "eggs",
-    "helminth-larvae": "larvae",
-    "protozoan-cysts": "protozoan",
-}
 
 DATASET_LABEL = {
     "eggs":      "Helminth Eggs",
@@ -726,7 +729,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--classical-csv",
         type=Path,
-        default=_ROOT / "results" / "classical_classifiers_results.csv",
+        default=Path(RESULTS_DIR) / "classical_classifiers_results.csv",
         metavar="PATH",
         help="Path to classical_classifiers_results.csv.",
     )
@@ -740,7 +743,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--out",
         type=Path,
-        default=_ROOT / "artifacts" / "plots" / "classical_classifiers",
+        default=Path(ARTIFACTS_PLOTS_DIR) / "classical_classifiers",
         metavar="DIR",
         help="Base output directory for all plots.",
     )

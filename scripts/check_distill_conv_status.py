@@ -30,20 +30,24 @@ import os
 import subprocess
 import sys
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from constants import (
+    ARTIFACTS_DISTILLATION_DIR,
+    CHECKPOINTS_SUBDIR,
+    DATASETS as _DATASETS,
+    PERCENTAGES as _PCTS,
+    PROJECT_ROOT as _ROOT,
+    RUN_METADATA_FILENAME,
+    SPLITS as _SPLITS,
+    WANDB_ENTITY as _ENTITY,
+    WANDB_FAILED_STATES as _WANDB_FAILED,
+    WANDB_PROJECT as _PROJECT,
+)
+
 sys.path.insert(0, _ROOT)
 
 import wandb
 
-_ENTITY  = "ophira-ai"
-_PROJECT = "flim-ssl"
-
-_DATASETS  = ["eggs", "larvae", "protozoan"]
-_SPLITS    = [1, 2, 3]
-_PCTS      = [1, 5, 25, 50, 75, 100]
 _DIST_TYPE = "direct"
-
-_WANDB_FAILED = {"crashed", "failed", "killed"}
 
 
 def run_name(dataset, split, pct):
@@ -96,7 +100,7 @@ def _get_wandb_states() -> dict[str, tuple[str, str]]:
 
 def _get_local_status(rn: str) -> str:
     """Retorna 'ok', 'error', ou 'missing'."""
-    path = os.path.join(_ROOT, "artifacts", "distillation", rn, "run_metadata.json")
+    path = os.path.join(ARTIFACTS_DISTILLATION_DIR, rn, RUN_METADATA_FILENAME)
     if not os.path.isfile(path):
         return "missing"
     try:
@@ -110,7 +114,7 @@ def _get_local_status(rn: str) -> str:
 # ── Fonte 4: checkpoint ────────────────────────────────────────────────────────
 
 def _has_checkpoint(rn: str) -> bool:
-    ckpt_dir = os.path.join(_ROOT, "artifacts", "distillation", rn, "checkpoints")
+    ckpt_dir = os.path.join(ARTIFACTS_DISTILLATION_DIR, rn, CHECKPOINTS_SUBDIR)
     if not os.path.isdir(ckpt_dir):
         return False
     return any(

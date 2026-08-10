@@ -37,8 +37,9 @@ import sys
 
 import yaml
 
+from constants import MLP_CONFIGS_DIR as _CONFIGS_DIR, PROJECT_ROOT as _ROOT
+
 # Allow running from the project root
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
@@ -57,8 +58,6 @@ _DEFAULTS = {
     "hidden_dim": 256,
     "dropout": 0.3,
 }
-
-_CONFIGS_DIR = os.path.join(_ROOT, "configs", "evaluate", "mlp")
 
 
 def build_yaml_content(run_id: str, run_name: str, freeze: bool) -> dict:

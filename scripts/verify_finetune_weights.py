@@ -42,20 +42,20 @@ from pathlib import Path
 import yaml
 import wandb
 
-# ── Ensure project root is on sys.path ────────────────────────────────────────
-_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_ROOT))
-
 # Import only the lightweight constants — avoid pulling the full dataset stack
-ENTITY = "ophira-ai"
-PROJECT = "flim-ssl"
+from constants import (
+    DATASET_ALIASES as DATASET_FULL_TO_SHORT,
+    DATASETS,
+    MLP_CONFIGS_DIR,
+    PROJECT_ROOT,
+    RESULTS_DIR,
+    WANDB_ENTITY as ENTITY,
+    WANDB_PROJECT as PROJECT,
+)
 
-DATASET_FULL_TO_SHORT: dict[str, str] = {
-    "helminth-eggs":   "eggs",
-    "helminth-larvae": "larvae",
-    "protozoan-cysts": "protozoan",
-    "parasito":        "parasito",
-}
+# ── Ensure project root is on sys.path ────────────────────────────────────────
+_ROOT = Path(PROJECT_ROOT)
+sys.path.insert(0, str(_ROOT))
 
 _WANDB_FILTER = {
     "$or": [
@@ -78,8 +78,8 @@ def _fetch_project_runs(entity: str = ENTITY, project: str = PROJECT, per_page: 
     return runs
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-WEIGHTS_ROOT = _ROOT / "results" / "mlp_weights"
-YAML_ROOT = _ROOT / "configs" / "evaluate" / "mlp"
+WEIGHTS_ROOT = Path(RESULTS_DIR) / "mlp_weights"
+YAML_ROOT = Path(MLP_CONFIGS_DIR)
 
 MODES = ("freeze", "unfreeze")
 
@@ -408,7 +408,8 @@ def verify(
 
 def main():
     p = argparse.ArgumentParser(description="Audit fine-tune weights vs YAML configs vs W&B.")
-    p.add_argument("--dataset", choices=["eggs", "larvae", "protozoan", "parasito"],
+    # "parasito" e o dataset agregado: nao esta em DATASETS, mas aparece nos YAML.
+    p.add_argument("--dataset", choices=[*DATASETS, "parasito"],
                    default=None, help="Filter by dataset short name.")
     p.add_argument("--mode", choices=["freeze", "unfreeze"],
                    default=None, help="Filter by freeze/unfreeze mode.")

@@ -56,7 +56,39 @@ import sys
 import time
 from typing import Any, Optional
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Rodando como ``python scripts/distillation_ray.py``, scripts/ é o sys.path[0] —
+# constants.py importa direto. Os alias preservam os nomes locais usados abaixo.
+# _ARCH_BASE é FLIM_ARCH_BASE (ch24_30_48 no protozoan), não FLIM_WEIGHTS_BASE.
+from constants import (
+    ARCH_JSON_FILENAME,
+    ARTIFACTS_DISTILLATION_DIR,
+    CHECKPOINTS_SUBDIR,
+    CUDA_ENV_VAR,
+    DATASET_SPLITS_ROOT as _DEFAULT_DATA_ROOT,
+    DATASETS as _ALL_DATASETS,
+    DEFAULT_CPUS_PER_EXPERIMENT,
+    FLIM_ARCH_BASE as _ARCH_BASE,
+    LOG_LEVEL_DEFAULT,
+    LOG_LEVELS as _LOG_LEVELS,
+    LOG_TIME_FMT,
+    NUM_CLASSES as _NUM_CLASSES,
+    OMP_ENV_VAR,
+    PARASITE_DIR as _PARASITE_DIR,
+    PERCENTAGES as _ALL_PCTS,
+    PROJECT_ROOT as _ROOT,
+    RAY_INIT_KWARGS,
+    SEP_WIDTH,
+    SPLITS as _ALL_SPLITS,
+    SPLITS_INCREMENTAL_SUBDIR,
+    STDERR_TRUNCATE_HEAD,
+    STDERR_TRUNCATE_MAX_CHARS,
+    STDERR_TRUNCATE_TAIL,
+    WRITE_TEST_FILENAME,
+    data_descriptor_filename,
+    split_dir,
+    train_dir,
+)
+
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
@@ -67,37 +99,11 @@ except ImportError as _e:
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-_ALL_DATASETS      = ["eggs", "larvae", "protozoan"]
-_ALL_SPLITS        = [1, 2, 3]
-_ALL_PCTS          = [1, 5, 25, 50, 75, 100]
+# Eixos exclusivos deste launcher: 'inits' aqui é o init do STUDENT, não o do SSL.
 _ALL_DIST_TYPES    = ["direct", "hybrid"]
 _ALL_INITS         = ["trunc_normal"]
 
-_NUM_CLASSES: dict[str, int] = {
-    "eggs":      9,
-    "larvae":    2,
-    "protozoan": 7,
-}
-
-_DEFAULT_DATA_ROOT = os.path.join(
-    _ROOT, "data", "to_modules", "new_split_parasito"
-)
-
-# FLIM architecture JSON paths per dataset (relative to project root)
-_ARCH_BASE: dict[str, str] = {
-    "eggs":      os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "eggs"),
-    "larvae":    os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_32_48_a0.5_f5", "larvae"),
-    "protozoan": os.path.join(_ROOT, "data", "to_mateus", "model", "ch24_30_48_a0.5_f5", "protozoan"),
-}
-
-# Parasite directory names (for split JSON validation)
-_PARASITE_DIR: dict[str, str] = {
-    "eggs":      "helminth-eggs",
-    "larvae":    "helminth-larvae",
-    "protozoan": "protozoan-cysts",
-}
-
-_MANIFEST_PATH = os.path.join(_ROOT, "artifacts", "distillation", "run_manifest.csv")
+_MANIFEST_PATH = os.path.join(ARTIFACTS_DISTILLATION_DIR, "run_manifest.csv")
 _MANIFEST_FIELDS = [
     "run_name", "dataset", "split", "percentage", "distillation_type",
     "encoder_init", "status", "skip_reason", "checkpoint_path",
@@ -106,20 +112,19 @@ _MANIFEST_FIELDS = [
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 
-_LOG_LEVELS = {"DEBUG": 0, "INFO": 1, "WARN": 2}
-_current_log_level = _LOG_LEVELS["INFO"]
+_current_log_level = _LOG_LEVELS[LOG_LEVEL_DEFAULT]
 
 
 def _log(msg: str, level: str = "INFO") -> None:
     if _LOG_LEVELS.get(level, 1) >= _current_log_level:
-        ts = time.strftime("%H:%M:%S")
+        ts = time.strftime(LOG_TIME_FMT)
         print(f"[{ts}][{level}] {msg}", flush=True)
 
 
 # ── Path resolution ────────────────────────────────────────────────────────────
 
 def _arch_json(dataset: str, split: int) -> str:
-    return os.path.join(_ARCH_BASE[dataset], f"train{split}", "architecture.json")
+    return os.path.join(_ARCH_BASE[dataset], train_dir(split), ARCH_JSON_FILENAME)
 
 
 def _split_json(dataset: str, split: int, pct: int) -> str:
@@ -127,9 +132,9 @@ def _split_json(dataset: str, split: int, pct: int) -> str:
     return os.path.join(
         _DEFAULT_DATA_ROOT,
         parasite_dir,
-        "splits_incremental",
-        f"split{split}",
-        f"data_descriptor_perc{pct}.json",
+        SPLITS_INCREMENTAL_SUBDIR,
+        split_dir(split),
+        data_descriptor_filename(pct),
     )
 
 
@@ -154,10 +159,10 @@ def validate_experiment(dataset: str, split: int, pct: int) -> tuple[bool, str]:
 
 def validate_output_dir() -> tuple[bool, str]:
     """Check that the artifacts directory is writable."""
-    out = os.path.join(_ROOT, "artifacts", "distillation")
+    out = ARTIFACTS_DISTILLATION_DIR
     try:
         os.makedirs(out, exist_ok=True)
-        test = os.path.join(out, ".write_test")
+        test = os.path.join(out, WRITE_TEST_FILENAME)
         with open(test, "w") as fh:
             fh.write("ok")
         os.remove(test)
@@ -275,15 +280,15 @@ def run_distillation_experiment(
     project_root: str,
     queue_index:  int = -1,
     total:        int = -1,
-    cpus:         int = 4,
+    cpus:         int = DEFAULT_CPUS_PER_EXPERIMENT,
 ) -> dict:
     """Run one distillation training experiment as a subprocess on the assigned GPU."""
     import os as _os
     import subprocess as _sp
     import sys as _sys
 
-    _os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    _os.environ["OMP_NUM_THREADS"]       = str(cpus)
+    _os.environ[CUDA_ENV_VAR] = str(gpu_id)
+    _os.environ[OMP_ENV_VAR]  = str(cpus)
 
     cmd = [
         _sys.executable, "-m", "src.modules.distillation_module",
@@ -333,8 +338,9 @@ def run_distillation_experiment(
             result["status"] = "ok"
         else:
             stderr = (proc.stderr or "").strip()
-            if len(stderr) > 2000:
-                stderr = stderr[:1000] + "\n...[truncated]...\n" + stderr[-1000:]
+            if len(stderr) > STDERR_TRUNCATE_MAX_CHARS:
+                stderr = (stderr[:STDERR_TRUNCATE_HEAD] + "\n...[truncated]...\n"
+                          + stderr[-STDERR_TRUNCATE_TAIL:])
             result["status"] = "error"
             result["error"]  = f"returncode={proc.returncode}\n{stderr}"
     except Exception as exc:
@@ -359,13 +365,14 @@ def run_queue(
         _log("No experiments to run.", "WARN")
         return []
 
-    ray_kwargs: dict[str, Any] = {"ignore_reinit_error": True, "log_to_driver": True}
+    ray_kwargs: dict[str, Any] = dict(RAY_INIT_KWARGS)
     if ray_address:
+        # Ray recusa num_cpus/num_gpus ao conectar num cluster já existente.
+        ray_kwargs.pop("num_gpus")
         ray_kwargs["address"] = ray_address
     else:
         total_cpus = cpus_per_experiment * max_concurrent_per_gpu * len(gpu_ids)
         ray_kwargs["num_cpus"] = total_cpus
-        ray_kwargs["num_gpus"] = 0
 
     if not ray.is_initialized():
         ray.init(**ray_kwargs)
@@ -385,7 +392,7 @@ def run_queue(
         f"{len(gpu_ids)} GPU(s) × {max_concurrent_per_gpu} slots = "
         f"{len(gpu_ids) * max_concurrent_per_gpu} max concurrent"
     )
-    _log("=" * 70)
+    _log("=" * SEP_WIDTH)
 
     def _submit_next() -> bool:
         nonlocal global_index
@@ -462,7 +469,7 @@ def _write_manifest(rows_ok: list[dict], skipped: list[dict]) -> None:
 
     for r in rows_ok:
         run_name = r.get("run_name", r.get("key", ""))
-        ckpt_dir = os.path.join(_ROOT, "artifacts", "distillation", run_name, "checkpoints")
+        ckpt_dir = os.path.join(ARTIFACTS_DISTILLATION_DIR, run_name, CHECKPOINTS_SUBDIR)
         all_records.append({
             "run_name":          run_name,
             "dataset":           r.get("dataset", ""),
@@ -519,9 +526,9 @@ def _print_summary(
         if gid in gpu_stats:
             gpu_stats[gid]["ok" if r.get("status") == "ok" else "error"] += 1
 
-    print(f"\n{'=' * 70}")
+    print(f"\n{'=' * SEP_WIDTH}")
     print("QUEUE SUMMARY — Distillation experiments")
-    print(f"{'=' * 70}")
+    print(f"{'=' * SEP_WIDTH}")
     print(f"  Succeeded      : {n_ok}")
     print(f"  Failed         : {n_err}")
     print(f"  Skipped        : {len(skipped)}")
@@ -544,7 +551,7 @@ def _print_summary(
             if r.get("status") != "ok":
                 print(f"    - {r.get('key', '?')}: {str(r.get('error', ''))[:200]}")
     print(f"  Manifest       : {_MANIFEST_PATH}")
-    print(f"{'=' * 70}\n")
+    print(f"{'=' * SEP_WIDTH}\n")
 
 
 # ── Dry-run printer ────────────────────────────────────────────────────────────
@@ -559,9 +566,9 @@ def _print_dry_run(
     total = len(experiments) + len(skipped)
     max_concurrent = max_per_gpu * len(gpu_ids)
 
-    print(f"\n{'=' * 70}")
+    print(f"\n{'=' * SEP_WIDTH}")
     print("DRY RUN — Distillation experiment queue")
-    print(f"{'=' * 70}")
+    print(f"{'=' * SEP_WIDTH}")
     print(f"  GPUs                  : {len(gpu_ids)}  (IDs: {gpu_ids})")
     print(f"  Slots per GPU         : {max_per_gpu}")
     print(f"  Max concurrent total  : {max_concurrent}")
@@ -592,7 +599,7 @@ def _print_dry_run(
         if len(skipped) > 5:
             print(f"    … and {len(skipped) - 5} more")
 
-    print(f"{'=' * 70}\n")
+    print(f"{'=' * SEP_WIDTH}\n")
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
@@ -646,7 +653,7 @@ def main() -> None:
         help="Maximum experiments running simultaneously on each GPU.",
     )
     parser.add_argument(
-        "--cpus-per-experiment", type=int, default=4, metavar="N",
+        "--cpus-per-experiment", type=int, default=DEFAULT_CPUS_PER_EXPERIMENT, metavar="N",
         help="CPU cores (OMP_NUM_THREADS) per experiment subprocess.",
     )
     parser.add_argument(
@@ -668,7 +675,7 @@ def main() -> None:
         help="Print the queue plan and exit without running.",
     )
     parser.add_argument(
-        "--log-level", choices=["DEBUG", "INFO", "WARN"], default="INFO",
+        "--log-level", choices=list(_LOG_LEVELS), default=LOG_LEVEL_DEFAULT,
     )
 
     args = parser.parse_args()

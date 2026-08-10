@@ -48,7 +48,15 @@ from pathlib import Path
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
-_ROOT_STR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# scripts/ é o sys.path[0] quando se roda `python scripts/plot_comparison_flim.py`;
+# tem de vir antes do bloco abaixo, que usa PROJECT_ROOT.
+from constants import (  # noqa: E402
+    ARTIFACTS_PLOTS_DIR,
+    METRICS,
+    PROJECT_ROOT as _ROOT_STR,
+    UNIFIED_SVM_COMPARISON_CSV,
+)
+
 if _ROOT_STR not in sys.path:
     sys.path.insert(0, _ROOT_STR)
 
@@ -105,10 +113,6 @@ eval_plotter.METHOD_COMPARE_LABEL = {
     "SVM_Distill_1x1BN_flim_frozen_eval_loss":  "Distill 1 — FLIM init (123K)", # results/svm_distillation_conv_flim_frozen_results.csv
 }
 
-_ROOT   = Path(__file__).resolve().parent.parent
-METRICS = ["kappa", "acc", "f1"]
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate FLIM vs LeJEPA vs I-JEPA vs Distillation comparison plots.",
@@ -140,14 +144,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--csv",
         type=Path,
-        default=_ROOT / "artifacts" / "normalized" / "unified_svm_comparison.csv",
+        default=Path(UNIFIED_SVM_COMPARISON_CSV),
         metavar="PATH",
         help="Path to the unified SVM comparison CSV.",
     )
     parser.add_argument(
         "--out",
         type=Path,
-        default=_ROOT / "artifacts" / "plots" / "plots_compare_to_flim",
+        default=Path(ARTIFACTS_PLOTS_DIR) / "plots_compare_to_flim",
         metavar="DIR",
         help="Base output directory (default: artifacts/plots/plots_compare_to_flim).",
     )

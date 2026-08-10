@@ -42,9 +42,10 @@ import sys
 import pandas as pd
 import yaml
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+from constants import MLP_CONFIGS_DIR, PROJECT_ROOT, RESULTS_DIR
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 try:
     import ray
@@ -59,7 +60,7 @@ from src.evaluate.ray_mlp import run_ray_experiment, _RESULTS_DIR
 
 def find_yaml(run_id: str, mode: str) -> str | None:
     """Return the YAML path for *run_id* under configs/evaluate/mlp/{mode}/."""
-    pattern = os.path.join(_ROOT, "configs", "evaluate", "mlp", mode, "**", f"{run_id}.yaml")
+    pattern = os.path.join(MLP_CONFIGS_DIR, mode, "**", f"{run_id}.yaml")
     matches = glob.glob(pattern, recursive=True)
     return matches[0] if matches else None
 
@@ -83,7 +84,7 @@ def main() -> None:
     parser.add_argument("--cpus-per-job", type=int, default=4,
                         help="CPU cores per experiment.")
     parser.add_argument("--output-dir", type=str,
-                        default=os.path.join(_ROOT, "results", "ray_finetune"),
+                        default=os.path.join(RESULTS_DIR, "ray_finetune"),
                         help="Root directory for experiment artifacts.")
     args = parser.parse_args()
 

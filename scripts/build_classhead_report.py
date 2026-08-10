@@ -40,10 +40,17 @@ import sys
 
 import pandas as pd
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from constants import (
+    DATASETS as DATASET_ORDER,
+    PROJECT_ROOT as _ROOT,
+    REPORTS_FELIPE_DIR,
+    RESULTS_DIR,
+)
 
+# NÃO é só lookup: o resultado de .map() alimenta dropna(subset=["dataset"]), então
+# o conjunto de chaves é a whitelist de datasets aceitos. DATASET_ALIASES tem chaves
+# a mais ("parasito" e os nomes longos) e alargaria esse filtro — fica local.
 DATASET_MAP = {"eggs": "eggs", "larvae": "larvae", "cistos": "protozoan", "protozoan": "protozoan"}
-DATASET_ORDER = ["eggs", "larvae", "protozoan"]
 
 METRICS = [
     ("test_accuracy", "Test Accuracy"),
@@ -56,7 +63,7 @@ _KEEP = ["dataset", "split", "percentage", "encoder_mode",
 
 
 def _load_felipe(subdir: str, arm: str) -> pd.DataFrame:
-    files = sorted(glob.glob(os.path.join(_ROOT, "data", "reports_felipe", subdir, "*.csv")))
+    files = sorted(glob.glob(os.path.join(REPORTS_FELIPE_DIR, subdir, "*.csv")))
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
@@ -66,10 +73,11 @@ def _load_felipe(subdir: str, arm: str) -> pd.DataFrame:
     return df
 
 
-def _load_ours(csv_rel: str, arm: str) -> pd.DataFrame:
-    path = os.path.join(_ROOT, csv_rel)
+def _load_ours(csv_name: str, arm: str) -> pd.DataFrame:
+    path = os.path.join(RESULTS_DIR, csv_name)
     if not os.path.exists(path):
-        print(f"[build_report] AUSENTE: {csv_rel} — braço '{arm}' será omitido.", file=sys.stderr)
+        print(f"[build_report] AUSENTE: {os.path.relpath(path, _ROOT)} — braço '{arm}' será omitido.",
+              file=sys.stderr)
         return pd.DataFrame()
     df = pd.read_csv(path)
     df["dataset"] = df["dataset"].map(DATASET_MAP)
@@ -82,8 +90,8 @@ def load_all(arms: dict[str, pd.DataFrame] | None = None) -> pd.DataFrame:
     frames = [
         _load_felipe("svm", "SVM + FLIM"),
         _load_felipe("flim_mlp", "FLIM + MLP (ReLU, Felipe)"),
-        _load_ours("results/sigmoid2l_test_results.csv", "FLIM + MLP (Sigmoid, ours)"),
-        _load_ours("results/relu2l_test_results.csv", "FLIM + MLP (ReLU, ours)"),
+        _load_ours("sigmoid2l_test_results.csv", "FLIM + MLP (Sigmoid, ours)"),
+        _load_ours("relu2l_test_results.csv", "FLIM + MLP (ReLU, ours)"),
     ]
     frames = [f for f in frames if not f.empty]
     if not frames:
