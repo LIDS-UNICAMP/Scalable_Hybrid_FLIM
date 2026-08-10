@@ -93,6 +93,8 @@ tools/diag_*.py
 *.orig
 *.rej
 *.tmp
+# Copias pristinas que um refactor cria para diffar antes/depois
+_orig_*.py
 tmp/
 scratch/
 scratchpad/
