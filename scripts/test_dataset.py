@@ -33,8 +33,9 @@ What this script tests
 import sys
 import os
 
+from constants import PROJECT_ROOT as ROOT
+
 # Make sure the project root is on sys.path so `config` and `src` are importable.
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -49,7 +50,12 @@ from src.data_modules.parasite import ParasiteDataModule
 # Settings – change these to match the dataset you want to test.
 # ---------------------------------------------------------------------------
 DATASET_NAME = "to_modules"
-SPLIT = 0
+# Dois esquemas de split convivem em disco e nao usam a mesma numeracao:
+#   data/to_modules/splits/split_{N}_p{pct}.json          -> so existe split 0
+#   .../new_split_parasito/<parasito>/splits_incremental/ -> so existem 1, 2, 3
+# O teste 1 exercita o primeiro; os testes 2-4 exercitam o segundo.
+SPLIT_LEGACY = 0
+SPLIT = 1
 PERCENTAGE = 100
 BATCH_SIZE = 4
 
@@ -71,7 +77,7 @@ def test_config_helpers():
     print(f"  images dir  : {paths['images']}")
     print(f"  splits dir  : {paths['splits']}")
 
-    split_json = get_split_path_incremental(DATASET_NAME, SPLIT, PERCENTAGE)
+    split_json = get_split_path_incremental(DATASET_NAME, SPLIT_LEGACY, PERCENTAGE)
     print(f"  split JSON  : {split_json}")
     assert os.path.isfile(split_json), f"Split JSON not found: {split_json}"
     print("  [OK] split JSON exists")
@@ -79,14 +85,16 @@ def test_config_helpers():
 
 def test_dataset_parasite():
     section("2. DatasetParasite")
-    for set_name in ("training", "validation", "test"):
+    # A assinatura real e (set_name, split, percentage, transform, loader,
+    # path_dataset) — sem `dataset_name` e sem `set`. Com path_dataset=None o
+    # dataset agrega os 3 parasitos, que e o que DATASET_NAME="to_modules" quer.
+    for set_name in ("train", "validation", "test"):
         ds = DatasetParasite(
-            dataset_name=DATASET_NAME,
-            set=set_name,
+            set_name=set_name,
             split=SPLIT,
             percentage=PERCENTAGE,
             transform=transform,
-            dataset_name=DATASET_NAME,
+            loader="pil",
         )
         img, label = ds[0]
         print(f"  [{set_name:10s}] len={len(ds):3d}  "
@@ -96,8 +104,9 @@ def test_dataset_parasite():
 
 def test_datamodule_parasite():
     section("3. DataModuleParasite (plain wrapper)")
+    # DataModuleParasite tambem nao aceita dataset_name (ParasiteDataModule, no
+    # teste 4, aceita — as duas classes divergem de proposito).
     dm = DataModuleParasite(
-        dataset_name=DATASET_NAME,
         split=SPLIT,
         percentage=PERCENTAGE,
         batch_size=BATCH_SIZE,

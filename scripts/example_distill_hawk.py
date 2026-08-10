@@ -43,7 +43,6 @@ from torchvision import models, transforms
 
 gpu    = torch.cuda.is_available()
 device = torch.device(0) if gpu else torch.device("cpu")
-print(f"Using device: {device}")
 
 
 # â”€â”€ Dataset Configuration (50/50 train/test) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -55,18 +54,6 @@ input_shape = (nchannels, height, width)
 
 train_perc = 0.50
 test_perc  = 0.50
-
-data = glob(orig_dir + "/*.png")
-num_train_samples = int(len(data) * train_perc)
-
-np.random.seed(42)
-np.random.shuffle(data)
-
-trainset_files = data[:num_train_samples]
-testset_files  = data[num_train_samples:]
-
-print(f"Training samples : {len(trainset_files)}")
-print(f"Test samples     : {len(testset_files)}")
 
 
 # â”€â”€ Data Transformations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -114,16 +101,7 @@ class ImageDataset:
         return image, self.targets[ix]
 
 
-trainset = ImageDataset(trainset_files, aug)
-testset  = ImageDataset(testset_files,  prep)
-
 batchsize  = 32
-trainload  = DataLoader(trainset, batch_size=batchsize, shuffle=True)
-testload   = DataLoader(testset,  batch_size=batchsize, shuffle=False)
-validload  = testload   # no separate validation set in 50/50 split
-
-print(f"Training batches : {len(trainload)}")
-print(f"Test batches     : {len(testload)}")
 
 
 # â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -171,9 +149,6 @@ class TeacherVGG16(nn.Module):
         return self.classifier(x)
 
 
-teacher_model = TeacherVGG16(nclasses).to(device)
-
-
 # â”€â”€ Classification helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def classification_criterion(preds, targets):
@@ -216,35 +191,7 @@ def test_model(model, loader):
 
 # â”€â”€ Phase 1 training loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-print("=" * 70)
-print("PHASE 1: Training Teacher Classifier")
-print("=" * 70)
-
-teacher_optimizer = optim.Adam(teacher_model.parameters(), lr=1e-3)
 n_epochs_teacher  = 10
-
-for epoch in range(n_epochs_teacher):
-    trn_losses, trn_accs = [], []
-    for data in trainload:
-        l, a = train_batch_classification(teacher_model, data, teacher_optimizer)
-        trn_losses.append(l); trn_accs.append(a)
-
-    val_losses, val_accs = [], []
-    for data in validload:
-        l, a = validate_batch_classification(teacher_model, data)
-        val_losses.append(l); val_accs.append(a)
-
-    if (epoch + 1) % 2 == 0:
-        print(
-            f"  Epoch {epoch+1:>3}/{n_epochs_teacher}"
-            f"  trn_loss={sum(trn_losses)/len(trn_losses):.4f}"
-            f"  trn_acc={sum(trn_accs)/len(trn_accs):.4f}"
-            f"  val_loss={sum(val_losses)/len(val_losses):.4f}"
-            f"  val_acc={sum(val_accs)/len(val_accs):.4f}"
-        )
-
-teacher_loss, teacher_acc = test_model(teacher_model, testload)
-print(f"\nTeacher Test  loss={teacher_loss:.6f}  acc={teacher_acc:.4f} ({teacher_acc*100:.2f}%)")
 
 
 # â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -304,18 +251,9 @@ class StudentModel(nn.Module):
                     m.bias.data.zero_()
 
 
-student_model = StudentModel(input_shape).to(device)
-print(f"\nStudent output shape: {student_model(torch.randn(1,3,224,224).to(device)).shape}")
-
-
 # â”€â”€ Distillation loss â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 ALPHA = 0.7
-
-# Frozen copy of the teacher's classifier used to compute CE on student features
-phase2_classifier = copy.deepcopy(teacher_model.classifier).to(device)
-for p in phase2_classifier.parameters():
-    p.requires_grad = False
 
 
 def train_batch_distillation(student, teacher, classifier, data, optimizer, alpha=ALPHA):
@@ -370,44 +308,7 @@ def validate_batch_distillation(student, teacher, classifier, data, alpha=ALPHA)
 
 # â”€â”€ Phase 2 training loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-print("=" * 70)
-print(f"PHASE 2: Training Student  (alpha={ALPHA})")
-print(f"Loss = {ALPHA} * MSE + {1-ALPHA} * CrossEntropy")
-print("=" * 70)
-
-student_optimizer = optim.Adam(student_model.parameters(), lr=1e-4)
-lr_scheduler      = optim.lr_scheduler.StepLR(student_optimizer, step_size=15, gamma=0.5)
 n_epochs_phase2   = 50
-
-for epoch in range(n_epochs_phase2):
-    trn = {"loss": [], "mse": [], "ce": [], "acc": []}
-    for data in trainload:
-        l, m, c, a = train_batch_distillation(
-            student_model, teacher_model, phase2_classifier, data, student_optimizer, ALPHA
-        )
-        trn["loss"].append(l); trn["mse"].append(m)
-        trn["ce"].append(c);   trn["acc"].append(a)
-
-    val = {"loss": [], "mse": [], "ce": [], "acc": [], "sim": []}
-    for data in validload:
-        l, m, c, a, s = validate_batch_distillation(
-            student_model, teacher_model, phase2_classifier, data, ALPHA
-        )
-        val["loss"].append(l); val["mse"].append(m)
-        val["ce"].append(c);   val["acc"].append(a); val["sim"].append(s)
-
-    lr_scheduler.step()
-
-    if (epoch + 1) % 10 == 0:
-        def _m(d, k): return sum(d[k]) / len(d[k])
-        print(
-            f"  Epoch {epoch+1:>3}/{n_epochs_phase2}"
-            f"  trn_loss={_m(trn,'loss'):.4f}  trn_mse={_m(trn,'mse'):.4f}"
-            f"  trn_ce={_m(trn,'ce'):.4f}  trn_acc={_m(trn,'acc'):.4f}"
-            f"  val_loss={_m(val,'loss'):.4f}  val_sim={_m(val,'sim'):.4f}"
-        )
-
-print("\nPhase 2 training complete!")
 
 
 # â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -437,19 +338,6 @@ class DistilledModel(nn.Module):
         return self.classifier(x)
 
 
-distilled_model = DistilledModel(student_model, teacher_model.classifier).to(device)
-
-print("=" * 70)
-print("PHASE 3: Evaluating Distilled Student Model")
-print("=" * 70)
-
-distilled_loss, distilled_acc = test_model(distilled_model, testload)
-
-print(f"\nDistilled Student  loss={distilled_loss:.6f}  acc={distilled_acc:.4f} ({distilled_acc*100:.2f}%)")
-print(f"Teacher            loss={teacher_loss:.6f}  acc={teacher_acc:.4f} ({teacher_acc*100:.2f}%)")
-print(f"Difference         {(distilled_acc - teacher_acc)*100:+.2f}%")
-
-
 # â”€â”€ Model Size Comparison â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def count_parameters(model):
@@ -458,21 +346,141 @@ def count_parameters(model):
     return total, trainable
 
 
-teacher_total,  teacher_trainable  = count_parameters(teacher_model)
-distilled_total, distilled_trainable = count_parameters(distilled_model)
-
-print("\n" + "=" * 70)
-print("MODEL SIZE COMPARISON")
-print("=" * 70)
-print(f"Teacher total parameters   : {teacher_total:,}")
-print(f"Distilled total parameters : {distilled_total:,}")
-print(f"\nStudent is {teacher_total / distilled_total:.2f}x lighter")
-print(f"Student has {(1 - distilled_total/teacher_total)*100:.1f}% fewer parameters")
-
-
 # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Teacher  : VGG16 (frozen backbone + trained classifier head)
 # Distill  : Pooled-output â€” predict C-dim vector
 # Loss     : Î±Â·MSE(student_pooled, teacher_pooled) + (1-Î±)Â·CE(cls(student_pooled), y)
 # Alpha    : 0.7
 # Eval     : student encoder+predictor + teacher classifier (no fine-tuning)
+
+
+# -- Entry point ------------------------------------------------------------
+
+def main():
+    print(f"Using device: {device}")
+
+    data = glob(orig_dir + "/*.png")
+    num_train_samples = int(len(data) * train_perc)
+
+    np.random.seed(42)
+    np.random.shuffle(data)
+
+    trainset_files = data[:num_train_samples]
+    testset_files  = data[num_train_samples:]
+
+    print(f"Training samples : {len(trainset_files)}")
+    print(f"Test samples     : {len(testset_files)}")
+
+    trainset = ImageDataset(trainset_files, aug)
+    testset  = ImageDataset(testset_files,  prep)
+
+    trainload  = DataLoader(trainset, batch_size=batchsize, shuffle=True)
+    testload   = DataLoader(testset,  batch_size=batchsize, shuffle=False)
+    validload  = testload   # no separate validation set in 50/50 split
+
+    print(f"Training batches : {len(trainload)}")
+    print(f"Test batches     : {len(testload)}")
+
+    teacher_model = TeacherVGG16(nclasses).to(device)
+
+    print("=" * 70)
+    print("PHASE 1: Training Teacher Classifier")
+    print("=" * 70)
+
+    teacher_optimizer = optim.Adam(teacher_model.parameters(), lr=1e-3)
+
+    for epoch in range(n_epochs_teacher):
+        trn_losses, trn_accs = [], []
+        for data in trainload:
+            l, a = train_batch_classification(teacher_model, data, teacher_optimizer)
+            trn_losses.append(l); trn_accs.append(a)
+
+        val_losses, val_accs = [], []
+        for data in validload:
+            l, a = validate_batch_classification(teacher_model, data)
+            val_losses.append(l); val_accs.append(a)
+
+        if (epoch + 1) % 2 == 0:
+            print(
+                f"  Epoch {epoch+1:>3}/{n_epochs_teacher}"
+                f"  trn_loss={sum(trn_losses)/len(trn_losses):.4f}"
+                f"  trn_acc={sum(trn_accs)/len(trn_accs):.4f}"
+                f"  val_loss={sum(val_losses)/len(val_losses):.4f}"
+                f"  val_acc={sum(val_accs)/len(val_accs):.4f}"
+            )
+
+    teacher_loss, teacher_acc = test_model(teacher_model, testload)
+    print(f"\nTeacher Test  loss={teacher_loss:.6f}  acc={teacher_acc:.4f} ({teacher_acc*100:.2f}%)")
+
+    student_model = StudentModel(input_shape).to(device)
+    print(f"\nStudent output shape: {student_model(torch.randn(1,3,224,224).to(device)).shape}")
+
+    # Frozen copy of the teacher's classifier used to compute CE on student features
+    phase2_classifier = copy.deepcopy(teacher_model.classifier).to(device)
+    for p in phase2_classifier.parameters():
+        p.requires_grad = False
+
+    print("=" * 70)
+    print(f"PHASE 2: Training Student  (alpha={ALPHA})")
+    print(f"Loss = {ALPHA} * MSE + {1-ALPHA} * CrossEntropy")
+    print("=" * 70)
+
+    student_optimizer = optim.Adam(student_model.parameters(), lr=1e-4)
+    lr_scheduler      = optim.lr_scheduler.StepLR(student_optimizer, step_size=15, gamma=0.5)
+
+    for epoch in range(n_epochs_phase2):
+        trn = {"loss": [], "mse": [], "ce": [], "acc": []}
+        for data in trainload:
+            l, m, c, a = train_batch_distillation(
+                student_model, teacher_model, phase2_classifier, data, student_optimizer, ALPHA
+            )
+            trn["loss"].append(l); trn["mse"].append(m)
+            trn["ce"].append(c);   trn["acc"].append(a)
+
+        val = {"loss": [], "mse": [], "ce": [], "acc": [], "sim": []}
+        for data in validload:
+            l, m, c, a, s = validate_batch_distillation(
+                student_model, teacher_model, phase2_classifier, data, ALPHA
+            )
+            val["loss"].append(l); val["mse"].append(m)
+            val["ce"].append(c);   val["acc"].append(a); val["sim"].append(s)
+
+        lr_scheduler.step()
+
+        if (epoch + 1) % 10 == 0:
+            def _m(d, k): return sum(d[k]) / len(d[k])
+            print(
+                f"  Epoch {epoch+1:>3}/{n_epochs_phase2}"
+                f"  trn_loss={_m(trn,'loss'):.4f}  trn_mse={_m(trn,'mse'):.4f}"
+                f"  trn_ce={_m(trn,'ce'):.4f}  trn_acc={_m(trn,'acc'):.4f}"
+                f"  val_loss={_m(val,'loss'):.4f}  val_sim={_m(val,'sim'):.4f}"
+            )
+
+    print("\nPhase 2 training complete!")
+
+    distilled_model = DistilledModel(student_model, teacher_model.classifier).to(device)
+
+    print("=" * 70)
+    print("PHASE 3: Evaluating Distilled Student Model")
+    print("=" * 70)
+
+    distilled_loss, distilled_acc = test_model(distilled_model, testload)
+
+    print(f"\nDistilled Student  loss={distilled_loss:.6f}  acc={distilled_acc:.4f} ({distilled_acc*100:.2f}%)")
+    print(f"Teacher            loss={teacher_loss:.6f}  acc={teacher_acc:.4f} ({teacher_acc*100:.2f}%)")
+    print(f"Difference         {(distilled_acc - teacher_acc)*100:+.2f}%")
+
+    teacher_total,  teacher_trainable  = count_parameters(teacher_model)
+    distilled_total, distilled_trainable = count_parameters(distilled_model)
+
+    print("\n" + "=" * 70)
+    print("MODEL SIZE COMPARISON")
+    print("=" * 70)
+    print(f"Teacher total parameters   : {teacher_total:,}")
+    print(f"Distilled total parameters : {distilled_total:,}")
+    print(f"\nStudent is {teacher_total / distilled_total:.2f}x lighter")
+    print(f"Student has {(1 - distilled_total/teacher_total)*100:.1f}% fewer parameters")
+
+
+if __name__ == "__main__":
+    main()

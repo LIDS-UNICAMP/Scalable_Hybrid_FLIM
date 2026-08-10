@@ -22,6 +22,7 @@ pandas
 ray[tune]>=2.0
 matplotlib
 seaborn
+adjustText
 notebook
 ipywidgets
 debugpy
