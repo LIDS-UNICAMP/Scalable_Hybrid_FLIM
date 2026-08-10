@@ -107,7 +107,7 @@ def main() -> None:
                     linestyle=(0, (5, 2.5)), marker="s", markersize=8,
                     markerfacecolor=S2, markeredgecolor=SURFACE, markeredgewidth=2,
                     elinewidth=1.4, capsize=3, ecolor=S2, alpha=0.95, zorder=4,
-                    label="conv3 achatado 27.648-d, LAB cru, max_iter=-1")
+                    label="conv3 achatado 27.648-d, LAB raw, max_iter=-1")
 
         if d48 is not None:
             q = (d48[d48["dataset"] == ds].set_index("percentage").reindex(PCTS))
@@ -116,7 +116,7 @@ def main() -> None:
                         markerfacecolor=S3, markeredgecolor=SURFACE,
                         markeredgewidth=2, elinewidth=1.4, capsize=3, ecolor=S3,
                         alpha=0.95, zorder=5,
-                        label="GAP 48-d, LAB cru, max_iter=-1")
+                        label="GAP 48-d, LAB raw, max_iter=-1")
 
         ax.set_title(title, fontsize=13, color=INK_PRIMARY, pad=12)
         ax.set_xticks(x)

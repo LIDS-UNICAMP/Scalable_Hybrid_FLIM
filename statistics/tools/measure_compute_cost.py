@@ -85,7 +85,7 @@ IJEPA_INPUT = (3, 224, 224)
 
 
 class EncoderFlatten(nn.Module):
-    """Encoder FLIM cru: saída conv3 achatada (o que o SVM recebe em FLIM/LeJEPA).
+    """Encoder FLIM raw: saída conv3 achatada (o que o SVM recebe em FLIM/LeJEPA).
 
     Reproduz src/utils/evaluate.py::extract_features (conv1->conv2->conv3->flatten).
     """

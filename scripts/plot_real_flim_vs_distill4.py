@@ -20,10 +20,10 @@
 Tres fontes, uma figura por metrica (kappa, acc, f1) mais uma figura 3x3 unindo tudo:
 
   Real FLIM (48-d, avg pool)  artifacts/real_FLIM/real_FLIM_results.csv
-      rodado agora por  src/evaluate/svm_real_flim.py  — encoder FLIM cru
+      rodado agora por  src/evaluate/svm_real_flim.py  — encoder FLIM raw
       (architecture.json + pesos dos marcadores, sem checkpoint) -> AdaptiveAvgPool2d(1)
       -> SVM do avaliador de destilacao. Duas variantes de pre-processamento:
-      imagenet_norm=True (mesmo transform do Distill 4) e LAB[0,1] cru.
+      imagenet_norm=True (mesmo transform do Distill 4) e LAB[0,1] raw.
 
   Distill 4 (889K)            results/svm_distill_proj1280_results.csv
       encoder FLIM destilado + proj head 1280-d, mesmo SVM. Gerado por
