@@ -657,8 +657,12 @@ probe. Isso é deliberado — os CSVs de baseline do repo pontuam o SVM no **tes
 números não são comparáveis. Medindo dentro do run, o veredito fica sólido:
 
 ```
-Δκ = val/svm_kappa (melhor época)  −  baseline/svm_kappa (época −1, FLIM puro)
+Δκ = stage{N}/svm_kappa (melhor época)  −  stage{N}/flim_ref_svm_kappa (época −1, FLIM puro)
 ```
+
+Toda métrica dependente de estágio é prefixada `stage1/` ou `stage2/` (`stage{N}/svm_kappa`,
+`stage{N}/svm_acc`, `stage{N}/svm_f1`). A referência FLIM **não** é uma série: é o escalar de
+summary `stage{N}/flim_ref_svm_kappa`, escrito uma vez em `on_fit_start`.
 
 | Δκ | Leitura |
 |---|---|
@@ -667,24 +671,27 @@ números não são comparáveis. Medindo dentro do run, o veredito fica sólido:
 | < 0 | reconstrução puxa o embedding para informação de baixo nível (textura, cromaticidade a/b, fundo) — o risco conhecido |
 
 Os dois números ficam lado a lado em `run_metadata.json` (`best_val_svm_kappa` e
-`baseline_flim_svm`) e no W&B a baseline é replicada como série plana, para o painel mostrar
-de relance se o treino subiu ou desceu em relação ao ponto de partida.
+`baseline_flim_svm`) e no W&B a referência fica no summary do run
+(`stage{N}/flim_ref_svm_kappa`), não como série plana replicada época a época.
 
 ### Seleção e parada
 
 | | Valor |
 |---|---|
-| Checkpoint | `best_kappa.ckpt`, monitor `val/svm_kappa` (max) |
-| EarlyStopping | `val/svm_kappa` (max), `patience=50`, `strict=False` |
+| Checkpoint (estágio 2) | `best_kappa.ckpt`, monitor `stage2/svm_kappa` (max) |
+| Checkpoint (estágio 1) | `best_recon.ckpt`, monitor `stage1/val_recon_loss` (min) |
+| EarlyStopping | o mesmo monitor do estágio, `patience=50`, `strict=False` |
 | Teto de épocas | `--max-epochs 1000` |
 
-Os dois olham `val/svm_kappa`, **não** `val/recon_loss` — o melhor *encoder* é o entregável,
-não a menor reconstrução. O `strict=False` existe porque com `--svm-probe-every > 1` a kappa
+No estágio 2 os dois olham `stage2/svm_kappa`, **não** `stage2/val_recon_loss` — o melhor
+*encoder* é o entregável, não a menor reconstrução. No estágio 1 o encoder está congelado, a
+kappa é ruído do solver, e a seleção cai em `stage1/val_recon_loss` (min), a única coisa que
+de fato melhora ali. O `strict=False` existe porque com `--svm-probe-every > 1` a kappa
 não é logada nas épocas em que o probe é pulado, e um callback estrito abortaria o run em vez
 de esperar a próxima.
 
-⚠️ **`val/recon_loss` quase não se move, e isso é esperado.** BCE sobre alvo contínuo tem piso
-de entropia: a loss mínima alcançável não é 0, é `−p·log p − (1−p)·log(1−p)` do próprio alvo,
+⚠️ **`stage{N}/val_recon_loss` quase não se move, e isso é esperado.** BCE sobre alvo
+contínuo tem piso de entropia: a loss mínima alcançável não é 0, é `−p·log p − (1−p)·log(1−p)` do próprio alvo,
 ≈ **0.466** para o LAB destes datasets. Os runs pousam em 0.465–0.469, ou seja, o sinal real
 de reconstrução são ~0.002 em cima de uma constante. Não leia essa curva como convergência, e
 não a use como critério de parada.
@@ -881,6 +888,56 @@ artifacts/
   plots/{dataset}/
   run_manifest.csv
 ```
+
+---
+
+## Avaliações — um comando por script
+
+Todo braço de avaliação tem exatamente um entrypoint. Rode a partir da raiz do repositório,
+com o ambiente ativo.
+
+| Braço | Comando | Saída |
+|---|---|---|
+| SVM sobre encoder LeJEPA congelado | `python -m src.evaluate.svm` | `results/svm_results.csv` |
+| SVM sobre student destilado (encoder 48-d) | `python -m src.evaluate.svm_distillation` | `results/svm_distillation_results.csv` |
+| SVM sobre student destilado — variante conv | `python -m src.evaluate.svm_distillation_conv` | `results/svm_distillation_conv_results.csv` |
+| SVM sobre a proj head 1280-d (com scaler) | `python -m src.evaluate.svm_distill_with_projection` | `results/svm_distill_proj1280_results.csv` |
+| SVM sobre FLIM raw (protocolo do Distill 4) | `python -m src.evaluate.svm_real_flim` | `results/<csv-stem>.csv` |
+| SVM sobre encoder I-JEPA (teacher, 1280-d) | `python -m src.evaluate.svm_ijepa` | `results/ijepa_svm_results.csv` |
+| SVM sobre a cabeça de classificação ReLU-2L | `python -m src.evaluate.svm_classification_flim` | `results/svm_relu2l_results.csv` |
+| SVM sobre encoder FLIM residual (eggs) | `python -m src.evaluate.svm_flim_residual` | `results/svm_flim_residual_eggs.csv` |
+| MLP (sequencial) | `python -m src.evaluate.mlp --mode all` | `results/mlp_results.csv` |
+| MLP (fila Ray) | `python -m src.evaluate.ray_mlp_queue` | `results/mlp_results.csv` |
+| Classificadores clássicos (kNN/RF/LGBM/GP/QDA) | `python -m src.evaluate.classical_classifiers` | `results/classical_classifiers_results.csv` |
+| Pipeline unificado (SVM + MLP + plots) | `python -m src.evaluate.unified_eval --model all --dataset all` | `artifacts/` |
+| t-SNE do test set | `python -m src.evaluate.tsne_analysis` | `artifacts/tsne/` |
+| Diagnóstico: 48-d sem imagenet_norm | `python tools/eval_avg_pooling_48d.py` | stdout |
+
+Flags comuns: `--dry-run` (prévia sem GPU), `--wandb-update` (atualiza o cache do W&B antes),
+`--dataset` / `--splits` / `--percentages` para recortar a grade. Use `--help` em qualquer um.
+
+### Código compartilhado — não duplique
+
+Existe **um** SVM e **uma** função de métrica. Toda avaliação acima usa os mesmos:
+
+| O quê | Onde | Como usar |
+|---|---|---|
+| SVM (linear, C=1e2, gamma=auto, ovo, max_iter=-1) | `src/utils/evaluate.py` | `from src.utils.evaluate import fit_svm` |
+| Métricas (κ, F1, acurácia) | `src/metrics/classification.py` | `from src.metrics.classification import compute_metrics` |
+| Constantes compartilhadas | `src/evaluate/constants.py` | `from src.evaluate.constants import IMAGE_SIZE, ...` |
+
+`fit_svm(X, y, scaler=True)` embrulha o SVC num `Pipeline` com `StandardScaler` — a assimetria de
+scaler entre braços é deliberada e fica registrada na coluna `svm_protocol` de cada CSV. A convenção
+de rótulo (0- ou 1-indexado) é responsabilidade do chamador; as métricas são invariantes a ela.
+
+Nunca escreva um segundo SVM nem recalcule κ/F1/acurácia localmente. Para travar isso:
+
+```bash
+python tools/check_refactor_equivalence.py
+# → ALL CHECKS PASSED
+```
+
+Falha se o SVM canônico, as métricas ou a config do probe do autoencoder divergirem.
 
 ---
 
