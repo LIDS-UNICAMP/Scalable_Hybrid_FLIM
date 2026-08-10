@@ -97,12 +97,15 @@ convention already used by ``classification_flim_ray.py``.
 from __future__ import annotations
 
 import csv
+import itertools
 import json
 import os
 import shlex
 import sys
 import time
 from typing import Any, Optional
+
+import yaml
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
@@ -123,6 +126,15 @@ _ALL_PCTS = [1, 5, 25, 50, 75, 100]
 _DEFAULT_PCTS = [5, 75]
 
 _NUM_CLASSES: dict[str, int] = {"eggs": 9, "larvae": 2, "protozoan": 7}
+
+# EarlyStopping patience is a property of the training protocol, not of the tmux line that
+# happens to launch it: it is read from configs/default.yaml so nobody has to type it.
+# ponytail: one key from one known file, no config layer — a missing/renamed key raises
+# StopIteration here, at import, instead of silently training with a different patience.
+with open(os.path.join(_ROOT, "configs", "default.yaml"), encoding="utf-8") as _fh:
+    _PATIENCE: int = next(cb["init_args"]["patience"]
+                          for cb in yaml.safe_load(_fh)["trainer"]["callbacks"]
+                          if cb["class_path"].endswith("EarlyStopping"))
 
 _ARCH_TAG: dict[str, str] = {
     "eggs": "ch24_32_48",
@@ -158,6 +170,8 @@ _ARTIFACT_ROOT = os.path.join(_ROOT, "artifacts", _ARTIFACT_SUBDIR)
 
 _MANIFEST_PATH = os.path.join(_ARTIFACT_ROOT, "run_manifest.csv")
 _MANIFEST_RETRY_PATH = os.path.join(_ARTIFACT_ROOT, "run_manifest_retry.csv")
+# ponytail: no `embed_mode` column — the run_name already ends in `_flat` for the flatten
+# arm and is bare for avgpool2d, so downstream joins can key on the name they already use.
 _MANIFEST_FIELDS = [
     "run_name", "dataset", "split", "percentage", "stage", "architecture",
     "status", "skip_reason", "checkpoint_path",
@@ -274,12 +288,20 @@ _STAGE_CKPT: dict[int, str] = {1: "best_recon.ckpt", 2: "best_kappa.ckpt"}
 # marker is what keeps the two arms apart on disk and on the dashboard.
 _LAB_MARKER = "_lab"
 
+# Same argument for the embedding head: it changes what the SVM probe sees, so it is part of
+# the run's identity. `avgpool2d` keeps the bare name (the runs already on disk used it, and
+# `_stage_ckpt` has to keep resolving them); only `flatten` takes a marker. Without this the
+# two arms would share a directory and stage 2 would silently load the other arm's ckpt.
+_EMBED_MARKER: dict[str, str] = {"avgpool2d": "", "flatten": "_flat"}
+_ALL_EMBED_MODES = list(_EMBED_MARKER)
+
 
 def _run_name(dataset: str, split: int, pct: int, stage: int = 1, run_prefix: str = "",
-              imagenet_norm: bool = True) -> str:
+              imagenet_norm: bool = True, embed_mode: str = "avgpool2d") -> str:
     """Run name for a cell. ``imagenet_norm=True`` reproduces the legacy name exactly."""
     return (f"{run_prefix}ae_resnet_flim_{dataset}_split{split}_pct{pct}"
-            f"_{_STAGE_SUFFIX[stage]}{'' if imagenet_norm else _LAB_MARKER}")
+            f"_{_STAGE_SUFFIX[stage]}{'' if imagenet_norm else _LAB_MARKER}"
+            f"{_EMBED_MARKER[embed_mode]}")
 
 
 def _run_dir(run_name: str) -> str:
@@ -287,10 +309,10 @@ def _run_dir(run_name: str) -> str:
 
 
 def _stage_ckpt(dataset: str, split: int, pct: int, stage: int, run_prefix: str = "",
-                imagenet_norm: bool = True) -> str:
+                imagenet_norm: bool = True, embed_mode: str = "avgpool2d") -> str:
     """Checkpoint a given stage writes — this is what the next wave consumes."""
     return os.path.join(
-        _run_dir(_run_name(dataset, split, pct, stage, run_prefix, imagenet_norm)),
+        _run_dir(_run_name(dataset, split, pct, stage, run_prefix, imagenet_norm, embed_mode)),
         "checkpoints", _STAGE_CKPT[stage],
     )
 
@@ -351,6 +373,7 @@ def _child_cmd_tail(exp: dict, stage: int, run_name: str, init_ckpt: str) -> lis
         "--num-workers", str(exp.get("num_workers", 4)),
         "--svm-probe-every", str(exp["svm_probe_every"]),
         "--log-recon-every", str(exp["log_recon_every"]),
+        "--embed-mode", exp["embed_mode"],
     ]
 
     if stage == 1:
@@ -378,104 +401,107 @@ def build_experiment_grid(
     svm_probe_every: int, log_recon_every: int,
     imagenet_norm: bool, wandb_update: bool, wandb_project: str,
     run_prefix: str, skip_existing: bool, check_wandb: bool, wandb_entity: str,
-    stage: str = "1",
+    stage: str = "1", embed_modes: Optional[list[str]] = None,
 ) -> tuple[list[dict], list[dict]]:
     experiments: list[dict] = []
     skipped: list[dict] = []
 
     stages = [1, 2] if str(stage) == "both" else [int(stage)]
 
-    for dataset in datasets:
-        for pct in pcts:
-            for split in splits:
-                key = f"{dataset}/split{split}/pct{pct}"
+    # The embedding head is a full grid axis (the SVM probe sees a different vector), so it
+    # multiplies the cells like any other. Flat product instead of a fourth nested `for`.
+    for dataset, pct, split, embed_mode in itertools.product(
+            datasets, pcts, splits, embed_modes or ["avgpool2d"]):
+        key = f"{dataset}/split{split}/pct{pct}/{embed_mode}"
 
-                # The data on disk is the same for both stages, so validate the cell once.
-                ok, reason = validate_experiment(dataset, split, pct)
-                if not ok:
-                    _log(f"SKIP (preflight) {key}: {reason}", "WARN")
-                    skipped.append({"key": key, "stage": stages[0],
-                                    "run_name": _run_name(dataset, split, pct, stages[0],
-                                                          run_prefix, imagenet_norm),
+        # The data on disk is the same for both stages, so validate the cell once.
+        ok, reason = validate_experiment(dataset, split, pct)
+        if not ok:
+            _log(f"SKIP (preflight) {key}: {reason}", "WARN")
+            skipped.append({"key": key, "stage": stages[0],
+                            "run_name": _run_name(dataset, split, pct, stages[0],
+                                                  run_prefix, imagenet_norm, embed_mode),
+                            "dataset": dataset, "split": split, "pct": pct,
+                            "reason": f"preflight:{reason}"})
+            continue
+
+        # Everything the child needs that does not depend on the stage. Built once
+        # per cell so the stage plan and the experiment entry cannot disagree.
+        common = {
+            "dataset": dataset,
+            "split": split,
+            "pct": pct,
+            "architecture": _ARCH_TAG[dataset],
+            "num_classes": _NUM_CLASSES[dataset],
+            "arch_json": _arch_json(dataset, split),
+            "flim_weights_path": _flim_weights_path(dataset, split),
+            "num_workers": num_workers,
+            "max_epochs": max_epochs,
+            "warmup_epochs": warmup_epochs,
+            "patience": patience,
+            "batch_size": batch_size,
+            "svm_probe_every": svm_probe_every,
+            "log_recon_every": log_recon_every,
+            "imagenet_norm": imagenet_norm,
+            "embed_mode": embed_mode,
+            "wandb_update": wandb_update,
+            "wandb_project": wandb_project,
+            "wandb_entity": wandb_entity,
+        }
+
+        # One queue entry carries the whole stage chain for this cell. Chaining
+        # inside a single Ray task is what removes the barrier between the two
+        # waves: cell A can already be fine-tuning while cell B is still frozen.
+        # Running `--stage 1` and then `--stage 2` as separate invocations would
+        # make every cell wait on the slowest stage-1 run of the entire grid.
+        plan: list[dict] = []
+        for st in stages:
+            run_name = _run_name(dataset, split, pct, st, run_prefix, imagenet_norm, embed_mode)
+            init_ckpt = (_stage_ckpt(dataset, split, pct, 1, run_prefix, imagenet_norm,
+                                     embed_mode)
+                         if st == 2 else "")
+
+            # Only a stage-2-only invocation can check the checkpoint now. In
+            # `both` mode stage 1 has not run yet, so the file is expected to be
+            # missing at build time — the Ray task re-checks it after stage 1.
+            if len(stages) == 1 and st == 2 and not os.path.isfile(init_ckpt):
+                _log(f"SKIP (no stage-1 ckpt) {key}: {init_ckpt}", "WARN")
+                skipped.append({"key": key, "stage": st, "run_name": run_name,
+                                "dataset": dataset, "split": split, "pct": pct,
+                                "reason": f"missing stage-1 ckpt:{init_ckpt}"})
+                continue
+
+            # Resume is per stage: a finished stage 1 must not force its stage 2
+            # to be re-run, nor the other way round.
+            if skip_existing:
+                should_skip, why = _should_skip_experiment(
+                    run_name, check_wandb, wandb_entity, wandb_project)
+                if should_skip:
+                    _log(f"SKIP (done) {key} stage{st}: {why}")
+                    skipped.append({"key": key, "stage": st, "run_name": run_name,
                                     "dataset": dataset, "split": split, "pct": pct,
-                                    "reason": f"preflight:{reason}"})
+                                    "reason": why})
                     continue
 
-                # Everything the child needs that does not depend on the stage. Built once
-                # per cell so the stage plan and the experiment entry cannot disagree.
-                common = {
-                    "dataset": dataset,
-                    "split": split,
-                    "pct": pct,
-                    "architecture": _ARCH_TAG[dataset],
-                    "num_classes": _NUM_CLASSES[dataset],
-                    "arch_json": _arch_json(dataset, split),
-                    "flim_weights_path": _flim_weights_path(dataset, split),
-                    "num_workers": num_workers,
-                    "max_epochs": max_epochs,
-                    "warmup_epochs": warmup_epochs,
-                    "patience": patience,
-                    "batch_size": batch_size,
-                    "svm_probe_every": svm_probe_every,
-                    "log_recon_every": log_recon_every,
-                    "imagenet_norm": imagenet_norm,
-                    "wandb_update": wandb_update,
-                    "wandb_project": wandb_project,
-                    "wandb_entity": wandb_entity,
-                }
+            plan.append({
+                "stage": st, "run_name": run_name, "init_ckpt": init_ckpt,
+                "run_dir": _run_dir(run_name),
+                "cmd_tail": _child_cmd_tail(common, st, run_name, init_ckpt),
+            })
 
-                # One queue entry carries the whole stage chain for this cell. Chaining
-                # inside a single Ray task is what removes the barrier between the two
-                # waves: cell A can already be fine-tuning while cell B is still frozen.
-                # Running `--stage 1` and then `--stage 2` as separate invocations would
-                # make every cell wait on the slowest stage-1 run of the entire grid.
-                plan: list[dict] = []
-                for st in stages:
-                    run_name = _run_name(dataset, split, pct, st, run_prefix, imagenet_norm)
-                    init_ckpt = (_stage_ckpt(dataset, split, pct, 1, run_prefix, imagenet_norm)
-                                 if st == 2 else "")
+        if not plan:
+            continue
 
-                    # Only a stage-2-only invocation can check the checkpoint now. In
-                    # `both` mode stage 1 has not run yet, so the file is expected to be
-                    # missing at build time — the Ray task re-checks it after stage 1.
-                    if len(stages) == 1 and st == 2 and not os.path.isfile(init_ckpt):
-                        _log(f"SKIP (no stage-1 ckpt) {key}: {init_ckpt}", "WARN")
-                        skipped.append({"key": key, "stage": st, "run_name": run_name,
-                                        "dataset": dataset, "split": split, "pct": pct,
-                                        "reason": f"missing stage-1 ckpt:{init_ckpt}"})
-                        continue
-
-                    # Resume is per stage: a finished stage 1 must not force its stage 2
-                    # to be re-run, nor the other way round.
-                    if skip_existing:
-                        should_skip, why = _should_skip_experiment(
-                            run_name, check_wandb, wandb_entity, wandb_project)
-                        if should_skip:
-                            _log(f"SKIP (done) {key} stage{st}: {why}")
-                            skipped.append({"key": key, "stage": st, "run_name": run_name,
-                                            "dataset": dataset, "split": split, "pct": pct,
-                                            "reason": why})
-                            continue
-
-                    plan.append({
-                        "stage": st, "run_name": run_name, "init_ckpt": init_ckpt,
-                        "run_dir": _run_dir(run_name),
-                        "cmd_tail": _child_cmd_tail(common, st, run_name, init_ckpt),
-                    })
-
-                if not plan:
-                    continue
-
-                experiments.append({
-                    # A single-stage entry says which stage it is; a chained one does not,
-                    # because it covers both.
-                    "key": key if len(plan) > 1 else f"{key}/stage{plan[0]['stage']}",
-                    "stage_plan": plan,
-                    "run_name": plan[0]["run_name"],
-                    "stage": plan[0]["stage"],
-                    "init_ckpt": plan[0]["init_ckpt"],
-                    **common,
-                })
+        experiments.append({
+            # A single-stage entry says which stage it is; a chained one does not,
+            # because it covers both.
+            "key": key if len(plan) > 1 else f"{key}/stage{plan[0]['stage']}",
+            "stage_plan": plan,
+            "run_name": plan[0]["run_name"],
+            "stage": plan[0]["stage"],
+            "init_ckpt": plan[0]["init_ckpt"],
+            **common,
+        })
 
     return experiments, skipped
 
@@ -657,9 +683,20 @@ def run_autoencoder_experiment(
 
 # ── Queue orchestrator ─────────────────────────────────────────────────────────
 
+def _cpus(exp: dict) -> int:
+    """CPU footprint of one child: its dataloader workers plus the process itself.
+
+    ponytail: derived instead of a --cpus-per-experiment flag. The only honest value
+    is the one implied by --num-workers, so a knob could only ever be set wrong.
+    Teto: ignora as threads de BLAS acima de OMP_NUM_THREADS, que ja e fixado com
+    este mesmo numero no filho.
+    """
+    return int(exp.get("num_workers", 4)) + 1
+
+
 def run_queue(
     experiments: list[dict], gpu_ids: list[int], max_concurrent_per_gpu: int,
-    cpus_per_experiment: int, fail_fast: bool, ray_address: Optional[str],
+    fail_fast: bool, ray_address: Optional[str],
     slots_per_gpu: Optional[dict[int, int]] = None,
     quota_per_gpu: Optional[dict[int, int]] = None,
 ) -> list[dict]:
@@ -678,7 +715,7 @@ def run_queue(
     if ray_address:
         ray_kwargs["address"] = ray_address
     else:
-        ray_kwargs["num_cpus"] = cpus_per_experiment * total_slots
+        ray_kwargs["num_cpus"] = max(_cpus(e) for e in experiments) * total_slots
         ray_kwargs["num_gpus"] = 0
 
     if not ray.is_initialized():
@@ -708,9 +745,9 @@ def run_queue(
         exp = pending.pop(0)
         idx = global_index
         global_index += 1
-        fut = run_autoencoder_experiment.options(num_cpus=cpus_per_experiment).remote(
+        fut = run_autoencoder_experiment.options(num_cpus=_cpus(exp)).remote(
             exp, gpu_id=gpu_id, project_root=_ROOT, queue_index=idx,
-            total=total, cpus=cpus_per_experiment,
+            total=total, cpus=_cpus(exp),
         )
         scheduler.acquire(gpu_id)
         futures[fut] = (gpu_id, exp, idx)
@@ -860,9 +897,10 @@ def _print_summary(rows: list[dict], skipped: list[dict], t_start: float,
 
 
 def _print_dry_run(experiments: list[dict], skipped: list[dict],
-                   gpu_ids: list[int], max_per_gpu: int, cpus_per: int,
+                   gpu_ids: list[int], max_per_gpu: int,
                    imagenet_norm: bool = False, retry: bool = False) -> None:
     total_slots = max_per_gpu * len(gpu_ids)
+    cpus_per = max((_cpus(e) for e in experiments), default=_cpus({}))
     print("\n" + "=" * 78)
     print(f"  DRY-RUN {'(retry) ' if retry else ''}— nothing will be executed")
     print("=" * 78)
@@ -871,7 +909,8 @@ def _print_dry_run(experiments: list[dict], skipped: list[dict],
     print(f"  artifacts      : {_ARTIFACT_ROOT}")
     print(f"  input norm     : {'imagenet' if imagenet_norm else 'lab[0,1] (default)'}")
     print(f"  run-name form  : ...{_STAGE_SUFFIX[1]}{'' if imagenet_norm else _LAB_MARKER}")
-    print(f"  to run         : {len(experiments)}")
+    print(f"  to run         : {len(experiments)} cells / "
+          f"{sum(len(e.get('stage_plan') or [1]) for e in experiments)} child runs")
     print(f"  skipped        : {len(skipped)}")
     if experiments:
         print("\n  Queue:")
@@ -911,6 +950,12 @@ def main() -> None:
     parser.add_argument("--percentages", nargs="+", type=int, choices=_ALL_PCTS,
                         default=_DEFAULT_PCTS,
                         help="Default is the experiment grid: 5 and 75.")
+    parser.add_argument("--embed-modes", nargs="+", choices=_ALL_EMBED_MODES,
+                        default=["avgpool2d"], metavar="MODE",
+                        help="Embedding head(s) fed to the SVM probe, one grid axis each: "
+                             "avgpool2d (48-d, legacy run names) and/or flatten. Runs with "
+                             "flatten carry a '_flat' suffix so the two arms never share a "
+                             "run directory — or a stage-1 checkpoint.")
     parser.add_argument("--stage", choices=["1", "2", "both"], required=True,
                         help="1 = frozen FLIM encoder, decoder learns to invert it. "
                              "2 = both unfrozen, starting from the stage-1 checkpoint "
@@ -926,12 +971,14 @@ def main() -> None:
     parser.add_argument("--max-concurrent-per-gpu", type=int, default=1, metavar="N")
     parser.add_argument("--gpu-slots", type=str, default=None, metavar="S0,S1,...",
                         help="Per-GPU concurrency slots, aligned with the GPU list.")
-    parser.add_argument("--cpus-per-experiment", type=int, default=4, metavar="N")
     parser.add_argument("--ray-address", type=str, default=None)
 
     parser.add_argument("--max-epochs", type=int, default=1000)
-    parser.add_argument("--patience", type=int, default=50, metavar="N",
-                        help="EarlyStopping patience on val/svm_kappa, passed to each run.")
+    parser.add_argument("--patience", type=int, default=_PATIENCE, metavar="N",
+                        help="EarlyStopping patience, passed to each run. Default comes from "
+                             "the EarlyStopping entry of configs/default.yaml (currently "
+                             f"{_PATIENCE}); the monitor is stage1/val_recon_loss (min) in "
+                             "stage 1 and stage2/svm_kappa (max) in stage 2.")
     parser.add_argument("--warmup-epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=4, metavar="N")
@@ -1009,13 +1056,12 @@ def main() -> None:
         imagenet_norm=args.imagenet_norm, wandb_update=args.wandb_update,
         wandb_project=args.wandb_project, run_prefix=args.run_prefix,
         skip_existing=skip_existing, check_wandb=args.check_wandb,
-        wandb_entity=args.wandb_entity, stage=args.stage,
+        wandb_entity=args.wandb_entity, stage=args.stage, embed_modes=args.embed_modes,
     )
 
     if args.dry_run:
         _print_dry_run(experiments, skipped, gpu_ids, args.max_concurrent_per_gpu,
-                       args.cpus_per_experiment, imagenet_norm=args.imagenet_norm,
-                       retry=args.retry)
+                       imagenet_norm=args.imagenet_norm, retry=args.retry)
         return
 
     if not experiments:
@@ -1027,7 +1073,6 @@ def main() -> None:
     rows = run_queue(
         experiments=experiments, gpu_ids=gpu_ids,
         max_concurrent_per_gpu=args.max_concurrent_per_gpu,
-        cpus_per_experiment=args.cpus_per_experiment,
         fail_fast=args.fail_fast, ray_address=args.ray_address,
         slots_per_gpu=slots_per_gpu, quota_per_gpu=quota_per_gpu,
     )

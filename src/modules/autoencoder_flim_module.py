@@ -85,7 +85,6 @@ import numpy as np
 import lightning.pytorch as pl
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 from sklearn.svm import SVC
@@ -98,6 +97,11 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from src.metrics.classification import compute_metrics
+# The probe embeds with the official evaluator's own function, not with a look-alike:
+# `AutoEncoderFLIM.embed` was mathematically identical to it (conv1→conv2→conv3, global
+# average pool, flatten), and two identical implementations are one drift away from
+# disagreeing. Importing it also means `evaluate.EMBED_MODE` governs the probe for free.
+from src.utils.evaluate import _encode_pooled
 from src.models.autoencoder_resnet import AutoEncoderFLIM
 from src.models.models import (
     PROTOZOAN_FLIM_ARCH,
@@ -266,10 +270,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
         """
         p = self._stage_prefix
         return (
-            f"{p}/val_recon_loss", f"{p}/val_recon_baseline",
+            f"{p}/val_recon_loss",
             f"{p}/svm_kappa", f"{p}/svm_acc", f"{p}/svm_f1", f"{p}/svm_fit_s",
             f"{p}/svm_fit_status", f"{p}/svm_n_iter_max", f"{p}/svm_n_iter_sum",
-            f"{p}/svm_n_sv", f"{p}/svm_kappa_delta", f"{p}/svm_kappa_delta_best",
+            f"{p}/svm_n_sv",
             f"{p}/flim_drift", "stage_epoch",
         )
 
@@ -324,34 +328,22 @@ class AutoEncoderFlimModule(pl.LightningModule):
     def validation_step(self, batch: Any, batch_idx: int) -> Tensor:
         views, y = batch
         x = self._first_view(views)
-        loss, logits, target = self._recon_loss(x)
+        loss, logits, _ = self._recon_loss(x)
 
-        self._val_emb.append(self.model.embed(x).detach().float().cpu())
+        # _encode_pooled already returns a detached CPU tensor — no second .detach().cpu().
+        self._val_emb.append(_encode_pooled(self.model.encoder, x).float())
         self._val_labels.append(y.detach().cpu())
         if batch_idx == 0:
             self._sample_batch = (x[:4].detach().cpu(), logits[:4].detach().float().cpu())
 
         p = self._stage_prefix
         self.log(f"{p}/val_recon_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
-        self.log(f"{p}/val_recon_baseline", self._do_nothing_floor(target),
-                 prog_bar=False, on_step=False, on_epoch=True)
         return loss
 
-    @staticmethod
-    def _do_nothing_floor(target: Tensor) -> Tensor:
-        """BCE of the best *constant* prediction: the per-channel mean LAB image.
-
-        The floor that turns "did the reconstruction converge?" into a ratio instead of an
-        impression. ``{stage}/val_recon_loss ~= {stage}/val_recon_baseline`` means the
-        48-channel bottleneck carries nothing the decoder can use — a publishable statement
-        about the FLIM embedding, not a failed run. Note the other end of the scale is not 0:
-        for a soft target, BCE bottoms out at the target's own entropy, so the reachable band
-        is narrower than [0, baseline].
-        """
-        mean = target.mean(dim=(0, 2, 3), keepdim=True).clamp(1e-6, 1 - 1e-6)
-        return F.binary_cross_entropy_with_logits(
-            torch.logit(mean).expand_as(target), target
-        )
+    # ponytail: the constant-prediction BCE floor (`val_recon_baseline`) is gone. It was the
+    # only true constant-baseline curve in the run — one number per stage, replotted every
+    # epoch as a flat line. Ceiling: the "is the loss near its floor?" ratio is no longer on
+    # the panel; recompute it offline from the target's own entropy if a paper needs it.
 
     # ── SVM probe ──────────────────────────────────────────────────────────
 
@@ -363,7 +355,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         embs, labels = [], []
         for views, y in loader:
             x = self._first_view(views).to(self.device, non_blocking=True)
-            embs.append(self.model.embed(x).float().cpu())
+            embs.append(_encode_pooled(self.model.encoder, x).float())
             labels.append(y.cpu())
         if was_training:
             self.model.train()
@@ -456,6 +448,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         if len(np.unique(y_tr)) < 2:
             _log.warning("SVM probe skipped: train split has a single class.")
             return None
+        # ponytail: única SVC fora de ``src/utils/evaluate.py:fit_svm`` — config idêntica, mas fit_svm imprime a linha de diagnóstico e sobe uma thread tqdm por segundo a cada validação; teto: unificar quando fit_svm tiver modo silencioso (tools/check_refactor_equivalence.py trava o drift).
         clf = SVC(
             max_iter=-1,
             C=1e2,
@@ -560,13 +553,14 @@ class AutoEncoderFlimModule(pl.LightningModule):
             else max(self._best_kappa, metrics["kappa"])
         )
 
-        # The delta against the on_fit_start FLIM reference — the whole question of the run in
-        # one series, instead of a second copy of the reference curve.
+        # ponytail: the delta against the on_fit_start FLIM reference is bookkeeping only, no
+        # longer a pair of curves. In stage 1 the encoder never moves, so both series were a
+        # constant line by construction, and in stage 2 they are `svm_kappa` shifted by a
+        # constant. Ceiling: the delta is now readable only at the end, from
+        # verdict_summary() / run_metadata.json, not epoch by epoch on the W&B panel.
         if self.baseline_metrics is not None:
             delta = metrics["kappa"] - self.baseline_metrics["kappa"]
             self._best_delta = delta if self._best_delta is None else max(self._best_delta, delta)
-            self.log(f"{p}/svm_kappa_delta", delta, prog_bar=False, on_epoch=True)
-            self.log(f"{p}/svm_kappa_delta_best", self._best_delta, on_epoch=True)
 
         self._log_reconstruction()
 
@@ -732,6 +726,10 @@ def _build_parser():
                         "selects its checkpoint by — stage1/val_recon_loss in stage 1, "
                         "stage2/svm_kappa in stage 2. Matches the patience "
                         "configs/default.yaml uses for the SSL runs.")
+    p.add_argument("--embed-mode", default="avgpool2d", choices=["avgpool2d", "flatten"],
+                   help="How src.utils.evaluate reduces the conv3 map for the probe: "
+                        "global average pool to [B, C] (the heads' convention) or the "
+                        "spatially flattened map. Governs the official evaluator too.")
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--lr", type=float, default=5e-4)
     p.add_argument("--weight-decay", type=float, default=5e-2)
@@ -775,6 +773,11 @@ def main() -> int:
             "so the first epochs push noise into the FLIM kernels. That is the ablation, "
             "not the protocol."
         )
+
+    # One module-level switch, read at call time inside _encode_pooled, so the probe and the
+    # official evaluator cannot end up in different embedding modes. Set before the Trainer.
+    import src.utils.evaluate as _ev
+    _ev.EMBED_MODE = args.embed_mode
 
     pl.seed_everything(args.seed, workers=True)
 
@@ -906,6 +909,7 @@ def main() -> int:
                 # run with the stage-1 run whose kappa is its baseline, so Δκ is computable
                 # straight from W&B without opening a checkpoint.
                 "stage": stage,
+                "embed_mode": args.embed_mode,
                 "encoder_frozen": stage == 1,
                 "encoder_trainable": stage == 2,
                 "init_ckpt": args.init_ckpt,
@@ -1023,6 +1027,7 @@ def _save_metadata(args, module, output_dir, ckpt_dir, status="ok", error="",
         "ckpt_monitor": module.monitor_spec[0],
         "stage_metric_prefix": module.stage_prefix,
         "stage": module.stage,
+        "embed_mode": args.embed_mode,
         "encoder_frozen": bool(args.freeze_encoder),
         "init_ckpt": args.init_ckpt,
         "parent_run": _parent_run_from_ckpt(args.init_ckpt),
