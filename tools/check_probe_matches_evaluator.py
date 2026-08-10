@@ -77,18 +77,24 @@ def main() -> int:
     x = torch.rand(B, 3, 200, 200, device=next(model.parameters()).device)
     y = np.arange(B) % NUM_CLASSES[DATASET]
 
-    _ev.EMBED_MODE = "avgpool2d"
     with torch.no_grad():
-        pooled = _ev._encode_pooled(model.encoder, x)
+        pooled = _ev._encode_pooled(model.encoder, x, mode="avgpool2d")
         embed = model.embed(x).detach().cpu()
     assert torch.allclose(pooled, embed, atol=1e-6), (pooled - embed).abs().max()
     assert _kappa(pooled.numpy(), y) == _kappa(embed.numpy(), y)
     assert pooled.shape == (B, 48), pooled.shape
 
-    _ev.EMBED_MODE = "flatten"
     with torch.no_grad():
-        flat = _ev._encode_pooled(model.encoder, x)
+        flat = _ev._encode_pooled(model.encoder, x, mode="flatten")
     assert flat.shape == (B, 27648), flat.shape
+
+    # Modo invalido nao pode mais cair silenciosamente no pooling.
+    try:
+        _ev._encode_pooled(model.encoder, x, mode="gap")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("_encode_pooled aceitou um modo invalido")
 
     print(f"OK  avgpool2d {tuple(pooled.shape)} == embed{tuple(embed.shape)} "
           f"(max |diff| {(pooled - embed).abs().max():.3e}, kappa identico) | "

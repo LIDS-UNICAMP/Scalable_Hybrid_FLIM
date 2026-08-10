@@ -43,7 +43,6 @@ import time
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from sklearn import svm
 from sklearn.pipeline import Pipeline
@@ -237,29 +236,43 @@ def find_best_checkpoint(run_id: str) -> str:
 # ``TwoLayerSigmoidHead``) and by ``src/evaluate/svm_classification_flim.py``,
 # so the SVM sees the same ``channels[-1]``-d embedding the heads see instead of
 # a spatially flattened map.
-_POOL = nn.AdaptiveAvgPool2d(1)
 
 # Como o mapa conv3 é reduzido: ``"avgpool2d"`` (GAP, ``channels[-1]``-d) ou
-# ``"flatten"`` (mapa raw achatado, ``C*H*W``-d — o protocolo original).
-# ponytail: chave de módulo em vez de parâmetro — nenhum chamador precisa
-# alternar no meio de uma avaliação, então quem quiser o outro modo rebinda
-# ``src.utils.evaluate.EMBED_MODE`` antes de rodar. Teto: não é thread-safe e
-# não viaja para workers em processos separados.
-EMBED_MODE = "avgpool2d"
+# ``"flatten"`` (mapa raw achatado, ``C*H*W``-d — o protocolo original).  É só o
+# default: quem quer o outro modo passa ``embed_mode=`` / ``mode=`` na chamada.
+DEFAULT_EMBED_MODE = "avgpool2d"
+
+# Alias mantido para os chamadores que ainda rebindam o módulo
+# (``src.utils.evaluate.EMBED_MODE = ...``) para trocar o default de um processo
+# inteiro.  Teto: rebindar não é thread-safe e não viaja para workers em
+# processos separados — o parâmetro explícito não tem nenhum dos dois problemas.
+EMBED_MODE = DEFAULT_EMBED_MODE
+
+EMBED_MODES = ("avgpool2d", "flatten")
 
 
-def _encode_pooled(model, inputs: torch.Tensor) -> torch.Tensor:
+def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torch.Tensor:
     """Run conv1→conv2→conv3, global-average-pool and flatten to ``[B, C]``.
 
-    Com ``EMBED_MODE == "flatten"`` o pooling é pulado e o mapa conv3 raw é
-    achatado direto, devolvendo ``[B, C*H*W]``.
+    Args:
+        model:  Encoder com ``.conv1``/``.conv2``/``.conv3``.
+        inputs: Batch ``[B, C, H, W]`` já no device do modelo.
+        mode:   ``"avgpool2d"`` (default) ou ``"flatten"``; ``None`` usa
+                ``EMBED_MODE`` (o default do módulo).  Com ``"flatten"`` o
+                pooling é pulado e o mapa conv3 raw é achatado direto,
+                devolvendo ``[B, C*H*W]``.
     """
+    mode = mode or EMBED_MODE
+    if mode not in EMBED_MODES:
+        raise ValueError(
+            f"embed mode inválido: {mode!r}; use um de {EMBED_MODES}"
+        )
     out = model.conv1(inputs)
     out = model.conv2(out)
     out = model.conv3(out)
-    if EMBED_MODE == "flatten":
+    if mode == "flatten":
         return out.flatten(start_dim=1).detach().cpu()
-    return _POOL(out).flatten(start_dim=1).detach().cpu()
+    return F.adaptive_avg_pool2d(out, 1).flatten(start_dim=1).detach().cpu()
 
 
 # ─── SVM solver diagnostics ───────────────────────────────────────────────────
@@ -420,11 +433,14 @@ def fit_svm(X, y, *, max_iter: int = -1, C: float = 1e2, scaler: bool = False,
 
 
 @torch.no_grad()
-def train_svm(model, dataloader, max_iter: int = -1, C: float = 1e2, degree: int = 3):
+def train_svm(model, dataloader, max_iter: int = -1, C: float = 1e2, degree: int = 3,
+              embed_mode: str | None = None):
     """Fit a linear SVM on frozen encoder features.
 
     Features are the conv3 feature map reduced by ``AdaptiveAvgPool2d(1)`` and
-    flattened, i.e. one value per output channel (``channels[-1]``-d).
+    flattened, i.e. one value per output channel (``channels[-1]``-d).  Pass
+    ``embed_mode="flatten"`` for the raw ``C*H*W``-d map instead; ``None``
+    (default) uses the module default ``EMBED_MODE``.
 
     *dataloader* must yield ``(inputs, one_hot_labels)`` where one_hot_labels
     has shape ``(B, num_classes)``.  Labels returned by the fitted SVM are
@@ -450,7 +466,7 @@ def train_svm(model, dataloader, max_iter: int = -1, C: float = 1e2, degree: int
     print("[INFO] Preparing data for SVM")
     for inputs, labels in tqdm(dataloader):
         inputs = inputs.to(DEVICE)
-        all_feats = torch.cat((all_feats, _encode_pooled(model, inputs)))
+        all_feats = torch.cat((all_feats, _encode_pooled(model, inputs, embed_mode)))
 
         labels_np = np.argmax(labels.cpu().numpy(), axis=1) + 1  # 1-indexed
         all_y = torch.cat((all_y, torch.from_numpy(labels_np).long()))
@@ -485,7 +501,7 @@ class _OneHotDataset(Dataset):
 
 
 @torch.no_grad()
-def extract_features(model, dataloader):
+def extract_features(model, dataloader, embed_mode: str | None = None):
     """Extract conv1→conv2→conv3 features from *model* for every batch.
 
     The conv3 feature map is reduced by ``AdaptiveAvgPool2d(1)`` and flattened,
@@ -495,9 +511,12 @@ def extract_features(model, dataloader):
     Args:
         model:      FLIM Encoder with ``.conv1``, ``.conv2``, ``.conv3``.
         dataloader: Yields ``(inputs, int_labels)``.
+        embed_mode: ``"avgpool2d"`` or ``"flatten"``; ``None`` (default) uses
+                    the module default ``EMBED_MODE``.
 
     Returns:
-        features: ``np.ndarray`` of shape ``(N, channels[-1])`` — pooled conv3.
+        features: ``np.ndarray`` of shape ``(N, channels[-1])`` — pooled conv3
+                  (``(N, C*H*W)`` under ``embed_mode="flatten"``).
         y_true:   ``np.ndarray`` of shape ``(N,)``  — 0-indexed class labels.
     """
     model.eval()
@@ -508,7 +527,7 @@ def extract_features(model, dataloader):
 
     for inputs, labels in tqdm(dataloader, desc="  Extracting test features"):
         inputs = inputs.to(DEVICE)
-        all_feats.append(_encode_pooled(model, inputs).numpy())
+        all_feats.append(_encode_pooled(model, inputs, embed_mode).numpy())
 
         if isinstance(labels, torch.Tensor):
             all_labels.extend(labels.tolist())
