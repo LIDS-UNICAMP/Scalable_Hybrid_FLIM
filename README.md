@@ -911,7 +911,7 @@ com o ambiente ativo.
 | Classificadores clássicos (kNN/RF/LGBM/GP/QDA) | `python -m src.evaluate.classical_classifiers` | `results/classical_classifiers_results.csv` |
 | Pipeline unificado (SVM + MLP + plots) | `python -m src.evaluate.unified_eval --model all --dataset all` | `artifacts/` |
 | t-SNE do test set | `python -m src.evaluate.tsne_analysis` | `artifacts/tsne/` |
-| Diagnóstico: 48-d sem imagenet_norm | `python tools/eval_avg_pooling_48d.py` | stdout |
+| Diagnóstico: 48-d sem imagenet_norm | `python -m src.evaluate.eval_avg_pooling_48d` | stdout |
 
 Flags comuns: `--dry-run` (prévia sem GPU), `--wandb-update` (atualiza o cache do W&B antes),
 `--dataset` / `--splits` / `--percentages` para recortar a grade. Use `--help` em qualquer um.

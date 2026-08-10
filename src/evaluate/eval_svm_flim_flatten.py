@@ -41,13 +41,14 @@ metrica; divergem em UMA linha — como o mapa conv3 vira vetor:
   solver     | max_iter=10000                  | max_iter=-1       | max_iter=-1
 
 As 27.648 dimensoes sao 48 x 24 x 24 — o mapa conv3 inteiro, sem pooling. A troca
-e feita rebindando `src.utils.evaluate.EMBED_MODE = "flatten"`, que e a chave que
-o proprio `_encode_pooled` le (evaluate.py:248). Nenhuma funcao e reescrita.
+e feita passando `embed_mode="flatten"` nas chamadas do avaliador oficial, que
+repassam para `_encode_pooled`. Nenhuma funcao e reescrita, nenhum estado global
+e alterado.
 
 O avaliador oficial e IMPORTADO, nunca reescrito:
-  * train_svm        src/utils/evaluate.py:422   (o parametro max_iter ja existe)
-  * extract_features src/utils/evaluate.py:487
-  * _encode_pooled   src/utils/evaluate.py:251   (e o que EMBED_MODE controla)
+  * train_svm        src/utils/evaluate.py       (max_iter e embed_mode ja sao parametros)
+  * extract_features src/utils/evaluate.py       (idem embed_mode)
+  * _encode_pooled   src/utils/evaluate.py       (e quem le o embed_mode)
   * compute_metrics  src/metrics/classification.py:31
   * rotulos          1-indexed no fit, predict(feats)-1  (src/evaluate/svm.py:135)
 
@@ -55,10 +56,10 @@ Encoder: FLIM cru, sem checkpoint — mesmo caminho que o estagio 1 congela
 (src/modules/autoencoder_flim_module.py:155-168).
 
 Uso:
-    python tools/eval_svm_flim_flatten.py --dry-run
+    python -m src.evaluate.eval_svm_flim_flatten --dry-run
     OMP_NUM_THREADS=2 OMP_WAIT_POLICY=PASSIVE CUDA_VISIBLE_DEVICES=0 \
       conda run -n scalable_FLIM --no-capture-output \
-      python tools/eval_svm_flim_flatten.py --datasets larvae eggs protozoan --compare
+      python -m src.evaluate.eval_svm_flim_flatten --datasets larvae eggs protozoan --compare
 """
 
 import argparse
@@ -76,14 +77,13 @@ import torch
 
 warnings.filterwarnings("ignore")
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for _p in (_ROOT, os.path.join(_ROOT, "scripts")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+# Tres niveis: src/evaluate/<este arquivo> -> src/evaluate -> src -> raiz.
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from torch.utils.data import DataLoader                                 # noqa: E402
 
-import src.utils.evaluate as _ev                                        # noqa: E402
 from src.data_modules.datasets.dataset import DatasetParasite           # noqa: E402
 from src.data_modules.datasets.lejepa_dataset import _build_test        # noqa: E402
 from src.metrics.classification import compute_metrics                  # noqa: E402
@@ -94,7 +94,7 @@ from src.evaluate.constants import IMAGE_SIZE                           # noqa: 
 from src.utils.evaluate import (                                        # noqa: E402
     DEVICE, _OneHotDataset, extract_features, train_svm,
 )
-from autoencoder_flim_ray import _arch_json, _flim_weights_path         # noqa: E402
+from scripts.autoencoder_flim_ray import _arch_json, _flim_weights_path  # noqa: E402
 
 _PARASITE = {"eggs": "helminth-eggs", "larvae": "helminth-larvae",
              "protozoan": "protozoan-cysts"}
@@ -107,6 +107,9 @@ _OUT_CSV = os.path.join(_CURVE_DIR, "eval_svm_flim_flatten.csv")
 _REF_DIR = os.path.join(_CURVE_DIR, "dados_brutos")
 
 _METHOD = "SVM_FLIM_flatten27648_labcru"
+# Passado explicitamente para extract_features/train_svm — e a unica divergencia
+# em relacao a eval_avg_pooling_48d.py.
+_EMBED_MODE = "flatten"
 _FIELDS = ["method", "dataset", "split", "percentage", "n_train", "n_test",
            "dim", "imagenet_norm", "max_iter", "fit_status", "n_iter_max",
            "n_iter_sum", "n_sv", "kappa", "acc", "f1", "acc_raw", "fit_s",
@@ -187,12 +190,9 @@ def main() -> None:
                     help="Valida arch JSON, pesos e splits; nao ajusta SVM nenhum.")
     args = ap.parse_args()
 
-    # A UNICA divergencia em relacao a eval_avg_pooling_48d.py. Rebindar o modulo e
-    # o contrato declarado em evaluate.py:243-248 (nao e thread-safe e nao viaja
-    # para workers em processos separados — aqui o forward roda no processo pai).
-    _ev.EMBED_MODE = "flatten"
-
-    print(f"[CONTRATO] features=EMBED_MODE='{_ev.EMBED_MODE}' -> flatten(conv3) = 48*24*24")
+    # A UNICA divergencia em relacao a eval_avg_pooling_48d.py: o modo de embedding
+    # vai explicito em cada chamada do avaliador oficial (nada de estado global).
+    print(f"[CONTRATO] features=embed_mode='{_EMBED_MODE}' -> flatten(conv3) = 48*24*24")
     print(f"[CONTRATO] entrada =_build_test({IMAGE_SIZE}, imagenet_norm=False)")
     print(f"[CONTRATO] solver  = train_svm(..., max_iter={args.max_iter})")
     print(f"[CONTRATO] datasets={args.datasets} | device={DEVICE}\n")
@@ -228,7 +228,7 @@ def main() -> None:
             enc = _build_encoder(ds, sp)
             test_loader = _loader(ds, sp, args.percentages[0], "test", args.num_workers)
             t0 = time.perf_counter()
-            feats_te, y_true = extract_features(enc, test_loader)
+            feats_te, y_true = extract_features(enc, test_loader, embed_mode=_EMBED_MODE)
             extract_s = time.perf_counter() - t0
             print(f"[INFO] {ds} split{sp}: test n={len(y_true)} dim={feats_te.shape[1]} "
                   f"({extract_s:.1f}s)")
@@ -238,7 +238,8 @@ def main() -> None:
                 n_train = len(tr_loader.dataset)
 
                 t0 = time.perf_counter()
-                clf = train_svm(enc, tr_loader, max_iter=args.max_iter)
+                clf = train_svm(enc, tr_loader, max_iter=args.max_iter,
+                                embed_mode=_EMBED_MODE)
                 fit_s = time.perf_counter() - t0
 
                 y_pred = clf.predict(feats_te) - 1          # svm.py:135
