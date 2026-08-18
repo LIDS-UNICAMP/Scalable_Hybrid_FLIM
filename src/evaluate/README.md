@@ -23,6 +23,7 @@ Quem não é executável (`constants.py`, `eval_plotter.py`, `wandb_resolver.py`
 | [`ray_mlp_queue.py`](ray_mlp_queue.py) | fila com slots: vários experimentos **na mesma** GPU | idem, com state file resumível |
 | [`eval_avg_pooling_48d.py`](eval_avg_pooling_48d.py) | **FLIM cru, GAP 48-d**, LAB cru, solver convergido | `artifacts/plots/comparacao_flim_protocolo_original/eval_48d_norm_off.csv` |
 | [`eval_svm_flim_flatten.py`](eval_svm_flim_flatten.py) | **FLIM cru, conv3 achatado 27.648-d** — o protocolo original | `.../eval_svm_flim_flatten.csv` |
+| [`eval_autoencoder.py`](eval_autoencoder.py) | encoder do **autoencoder treinado**, um braço de peso (`lab` / `lab_flat`) por rodada | `results/eval_autoencoder_<weights>.csv` |
 | [`svm_real_flim.py`](svm_real_flim.py) | FLIM cru sob o protocolo do "Distill 4" | `results/real_FLIM_results.csv` |
 | [`svm_classification_flim.py`](svm_classification_flim.py) | sonda linear **depois** do treino supervisionado (Experimento 3) | `results/svm_relu2l_results.csv` |
 | [`svm_distillation.py`](svm_distillation.py) | students destilados, embedding cru do encoder | `results/svm_distill_*.csv` |
