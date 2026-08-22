@@ -39,6 +39,11 @@ O cabeçalho de `constants.py` documenta o que **não** foi unificado e por quê
 | [`retry_protozoan_experiment.py`](retry_protozoan_experiment.py) | re-treino SSL só de protozoan-cysts |
 | [`run_missing_mlp.py`](run_missing_mlp.py) | fine-tune MLP de `run_ids` específicos |
 | [`train_autoencoder_flim.py`](train_autoencoder_flim.py) | entrypoint de UMA run de autoencoder (o que o launcher invoca) |
+| **Crescimento SPiFiL (uma camada por rodada)** | |
+| [`spifil_growth_loop.py`](spifil_growth_loop.py) | protocolo completo: estágio 1/2, depois cresce+congela / solta, até o κ parar |
+| [`spifil_grow.py`](spifil_grow.py) | UMA rodada: corta uma camada SPiFiL do backbone treinado e grava em formato FLIM |
+| [`spifil_resnet_graft.py`](spifil_resnet_graft.py) | referência: enxerta blocos SPiFiL no meio de uma ResNet-18 |
+| [`check_spifil_growth.py`](check_spifil_growth.py) | check do crescimento: shape do decoder, regra de parada, layout dos pesos |
 | **Status e auditoria** | |
 | [`check_distill_conv_status.py`](check_distill_conv_status.py) | status da grade `next_layers_direct`: disco × W&B |
 | [`report_distill_disk_wandb.py`](report_distill_disk_wandb.py) | relatório de disco + W&B de toda a destilação |
