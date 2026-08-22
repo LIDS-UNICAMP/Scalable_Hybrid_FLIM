@@ -669,11 +669,19 @@ def load_FLIM_encoder_from_arch_dict(
     print("[INFO] FLIM Encoder loaded successfully")
 
 
-def freeze_encoder(model: nn.Module) -> None:
-    """Freeze all encoder parameters."""
+def freeze_encoder(model: nn.Module, except_last: bool = False) -> None:
+    """Freeze all encoder parameters.
+
+    ``except_last`` keeps the highest-indexed block (``conv{n_layers}``) trainable: the
+    growth curriculum's stage 3 trains ONLY the freshly grown layer, with every older
+    block fixed. Default False is the whole-encoder freeze every other caller expects.
+    """
     encoder = model.encoder if hasattr(model, "encoder") else model
     for param in encoder.parameters():
         param.requires_grad = False
+    if except_last:
+        for param in encoder.blocks[f"conv{encoder.n_layers}"].parameters():
+            param.requires_grad = True
 
 
 def unfreeze_encoder(model: nn.Module) -> None:

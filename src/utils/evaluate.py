@@ -252,10 +252,11 @@ EMBED_MODES = ("avgpool2d", "flatten")
 
 
 def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torch.Tensor:
-    """Run conv1→conv2→conv3, global-average-pool and flatten to ``[B, C]``.
+    """Percorre conv1→…→conv``n_layers``, faz GAP e achata para ``[B, C]``.
 
     Args:
-        model:  Encoder com ``.conv1``/``.conv2``/``.conv3``.
+        model:  Encoder com ``.conv1``…``.conv{n}``, onde ``n`` vem de
+                ``model.n_layers`` (default 3) — "conv3" não é mais o último.
         inputs: Batch ``[B, C, H, W]`` já no device do modelo.
         mode:   ``"avgpool2d"`` (default) ou ``"flatten"``; ``None`` usa
                 ``EMBED_MODE`` (o default do módulo).  Com ``"flatten"`` o
@@ -267,9 +268,9 @@ def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torc
         raise ValueError(
             f"embed mode inválido: {mode!r}; use um de {EMBED_MODES}"
         )
-    out = model.conv1(inputs)
-    out = model.conv2(out)
-    out = model.conv3(out)
+    out = inputs
+    for n in range(1, getattr(model, "n_layers", 3) + 1):
+        out = getattr(model, f"conv{n}")(out)
     if mode == "flatten":
         return out.flatten(start_dim=1).detach().cpu()
     return F.adaptive_avg_pool2d(out, 1).flatten(start_dim=1).detach().cpu()
