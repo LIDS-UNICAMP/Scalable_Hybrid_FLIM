@@ -4,8 +4,9 @@ Working notes from reading the SPiFiL sources at `/dados/home/moliveira/SPiFiL`.
 Companion to [`scripts/spifil_resnet_graft.py`](../scripts/spifil_resnet_graft.py).
 
 **Nothing on this page was executed.** Every number is what the code says it will
-do, not measured output. `spifil` is not installed in this environment yet —
-`pip install -e /dados/home/moliveira/SPiFiL`.
+do, not measured output. `spifil` 1.0.0 *is* installed in the `scalable_FLIM` env
+(editable, from `/dados/home/moliveira/SPiFiL`) — the script imports clean; it just
+has not been run on data.
 
 ---
 

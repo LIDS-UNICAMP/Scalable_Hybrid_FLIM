@@ -59,7 +59,8 @@ conv -> ReLU -> pool, sem skip. E uma mudanca de arquitetura, nao so de pesos.
 
 Pre-requisitos
 --------------
-    pip install -e /dados/home/moliveira/SPiFiL      # spifil ainda nao esta no env
+    # ja instalado no env scalable_FLIM; a linha abaixo so em env novo
+    pip install -e /dados/home/moliveira/SPiFiL
 
 Uso
 ---
