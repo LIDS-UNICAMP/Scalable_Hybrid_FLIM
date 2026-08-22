@@ -43,34 +43,39 @@ every ReLU cut the markers calibrated stops falling where it should (measured: �
 decision for the FLIM-init autoencoder, not a global inversion: the I-JEPA and distillation
 arms still need ``imagenet_norm=True``, because their teacher was trained with it.
 
-**Two-stage protocol.** A run is two chained trainings, each a separate W&B run:
+**Progressive-growth protocol.** A run is one stage of a chain, each stage a separate W&B run,
+the encoder gaining one conv layer per round:
 
   stage 1  ``--freeze-encoder``      encoder = FLIM, frozen; decoder random.
            The decoder learns to invert a *fixed* feature space, so it stops
            injecting garbage gradient into the FLIM kernels on the epochs where
            the decoder is still noise. The probe here is the "pure frozen FLIM"
            baseline, measured in the same run, split, seed, dataloader and probe.
-  stage 2  ``--init-ckpt <stage 1>``  encoder + decoder both trainable, decoder
-           starting from stage 1 rather than from noise.
+  stage 2  ``--init-ckpt <previous>``  encoder + decoder both trainable, decoder
+           starting from the previous round rather than from noise.
+  stage 3  ``--freeze-encoder --init-ckpt <previous>``  one extra conv layer grown on the
+           encoder, trained frozen on top of the previous round's backbone. The decoder
+           block indices shift by the layers gained; ``main()`` remaps them on load.
 
-           Δκ = ``stage{N}/svm_kappa`` (best) − the ``on_fit_start`` FLIM reference kappa,
-           which for stage 2 *is* the frozen-FLIM baseline: stage 1 never moves the encoder.
+           Δκ = ``probe/svm_kappa`` (best) − the ``on_fit_start`` FLIM reference kappa,
+           which for an unfrozen round *is* the frozen baseline: a frozen round never
+           moves the encoder.
 
-Read Δκ only after checking ``stage2/flim_drift``: Δκ > 0 with the drift exploding is
+Read Δκ only after checking ``probe/flim_drift``: Δκ > 0 with the drift exploding is
 not "FLIM adapted", it is "FLIM was erased and a random CNN trained in its place".
 
-Best checkpoint is selected by ``stage2/svm_kappa`` in stage 2 — the best *encoder* is the
-deliverable. Stage 1 cannot use that metric: its encoder never moves, so the kappa curve
-carries no signal about the decoder, only the SVM's own fit noise, and selecting its
-maximum would hand stage 2 a checkpoint picked by luck. Stage 1 therefore selects on
-``stage1/val_recon_loss`` (min), which is the only thing actually improving there.
+Best checkpoint is selected by ``probe/svm_kappa`` in **every** stage — the best *encoder* is
+the deliverable, and one selection metric is what makes the rounds comparable. In a frozen
+round that curve is only the SVM's own fit noise around a fixed embedding, so its argmax is
+close to arbitrary: read it as a measurement of the round's starting point, not as training.
 
-**Metric keys.** Every stage-dependent metric is prefixed ``stage1/`` or ``stage2/``, all of
-them derived from the single ``self._stage_prefix`` — including the checkpoint monitor, so
-the monitor string cannot drift away from the key the module logs (``EarlyStopping`` runs
-with ``strict=False`` and would silently train to ``max_epochs`` on a monitor that never
-appears). ``stage_epoch`` is the 0-based x axis of each stage, so the two curves start at the
-same origin instead of stage 2 resuming stage 1's axis.
+**Metric keys.** Every metric is prefixed ``probe/``, stage-independently, all of them derived
+from the single ``self._stage_prefix`` — including the checkpoint monitor, so the monitor
+string cannot drift away from the key the module logs (``EarlyStopping`` runs with
+``strict=False`` and would silently train to ``max_epochs`` on a monitor that never appears).
+The stage itself lives in the run name and the W&B config, not in the key, so every round of
+every stage plots on ONE curve. ``stage_epoch`` is the 0-based x axis of each stage, so the
+curves start at the same origin instead of a later stage resuming the earlier one's axis.
 """
 
 from __future__ import annotations
@@ -104,11 +109,9 @@ from src.metrics.classification import compute_metrics
 from src.utils.evaluate import _encode_pooled
 from src.models.autoencoder_resnet import AutoEncoderFLIM
 from src.models.models import (
-    PROTOZOAN_FLIM_ARCH,
     freeze_encoder,
     get_actual_channels_from_weights,
     load_FLIM_encoder,
-    load_FLIM_encoder_from_arch_dict,
     override_arch_channels,
     parse_architecture,
 )
@@ -134,24 +137,55 @@ LAB_AB_OFFSET = 128.0
 KAPPA_TOLERANCE = 0.01
 
 
+def _decoder_block_delta(state: dict, n_layers: int) -> int:
+    """How many decoder blocks are NEW relative to ``state`` — i.e. how many layers this
+    model grew past the checkpoint it resumes from.
+
+    ``ResNetDecoder`` builds its blocks deepest-first (autoencoder_resnet.py:110-117), so
+    the new blocks are indices ``0 .. delta-1`` and every old index is shifted by ``+delta``.
+    ONE formula, two callers: the state_dict remap in ``main`` and the stage-3 freeze policy.
+    """
+    pre = "model.decoder.blocks."
+    return n_layers - len({k[len(pre):].split(".")[0] for k in state if k.startswith(pre)})
+
+
+def _freeze_for_growth(model: nn.Module, delta: int) -> None:
+    """Stage 3 freeze policy: only the grown encoder layer and the ``delta`` new decoder
+    blocks keep learning; every older encoder block, older decoder block and ``to_image``
+    is frozen. ``to_image`` is always old — its width is channels[1], which growth never
+    touches.
+    """
+    freeze_encoder(model, except_last=True)
+    for param in model.decoder.blocks[delta:].parameters():
+        param.requires_grad = False
+    for param in model.decoder.to_image.parameters():
+        param.requires_grad = False
+
+
 class AutoEncoderFlimModule(pl.LightningModule):
     """FLIM-init AutoEncoder trained by reconstruction, probed by a one-vs-one SVM.
 
     Args:
         arch_json:          Path to the FLIM ``architecture.json``.
-        dataset:            ``"eggs"`` | ``"larvae"`` | ``"protozoan"``. protozoan loads
-                            ``PROTOZOAN_FLIM_ARCH``, matching the convention already used
-                            by ``ClassificationFlimModule`` — its trained weights live in
-                            ``ch24_32_48_a0.5_f5`` even though the real widths are 24/30/48,
-                            which ``get_actual_channels_from_weights`` then corrects.
+        dataset:            ``"eggs"`` | ``"larvae"`` | ``"protozoan"``. Only selects the
+                            split folders; the architecture always comes from ``arch_json``.
+                            protozoan's trained weights live in ``ch24_32_48_a0.5_f5`` even
+                            though the real widths are 24/30/48, which
+                            ``get_actual_channels_from_weights`` then corrects.
         flim_weights_path:  Directory with ``conv{n}-kernels.npy`` / ``conv{n}-bias.txt``.
         num_classes:        9 (eggs) / 2 (larvae) / 7 (protozoan). Used by the SVM probe only.
         imagenet_norm:      Whether the dataloader normalised the input. Drives target recovery.
                             Defaults to False — see the module docstring: the FLIM kernels
                             already embed the marker normalisation over LAB[0, 1].
         svm_probe_every:    Run the SVM probe every N validation epochs (1 = every epoch).
-        freeze_encoder_flag: Stage 1. Freezes the FLIM encoder so only the decoder learns.
-                            Stage 2 passes ``False`` through ``load_from_checkpoint``.
+        freeze_encoder_flag: Freezes the FLIM encoder so only the decoder learns.
+        freeze_spifil_layer: Ablation. Keeps the grafted SPiFiL filter bank (the LAST encoder
+                            block) exactly as SPiFiL cut it, even in an unfrozen stage. Off by
+                            default: once written into the layer those patches are ordinary
+                            conv weights, like the FLIM kernels the unfrozen stages fine-tune.
+        init_ckpt:          Checkpoint this round resumed its backbone from, "" for round 1.
+                            Recorded so ``stage`` can tell a first frozen round apart from a
+                            grown-and-frozen one.
     """
 
     def __init__(
@@ -171,6 +205,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
         svm_probe_every: int = 1,
         log_recon_every: int = 10,
         freeze_encoder_flag: bool = False,
+        freeze_spifil_layer: bool = False,
+        init_ckpt: str = "",
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -181,7 +217,13 @@ class AutoEncoderFlimModule(pl.LightningModule):
                 "the encoder with FLIM weights (encoder_init=flim)."
             )
 
-        arch = PROTOZOAN_FLIM_ARCH if dataset == "protozoan" else parse_architecture(arch_json)
+        # O `architecture.json` manda, inclusive para protozoan. O `PROTOZOAN_FLIM_ARCH`
+        # existia para nao confiar no json de ch24_30_48, mas os dois so divergem em
+        # `noutput_channels`/`nkernels_*` — campos que `override_arch_channels` sobrescreve
+        # logo abaixo com o que os `conv{n}-bias.txt` dizem. Ler o json e portanto
+        # equivalente, e e o que deixa uma arquitetura CRESCIDA (nlayers > 3, escrita por
+        # `scripts/spifil_grow.py`) chegar ate aqui em vez de ser trocada por 3 camadas.
+        arch = parse_architecture(arch_json)
         channels = get_actual_channels_from_weights(flim_weights_path, arch, in_channels)
         arch = override_arch_channels(arch, channels)
 
@@ -191,10 +233,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self.encoder_out_channels: int = channels[-1]
         self.channels: List[int] = channels
 
-        if dataset == "protozoan":
-            load_FLIM_encoder_from_arch_dict(self.model, arch, flim_weights_path, channels)
-        else:
-            load_FLIM_encoder(self.model, arch_json, flim_weights_path, channels)
+        load_FLIM_encoder(self.model, arch_json, flim_weights_path, channels)
 
         # Reference copy of the FLIM kernels, taken before any gradient touches them, so
         # stage 2 can measure how far it drifted from the prior the markers produced.
@@ -204,7 +243,54 @@ class AutoEncoderFlimModule(pl.LightningModule):
             n: p.detach().cpu().clone() for n, p in self.model.encoder.named_parameters()
         }
         if freeze_encoder_flag:
-            freeze_encoder(self.model)  # models.py:672 — resolves .encoder on its own
+            # Stage 1 (no init_ckpt): whole encoder frozen, whole decoder learning.
+            # Stage 3 (init_ckpt of a SHALLOWER model): only what is new learns — the grown
+            # encoder layer and the decoder blocks that came with it. Safe to decide here:
+            # the state_dict is laid on top afterwards (main:914) and `load_state_dict`
+            # copies data in-place, it never touches `requires_grad`.
+            delta = 0
+            if init_ckpt:
+                try:
+                    state = torch.load(init_ckpt, map_location="cpu").get("state_dict", {})
+                except Exception as exc:  # unreadable / not a Lightning checkpoint
+                    _log.warning("[stage 3] cannot read init_ckpt %s (%s) — falling back to "
+                                 "the stage-1 freeze (whole encoder)", init_ckpt, exc)
+                    state = {}
+                if not state:
+                    # `delta` stays 0 on purpose: an empty state would make the formula read
+                    # n_layers, i.e. "everything is new", the opposite of the intended fallback.
+                    _log.warning("[stage 3] init_ckpt %s yielded no state_dict — falling back to "
+                                 "the stage-1 freeze (whole encoder)", init_ckpt)
+                else:
+                    delta = _decoder_block_delta(state, self.model.encoder.n_layers)
+                    if delta == 0:
+                        _log.warning("[stage 3] init_ckpt %s already has %d decoder blocks: "
+                                     "nothing grew, so there is no 'new layer' to train alone "
+                                     "— falling back to the stage-1 freeze (whole encoder)",
+                                     init_ckpt, self.model.encoder.n_layers)
+            if delta >= 1:
+                _freeze_for_growth(self.model, delta)
+            else:
+                freeze_encoder(self.model)  # models.py:672 — resolves .encoder on its own
+        # AFTER the policy on purpose: as an ablation on a stage-3 round this re-freezes the
+        # grown FLIM layer, leaving only the new decoder block learning. Order is the rule.
+        if freeze_spifil_layer:
+            # Last block only = the grafted SPiFiL layer. `Encoder.__init__` registers each
+            # block both in `.blocks` and as `.conv{n}` (models.py:163-165), and both names
+            # point at the SAME Parameter objects, so freezing through one reaches both.
+            last = self.model.encoder.blocks[f"conv{self.model.encoder.n_layers}"]
+            for p in last.parameters():
+                p.requires_grad = False
+        if freeze_encoder_flag:
+            # Logged only after the ablation, so the line is what configure_optimizers:706
+            # will actually see. Without it a frozen round cannot be validated from the log.
+            trainable = [n for n, p in self.model.named_parameters() if p.requires_grad]
+            _log.info(
+                "[stage %d] freeze policy | delta=%+d | trainable=%d params in %d tensors: %s",
+                self.stage, delta,
+                sum(p.numel() for p in self.model.parameters() if p.requires_grad),
+                len(trainable), trainable,
+            )
 
         self.criterion = nn.BCEWithLogitsLoss()
 
@@ -215,18 +301,21 @@ class AutoEncoderFlimModule(pl.LightningModule):
 
         _log.info(
             "[AutoEncoderFlimModule] FLIM weights from %s | channels=%s | embed_dim=%d | "
-            "imagenet_norm=%s | probe_every=%d | stage=%d (encoder %s)",
+            "imagenet_norm=%s | probe_every=%d | stage=%d (encoder %s, spifil layer %s)",
             flim_weights_path, channels, self.encoder_out_channels,
             imagenet_norm, svm_probe_every,
-            1 if freeze_encoder_flag else 2, "frozen" if freeze_encoder_flag else "trainable",
+            self.stage, "frozen" if freeze_encoder_flag else "trainable",
+            "frozen" if freeze_spifil_layer else "trainable",
         )
 
-        # ONE source of truth for the stage. Every stage-dependent metric key, the checkpoint
-        # monitor and the run metadata are derived from it and never typed a second time: a
-        # monitor that does not match a logged key does NOT raise (EarlyStopping is built with
-        # strict=False, which is required for --svm-probe-every > 1), it just runs to
-        # max_epochs in silence.
-        self._stage_prefix = "stage1" if freeze_encoder_flag else "stage2"
+        # ONE source of truth for the metric namespace — and it is now the SAME string in every
+        # stage and every growth round, so the kappa key is always `probe/svm_kappa` and all
+        # rounds land on ONE comparable curve instead of one curve per stage. The stage identity
+        # lives in the run name and in the W&B config, not in the metric key. Everything below
+        # still derives from it by f-string and is never typed a second time: a monitor that does
+        # not match a logged key does NOT raise (EarlyStopping is built with strict=False, which
+        # is required for --svm-probe-every > 1), it just runs to max_epochs in silence.
+        self._stage_prefix = "probe"
 
         self._val_emb: List[Tensor] = []
         self._val_labels: List[Tensor] = []
@@ -243,22 +332,31 @@ class AutoEncoderFlimModule(pl.LightningModule):
 
     @property
     def stage(self) -> int:
-        return 1 if self.hparams.freeze_encoder_flag else 2
+        """1 = frozen encoder from FLIM · 2 = unfrozen end-to-end · 3 = grown by one layer and
+        trained frozen, resuming the backbone from the previous round's checkpoint."""
+        if not self.hparams.freeze_encoder_flag:
+            return 2
+        return 3 if self.hparams.init_ckpt else 1
 
     @property
     def stage_prefix(self) -> str:
-        """``"stage1"`` | ``"stage2"`` — the namespace of every metric this module logs."""
+        """``"probe"`` — the namespace of every metric this module logs, in every stage."""
         return self._stage_prefix
 
     @property
     def monitor_spec(self) -> Tuple[str, str, str]:
-        """``(monitor, mode, checkpoint filename)`` for this stage.
+        """``(monitor, mode, checkpoint filename)`` — bottleneck kappa, in every stage.
 
         Read by ``main()`` instead of being re-derived there, so the callbacks cannot end up
         watching a key that is never logged.
+
+        Kappa is the only selection signal at every stage so that all growth rounds are
+        comparable. The caveat, stated honestly: with a frozen encoder the embedding is
+        identical every epoch, so kappa moves only with the SVM's own fit noise (0.0675 spread
+        measured here across permutations of the same feature matrix). A frozen stage's kappa
+        is therefore a measurement of the round's starting point, not a training curve, and
+        which epoch wins is close to arbitrary.
         """
-        if self.hparams.freeze_encoder_flag:
-            return f"{self._stage_prefix}/val_recon_loss", "min", "best_recon"
         return f"{self._stage_prefix}/svm_kappa", "max", "best_kappa"
 
     @property
@@ -711,23 +809,30 @@ def _build_parser():
     p.add_argument("--recon-loss", default="bce_logits", choices=["bce_logits"],
                    help="Reconstruction loss. Cross-entropy over LAB in [0,1] as logits.")
     p.add_argument("--freeze-encoder", action="store_true", default=False,
-                   help="Stage 1: freeze the FLIM encoder so only the decoder learns. The "
-                        "probe then measures the untouched FLIM embedding — the baseline "
-                        "stage 2 is compared against.")
+                   help="Freeze the encoder so only the decoder learns. The probe then "
+                        "measures the encoder as this round received it. Combinable with "
+                        "--init-ckpt: that pair is a grown round trained frozen.")
     p.add_argument("--init-ckpt", default="",
-                   help="Stage 2: start from this stage-1 checkpoint instead of from a "
-                        "random decoder. Weights only — the optimizer, scheduler and epoch "
-                        "counter are NOT restored.")
+                   help="Resume the backbone from this checkpoint of the previous growth "
+                        "round instead of from a random decoder. Loaded with the decoder "
+                        "block indices shifted by the layers gained, and weights only — the "
+                        "optimizer, scheduler and epoch counter are NOT restored.")
+    p.add_argument("--freeze-spifil-layer", action="store_true", default=False,
+                   help="Keep the grafted SPiFiL filter bank (the last encoder block) exactly "
+                        "as SPiFiL cut it. Off by default: those patches are cut, not trained, "
+                        "but once written into the layer they are ordinary conv weights just "
+                        "like the FLIM kernels the unfrozen stages already fine-tune. Pass it "
+                        "for the ablation that keeps the bank fixed.")
     p.add_argument("--run-name", required=True)
     p.add_argument("--max-epochs", type=int, default=1000)
     p.add_argument("--warmup-epochs", type=int, default=10)
     p.add_argument("--patience", type=int, default=50,
-                   help="EarlyStopping patience, in epochs, on whichever metric the stage "
-                        "selects its checkpoint by — stage1/val_recon_loss in stage 1, "
-                        "stage2/svm_kappa in stage 2. Matches the patience "
+                   help="EarlyStopping patience, in epochs, on probe/svm_kappa — the one "
+                        "metric every stage selects by. Matches the patience "
                         "configs/default.yaml uses for the SSL runs.")
     p.add_argument("--embed-mode", default="avgpool2d", choices=["avgpool2d", "flatten"],
-                   help="How src.utils.evaluate reduces the conv3 map for the probe: "
+                   help="How src.utils.evaluate reduces the LAST encoder layer's map for "
+                        "the probe (conv3 on the ungrown model, conv{3+rounds} after growth): "
                         "global average pool to [B, C] (the heads' convention) or the "
                         "spatially flattened map. Governs the official evaluator too.")
     p.add_argument("--batch-size", type=int, default=32)
@@ -737,6 +842,12 @@ def _build_parser():
     p.add_argument("--image-size", type=int, default=200)
     p.add_argument("--svm-probe-every", type=int, default=1)
     p.add_argument("--log-recon-every", type=int, default=10)
+    p.add_argument("--log-every-n-steps", type=int, default=1,
+                   help="Com que frequencia o Lightning descarrega as metricas de step "
+                        "(train/lr, probe/train_recon_loss) para o logger. Default 1 = "
+                        "toda step. O default 10 do Lightning esconde a curva inteira "
+                        "nos splits pequenos: pct5 tem 124 imagens de treino, ou 4 steps "
+                        "por epoca, entao nada seria logado antes da terceira epoca.")
     # Default OFF, and only here: the FLIM kernels already embed the marker normalisation over
     # LAB[0, 1], so normalising again moves their effective bias and decalibrates every ReLU
     # cut (-0.33 kappa, measured). The I-JEPA/distillation arms keep it ON — their teacher was
@@ -749,6 +860,13 @@ def _build_parser():
     p.add_argument("--wandb-project", default="journal_02_2026_hybrid_FLIM")
     p.add_argument("--wandb-entity", default="ophira-ai")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--gpu", type=int, default=None,
+                   help="GPU index this run trains on. Omitted keeps Lightning's default "
+                        "(devices=1, the first visible GPU), which is what a single run wants; "
+                        "a launcher firing several experiments at once passes a different index "
+                        "per run so they do not collide. Replaces CUDA_VISIBLE_DEVICES on this "
+                        "path — everything a run needs travels as an explicit flag. Ignored when "
+                        "no CUDA device is present.")
     return p
 
 
@@ -761,12 +879,23 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
 
-    if args.freeze_encoder and args.init_ckpt:
-        parser.error("--freeze-encoder is stage 1 and --init-ckpt is stage 2 — pick one.")
     if args.init_ckpt and not os.path.isfile(args.init_ckpt):
         parser.error(f"--init-ckpt does not exist: {args.init_ckpt}")
 
-    stage = 1 if args.freeze_encoder else 2
+    # Checked here, before the datamodule spends minutes loading: a wrong index has to fail now.
+    if args.gpu is not None:
+        if not torch.cuda.is_available():
+            _log.info("no CUDA device visible, ignoring --gpu %d", args.gpu)
+            args.gpu = None
+        elif args.gpu not in range(torch.cuda.device_count()):
+            n = torch.cuda.device_count()
+            parser.error(f"--gpu {args.gpu} out of range: this machine has "
+                         f"{n} CUDA device(s), valid indices 0..{n - 1}")
+
+    # The two flags are orthogonal, not exclusive: frozen without a checkpoint is the first
+    # round (1), unfrozen is the end-to-end round (2), and frozen *with* a checkpoint is a
+    # grown round trained frozen on top of the previous one (3).
+    stage = 2 if not args.freeze_encoder else (3 if args.init_ckpt else 1)
     if stage == 2 and not args.init_ckpt:
         _log.warning(
             "Stage 2 without --init-ckpt: the encoder is unfrozen against a RANDOM decoder, "
@@ -817,32 +946,47 @@ def main() -> int:
         svm_probe_every=args.svm_probe_every,
         log_recon_every=args.log_recon_every,
         freeze_encoder_flag=args.freeze_encoder,
+        freeze_spifil_layer=args.freeze_spifil_layer,
+        init_ckpt=args.init_ckpt,
     )
 
+    # Weights only, deliberately. `trainer.fit(ckpt_path=...)` would also restore the epoch
+    # counter, the optimizer AND the scheduler — the new round would resume on the tail of the
+    # cosine at lr ~= eta_min=1e-5 and "converge" without having moved. It would also make the
+    # W&B logger resume the previous run, fusing two runs that must stay separate. And it could
+    # not work at all across a growth round: the model is a layer wider than the checkpoint.
+    # Building the module first is what rebuilds `_flim_ref` from the original FLIM kernels
+    # (the reference probe/flim_drift needs) and what leaves the newly grown layer holding the
+    # SPiFiL bank `load_FLIM_encoder` just wrote — the old state_dict is only laid on top.
+    module = AutoEncoderFlimModule(**module_kwargs)
     if args.init_ckpt:
-        # Weights only, deliberately. `trainer.fit(ckpt_path=...)` would also restore the
-        # epoch counter, the optimizer AND the scheduler — stage 2 would resume on the tail
-        # of the cosine at lr ~= eta_min=1e-5 and "converge" without having moved. It would
-        # also make the W&B logger resume stage 1's run, fusing two runs that must stay
-        # separate. load_from_checkpoint re-runs __init__ first, so _flim_ref is rebuilt
-        # from the original FLIM kernels (the reference {stage}/flim_drift needs) and only then
-        # is the stage-1 state_dict laid on top.
-        module = AutoEncoderFlimModule.load_from_checkpoint(args.init_ckpt, **module_kwargs)
-        _log.info("[stage 2] encoder + decoder initialised from %s", args.init_ckpt)
-    else:
-        module = AutoEncoderFlimModule(**module_kwargs)
+        state = torch.load(args.init_ckpt, map_location="cpu").get("state_dict", {})
+        # ResNetDecoder builds its blocks DEEPEST FIRST (autoencoder_resnet.py:108-116), so
+        # block 0 is always the bottleneck's up-block: gaining a layer pushes every old index
+        # up by `delta`. A name-based strict=False load would hit a shape mismatch on each of
+        # them and silently throw the whole trained decoder away. `to_image` keeps its name —
+        # its width is channels[1], which growth does not touch.
+        pre = "model.decoder.blocks."
+        delta = _decoder_block_delta(state, module.model.encoder.n_layers)
+        remapped = {}
+        for k, v in state.items():
+            if k.startswith(pre):
+                idx, rest = k[len(pre):].split(".", 1)
+                k = f"{pre}{int(idx) + delta}.{rest}"
+            remapped[k] = v
+        missing, unexpected = module.load_state_dict(remapped, strict=False)
+        _log.info(
+            "[stage %d] backbone from %s | decoder block shift delta=%+d | "
+            "missing=%d (left at their FLIM/SPiFiL init) unexpected=%d",
+            stage, args.init_ckpt, delta, len(missing), len(unexpected),
+        )
 
-    # Which curve carries the signal depends on the stage, so both callbacks follow it.
-    #
-    # Stage 2 moves the encoder, so the best *encoder* — highest probe kappa — is the
-    # deliverable, and stopping on that same metric is right.
-    #
-    # Stage 1 must not use kappa: the encoder is frozen, the embedding is byte-identical
-    # every epoch, and the only thing that moves the probe is the SVM's own fit noise
-    # (measured on protozoan/split1/pct5: kappa spread 0.0675 across permutations of the
-    # same feature matrix). Selecting that maximum would hand stage 2 a checkpoint chosen
-    # by luck, and stopping on it would stop on noise. stage1/val_recon_loss is what actually
-    # improves while the decoder learns to invert a fixed feature space.
+    # Both callbacks follow the bottleneck kappa, in every stage: the best *encoder* is the
+    # deliverable of every growth round, and one metric for all of them is what makes the
+    # rounds comparable. In a frozen round that curve is the SVM's fit noise around a fixed
+    # embedding (0.0675 spread, measured on protozoan/split1/pct5 across permutations of the
+    # same feature matrix), so its argmax is close to arbitrary — read that round's kappa as
+    # the starting point it measured, not as a training curve. See monitor_spec.
     #
     # strict=False: with --svm-probe-every > 1 the kappa is missing on the epochs the probe
     # skips, and a strict callback aborts the run instead of waiting for the next one. That
@@ -863,8 +1007,10 @@ def main() -> int:
     early_stop = EarlyStopping(
         monitor=monitor, mode=mode, patience=args.patience, strict=False,
     )
-    _log.info("[stage %d] selection + early stop on %s (%s) -> %s.ckpt | metric prefix %s/",
-              module.stage, monitor, mode, ckpt_name, module.stage_prefix)
+    _log.info("[stage %d] selection + early stop on %s (%s) -> %s.ckpt | metric prefix %s/ | "
+              "device %s",
+              module.stage, monitor, mode, ckpt_name, module.stage_prefix,
+              "default" if args.gpu is None else f"cuda:{args.gpu}")
 
     logger_list: list = []
     if args.wandb:
@@ -877,7 +1023,8 @@ def main() -> int:
             wandb_logger.experiment.tags = tuple(dict.fromkeys(
                 list(wandb_logger.experiment.tags or ())
                 + ["journal_02_2026_hybrid_FLIM", "autoencoder", "flim_init", "unsupervised",
-                   "stage1_frozen" if stage == 1 else "stage2_fine_tune"]
+                   {1: "stage1_frozen", 2: "stage2_fine_tune",
+                    3: "stage3_grown_frozen"}[stage]]
             ))
             wandb_logger.log_hyperparams({
                 "dataset": args.dataset,
@@ -905,17 +1052,20 @@ def main() -> int:
                 "embed_dim": module.encoder_out_channels,
                 "arch_json": args.arch_json,
                 "flim_weights_path": args.flim_weights_path,
-                # Stage lineage. `stage` groups the board; `parent_run` pairs each stage-2
-                # run with the stage-1 run whose kappa is its baseline, so Δκ is computable
-                # straight from W&B without opening a checkpoint.
+                # Stage lineage — the metric keys no longer carry it, so the board reads it
+                # from here. `stage` groups the board; `parent_run` pairs each round with the
+                # round whose kappa is its baseline, so Δκ is computable straight from W&B
+                # without opening a checkpoint.
                 "stage": stage,
                 "embed_mode": args.embed_mode,
-                "encoder_frozen": stage == 1,
-                "encoder_trainable": stage == 2,
+                "encoder_frozen": args.freeze_encoder,
+                "encoder_trainable": not args.freeze_encoder,
+                "freeze_spifil_layer": args.freeze_spifil_layer,
                 "init_ckpt": args.init_ckpt,
                 "parent_run": _parent_run_from_ckpt(args.init_ckpt),
                 "ckpt_monitor": monitor,
                 "stage_metric_prefix": module.stage_prefix,
+                "gpu": args.gpu,
             })
             logger_list.append(wandb_logger)
         except Exception as _e:
@@ -924,9 +1074,11 @@ def main() -> int:
     trainer = pl.Trainer(
         max_epochs=args.max_epochs,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=1, callbacks=[checkpoint_cb, early_stop],
+        # Sem --gpu, devices=1 = a primeira GPU visível; com --gpu, essa GPU e só ela.
+        devices=1 if args.gpu is None else [args.gpu],
+        callbacks=[checkpoint_cb, early_stop],
         logger=logger_list or False,
-        log_every_n_steps=10, enable_progress_bar=True, deterministic=False,
+        log_every_n_steps=args.log_every_n_steps, enable_progress_bar=True, deterministic=False,
     )
 
     # Crash resume of *this* run only, never the stage-1 -> stage-2 handoff: each stage
@@ -1014,9 +1166,9 @@ def _save_metadata(args, module, output_dir, ckpt_dir, status="ok", error="",
         "flim_weights_path": args.flim_weights_path,
         "ckpt_dir": ckpt_dir,
         "best_ckpt": best_ckpt,
-        # Stage 1 selects on stage1/val_recon_loss, so its checkpoint score is not a kappa. Its
-        # probe kappa is the frozen-FLIM baseline instead — the number stage 2 is read
-        # against — which keeps this key meaningful for both stages.
+        # The monitor is probe/svm_kappa in every stage now, so best_score is always a kappa.
+        # For a frozen round that maximum is fit noise (see monitor_spec), so what is recorded
+        # there is the on_fit_start baseline instead — the number the next round is read against.
         "best_val_svm_kappa": (
             best_score if not args.freeze_encoder
             else (module.baseline_metrics or {}).get("kappa", float("nan"))
