@@ -758,6 +758,120 @@ artifacts/autoencoder_resnet_init_flim/
 
 ---
 
+## Crescimento SPiFiL — uma camada por rodada
+
+O encoder não nasce com a profundidade final: ele começa com as 3 camadas do FLIM e **ganha uma
+camada por rodada**, cortada pelo SPiFiL do backbone que já foi treinado. A pergunta que o
+experimento responde é se cada camada nova paga o próprio custo — o laço mede o κ do probe SVM
+depois de cada rodada e para sozinho quando o κ deixa de melhorar.
+
+Protocolo em [`docs/spifil_growth.md`](docs/spifil_growth.md); resultados de teste consolidados em
+[`docs/table_result_stages.md`](docs/table_result_stages.md).
+
+### O laço
+
+```
+stage1                encoder FLIM congelado, só o decoder treina
+stage2                tudo destravado
+por rodada r = 1..max-rounds:
+  round<r>_grow       spifil_grow.py corta 1 camada do backbone JÁ TREINADO (sem gradiente)
+  round<r>_stage3     só a camada nova + o bloco novo do decoder  ← some com --unfrozen-after-stage-two
+  round<r>_stage4     tudo destravado
+  lê o κ do stage4 e decide se continua
+```
+
+`--unfrozen-after-stage-two` e `--head-finetune` reescrevem a rodada, cada uma do seu jeito, e são
+**mutuamente exclusivas**. Com `--head-finetune` a rodada troca `stage3` + `stage4` por um estágio
+só, `round<r>_head`: fine-tune **supervisionado** com a `Head` do treinador, tudo destravado.
+
+O `grow` da rodada *r* come o `best_kappa.ckpt` do `stage4` da rodada *r−1* (e o do `stage2` na
+rodada 1). Isso é o ponto do protocolo: a camada tem que sair do backbone treinado, não do
+backbone de três camadas original.
+
+### As variantes
+
+Ablação de um fator por braço, todos com `--one-per-class --impurities --pool-stride 2 --max-rounds 2`
+e percentuais 5 e 50 — o que muda é uma coisa por braço:
+
+| Sessão | `--work-dir` | O que isola |
+|---|---|---|
+| `g5_feat` | `artifacts/spifil_growth/g5_in_feature` | superpixel na **grade de features** 24×24 |
+| `g5_img` | `artifacts/spifil_growth/g5_in_image` | superpixel na **imagem LAB** 200×200 (o default) |
+| `g5_ft` | `artifacts/spifil_growth/g5_finetune` | igual ao `g5_img`, **sem** o estágio 3 congelado |
+| `g5_head` | `artifacts/spifil_growth/g5_head` | igual ao `g5_img`, com a rodada trocada por **fine-tune supervisionado do perceptron** |
+
+```bash
+tmux new -d -s g5_feat "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_in_feature --percentages 5 50 --spifil-in-feature --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_in_feature.log"
+
+tmux new -d -s g5_img "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_in_image --percentages 5 50 --spifil-in-image --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_in_image.log"
+
+tmux new -d -s g5_ft "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_finetune --percentages 5 50 --spifil-in-image --unfrozen-after-stage-two --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_finetune.log"
+
+tmux new -d -s g5_head "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_head --percentages 5 50 --spifil-in-image --head-finetune --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_head.log"
+```
+
+O `python3` aqui depende do PATH que o servidor tmux herdou. Se a sessão morrer em silêncio, troque
+pelo caminho direto do env — a mesma armadilha da seção do AutoEncoder acima.
+
+### As flags que mudam o método
+
+| Flag | Default do `spifil_grow.py` | O que muda |
+|---|---|---|
+| `--spifil-in-image` | **é o default** | SLIC na imagem LAB 200×200, sementes reprojetadas para a grade 24×24. Passar a flag não muda nada — só deixa o default explícito no comando e no log |
+| `--spifil-in-feature` | — | SLIC na própria grade 24×24, com teto de superpixels. **Mutuamente exclusiva** com a de cima |
+| `--one-per-class` | **já é o default** | uma imagem por classe (9 em eggs, 2 em larvae, 7 em protozoan) em vez da fatia de até 200 imagens |
+| `--impurities` | `--no-impurities` | **desliga a máscara**: o SLIC segmenta o quadro inteiro e as sementes caem também no fundo e na impureza |
+| `--pool-stride 2` | `1`, sem pooling | põe `MaxPool2d(3×3, stride=2)` na camada nova: a grade cai de 24×24 para 11×11 |
+| `--unfrozen-after-stage-two` | — | remove o `round<r>_stage3`: a camada nova entra e tudo treina junto desde o passo 0 |
+| `--head-finetune` | — | troca `stage3` + `stage4` por um `round<r>_head` supervisionado, com a `Head` do treinador. Exclusiva com a de cima |
+
+Em nenhum dos dois modos o SPiFiL "vê" a imagem: os kernels são **sempre** recortados do mapa de
+features do encoder já treinado, `(48, 24, 24)`. A flag decide só onde o SLIC roda para escolher as
+*posições* das sementes — e, portanto, quantas sementes existem.
+
+`--impurities` não é cosmético aqui: é o que torna o `--spifil-in-feature` viável. Com a máscara
+ligada a grade 24×24 rende ~12 posições por imagem, o que com `--one-per-class` dá N ≈ 185 contra
+D = 48·3² = 432, e o `spifil_grow.py` sai com código 3 (orçamento de covariância esgotado). Sem a
+máscara a área vira as 576 posições e N sobe para ~1287.
+
+`--pool-stride 2` encolhe em **4,76×** o embedding que o SVM lê (576 → 121 posições) e, de quebra,
+funde sementes: derruba o N da rodada seguinte justo quando o D está subindo.
+
+### Seleção e parada
+
+| | Valor |
+|---|---|
+| Checkpoint de cada estágio | `best_kappa.ckpt`, monitor `stage<N>/svm_kappa` (max) |
+| Sinal do veredito | `best_val_svm_kappa` do `run_metadata.json`, só do `stage4` — o `stage3` nunca entra na decisão |
+| Com `--head-finetune` | o monitor vira `probe/head_kappa`, gravado sob a **mesma** chave. Ressalva escrita no próprio código (`scripts/spifil_growth_loop.py:358-363`): o κ do `stage2` vem da sonda SVM sobre o gargalo e o do `round<r>_head` vem da Head supervisionada — o `should_stop` compara os dois como se fossem a mesma métrica, e não são. Entre rodadas, aí sim, é a mesma métrica |
+| Parada por estagnação | `--kappa-tolerance 0.01`, `--rounds-patience 1`: uma rodada sem bater o melhor κ por mais de 0.01 já encerra |
+| Parada por orçamento | `spifil_grow.py` sai com código 3 quando N ≤ D. Não é falha: é o método dizendo que não há mais camada a cortar |
+| Teto de rodadas | `--max-rounds 2` (default do script: 4) |
+
+### Grade
+
+3 datasets × 3 splits × {5%, 50%} = **18 braços**. Com `--gpus 1 2 3 --max-concurrent-per-gpu 2`
+rodam 6 ao mesmo tempo, em 3 ondas. Processos de treino por braço: **6** com o estágio 3
+(`2 + 2 × max-rounds`), **4** com `--unfrozen-after-stage-two` ou `--head-finetune`.
+
+### Layout de saída
+
+```
+artifacts/spifil_growth/<work-dir>/
+  <dataset>_split<N>_pct<P>/
+    stage1/  stage2/
+    round<r>_grow/       ← architecture.json + conv<n>-kernels.npy + spifil_bundle/
+    round<r>_stage3/     ← ausente com --unfrozen-after-stage-two e com --head-finetune
+    round<r>_stage4/     ← vira round<r>_head/ com --head-finetune
+```
+
+Cada diretório de estágio tem `checkpoints/{best_kappa.ckpt, last.ckpt}`, `run_metadata.json` e
+`wandb/`. Os `round<r>_grow/` **não** têm checkpoint — guardam os kernels da camada nova, e apagá-los
+inutiliza todos os checkpoints das rodadas seguintes, que os releem pelo caminho gravado nos hparams.
+
+---
+
+
 ## Classical Classifiers Evaluation (kNN / RF / LightGBM / GP / QDA)
 
 Evaluates frozen LeJEPA encoder embeddings with classical classifiers.

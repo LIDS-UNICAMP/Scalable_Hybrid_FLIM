@@ -35,6 +35,8 @@ DistillationLoss
 """
 from __future__ import annotations
 
+import argparse
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -105,10 +107,15 @@ class FrozenTeacher(nn.Module):
             ``"facebook/ijepa_vith14_1k"``.
     """
 
-    def __init__(self, model_id: str = "facebook/ijepa_vith14_1k") -> None:
+    def __init__(self, model_id: str = "facebook/ijepa_vith14_1k",
+                 frozen: bool = True) -> None:
         super().__init__()
         self._encoder = IJEPAEncoder(model_id=model_id)
-        self._freeze()
+        self.frozen: bool = frozen
+        if frozen:
+            self._freeze()
+        else:
+            self._encoder.requires_grad_(True)
         self.embed_dim: int = TEACHER_DIM
         self.image_size: int = TEACHER_IMAGE_SIZE
 
@@ -116,21 +123,26 @@ class FrozenTeacher(nn.Module):
         self._encoder.eval()
         self._encoder.requires_grad_(False)
 
-    @torch.no_grad()
     def forward(self, pixel_values: Tensor) -> Tensor:
-        """Extract frozen I-JEPA embeddings.
+        """Extract I-JEPA embeddings.
 
         Args:
             pixel_values: ``(B, 3, 224, 224)`` ImageNet-normalised tensors.
 
         Returns:
-            ``(B, 1280)`` mean-pooled patch embeddings on CPU.
+            ``(B, 1280)`` mean-pooled patch embeddings — on CPU when frozen,
+            on the teacher device (grad-tracked) when unfrozen.
         """
-        return self._encoder.extract_features(pixel_values)
+        if self.frozen:
+            with torch.no_grad():
+                return self._encoder.extract_features(pixel_values)
+        # Unfrozen: bypass extract_features, whose @torch.no_grad() and .cpu()
+        # would sever the graph.
+        return self._encoder._model(pixel_values.to(self._encoder.device))
 
     def train(self, mode: bool = True):
-        """Override: always stay in eval mode regardless of trainer calls."""
-        return super().train(False)
+        """Stay in eval mode while frozen; follow the trainer once unfrozen."""
+        return super().train(mode and not self.frozen)
 
 
 class FrozenTeacherCheckpointMixin:
@@ -143,18 +155,28 @@ class FrozenTeacherCheckpointMixin:
 
     #: state_dict prefixes persisted to disk; everything else (the teacher) is
     #: reconstructed from the live module on load.
-    PERSISTED_PREFIXES = ("student.", "proj_kd.")
+    PERSISTED_PREFIXES = ("student.", "proj_kd.", "cls_head.", "teacher_cls_head.")
+
+    def _persisted_prefixes(self) -> tuple:
+        # An unfrozen teacher has trained weights — dropping them would silently
+        # discard the fine-tuning.
+        teacher = getattr(self, "teacher", None)
+        if teacher is not None and not getattr(teacher, "frozen", True):
+            return self.PERSISTED_PREFIXES + ("teacher.",)
+        return self.PERSISTED_PREFIXES
 
     def on_save_checkpoint(self, checkpoint: dict) -> None:
+        keep = self._persisted_prefixes()
         checkpoint["state_dict"] = {
             k: v for k, v in checkpoint["state_dict"].items()
-            if k.startswith(self.PERSISTED_PREFIXES)
+            if k.startswith(keep)
         }
 
     def on_load_checkpoint(self, checkpoint: dict) -> None:
+        keep = self._persisted_prefixes()
         checkpoint["state_dict"].update(
             (k, v) for k, v in self.state_dict().items()
-            if not k.startswith(self.PERSISTED_PREFIXES)
+            if not k.startswith(keep) and k not in checkpoint["state_dict"]
         )
 
 
@@ -222,6 +244,169 @@ class CosineDistillationLoss(nn.Module):
     def forward(self, student_proj: Tensor, teacher_emb: Tensor) -> Tensor:
         teacher_emb = teacher_emb.to(student_proj.device)
         return (1.0 - F.cosine_similarity(student_proj, teacher_emb, dim=-1)).mean()
+
+
+def kd_loss(logits_s: Tensor, logits_t: Tensor, targets: Tensor,
+            T: float = 4.0, alpha: float = 0.7) -> Tensor:
+    """Hybrid knowledge-distillation loss on class logits.
+
+        L = (1 - alpha) * CE(logits_s, targets) + alpha * KL(s/T ‖ t/T) * T²
+
+    Used by the ``--fine_tune True`` path, where the student learns the label
+    directly (CE) while still matching the teacher's soft class distribution.
+
+    Args:
+        logits_s: ``(B, C)`` student class logits.
+        logits_t: ``(B, C)`` teacher class logits (soft targets).
+        targets:  ``(B,)`` ground-truth class indices.
+        T:        Softmax temperature for the KL term.
+        alpha:    Weight of the KL term; ``1 - alpha`` weights the CE term.
+
+    Returns:
+        Scalar loss.
+    """
+    logits_t = logits_t.to(logits_s.device)
+    ce = F.cross_entropy(logits_s, targets)
+    kl = F.kl_div(
+        F.log_softmax(logits_s / T, dim=1),
+        F.softmax(logits_t / T, dim=1),
+        reduction="batchmean",
+    ) * (T ** 2)
+    return (1 - alpha) * ce + alpha * kl
+
+
+# ── Single point of configuration shared by every distillation module ─────────
+#
+# All four distillation LightningModules declare the same flags by calling
+# ``add_distill_flags`` and resolve them through ``resolve_distill_flags``.  The
+# new user-facing flags are a façade over hyper-parameters the modules already
+# have (``encoder_init``, ``distillation_type``), so nothing is duplicated per
+# model.
+
+def _str2bool(value: str) -> bool:
+    lowered = str(value).strip().lower()
+    if lowered in ("true", "t", "yes", "y", "1"):
+        return True
+    if lowered in ("false", "f", "no", "n", "0"):
+        return False
+    raise argparse.ArgumentTypeError(f"expected True or False, got {value!r}")
+
+
+def add_distill_flags(parser: "argparse.ArgumentParser") -> "argparse.ArgumentParser":
+    """Declare the shared distillation flags on *parser*.
+
+    Adds the six flags every distillation model must accept:
+    ``--init_flim`` / ``--init_random``, ``--fine_tune``, ``--loss_cos`` /
+    ``--loss_mse``, ``--teacher_frozen`` / ``--teacher_unfrozen``.
+    """
+    g = parser.add_argument_group("distillation (shared)")
+
+    init = g.add_mutually_exclusive_group()
+    init.add_argument("--init_flim", action="store_true", default=False,
+                      help="Initialise the student encoder with FLIM weights "
+                           "(requires --flim-weights-path).")
+    init.add_argument("--init_random", action="store_true", default=False,
+                      help="Initialise the student encoder randomly.")
+
+    g.add_argument("--fine_tune", type=_str2bool, default=None,
+                   metavar="True|False",
+                   help="False: train on the teacher embedding only, with "
+                        "--loss_cos or --loss_mse. True: train on the label "
+                        "with the hybrid kd_loss (CE + KL).")
+
+    emb = g.add_mutually_exclusive_group()
+    emb.add_argument("--loss_cos", action="store_true", default=False,
+                     help="Embedding loss = 1 - cosine. Only with --fine_tune False.")
+    emb.add_argument("--loss_mse", action="store_true", default=False,
+                     help="Embedding loss = MSE. Only with --fine_tune False.")
+
+    tch = g.add_mutually_exclusive_group()
+    tch.add_argument("--teacher_frozen", action="store_true", default=False,
+                     help="Teacher stays in eval with requires_grad=False.")
+    tch.add_argument("--teacher_unfrozen", action="store_true", default=False,
+                     help="Teacher trains alongside the student.")
+
+    g.add_argument("--kd_temperature", type=float, default=None,
+                   help="Temperature T of the kd_loss KL term (--fine_tune True). "
+                        "Default: 4.0.")
+    g.add_argument("--kd_alpha", type=float, default=None,
+                   help="Weight alpha of the kd_loss KL term (--fine_tune True). "
+                        "Default: 0.7.")
+    return parser
+
+
+def distill_run_tags(hparams) -> list:
+    """W&B tags derived from the shared flags.
+
+    Makes a run's configuration readable at a glance in the W&B run list, which
+    the ``run_name`` alone does not guarantee for runs launched by the ray
+    scripts.
+
+    Args:
+        hparams: the module's ``self.hparams``.
+
+    Returns:
+        ``["init_flim", "loss_mse", "teacher_frozen"]`` and the like.
+    """
+    loss = {"direct": "loss_mse", "direct_cosine": "loss_cos"}.get(
+        hparams.distillation_type, hparams.distillation_type)
+    return [
+        f"init_{hparams.encoder_init}",
+        loss,
+        "teacher_frozen" if hparams.teacher_frozen else "teacher_unfrozen",
+    ]
+
+
+def resolve_distill_flags(args: "argparse.Namespace") -> dict:
+    """Validate the shared flags and resolve them into module kwargs.
+
+    Raises:
+        SystemExit: on any invalid combination, with an explicit message —
+            an invalid run must fail loudly instead of training something else.
+
+    Returns:
+        ``{"encoder_init", "distillation_type", "fine_tune", "teacher_frozen",
+        "kd_temperature", "kd_alpha"}``.
+    """
+    def fail(msg: str):
+        raise SystemExit(f"[distill-flags] {msg}")
+
+    # No new flag touched → legacy invocation; --encoder-init / --distillation-type
+    # stay in charge and nothing is overridden.
+    if not (args.init_flim or args.init_random or args.fine_tune is not None
+            or args.loss_cos or args.loss_mse
+            or args.teacher_frozen or args.teacher_unfrozen
+            or args.kd_temperature is not None or args.kd_alpha is not None):
+        return {}
+
+    if args.init_flim == args.init_random:
+        fail("choose exactly one of --init_flim / --init_random.")
+    if args.teacher_frozen == args.teacher_unfrozen:
+        fail("choose exactly one of --teacher_frozen / --teacher_unfrozen.")
+    if args.fine_tune is None:
+        fail("--fine_tune True|False is required.")
+
+    if args.fine_tune:
+        if args.loss_cos or args.loss_mse:
+            fail("--loss_cos / --loss_mse are embedding losses and only apply "
+                 "to --fine_tune False; with --fine_tune True the loss is kd_loss.")
+        distillation_type = "kd_hybrid"
+    else:
+        if args.loss_cos == args.loss_mse:
+            fail("with --fine_tune False, choose exactly one of --loss_cos / --loss_mse.")
+        distillation_type = "direct_cosine" if args.loss_cos else "direct"
+
+    if args.init_flim and not getattr(args, "flim_weights_path", None):
+        fail("--init_flim requires --flim-weights-path.")
+
+    return {
+        "encoder_init":      "flim" if args.init_flim else "random",
+        "distillation_type": distillation_type,
+        "fine_tune":         bool(args.fine_tune),
+        "teacher_frozen":    bool(args.teacher_frozen),
+        "kd_temperature":    4.0 if args.kd_temperature is None else float(args.kd_temperature),
+        "kd_alpha":          0.7 if args.kd_alpha is None else float(args.kd_alpha),
+    }
 
 
 class ConvDistillationProjectionHead(nn.Module):

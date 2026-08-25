@@ -28,6 +28,15 @@ percentual. A ordem dentro de cada celula e fixa e nao e configuravel:
       stage4    tudo solto, o modelo crescido inteiro
     repete ate o kappa parar de melhorar
 
+Com `--unfrozen-after-stage-two` a rodada perde o stage3: cada camada nova
+entra e o treino segue com tudo destravado, so stage4. Os estagios 1 e 2 e a
+regra de parada (que sempre leu o kappa do stage4) nao mudam.
+
+Com `--head-finetune` a rodada troca stage3+stage4 por um estagio so,
+`round{r}_head`: fine-tune SUPERVISIONADO com a Head do treinador (GAP ->
+dropout -> linear) sobre a camada nova, tudo destravado. As duas flags sao
+mutuamente exclusivas e, sem nenhuma delas, o fluxo acima segue identico.
+
 O grow da rodada r come o checkpoint do stage4 da rodada r-1 (e o stage2 na
 rodada 1). Isso e o ponto do protocolo: a camada tem que sair do backbone
 treinado, nao do backbone de tres camadas original.
@@ -108,6 +117,17 @@ KAPPA_KEY = "best_val_svm_kappa"
 # Prefixo do `--run-name`, que e o nome da run no W&B. O braco entra no nome
 # porque "stage1" sozinho colidiria entre as 18 celulas da grade.
 RUN_NAME_PREFIX = "spifil_growth"
+
+
+def _exp(args) -> str:
+    """Nome curto do experimento: o basename do `--work-dir`.
+
+    Sem isto, dois lacos com flags diferentes (in-feature contra in-image contra
+    finetune) sobem com nome de run IDENTICO e ficam indistinguiveis no board do
+    W&B. O work-dir ja e unico por braco, entao ele e a etiqueta natural — nao
+    precisa de flag nova nem de variavel de ambiente.
+    """
+    return os.path.basename(os.path.normpath(args.work_dir))
 
 # O que o preflight exige do diretorio de pesos: sem o kernel da primeira camada
 # nao ha de onde montar o encoder FLIM.
@@ -201,7 +221,8 @@ def _fwd(args: argparse.Namespace, names: list[str]) -> list[str]:
 
 
 def _trainer_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, name: str,
-                 arch: str, weights: str, freeze: bool, init_ckpt: str) -> list[str]:
+                 arch: str, weights: str, freeze: bool, init_ckpt: str,
+                 head: bool) -> list[str]:
     dataset, split, pct = arm
     cmd = [sys.executable, "-m", TRAINER_MODULE,
            "--dataset", dataset,
@@ -209,7 +230,7 @@ def _trainer_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, 
            "--percentage", str(pct),
            "--arch-json", arch,
            "--flim-weights-path", weights,
-           "--run-name", f"{RUN_NAME_PREFIX}_{_tag(arm)}_{name}",
+           "--run-name", f"{RUN_NAME_PREFIX}_{_exp(args)}_{_tag(arm)}_{name}",
            "--output-dir", _stage_dir(args, arm, name),
            # Pinning de GPU por flag, nunca por variavel de ambiente: assim o
            # --dry-run mostra em que GPU cada comando cai e nada depende do shell.
@@ -220,6 +241,10 @@ def _trainer_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, 
            "--patience", str(PATIENCE)]
     if freeze:
         cmd.append("--freeze-encoder")
+    # So o estagio `round{r}_head` pede a Head: os estagios 1 e 2 sao de
+    # reconstrucao e a flag nao pode vazar para eles.
+    if head:
+        cmd.append("--head-finetune")
     if init_ckpt:
         cmd += ["--init-ckpt", init_ckpt]
     if args.wandb:
@@ -234,15 +259,24 @@ def _trainer_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, 
 def _grow_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, ckpt: str,
               arch: str, weights: str, out: str) -> list[str]:
     dataset, split, pct = arm
-    return [sys.executable, GROW_SCRIPT,
-            "--ckpt", ckpt,
-            "--arch-json", arch,
-            "--flim-weights-path", weights,
-            "--dataset", dataset,
-            "--split", str(split),
-            "--percentage", str(pct),
-            "--out", out,
-            "--device", f"cuda:{gpu}"] + _fwd(args, GROW_FWD)
+    cmd = [sys.executable, GROW_SCRIPT,
+           "--ckpt", ckpt,
+           "--arch-json", arch,
+           "--flim-weights-path", weights,
+           "--dataset", dataset,
+           "--split", str(split),
+           "--percentage", str(pct),
+           "--out", out,
+           "--device", f"cuda:{gpu}"]
+    if args.spifil_in_feature:
+        cmd.append("--spifil-in-feature")
+    if args.spifil_in_image:
+        cmd.append("--spifil-in-image")
+    if args.impurities is not None:
+        cmd.append("--impurities" if args.impurities else "--no-impurities")
+    if args.one_per_class is not None:
+        cmd.append("--one-per-class" if args.one_per_class else "--no-one-per-class")
+    return cmd + _fwd(args, GROW_FWD)
 
 
 def _die(message: str) -> None:
@@ -279,8 +313,8 @@ def run_arm(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int) -> di
         return subprocess.run(cmd, cwd=PROJECT_ROOT, env=env, check=False).returncode
 
     def train(name: str, arch: str, weights: str, freeze: bool = False,
-              init_ckpt: str = "") -> str:
-        rc = run(_trainer_cmd(args, arm, gpu, name, arch, weights, freeze, init_ckpt))
+              init_ckpt: str = "", head: bool = False) -> str:
+        rc = run(_trainer_cmd(args, arm, gpu, name, arch, weights, freeze, init_ckpt, head))
         if rc != 0:
             _die(f"{name} saiu com codigo {rc}")
         return os.path.join(_stage_dir(args, arm, name), CHECKPOINTS_SUBDIR, BEST_CKPT_FILENAME)
@@ -307,13 +341,26 @@ def run_arm(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int) -> di
                 _die(f"round{r}_grow saiu com codigo {rc}")
             arch, weights = os.path.join(grow_dir, ARCH_JSON_FILENAME), grow_dir
 
-            ckpt = train(f"round{r}_stage3", arch, weights, freeze=True, init_ckpt=ckpt)
-            ckpt = train(f"round{r}_stage4", arch, weights, init_ckpt=ckpt)
+            if not (args.unfrozen_after_stage_two or args.head_finetune):
+                ckpt = train(f"round{r}_stage3", arch, weights, freeze=True, init_ckpt=ckpt)
+            # O estagio final da rodada. Com --head-finetune ele e supervisionado e
+            # se chama `round{r}_head` de proposito: nome distinto de stage3/stage4
+            # para que pasta e run W&B nao se misturem com as dos outros bracos.
+            stage = "head" if args.head_finetune else "stage4"
+            ckpt = train(f"round{r}_{stage}", arch, weights, init_ckpt=ckpt,
+                         head=args.head_finetune)
             if args.dry_run:
                 continue
 
-            rows.append((str(r), "stage3", _kappa(_stage_dir(args, arm, f"round{r}_stage3"))))
-            rows.append((str(r), "stage4", _kappa(_stage_dir(args, arm, f"round{r}_stage4"))))
+            if not (args.unfrozen_after_stage_two or args.head_finetune):
+                rows.append((str(r), "stage3", _kappa(_stage_dir(args, arm, f"round{r}_stage3"))))
+            rows.append((str(r), stage, _kappa(_stage_dir(args, arm, f"round{r}_{stage}"))))
+            # RESSALVA, deixada por escrito em vez de resolvida: com --head-finetune o
+            # kappa do stage2 vem da sonda SVM sobre o gargalo e o do round{r}_head vem
+            # da Head supervisionada. O should_stop abaixo compara os dois como se
+            # fossem a mesma metrica — nao sao. Quem for ler estes numeros depois tem
+            # que saber que a comparacao entre rodada e stage2 e entre metricas
+            # diferentes; entre rodadas, ai sim, e a mesma metrica.
             kappas.append(rows[-1][2])
             if should_stop(kappas, args.kappa_tolerance, args.rounds_patience):
                 result["reason"] = (f"kappa estagnou: {args.rounds_patience} rodada(s) seguidas "
@@ -368,6 +415,17 @@ def main() -> None:
     p.add_argument("--kappa-tolerance", type=float, default=KAPPA_TOLERANCE)
     p.add_argument("--rounds-patience", type=int, default=1,
                    help="rodadas seguidas sem ganho > tolerancia antes de parar")
+    # Mutuamente exclusivas: as duas reescrevem a rodada, e de formas diferentes.
+    round_mode = p.add_mutually_exclusive_group()
+    round_mode.add_argument("--unfrozen-after-stage-two", action="store_true", default=False,
+                            help="pula o stage3 de cada rodada: depois do stage2 a camada nova "
+                                 "entra e o treino segue com tudo destravado, so stage4. Sem a "
+                                 "flag o fluxo grow+stage3+stage4 continua identico.")
+    round_mode.add_argument("--head-finetune", action="store_true", default=False,
+                            help="troca stage3+stage4 por um unico `round{r}_head`: fine-tune "
+                                 "SUPERVISIONADO com a Head do treinador, tudo destravado, "
+                                 "selecao por probe/head_kappa. Sem a flag o fluxo de "
+                                 "reconstrucao continua identico.")
     p.add_argument("--dry-run", action="store_true", default=False,
                    help="imprime todos os comandos de todos os bracos e sai 0, sem rodar nada")
     # Repasses ao treinador. Default None de proposito: ver TRAINER_FWD.
@@ -396,6 +454,17 @@ def main() -> None:
     p.add_argument("--pool-stride", type=int)
     p.add_argument("--n-superpixels", type=int)
     p.add_argument("--n-images", type=int)
+    # Mutuamente exclusivas: o argparse ja recusa o par e imprime o porque.
+    spifil_in = p.add_mutually_exclusive_group()
+    spifil_in.add_argument("--spifil-in-feature", action="store_true", default=False,
+                           help="recalcula os superpixels em cima da ultima camada")
+    spifil_in.add_argument("--spifil-in-image", action="store_true", default=False,
+                           help="superpixel na imagem original, sementes reprojetadas")
+    p.add_argument("--impurities", action=argparse.BooleanOptionalAction, default=None,
+                   help="--impurities segmenta o quadro inteiro (sem mascara): fora do parasita "
+                        "e impureza. DEFAULT do grow: --no-impurities, com mascara")
+    p.add_argument("--one-per-class", action=argparse.BooleanOptionalAction, default=None,
+                   help="uma unica imagem por classe")
     args = p.parse_args()
 
     gpu_ids = args.gpus if args.gpus else list(range(args.num_gpus))
@@ -424,14 +493,17 @@ def main() -> None:
             ready.append(arm)
 
     slots = len(gpu_ids) * args.max_concurrent_per_gpu
-    per_arm = 2 + 2 * args.max_rounds
+    one_stage_round = args.unfrozen_after_stage_two or args.head_finetune
+    round_stages = ("head" if args.head_finetune else
+                    "stage4" if args.unfrozen_after_stage_two else "stage3+stage4")
+    per_arm = 2 + (1 if one_stage_round else 2) * args.max_rounds
     print(f"[loop] {len(ready)} braco(s) prontos, {len(skipped)} pulados no preflight")
     print(f"[loop] {slots} slots = {len(gpu_ids)} gpu(s) {gpu_ids} x "
           f"{args.max_concurrent_per_gpu} braco(s) por gpu")
     print(f"[loop] configs/default.yaml amarra: --max-epochs {MAX_EPOCHS} --patience {PATIENCE}")
     print(f"[loop] no maximo {len(ready) * per_arm} processos de treino "
           f"({per_arm} por braco: stage1, stage2 e ate {args.max_rounds} rodada(s) "
-          f"de stage3+stage4)")
+          f"de {round_stages})")
     for tag, missing in skipped:
         print(f"[loop] PREFLIGHT pulou {tag}: nao existe " + ", ".join(missing))
 

@@ -1,0 +1,82 @@
+{
+  "_about": {
+    "o_que_e": "A imagem-semente que o artigo do SPiFiL usa por classe: uma unica imagem por classe, por split, por dataset.",
+    "de_onde_veio": "Os nomes de arquivo commitados em <clone do SPiFiL>/examples/data/<pasta>/split<N>/images/. 48 arquivos: eggs 8x3, cysts 6x3, larvae 2x3.",
+    "como_regenerar": "Num clone do SPiFiL (github.com/LIDS-UNICAMP/SPiFiL, privado):\n  python -c \"import json,pathlib;S=pathlib.Path('examples/data');print(json.dumps({d:{s.name[5:]:{str(int(f.stem.split('_')[0])):f.stem for f in sorted((s/'images').glob('*.png'))} for s in sorted((S/k).glob('split*'))} for k,d in [('eggs','eggs'),('cysts','protozoan'),('larvae','larvae')]},indent=2))\"\ne cole a saida por cima das chaves eggs/protozoan/larvae deste arquivo, preservando este bloco _about.",
+    "por_que_um_json": "Para o codigo nao depender de /dados/home/moliveira/SPiFiL, que so existe nesta maquina.",
+    "SUPOSICAO_NAO_VERIFICADA": "Assumimos que o split<N> do repositorio do SPiFiL e o MESMO split<N> do nosso dataset. Os 48 arquivos existem no nosso disco (conferido 48/48), mas a particao treino/teste pode ser outra. Por isso o --one-per-class e HIBRIDO: usa o id do artigo so quando ele cai no treino, e sorteia caso contrario.",
+    "valor": "stem do arquivo, sem extensao — casa com Sample.name do SPiFiL."
+  },
+  "eggs": {
+    "1": {
+      "1": "000001_00000333",
+      "2": "000002_00000012",
+      "3": "000003_00000036",
+      "4": "000004_00000084",
+      "5": "000005_00000331",
+      "6": "000006_00000329",
+      "7": "000007_00000081",
+      "8": "000008_00000173"
+    },
+    "2": {
+      "1": "000001_00000324",
+      "2": "000002_00000018",
+      "3": "000003_00000032",
+      "4": "000004_00000084",
+      "5": "000005_00000325",
+      "6": "000006_00000337",
+      "7": "000007_00000085",
+      "8": "000008_00000171"
+    },
+    "3": {
+      "1": "000001_00000323",
+      "2": "000002_00000018",
+      "3": "000003_00000027",
+      "4": "000004_00000084",
+      "5": "000005_00000315",
+      "6": "000006_00000323",
+      "7": "000007_00000083",
+      "8": "000008_00000158"
+    }
+  },
+  "protozoan": {
+    "1": {
+      "1": "000001_00000635",
+      "2": "000002_00000017",
+      "3": "000003_00000661",
+      "4": "000004_00000109",
+      "5": "000005_00001300",
+      "6": "000006_00000171"
+    },
+    "2": {
+      "1": "000001_00000655",
+      "2": "000002_00000017",
+      "3": "000003_00000649",
+      "4": "000004_00000112",
+      "5": "000005_00001316",
+      "6": "000006_00000167"
+    },
+    "3": {
+      "1": "000001_00000657",
+      "2": "000002_00000021",
+      "3": "000003_00000657",
+      "4": "000004_00000114",
+      "5": "000005_00001331",
+      "6": "000006_00000166"
+    }
+  },
+  "larvae": {
+    "1": {
+      "1": "000001_00000341",
+      "2": "000002_00002622"
+    },
+    "2": {
+      "1": "000001_00000319",
+      "2": "000002_00002599"
+    },
+    "3": {
+      "1": "000001_00000334",
+      "2": "000002_00002637"
+    }
+  }
+}

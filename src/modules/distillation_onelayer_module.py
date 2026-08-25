@@ -58,6 +58,21 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+# scripts/ nao e pacote importavel a partir de src/, e scripts/constants.py e a
+# fonte unica de FLIM_ARCH_BASE/FLIM_WEIGHTS_BASE. Copiar os dicts para ca criaria
+# uma segunda fonte de verdade. Mesmo truque de scripts/autoencoder_flim_ray.py:115.
+_SCRIPTS = os.path.join(_ROOT, "scripts")
+if _SCRIPTS not in sys.path:
+    sys.path.insert(0, _SCRIPTS)
+
+from constants import (  # noqa: E402
+    ARCH_JSON_FILENAME,
+    FLIM_ARCH_BASE,
+    FLIM_WEIGHTS_BASE,
+    MODELS_SUBDIR,
+    train_dir,
+)
+
 from src.models.distillation import (
     KLDistillationLoss,
     MSEDistillationLoss,
@@ -68,7 +83,12 @@ from src.models.distillation import (
     FrozenTeacherCheckpointMixin,
     KnnKappaProbeMixin,
     TEACHER_DIM,
+    StudentClassificationHead,
+    add_distill_flags,
+    kd_loss,
     prepare_teacher_input,
+    resolve_distill_flags,
+    distill_run_tags,
 )
 from src.models.lejepa_flim import LeJEPAFLIMModel
 from src.models.models import (
@@ -89,7 +109,7 @@ _log = logging.getLogger(__name__)
 
 _SIGREG_TYPES      = {"simple": SimpleSIGReg, "real": RealSIGReg}
 ENCODER_INITS      = ("random", "he", "xavier", "trunc_normal", "flim")
-DISTILLATION_TYPES = ("direct", "direct_cosine", "hybrid")
+DISTILLATION_TYPES = ("direct", "direct_cosine", "hybrid", "kd_hybrid")
 
 
 class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixin, pl.LightningModule):
@@ -130,6 +150,10 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
         knn_probe: str = "encoder",
         knn_train_subsample: int = 3000,
         knn_every_n_epochs: int = 1,
+        fine_tune: bool = False,
+        teacher_frozen: bool = True,
+        kd_temperature: float = 4.0,
+        kd_alpha: float = 0.7,
         seed: int = 42,
     ) -> None:
         super().__init__()
@@ -144,6 +168,12 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
             raise ValueError("proj_kernel must be 1 or 3")
         if knn_probe not in ("encoder", "projection"):
             raise ValueError("knn_probe must be 'encoder' or 'projection'")
+        if fine_tune != (distillation_type == "kd_hybrid"):
+            raise ValueError(
+                f"fine_tune=True and distillation_type='kd_hybrid' must be set "
+                f"together; got fine_tune={fine_tune}, "
+                f"distillation_type='{distillation_type}'"
+            )
 
         self.save_hyperparameters()
 
@@ -177,7 +207,7 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
             _log.info("[DistillationOneLayerModule] FLIM weights loaded from %s.", flim_weights_path)
 
         # ── Frozen teacher ─────────────────────────────────────────────────
-        self.teacher = FrozenTeacher(model_id=teacher_model_id)
+        self.teacher = FrozenTeacher(model_id=teacher_model_id, frozen=teacher_frozen)
 
         # ── One-layer projection head: 48 → 1280 (3×3 ou 1×1) ─────────────
         if proj_kernel == 1:
@@ -193,6 +223,12 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
             )
             _proj_label = "Conv3x3(48→1280)+BN2d+GELU"
 
+        if fine_tune:
+            self.cls_head = StudentClassificationHead(TEACHER_DIM, num_classes)
+            # I-JEPA não tem classificador; esta cabeça é o probe linear que produz
+            # logits_t, treinada pelo CE do training_step.
+            self.teacher_cls_head = StudentClassificationHead(TEACHER_DIM, num_classes)
+
         _log.info(
             "[DistillationOneLayerModule] embed_dim=%d  init=%s  type=%s  proj=%s",
             self.student_embed_dim, encoder_init, distillation_type, _proj_label,
@@ -202,10 +238,9 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
             self.mse_loss = MSEDistillationLoss()
         elif distillation_type == "direct_cosine":
             self.mse_loss = CosineDistillationLoss()
-        else:
+        elif distillation_type == "hybrid":
             self.kd_loss = KLDistillationLoss(temperature=temperature)
-            if distillation_type == "hybrid":
-                self.sigreg = _SIGREG_TYPES[sigreg_type]()
+            self.sigreg = _SIGREG_TYPES[sigreg_type]()
 
         # ── Frozen-encoder mode: only the projection head trains ────────────
         # The FLIM encoder is kept in eval() with requires_grad=False, so its
@@ -243,15 +278,17 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
             return views[:, 0] if views.shape[1] < views.shape[0] else views[0]
         return views
 
-    @torch.no_grad()
     def _teacher_emb(self, student_view: Tensor) -> Tensor:
-        x = prepare_teacher_input(student_view.float())
-        # Decoupled normalisation: the FLIM student may receive raw LAB[0,1],
-        # but I-JEPA expects ImageNet stats. Apply them here only for the teacher
-        # (matches the svm_ijepa baseline, which feeds I-JEPA LAB + ImageNet norm).
-        if getattr(self.hparams, "teacher_imagenet_norm", False):
-            x = (x - self._imagenet_mean) / self._imagenet_std
-        return self.teacher(x)
+        # Grad only when the teacher is unfrozen — um @torch.no_grad() fixo aqui
+        # cortaria o gradiente do teacher em fine-tune.
+        with torch.set_grad_enabled(not self.hparams.teacher_frozen):
+            x = prepare_teacher_input(student_view.float())
+            # Decoupled normalisation: the FLIM student may receive raw LAB[0,1],
+            # but I-JEPA expects ImageNet stats. Apply them here only for the teacher
+            # (matches the svm_ijepa baseline, which feeds I-JEPA LAB + ImageNet norm).
+            if getattr(self.hparams, "teacher_imagenet_norm", False):
+                x = (x - self._imagenet_mean) / self._imagenet_std
+            return self.teacher(x)
 
     def _log_embedding_stats(self, student_emb, student_proj, teacher_emb, prefix):
         with torch.no_grad():
@@ -272,7 +309,18 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
 
         self.log("train/lr", self.optimizers().param_groups[0]["lr"], on_step=True, on_epoch=False)
 
-        if self.hparams.distillation_type in ("direct", "direct_cosine"):
+        if self.hparams.distillation_type == "kd_hybrid":
+            logits_s   = self.cls_head(student_proj)
+            logits_t   = self.teacher_cls_head(teacher_emb.to(student_proj.device))
+            teacher_ce = F.cross_entropy(logits_t, y)
+            loss = kd_loss(logits_s, logits_t.detach(), y,
+                           T=self.hparams.kd_temperature,
+                           alpha=self.hparams.kd_alpha) + teacher_ce  # + teacher_ce treina teacher_cls_head
+            self.log("train/teacher_ce", teacher_ce, on_step=True, on_epoch=True)
+            self.log("train/kd_acc", (logits_s.argmax(1) == y).float().mean(),
+                     on_step=True, on_epoch=True)
+            self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+        elif self.hparams.distillation_type in ("direct", "direct_cosine"):
             loss = self.mse_loss(student_proj, teacher_emb)
             self.log("train/loss_mse", loss, prog_bar=True,  on_step=True, on_epoch=True)
             self.log("train/loss",     loss, prog_bar=False, on_step=True, on_epoch=True)
@@ -299,7 +347,17 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
         student_proj = self.proj_kd(feat_map)
         teacher_emb  = self._teacher_emb(first_view)
 
-        if self.hparams.distillation_type in ("direct", "direct_cosine"):
+        if self.hparams.distillation_type == "kd_hybrid":
+            logits_s   = self.cls_head(student_proj)
+            logits_t   = self.teacher_cls_head(teacher_emb.to(student_proj.device))
+            teacher_ce = F.cross_entropy(logits_t, y)
+            loss = kd_loss(logits_s, logits_t.detach(), y,
+                           T=self.hparams.kd_temperature,
+                           alpha=self.hparams.kd_alpha)
+            self.log("val/teacher_ce", teacher_ce, on_epoch=True)
+            self.log("val/kd_acc", (logits_s.argmax(1) == y).float().mean(), on_epoch=True)
+            self.log("val/loss", loss, prog_bar=True, on_epoch=True)
+        elif self.hparams.distillation_type in ("direct", "direct_cosine"):
             loss = self.mse_loss(student_proj, teacher_emb)
             self.log("val/loss_mse", loss, on_epoch=True)
             self.log("val/loss",     loss, prog_bar=True, on_epoch=True)
@@ -325,7 +383,14 @@ class DistillationOneLayerModule(FrozenTeacherCheckpointMixin, KnnKappaProbeMixi
         # mode this leaves only proj_kd ("a única que treina é a projetora").
         params = [p for p in self.student.parameters() if p.requires_grad] \
                  + list(self.proj_kd.parameters())
-        optimizer    = AdamW(params, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        if self.hparams.fine_tune:
+            params += list(self.cls_head.parameters()) + list(self.teacher_cls_head.parameters())
+        groups = [{"params": params}]
+        if not self.hparams.teacher_frozen:
+            # LR do student destrói um ViT-H em fine-tune — teacher anda a 10%.
+            groups.append({"params": list(self.teacher.parameters()),
+                           "lr": self.hparams.lr * 0.1})
+        optimizer    = AdamW(groups, lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         sched_warmup = LinearLR(optimizer, start_factor=0.01, total_iters=warmup)
         sched_cosine = CosineAnnealingLR(optimizer, T_max=max(1, total - warmup), eta_min=1e-5)
         scheduler    = SequentialLR(optimizer, schedulers=[sched_warmup, sched_cosine], milestones=[warmup])
@@ -343,12 +408,13 @@ def _build_parser():
     p.add_argument("--dataset",            required=True, choices=["eggs", "larvae", "protozoan"])
     p.add_argument("--split",              required=True, type=int)
     p.add_argument("--percentage",         required=True, type=int)
-    p.add_argument("--arch-json",          required=True)
+    p.add_argument("--arch-json",          default=None,
+                   help="architecture.json do encoder FLIM. Default: derivado de --dataset/--split.")
     p.add_argument("--run-name",           required=True)
-    p.add_argument("--distillation-type",  required=True, choices=list(DISTILLATION_TYPES))
+    p.add_argument("--distillation-type",  default="direct", choices=list(DISTILLATION_TYPES))
     p.add_argument("--encoder-init",       default="trunc_normal", choices=list(ENCODER_INITS))
     p.add_argument("--flim-weights-path",  default=None,
-                   help="Directory with FLIM weight files. Required when --encoder-init flim.")
+                   help="Diretorio dos pesos FLIM. Default: derivado de --dataset/--split quando o init e FLIM.")
     p.add_argument("--alpha",              type=float, default=0.5)
     p.add_argument("--temperature",        type=float, default=4.0)
     p.add_argument("--num-classes",        type=int,   default=9)
@@ -387,7 +453,34 @@ def _build_parser():
     p.add_argument("--wandb-project",      default="flim-ssl")
     p.add_argument("--wandb-entity",       default="ophira-ai")
     p.add_argument("--seed",               type=int, default=42)
+    add_distill_flags(p)
     return p
+
+
+def _derive_flim_paths(args) -> None:
+    """Preenche --arch-json / --flim-weights-path a partir de --dataset e --split.
+
+    O valor passado na mao manda: so o caminho DERIVADO e checado em disco, entao
+    quem ja passa as flags se comporta exatamente como antes. E o protozoan tem
+    DUAS arvores (arch em ch24_30_48_a0.5_f5, pesos em ch24_32_48_a0.5_f5) — por
+    isso os dois dicts separados, e nao um template de string.
+    """
+    def _need(path: str, ok: bool, flag: str) -> None:
+        if not ok:
+            raise SystemExit(
+                f"[paths] caminho derivado de --dataset {args.dataset} --split {args.split} "
+                f"nao existe: {path}\n        passe {flag} <caminho> na mao."
+            )
+
+    if not args.arch_json:
+        args.arch_json = os.path.join(
+            FLIM_ARCH_BASE[args.dataset], train_dir(args.split), ARCH_JSON_FILENAME)
+        _need(args.arch_json, os.path.isfile(args.arch_json), "--arch-json")
+
+    if not args.flim_weights_path and (args.init_flim or args.encoder_init == "flim"):
+        args.flim_weights_path = os.path.join(
+            FLIM_WEIGHTS_BASE[args.dataset], train_dir(args.split), MODELS_SUBDIR)
+        _need(args.flim_weights_path, os.path.isdir(args.flim_weights_path), "--flim-weights-path")
 
 
 def _dataset_short_to_parasite_name(dataset: str) -> str:
@@ -405,6 +498,10 @@ def main() -> int:
                         stream=sys.stdout)
 
     args = _build_parser().parse_args()
+    # Antes de resolve_distill_flags: ela exige flim_weights_path com --init_flim.
+    _derive_flim_paths(args)
+    # As flags novas vencem as antigas quando alguma delas é usada.
+    _overrides = resolve_distill_flags(args)
     pl.seed_everything(args.seed, workers=True)
 
     output_dir = args.output_dir or os.path.join(_ROOT, "artifacts", "distillation", args.run_name)
@@ -423,7 +520,7 @@ def main() -> int:
         imagenet_norm=not args.no_imagenet_norm,
     )
 
-    module = DistillationOneLayerModule(
+    _module_kwargs = dict(
         arch_json=args.arch_json,
         dataset=args.dataset,
         distillation_type=args.distillation_type,
@@ -442,6 +539,8 @@ def main() -> int:
         knn_every_n_epochs=args.knn_every_n_epochs,
         seed=args.seed,
     )
+    _module_kwargs.update(_overrides)
+    module = DistillationOneLayerModule(**_module_kwargs)
 
     # Two checkpoints: PRIMARY by val/knn_kappa (the MSE val/loss is decoupled
     # from / inverted w.r.t. downstream κ — minimising it collapses the encoder),
@@ -476,13 +575,19 @@ def main() -> int:
                 _tags.append("frozen")
             if args.no_imagenet_norm:
                 _tags.append("no_imagenet_norm")
+            _tags += distill_run_tags(module.hparams)
             if _tags:
                 wandb_logger.experiment.tags = tuple(dict.fromkeys(_tags))
             _proj_label = f"Conv{args.proj_kernel}x{args.proj_kernel}(48→1280)+BN2d+GELU"
             wandb_logger.log_hyperparams({
                 "dataset": args.dataset, "split": args.split,
-                "percentage": args.percentage, "distillation_type": args.distillation_type,
-                "encoder_init": args.encoder_init,
+                "percentage": args.percentage,
+                "distillation_type": module.hparams.distillation_type,
+                "encoder_init": module.hparams.encoder_init,
+                "fine_tune": module.hparams.fine_tune,
+                "teacher_frozen": module.hparams.teacher_frozen,
+                "kd_temperature": module.hparams.kd_temperature,
+                "kd_alpha": module.hparams.kd_alpha,
                 "no_imagenet_norm": args.no_imagenet_norm,
                 "freeze_encoder": args.freeze_encoder,
                 "teacher_imagenet_norm": args.teacher_imagenet_norm,
@@ -559,8 +664,12 @@ def _save_metadata(args, module, output_dir, ckpt_dir,
     meta = {
         "run_name": args.run_name, "dataset": args.dataset,
         "split": args.split, "percentage": args.percentage,
-        "distillation_type": args.distillation_type,
-        "encoder_init": args.encoder_init,
+        "distillation_type": module.hparams.distillation_type,
+        "encoder_init": module.hparams.encoder_init,
+        "fine_tune": module.hparams.fine_tune,
+        "teacher_frozen": module.hparams.teacher_frozen,
+        "kd_temperature": module.hparams.kd_temperature,
+        "kd_alpha": module.hparams.kd_alpha,
         "no_imagenet_norm": args.no_imagenet_norm,
         "freeze_encoder": args.freeze_encoder,
         "teacher_imagenet_norm": args.teacher_imagenet_norm,

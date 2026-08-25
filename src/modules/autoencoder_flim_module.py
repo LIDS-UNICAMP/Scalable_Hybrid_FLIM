@@ -162,6 +162,26 @@ def _freeze_for_growth(model: nn.Module, delta: int) -> None:
         param.requires_grad = False
 
 
+class Head(nn.Module):
+    """Cabeca de classificacao sobre o ultimo mapa do encoder.
+
+    ``AdaptiveAvgPool2d(1)`` torna a cabeca independente da resolucao: a MESMA Head serve
+    para 45x11x11 (saida de conv4) e 45x5x5 (saida de conv5). ``in_channels`` vem de
+    ``channels[-1]`` do modelo ja construido e ``num_classes`` de ``NUM_CLASSES[dataset]`` —
+    nenhum dos dois e chumbado aqui.
+    """
+
+    def __init__(self, in_channels: int, num_classes: int, p_drop: float = 0.2) -> None:
+        super().__init__()
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.flat = nn.Flatten()
+        self.drop = nn.Dropout(p_drop)
+        self.fc = nn.Linear(in_channels, num_classes)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.fc(self.drop(self.flat(self.pool(x))))
+
+
 class AutoEncoderFlimModule(pl.LightningModule):
     """FLIM-init AutoEncoder trained by reconstruction, probed by a one-vs-one SVM.
 
@@ -183,6 +203,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
                             block) exactly as SPiFiL cut it, even in an unfrozen stage. Off by
                             default: once written into the layer those patches are ordinary
                             conv weights, like the FLIM kernels the unfrozen stages fine-tune.
+        head_finetune:      Troca a reconstrucao por classificacao: uma ``Head`` sobre a
+                            ultima camada do encoder, perda ``cross_entropy`` e monitor
+                            ``probe/head_kappa``. O decoder e congelado (sai do otimizador).
+                            Off por default — sem a flag o fluxo de reconstrucao e identico.
         init_ckpt:          Checkpoint this round resumed its backbone from, "" for round 1.
                             Recorded so ``stage`` can tell a first frozen round apart from a
                             grown-and-frozen one.
@@ -206,6 +230,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         log_recon_every: int = 10,
         freeze_encoder_flag: bool = False,
         freeze_spifil_layer: bool = False,
+        head_finetune: bool = False,
         init_ckpt: str = "",
     ) -> None:
         super().__init__()
@@ -281,6 +306,15 @@ class AutoEncoderFlimModule(pl.LightningModule):
             last = self.model.encoder.blocks[f"conv{self.model.encoder.n_layers}"]
             for p in last.parameters():
                 p.requires_grad = False
+        # Depois de TODA politica de congelamento, para o log abaixo ser o que
+        # configure_optimizers vai de fato ver.
+        self.head = Head(channels[-1], num_classes) if head_finetune else None
+        if head_finetune:
+            # O decoder sai do caminho: a perda deixa de ser reconstrucao. Ele continua
+            # existindo porque `AutoEncoderFLIM` sempre o constroi; congelado, fica fora do
+            # otimizador — mas ainda viaja como PESO MORTO no .ckpt. Divida conhecida.
+            for p in self.model.decoder.parameters():
+                p.requires_grad = False
         if freeze_encoder_flag:
             # Logged only after the ablation, so the line is what configure_optimizers:706
             # will actually see. Without it a frozen round cannot be validated from the log.
@@ -319,6 +353,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
 
         self._val_emb: List[Tensor] = []
         self._val_labels: List[Tensor] = []
+        self._val_head_logits: List[Tensor] = []
         self._sample_batch: Optional[Tensor] = None
         self._train_loader_cache = None
         self.baseline_metrics: Optional[dict] = None
@@ -357,6 +392,11 @@ class AutoEncoderFlimModule(pl.LightningModule):
         is therefore a measurement of the round's starting point, not a training curve, and
         which epoch wins is close to arbitrary.
         """
+        # Com --head-finetune quem seleciona e o kappa da Head: ali o encoder pode estar
+        # congelado, mas a Head TREINA, entao o pico e sinal e nao ruido de fit. O nome do
+        # arquivo continua `best_kappa` — o laco de crescimento monta o caminho por convencao.
+        if self.hparams.head_finetune:
+            return f"{self._stage_prefix}/head_kappa", "max", "best_kappa"
         return f"{self._stage_prefix}/svm_kappa", "max", "best_kappa"
 
     @property
@@ -372,6 +412,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
             f"{p}/svm_kappa", f"{p}/svm_acc", f"{p}/svm_f1", f"{p}/svm_fit_s",
             f"{p}/svm_fit_status", f"{p}/svm_n_iter_max", f"{p}/svm_n_iter_sum",
             f"{p}/svm_n_sv",
+            f"{p}/head_kappa", f"{p}/head_acc",
             f"{p}/flim_drift", "stage_epoch",
         )
 
@@ -407,20 +448,27 @@ class AutoEncoderFlimModule(pl.LightningModule):
         return self.criterion(logits, target), logits, target
 
     def training_step(self, batch: Any, batch_idx: int) -> Tensor:
-        views, _ = batch  # labels deliberately discarded — training is unsupervised
+        views, y = batch  # y so entra na perda no braco --head-finetune
         x = self._first_view(views)
-        loss, _, _ = self._recon_loss(x)
+        if self.head is not None:
+            # `y` ja e 0-based (datasets/dataset.py:173), entao entra direto. O `-1` do
+            # caminho do SVM desfaz um `+1` do proprio evaluate.py:472 e nao vale aqui.
+            loss = nn.functional.cross_entropy(self.head(self.model.encoder(x)), y)
+        else:
+            loss, _, _ = self._recon_loss(x)
 
         opt = self.optimizers()
         # lr is the schedule, not a result: it stays outside the stage namespace.
         self.log("train/lr", opt.param_groups[0]["lr"], on_step=True, on_epoch=False)
-        self.log(f"{self._stage_prefix}/train_recon_loss", loss,
-                 prog_bar=True, on_step=True, on_epoch=True)
+        self.log(f"{self._stage_prefix}/"
+                 f"{'train_ce_loss' if self.head is not None else 'train_recon_loss'}",
+                 loss, prog_bar=True, on_step=True, on_epoch=True)
         return loss
 
     def on_validation_epoch_start(self) -> None:
         self._val_emb = []
         self._val_labels = []
+        self._val_head_logits = []
         self._sample_batch = None
 
     def validation_step(self, batch: Any, batch_idx: int) -> Tensor:
@@ -431,6 +479,11 @@ class AutoEncoderFlimModule(pl.LightningModule):
         # _encode_pooled already returns a detached CPU tensor — no second .detach().cpu().
         self._val_emb.append(_encode_pooled(self.model.encoder, x).float())
         self._val_labels.append(y.detach().cpu())
+        # ponytail: passe extra do encoder — `_encode_pooled` acima ja devolve pooled e
+        # detached, o que nao serve para a Head. Teto: fundir os dois passes se a validacao
+        # ficar cara.
+        if self.head is not None:
+            self._val_head_logits.append(self.head(self.model.encoder(x)).float().cpu())
         if batch_idx == 0:
             self._sample_batch = (x[:4].detach().cpu(), logits[:4].detach().float().cpu())
 
@@ -616,6 +669,17 @@ class AutoEncoderFlimModule(pl.LightningModule):
 
         self._log_flim_drift()
 
+        # Antes do gate do svm_probe_every de proposito: com --head-finetune este e O monitor,
+        # e ele nao pode faltar nas epocas em que a sonda SVM e pulada.
+        if self._val_head_logits:
+            # compute_metrics faz o argmax sozinho quando y_pred e (N, C) — logits crus entram.
+            head_metrics = compute_metrics(
+                torch.cat(self._val_labels), torch.cat(self._val_head_logits),
+                num_classes=self.hparams.num_classes,
+            )
+            self.log(f"{p}/head_kappa", head_metrics["kappa"], prog_bar=True, on_epoch=True)
+            self.log(f"{p}/head_acc", head_metrics["acc"], on_epoch=True)
+
         every = max(1, int(self.hparams.svm_probe_every))
         if (self.current_epoch % every) != 0 and self.current_epoch != self.trainer.max_epochs - 1:
             return
@@ -768,7 +832,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
         # Same filter as classification_flim_module.py:232 — stage 1's frozen encoder is
         # then respected for free, with no optimizer state allocated for its kernels.
         optimizer = AdamW(
-            filter(lambda p: p.requires_grad, self.model.parameters()),
+            # self.parameters(), nao self.model.parameters(): a Head vive fora de `model`.
+            # Sem Head os dois conjuntos sao identicos, entao nada muda no fluxo de recon.
+            filter(lambda p: p.requires_grad, self.parameters()),
             lr=self.hparams.lr, weight_decay=self.hparams.weight_decay,
         )
         sched_warmup = LinearLR(optimizer, start_factor=0.01, total_iters=warmup)
@@ -823,6 +889,11 @@ def _build_parser():
                         "but once written into the layer they are ordinary conv weights just "
                         "like the FLIM kernels the unfrozen stages already fine-tune. Pass it "
                         "for the ablation that keeps the bank fixed.")
+    p.add_argument("--head-finetune", action="store_true", default=False,
+                   help="Troca reconstrucao por classificacao: Head (GAP -> dropout -> linear) "
+                        "sobre a ultima camada do encoder, perda cross_entropy, selecao por "
+                        "probe/head_kappa. O decoder e congelado e sai do otimizador. Sem a "
+                        "flag o fluxo de reconstrucao segue identico.")
     p.add_argument("--run-name", required=True)
     p.add_argument("--max-epochs", type=int, default=1000)
     p.add_argument("--warmup-epochs", type=int, default=10)
@@ -947,6 +1018,7 @@ def main() -> int:
         log_recon_every=args.log_recon_every,
         freeze_encoder_flag=args.freeze_encoder,
         freeze_spifil_layer=args.freeze_spifil_layer,
+        head_finetune=args.head_finetune,
         init_ckpt=args.init_ckpt,
     )
 
@@ -968,8 +1040,21 @@ def main() -> int:
         # its width is channels[1], which growth does not touch.
         pre = "model.decoder.blocks."
         delta = _decoder_block_delta(state, module.model.encoder.n_layers)
-        remapped = {}
+        # As chaves `head.*` sao DESCARTADAS: a Head e da camada, nao do braco. Duas razoes.
+        # (a) O espaco de features que ela classificava ganhou uma camada inteira desde este
+        # checkpoint, entao aqueles pesos decidem sobre outra coisa — sem descartar, o remap
+        # nao toca em `head.*`, elas atravessam e sobrescrevem a Head recem-construida, e a
+        # Head da rodada 2 sai byte-identica a da rodada 1. (b) A heranca silenciosa vira
+        # crash assim que a largura mudar entre rodadas: `load_state_dict` levanta size
+        # mismatch MESMO com strict=False, e hoje so nao levanta por coincidencia aritmetica
+        # (o allocator do SPiFiL faz out_channels // n_classes * n_classes, entao eggs vai
+        # 48 -> 45 -> 45 e as formas casam). Descartadas, a Head nasce nova sobre o espaco de
+        # features atual — que e o que "plugar a Head na saida da camada nova" significa.
+        remapped, dropped_head = {}, 0
         for k, v in state.items():
+            if k.startswith("head."):
+                dropped_head += 1
+                continue
             if k.startswith(pre):
                 idx, rest = k[len(pre):].split(".", 1)
                 k = f"{pre}{int(idx) + delta}.{rest}"
@@ -977,8 +1062,9 @@ def main() -> int:
         missing, unexpected = module.load_state_dict(remapped, strict=False)
         _log.info(
             "[stage %d] backbone from %s | decoder block shift delta=%+d | "
-            "missing=%d (left at their FLIM/SPiFiL init) unexpected=%d",
-            stage, args.init_ckpt, delta, len(missing), len(unexpected),
+            "missing=%d (left at their FLIM/SPiFiL init) unexpected=%d | "
+            "head keys dropped=%d (a Head sempre nasce nova sobre a camada atual)",
+            stage, args.init_ckpt, delta, len(missing), len(unexpected), dropped_head,
         )
 
     # Both callbacks follow the bottleneck kappa, in every stage: the best *encoder* is the
@@ -1022,7 +1108,13 @@ def main() -> int:
             )
             wandb_logger.experiment.tags = tuple(dict.fromkeys(
                 list(wandb_logger.experiment.tags or ())
-                + ["journal_02_2026_hybrid_FLIM", "autoencoder", "flim_init", "unsupervised",
+                # O braco com Head roda SEM --freeze-encoder, entao `stage` vale 2 aqui —
+                # a mesma identidade do estagio 2 de reconstrucao. A tag e o que separa os
+                # dois no board, em vez de um quarto valor de `stage` (ver _save_metadata).
+                # "unsupervised" tambem sai: com a Head a perda e cross_entropy sobre rotulo.
+                + ["journal_02_2026_hybrid_FLIM", "autoencoder", "flim_init",
+                   "supervised" if args.head_finetune else "unsupervised",
+                   "head_finetune" if args.head_finetune else
                    {1: "stage1_frozen", 2: "stage2_fine_tune",
                     3: "stage3_grown_frozen"}[stage]]
             ))
@@ -1166,11 +1258,15 @@ def _save_metadata(args, module, output_dir, ckpt_dir, status="ok", error="",
         "flim_weights_path": args.flim_weights_path,
         "ckpt_dir": ckpt_dir,
         "best_ckpt": best_ckpt,
-        # The monitor is probe/svm_kappa in every stage now, so best_score is always a kappa.
-        # For a frozen round that maximum is fit noise (see monitor_spec), so what is recorded
-        # there is the on_fit_start baseline instead — the number the next round is read against.
+        # For a frozen RECONSTRUCTION round the monitored maximum is SVM fit noise (see
+        # monitor_spec), so what is recorded there is the on_fit_start baseline instead.
+        # Com --head-finetune a troca NAO vale: mesmo com o encoder congelado a Head treina de
+        # verdade, o pico e sinal, e o melhor score vai para o disco como ele e.
+        # O nome da chave e mantido por compatibilidade — scripts/spifil_growth_loop.py:110 le
+        # `best_val_svm_kappa` e mata o braco se faltar. Qual metrica foi de fato monitorada
+        # esta em `ckpt_monitor`, logo abaixo (probe/head_kappa no braco com Head).
         "best_val_svm_kappa": (
-            best_score if not args.freeze_encoder
+            best_score if (args.head_finetune or not args.freeze_encoder)
             else (module.baseline_metrics or {}).get("kappa", float("nan"))
         ),
         "best_monitor_score": best_score,
@@ -1179,6 +1275,18 @@ def _save_metadata(args, module, output_dir, ckpt_dir, status="ok", error="",
         "ckpt_monitor": module.monitor_spec[0],
         "stage_metric_prefix": module.stage_prefix,
         "stage": module.stage,
+        # `stage` sozinho NAO identifica este braco: com --head-finetune o encoder roda
+        # destravado, entao a property devolve 2, igual ao estagio 2 de reconstrucao. A
+        # property fica como esta de proposito — `stage` e documentado como 1/2/3 (o main()
+        # re-deriva o mesmo numero em :969 para a config do W&B, e a tag de la e montada por
+        # um dict {1,2,3}), e nenhum leitor no repo le este campo: eval_growth_stages.py:33
+        # rotula pelo NOME do diretorio e ignora `stage` explicitamente. Um quarto valor
+        # espalharia risco sem ganhar leitor. Quem separa o braco e a flag crua abaixo.
+        "head_finetune": bool(args.head_finetune),
+        # Lidos da Head CONSTRUIDA, nao re-derivados de args: se um dia divergirem do
+        # `embed_dim`/`num_classes` acima, o metadado mostra a divergencia em vez de esconder.
+        "head_in_channels": module.head.fc.in_features if module.head is not None else None,
+        "head_num_classes": module.head.fc.out_features if module.head is not None else None,
         "embed_mode": args.embed_mode,
         "encoder_frozen": bool(args.freeze_encoder),
         "init_ckpt": args.init_ckpt,
