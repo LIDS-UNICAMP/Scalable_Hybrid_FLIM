@@ -105,7 +105,11 @@ _FIELDS = ["method", "run_name", "stage_label", "round", "dataset", "split",
            "percentage", "n_train", "n_test", "dim", "embed_mode",
            "imagenet_norm", "max_iter", "fit_status", "n_iter_max",
            "n_iter_sum", "n_sv", "kappa", "acc", "f1", "acc_raw", "extract_s",
-           "fit_s", "predict_s", "ckpt_epoch", "ckpt"]
+           "fit_s", "predict_s", "ckpt_epoch", "ckpt",
+           # No FIM de proposito: coluna no meio desalinharia o append de
+           # `--skip-existing` contra os CSVs de 26 campos ja escritos. Vazias
+           # em quem nao tem Head (`restval=""` do DictWriter).
+           "head_kappa", "head_acc", "head_f1"]
 
 
 def _jobs(pct: int, families, stages, datasets, splits):
@@ -140,7 +144,7 @@ def _jobs(pct: int, families, stages, datasets, splits):
 
 
 def _encoder(job: dict, device):
-    """Encoder do estagio, congelado para inferencia — e a epoca do checkpoint.
+    """Encoder e Head do estagio, congelados — e a epoca do checkpoint.
 
     `load_from_checkpoint` re-roda `__init__` (relendo os kernels FLIM do disco)
     e so entao aplica o state_dict, entao os caminhos guardados nos hparams
@@ -160,7 +164,11 @@ def _encoder(job: dict, device):
     enc = module.model.encoder.to(device).eval()
     for p in enc.parameters():
         p.requires_grad_(False)
-    return enc, int(blob.get("epoch", -1))
+    # `self.head = Head(...) if head_finetune else None` (autoencoder_flim_module.py:311),
+    # entao `is None` ja E o teste de `head_finetune`. Fica na CPU: e um Linear
+    # de 48 entradas, e assim consome `feats_te` sem copiar nada para a GPU.
+    head = module.head.cpu().eval() if module.head is not None else None
+    return enc, head, int(blob.get("epoch", -1))
 
 
 def _done(out: str):
@@ -279,7 +287,7 @@ def main() -> None:
                 f"{j['family'] + ' ' if len(args.family) > 1 else ''}"
                 f"{j['stage_label']} {ds} split{sp}")
             n_cls = NUM_CLASSES[ds]
-            enc, epoch = _encoder(j, device)
+            enc, head, epoch = _encoder(j, device)
 
             t0 = time.perf_counter()
             feats_te, y_true = extract_features(enc,
@@ -323,6 +331,21 @@ def main() -> None:
                 "predict_s": round(predict_s, 1), "ckpt_epoch": epoch,
                 "ckpt": os.path.relpath(j["ckpt"], _ROOT),
             }
+            # A Head no MESMO passe do SVM: sob `flatten`, `feats_te` E o mapa do
+            # encoder achatado, entao (N, C, H*W, 1) e o mesmo tensor de volta e o
+            # AdaptiveAvgPool2d(1) da Head media sobre H*W igual. Zero forward extra.
+            # (Sob `avgpool2d` o dim ja e C, o reshape vira (N, C, 1, 1) e a pool
+            # deixa passar: correto nos dois modos.) Rotulo 0-indexed direto — o `-1`
+            # do SVM desfaz um `+1` que so o SVM aplica.
+            if head is not None:
+                ch = head.fc.in_features
+                fmap = torch.from_numpy(feats_te).view(-1, ch,
+                                                       feats_te.shape[1] // ch, 1)
+                with torch.no_grad():
+                    hm = compute_metrics(y_true=y_true, y_pred=head(fmap),
+                                         num_classes=n_cls)
+                row |= {f"head_{k}": float(v) for k, v in hm.items()}
+
             writer.writerow(row)
             fh.flush()
             rows.append(row)
