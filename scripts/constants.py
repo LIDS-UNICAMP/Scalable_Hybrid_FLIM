@@ -17,10 +17,15 @@
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
 """constants.py — fonte unica das constantes compartilhadas por scripts/.
 
-Regra: um valor que aparece identico em DOIS OU MAIS arquivos de scripts/ mora
-aqui. Um valor que existe em um arquivo so, ou que difere de propositio entre
-arquivos, fica no arquivo dele — centralizar divergencia intencional e como
-apagar a intencao.
+Regra: constante de modulo mora aqui, mesmo quando hoje so um arquivo a usa —
+uma constante com endereco unico nao precisa ser cacada quando o segundo
+consumidor aparecer. A UNICA excecao e o valor que difere de proposito entre
+arquivos: centralizar divergencia intencional e como apagar a intencao, e esses
+casos estao listados em "O que NAO foi unificado" no fim deste docstring.
+
+Fica de fora tambem a lista que so descreve a fiacao de UM script e precisa
+andar junto do argparse dele (`TRAINER_FWD`/`GROW_FWD` em
+`spifil_growth_loop.py`): sao mecanismo, nao valor compartilhado.
 
 ## Como importar
 
@@ -170,6 +175,10 @@ SPLITS_INCREMENTAL_SUBDIR: str = "splits_incremental"
 RUN_METADATA_FILENAME: str = "run_metadata.json"
 WRITE_TEST_FILENAME: str = ".write_test"
 LAST_CKPT_FILENAME: str = "last.ckpt"
+BEST_CKPT_FILENAME: str = "best_kappa.ckpt"
+# O que o preflight do crescimento exige do diretorio de pesos: sem o kernel da
+# primeira camada nao ha de onde montar o encoder FLIM.
+CONV1_KERNELS: str = "conv1-kernels.npy"
 
 
 def train_dir(split: int) -> str:
@@ -217,6 +226,42 @@ DEFAULT_NUM_WORKERS: int = 4
 STDERR_TRUNCATE_MAX_CHARS: int = 2000
 STDERR_TRUNCATE_HEAD: int = 1000
 STDERR_TRUNCATE_TAIL: int = 1000
+
+
+# ─── Crescimento SPiFiL ───────────────────────────────────────────────────────
+# Contrato compartilhado por scripts/spifil_growth_loop.py (o laco) e
+# scripts/spifil_grow.py (o corte). Moradas aqui porque os dois lados precisam
+# concordar: o `3` abaixo ja viveu duplicado nos dois arquivos, com nomes
+# diferentes, e um contrato de codigo de saida com duas fontes e um bug esperando.
+
+TRAINER_MODULE: str = "src.modules.autoencoder_flim_module"
+GROW_SCRIPT: str = os.path.join("scripts", "spifil_grow.py")
+
+# Chave do run_metadata.json que o laco le para decidir parada. CUIDADO: em
+# estagio com encoder congelado ela NAO e o pico, e sim o baseline de
+# on_fit_start (autoencoder_flim_module.py, "best_val_svm_kappa"); o pico esta em
+# `best_svm_kappa`.
+KAPPA_KEY: str = "best_val_svm_kappa"
+
+# Prefixo do `--run-name`, que e o nome da run no W&B. O braco entra no nome
+# porque "stage1" sozinho colidiria entre as 18 celulas da grade.
+RUN_NAME_PREFIX: str = "spifil_growth"
+
+# Mesmos percentuais que `autoencoder_flim_ray.py` usa por padrao — a grade de
+# crescimento tem que cair em cima das mesmas celulas para ser comparavel.
+GROWTH_DEFAULT_PCTS: list[int] = [5, 75]
+
+# Espelha KAPPA_TOLERANCE de src/modules/autoencoder_flim_module.py (mesmo
+# significado: dentro disso e empate, nao ganho). Nao e importado de la porque
+# aquele modulo arrasta lightning/wandb, e um lancador nao pode pagar import de
+# torch so para responder `--help`.
+KAPPA_TOLERANCE: float = 0.01
+
+# `spifil_grow.py` sai com isto quando o orcamento de covariancia acabou (N <= D).
+# Nao e falha: e o proprio metodo dizendo que nao ha mais camada para cortar.
+# O grow importa como EXIT_BUDGET (o nome de quem produz), o laco como
+# GROW_EXHAUSTED (o nome de quem consome) — um valor so, duas leituras.
+GROW_EXHAUSTED: int = 3
 
 # ─── Log ──────────────────────────────────────────────────────────────────────
 

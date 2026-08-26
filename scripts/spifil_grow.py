@@ -112,6 +112,9 @@ import torch.nn.functional as F
 from torchvision.transforms import v2
 
 from constants import PROJECT_ROOT as _ROOT
+# Mesmo valor que o laco le como GROW_EXHAUSTED: um contrato de codigo de saida
+# nao pode ter duas fontes. Aliasado para o nome de quem PRODUZ o codigo.
+from constants import GROW_EXHAUSTED as EXIT_BUDGET
 
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
@@ -132,10 +135,6 @@ from src.modules.autoencoder_flim_module import (
     AutoEncoderFlimModule,
     _dataset_short_to_parasite_name,
 )
-
-# Exit code proprio para "o orcamento de covariancia acabou". O laco de
-# crescimento distingue isto de uma falha de verdade e encerra limpo.
-EXIT_BUDGET = 3
 
 # Uma imagem por classe, por split, por dataset — os ids publicados no artigo do
 # SPiFiL. Vive num JSON no repositorio para o caminho de crescimento nao depender
@@ -396,22 +395,31 @@ def seeds_in_features(features, data, n_superpixels, grid):
     slic, medoids = SLIC(), Medoids()
     seeds, regions, caps = [], [], []
     for index, feature in enumerate(features):
+
         band = feature.detach().cpu().float().numpy()
+
         band = np.ascontiguousarray(band / max(float(np.abs(band).max()), 1e-8))
 
         mask = data.load_mask(index)
+
         if mask is not None:
             mask = F.interpolate(torch.from_numpy(mask)[None, None].float(),
                                  size=grid, mode="nearest")[0, 0].numpy().astype(np.int32)
+            
         area = int((mask != 0).sum()) if mask is not None else grid[0] * grid[1]
+
         cap = max(1, min(n_superpixels, area // MIN_POSITIONS_PER_SUPERPIXEL))
+
         caps.append(cap)
 
         labels = slic(band, mask, cap)
+
         regions.append(labels)
+
         seeds.append(Seeds.from_coords(
             torch.from_numpy(medoids(labels, band)), label=data[index].label, grid=grid,
         ))
+
     per = [len(s) for s in seeds]
     print(f"[grow] superpixel NAS FEATURES {grid}: {n_superpixels} pedidos -> teto "
           f"{min(caps)}..{max(caps)} por imagem (>= {MIN_POSITIONS_PER_SUPERPIXEL} "
@@ -536,6 +544,11 @@ def main() -> int:
                              "(veja Cropped.load_mask)")
     parser.add_argument("--one-per-class", action=argparse.BooleanOptionalAction, default=True,
                         help="UMA imagem por classe: id do artigo se ele cair no treino, senao sorteio por --seed")
+    parser.add_argument("--random-layer", action="store_true", default=False,
+                        help="ABLACAO DE CONTROLE: mantem todo o fluxo (superpixel, orcamento, "
+                             "shape) e troca so os VALORES dos filtros por ruido de mesma norma. "
+                             "Responde 'a camada SPiFiL ajuda, ou qualquer camada deste tamanho "
+                             "ajudaria?'")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -545,18 +558,22 @@ def main() -> int:
         args.ckpt, map_location=args.device
     )
     trunk = Trunk(module.model.encoder, args.image_size, args.device)
+
     arch = parse_architecture(args.arch_json)
+
     layer = arch["nlayers"] + 1
+
     out_channels = args.out_channels or trunk.out_channels
+
     print(f"[grow] backbone de {args.ckpt} | {trunk.out_channels} canais em "
           f"{trunk.grid}x{trunk.grid} | crescendo a camada {layer}")
 
     samples = train_samples(args.dataset, args.split, args.percentage, args.n_images,
                             one_per_class=args.one_per_class, seed=args.seed)
+    
     data = Cropped(samples, args.image_size, use_mask=not args.impurities)
 
-    # UMA LayerSpec por rodada. Sem after_graft nao ha ninguem exigindo contagem
-    # de canal a jusante, entao nao existe `need` para reconciliar nem adapter.
+    
     learn = Learner(
         data,
         ArchSpec(layers=[LayerSpec(
@@ -584,8 +601,31 @@ def main() -> int:
     if got != out_channels:
         print(f"[grow] {out_channels} pedidos -> {got} filtros (resto do allocator)")
 
+    if args.random_layer:
+        # Troca so os VALORES, no ultimo instante: shape, largura do allocator e
+        # architecture.json continuam vindo do mesmo `block`, entao a familia aleatoria e
+        # identica a SPiFiL em tudo menos nos pesos. Como o orcamento (N <= D) ja foi
+        # cobrado la em cima, ela tambem recusa os MESMOS bracos — o controle sai pareado.
+        # A norma e copiada FILTRO A FILTRO do proprio tensor, nao normalizada para 1: o
+        # SPiFiL faz `patch_zscored / desvio`, o que espalha a norma (medido: 0.36 a 1.19,
+        # media 0.54). Sortear com escala propria mediria magnitude de ativacao em vez de
+        # estrutura, entao o ruido herda a escala exata do filtro que substitui — o que
+        # varia e so a DIRECAO, que e o que o superpixel escolhe.
+        # O bias do SPiFiL e -(K . media do patch); sem patch ele perde sentido e vai a zero.
+        with torch.no_grad():
+            w = block.conv.weight
+            g = torch.Generator().manual_seed(args.seed)
+            noise = torch.randn(w.shape, generator=g).to(w.device, w.dtype)
+            escala = (w.flatten(1).norm(dim=1) / noise.flatten(1).norm(dim=1))
+            w.copy_(noise * escala.view(-1, *([1] * (w.dim() - 1))))
+            if block.conv.bias is not None:
+                block.conv.bias.zero_()
+        print(f"[grow] --random-layer: {got} filtros sorteados (seed={args.seed}, "
+              f"norma por filtro preservada, bias=0)")
+
     write_weights(args.out, args.flim_weights_path,
                   grown_arch(arch, args.kernel_size, got, args.pool_stride), layer, block)
+    
     learn.export(args.out / "spifil_bundle")  # labels{L}.txt: de que classe veio cada filtro
 
     print(f"[grow] camada {layer} com {got} filtros em {args.out}\n"

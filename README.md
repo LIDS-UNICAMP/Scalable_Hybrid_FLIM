@@ -799,6 +799,17 @@ e percentuais 5 e 50 — o que muda é uma coisa por braço:
 | `g5_img` | `artifacts/spifil_growth/g5_in_image` | superpixel na **imagem LAB** 200×200 (o default) |
 | `g5_ft` | `artifacts/spifil_growth/g5_finetune` | igual ao `g5_img`, **sem** o estágio 3 congelado |
 | `g5_head` | `artifacts/spifil_growth/g5_head` | igual ao `g5_img`, com a rodada trocada por **fine-tune supervisionado do perceptron** |
+| `g5_rand` | `artifacts/spifil_growth/g5_random` | **controle**: igual ao `g5_img`, camada nova com pesos **aleatorios** de mesmo shape |
+| `g5_rand_feat` | `artifacts/spifil_growth/g5_random_in_feature` | **controle**: igual ao `g5_feat`, camada nova com pesos **aleatorios** de mesmo shape |
+
+Os dois braços `g5_rand*` são a ablação de controle das outras quatro: sem eles não dá para
+separar "a camada **SPiFiL** ajuda" de "uma camada **qualquer** deste tamanho ajuda". O
+`--random-layer` deixa todo o fluxo rodar igual — superpixel, ranking, allocator e o orçamento
+de covariância — e troca só os *valores* dos filtros no último instante, herdando a norma de
+cada filtro que substitui. Duas consequências que fazem deles um controle e não outro
+experimento: o `architecture.json` sai byte-idêntico ao da variante SPiFiL correspondente, e o
+`GROW_EXHAUSTED` é cobrado antes da troca, então os mesmos braços de larvae recusam crescer nas
+duas famílias.
 
 ```bash
 tmux new -d -s g5_feat "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_in_feature --percentages 5 50 --spifil-in-feature --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_in_feature.log"
@@ -808,6 +819,10 @@ tmux new -d -s g5_img "python3 scripts/spifil_growth_loop.py --work-dir artifact
 tmux new -d -s g5_ft "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_finetune --percentages 5 50 --spifil-in-image --unfrozen-after-stage-two --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_finetune.log"
 
 tmux new -d -s g5_head "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_head --percentages 5 50 --spifil-in-image --head-finetune --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_head.log"
+
+tmux new -d -s g5_rand "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_random --percentages 5 50 --random-layer --spifil-in-image --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_random.log"
+
+tmux new -d -s g5_rand_feat "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_random_in_feature --percentages 5 50 --random-layer --spifil-in-feature --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_random_in_feature.log"
 ```
 
 O `python3` aqui depende do PATH que o servidor tmux herdou. Se a sessão morrer em silêncio, troque

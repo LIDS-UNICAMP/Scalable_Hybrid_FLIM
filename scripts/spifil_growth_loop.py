@@ -103,20 +103,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 import yaml
 
-from constants import (ARCH_JSON_FILENAME, CHECKPOINTS_SUBDIR, DATASETS,
-                       DEFAULT_CONFIG_YAML, FLIM_ARCH_BASE, FLIM_WEIGHTS_BASE,
-                       DEFAULT_CPUS_PER_EXPERIMENT, MODELS_SUBDIR, OMP_ENV_VAR,
-                       PERCENTAGES, PROJECT_ROOT,
-                       RUN_METADATA_FILENAME, SPLITS, train_dir)
-
-TRAINER_MODULE = "src.modules.autoencoder_flim_module"
-GROW_SCRIPT = os.path.join("scripts", "spifil_grow.py")
-BEST_CKPT_FILENAME = "best_kappa.ckpt"
-KAPPA_KEY = "best_val_svm_kappa"
-
-# Prefixo do `--run-name`, que e o nome da run no W&B. O braco entra no nome
-# porque "stage1" sozinho colidiria entre as 18 celulas da grade.
-RUN_NAME_PREFIX = "spifil_growth"
+from constants import (ARCH_JSON_FILENAME, BEST_CKPT_FILENAME, CHECKPOINTS_SUBDIR,
+                       CONV1_KERNELS, DATASETS, DEFAULT_CONFIG_YAML,
+                       FLIM_ARCH_BASE, FLIM_WEIGHTS_BASE, GROW_EXHAUSTED,
+                       GROW_SCRIPT, GROWTH_DEFAULT_PCTS, KAPPA_KEY,
+                       KAPPA_TOLERANCE, DEFAULT_CPUS_PER_EXPERIMENT,
+                       MODELS_SUBDIR, OMP_ENV_VAR, PERCENTAGES, PROJECT_ROOT,
+                       RUN_METADATA_FILENAME, RUN_NAME_PREFIX, SPLITS,
+                       TRAINER_MODULE, train_dir)
 
 
 def _exp(args) -> str:
@@ -128,24 +122,6 @@ def _exp(args) -> str:
     precisa de flag nova nem de variavel de ambiente.
     """
     return os.path.basename(os.path.normpath(args.work_dir))
-
-# O que o preflight exige do diretorio de pesos: sem o kernel da primeira camada
-# nao ha de onde montar o encoder FLIM.
-CONV1_KERNELS = "conv1-kernels.npy"
-
-# Mesmos percentuais que `autoencoder_flim_ray.py` usa por padrao — a grade de
-# crescimento tem que cair em cima das mesmas celulas para ser comparavel.
-DEFAULT_PCTS = [5, 75]
-
-# Espelha KAPPA_TOLERANCE de src/modules/autoencoder_flim_module.py (mesmo
-# significado: dentro disso e empate, nao ganho). Nao e importado de la porque
-# aquele modulo arrasta lightning/wandb, e este aqui e so um lancador — `--help`
-# nao pode custar um import de torch.
-KAPPA_TOLERANCE = 0.01
-
-# `spifil_grow.py` sai com 3 quando o orcamento de covariancia acabou (N <= D).
-# Nao e falha: e o proprio metodo dizendo que nao ha mais camada para cortar.
-GROW_EXHAUSTED = 3
 
 # O orcamento de epocas e propriedade do protocolo de treino, nao da linha de
 # tmux que por acaso lanca a grade: `max_epochs` e a `patience` do EarlyStopping
@@ -276,6 +252,9 @@ def _grow_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, ckp
         cmd.append("--impurities" if args.impurities else "--no-impurities")
     if args.one_per_class is not None:
         cmd.append("--one-per-class" if args.one_per_class else "--no-one-per-class")
+    # Booleana nao cabe em GROW_FWD: `_fwd` emitiria `--random-layer False`.
+    if args.random_layer:
+        cmd.append("--random-layer")
     return cmd + _fwd(args, GROW_FWD)
 
 
@@ -314,6 +293,11 @@ def run_arm(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int) -> di
 
     def train(name: str, arch: str, weights: str, freeze: bool = False,
               init_ckpt: str = "", head: bool = False) -> str:
+        """
+        @Mateus Oliveira
+        monta todo o comando com os argumentos, e dai se nao for. para carregar pesos do treino anterior,
+        ele nao carrega. 
+        """
         rc = run(_trainer_cmd(args, arm, gpu, name, arch, weights, freeze, init_ckpt, head))
         if rc != 0:
             _die(f"{name} saiu com codigo {rc}")
@@ -321,11 +305,16 @@ def run_arm(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int) -> di
 
     arch, weights = _paths(args, arm)
     try:
+        """
+        @Mateus Oliveira
+        nessa parte do code ele trabalha a ideia de dar o comando e ir carregando os pesos ao longo do processo.
+        os comandos sao criados para rodar via cmd.
+        """
         ckpt = train("stage1", arch, weights, freeze=True)
         ckpt = train("stage2", arch, weights, init_ckpt=ckpt)
 
         kappas: list[float] = []
-        if not args.dry_run:
+        if not args.dry_run: # so para ver se funciona.
             rows += [("—", "stage1", _kappa(_stage_dir(args, arm, "stage1"))),
                      ("—", "stage2", _kappa(_stage_dir(args, arm, "stage2")))]
             kappas = [rows[-1][2]]
@@ -398,7 +387,7 @@ def main() -> None:
     p.add_argument("--datasets", nargs="+", choices=DATASETS, default=DATASETS)
     p.add_argument("--splits", nargs="+", type=int, choices=SPLITS, default=SPLITS)
     p.add_argument("--percentages", nargs="+", type=int, choices=PERCENTAGES,
-                   default=DEFAULT_PCTS)
+                   default=GROWTH_DEFAULT_PCTS)
     p.add_argument("--work-dir", required=True,
                    help="uma subpasta por braco nasce aqui, e uma por estagio dentro dela")
     p.add_argument("--arch-json",
@@ -465,6 +454,11 @@ def main() -> None:
                         "e impureza. DEFAULT do grow: --no-impurities, com mascara")
     p.add_argument("--one-per-class", action=argparse.BooleanOptionalAction, default=None,
                    help="uma unica imagem por classe")
+    # Controle do crescimento: mesma camada, pesos sorteados. Repassada ao grow, que segue
+    # calculando o superpixel e o orcamento normalmente e so troca os VALORES no fim — e o
+    # que garante que a familia aleatoria cresca nos MESMOS bracos que a SPiFiL.
+    p.add_argument("--random-layer", action="store_true", default=False,
+                   help="camada nova com pesos aleatorios de mesmo shape (ablacao de controle)")
     args = p.parse_args()
 
     gpu_ids = args.gpus if args.gpus else list(range(args.num_gpus))
