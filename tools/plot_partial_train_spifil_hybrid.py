@@ -122,7 +122,19 @@ def fetch(dataset: str | None = None, tries: int = 3, wait: float = 5.0,
 
     CSV_DIR.mkdir(parents=True, exist_ok=True)
     failed = []
-    for run in wandb.Api(timeout=60).runs(PROJECT):
+    # A listagem tem retry PROPRIO: o laco de baixo protege so o `scan_history()` de cada
+    # run, e e a listagem que ja estourou timeout nesta maquina — sem isto o lote inteiro
+    # cai antes do primeiro download.
+    for attempt in range(1, tries + 1):
+        try:
+            listing = list(wandb.Api(timeout=60).runs(PROJECT))
+            break
+        except Exception as err:  # rede intermitente
+            print(f"[listagem {attempt}/{tries}] {err}")
+            if attempt == tries:
+                raise
+            time.sleep(wait * attempt)
+    for run in listing:
         meta = RUN_RE.match(run.name)
         if not meta or (dataset and meta["dataset"] != dataset):
             continue
@@ -179,6 +191,12 @@ def aggregate(df: pd.DataFrame, metric: str) -> pd.DataFrame:
     indefinido: vira 0, e quem denuncia isso e o ``n``.
     """
     rows = df[df[metric].notna()].sort_values("_step")
+    # `epoch` e o contador GLOBAL do Lightning. No braco com Head cada estagio retoma de
+    # checkpoint, entao o contador abre num offset diferente por split e a agregacao punha
+    # cada split num bucket so (n=1 em todo o estagio 2). `stage_epoch` ja e o mesmo
+    # contador zerado no inicio do estagio, e nos bracos que treinam do zero os dois sao
+    # identicos — por isso trocar a chave nao mexe nos paineis antigos.
+    rows = rows.assign(epoch=rows["stage_epoch"].astype(int))
     rows = rows.groupby(KEYS + ["split"], as_index=False)[metric].last()
     out = rows.groupby(KEYS)[metric].agg(mean="mean", std="std", n="count").reset_index()
     out["std"] = out["std"].fillna(0.0)
@@ -230,12 +248,24 @@ def out_shapes(family: str = "grid4") -> dict:
 
 
 def plot(dataset: str, percentage: int, metric: str = "probe/svm_kappa",
-         out_dir: Path = OUT_DIR, df: pd.DataFrame | None = None) -> Path:
-    """Desenha um painel dataset x percentage e devolve o caminho do PNG."""
+         out_dir: Path = OUT_DIR, df: pd.DataFrame | None = None,
+         family: str = "grid4") -> Path:
+    """Desenha um painel dataset x percentage de UMA familia e devolve o caminho do PNG.
+
+    O filtro por familia nao e opcional: todas as familias moram no mesmo projeto W&B e
+    portanto na mesma pasta de CSVs, e sem ele `grid4`, `g5_in_feature`, `g5_in_image` e
+    `g5_head` caem na mesma celula de `(dataset, percentage)` e sao mediadas juntas.
+
+    Nao ha flag `--family` no CLI deste modulo de proposito: o nome do PNG nao carrega a
+    familia, entao rodar outra familia aqui sobrescreveria o painel da grid4. Painel por
+    familia e o do modulo irmao (`plot_continuity_spifil_hybrid`), que ja escreve numa
+    pasta por familia.
+    """
     df = load() if df is None else df
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    panel = df[(df["dataset"] == dataset) & (df["percentage"] == percentage)]
+    panel = df[(df["dataset"] == dataset) & (df["percentage"] == percentage)
+               & (df["family"] == family)]
     agg = aggregate(panel, metric) if not panel.empty else panel
 
     fig, ax = plt.subplots(figsize=(9.5, 6.6))
@@ -248,7 +278,7 @@ def plot(dataset: str, percentage: int, metric: str = "probe/svm_kappa",
     else:
         # O enquadramento pertence a regiao com os 3 splits: um unico split que
         # treinou 500 epocas nao pode espremer o trecho comparavel na borda.
-        shapes = out_shapes()
+        shapes = out_shapes(family)
         full = agg.loc[agg["n"] >= 3, "epoch"]
         cut = int(full.max()) if len(full) else 0
         for stage in STAGES:

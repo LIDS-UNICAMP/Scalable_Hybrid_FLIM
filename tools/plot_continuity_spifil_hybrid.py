@@ -67,8 +67,13 @@ OUT_DIR = ROOT / "artifacts" / "analysis_continuidade"
 # No modo `stage` a serie e a FAMILIA, nao o estagio: STAGE_COLORS nao serve, esta indexada
 # pelo eixo X. Mesma Okabe-Ito do modulo irmao, e o marcador como segundo canal visual.
 FAMILY_COLORS = {"grid3": "#000000", "grid4": "#0072B2",
-                 "g5_in_feature": "#E69F00", "g5_in_image": "#009E73"}
-FAMILY_MARKERS = {"grid3": "o", "grid4": "s", "g5_in_feature": "^", "g5_in_image": "D"}
+                 "g5_in_feature": "#E69F00", "g5_in_image": "#009E73",
+                 # Controles de camada aleatoria e o braco com Head. Fecham as oito cores da
+                 # Okabe-Ito; uma familia nova daqui em diante precisa de outra fonte.
+                 "g5_random": "#CC79A7", "g5_random_in_feature": "#D55E00",
+                 "g5_head": "#56B4E9"}
+FAMILY_MARKERS = {"grid3": "o", "grid4": "s", "g5_in_feature": "^", "g5_in_image": "D",
+                  "g5_random": "v", "g5_random_in_feature": "P", "g5_head": "X"}
 
 
 def inherited(metric: str = "probe/svm_kappa", family: str = "grid4") -> dict:
