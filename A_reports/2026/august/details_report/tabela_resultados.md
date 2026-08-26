@@ -1,4 +1,4 @@
-# Resultados a 5% e 50% — autoencoder ResNet com encoder FLIM + crescimento SPiFiL
+# Estágios 1 a 4 do encoder FLIM + SPiFiL — teste e validação lado a lado, sem misturar
 
 Tabelas de kappa, f1 e acurácia para os três datasets do projeto, com **5%** e com **50%**
 dos dados rotulados para treinar o SVM.

@@ -42,7 +42,7 @@ drain, ``--skip-existing`` / ``--check-wandb`` resume, manifest, ``--dry-run``.
 **Input normalisation — the default changed.** The FLIM kernels were estimated on LAB
 images in [0, 1], so feeding the encoder an ImageNet-normalised input evaluates those
 kernels off the distribution they were built for; the report measures ~0.33 of kappa lost
-that way (``docs/relatorio_kappa_estagio1_estagio2.md`` §8.1). This queue therefore runs
+that way (``A_reports/2026/august/details_report/relatorio_kappa_estagio1_estagio2.md`` §8.1). This queue therefore runs
 **LAB [0, 1] by default** and passes ``--no-imagenet-norm`` to every child explicitly, so
 the flag is visible in the logged command line. ``--imagenet-norm`` opts back in and
 reproduces the legacy behaviour. This is a *local* decision for the FLIM-init autoencoder

@@ -271,7 +271,7 @@ distintos por md5**; `~/scalable_FLIM_self_supervised` é cópia byte-idêntica.
 22. `README.md` (diff não commitado): diz que os dois callbacks olham `val/svm_kappa` (no estágio 1 é
     `val/recon_loss`), diz 18 runs (são 36), dá convenção de nome que o código não usa, e os comandos
     omitem `--stage`, que é obrigatório.
-23. `docs/svm_probe_curves.md` cita as chaves antigas.
+23. `svm_probe_curves.md` cita as chaves antigas.
 24. `analysis_flim_distill/REPORT_why_protozoan_collapses.md:98` afirma que falta aplicar
     marker-norm. **Está errado** — ver §4.
 
@@ -390,7 +390,7 @@ As runs **já** são separadas por nome, tag e config — dá para filtrar o das
 ### 8.8 Parar de descartar o `stderr` do filho
 **Onde:** `scripts/autoencoder_flim_ray.py:514-522`. **Risco: nenhum.**
 
-### 8.9 Corrigir README, `docs/svm_probe_curves.md` e as notas de marker-norm
+### 8.9 Corrigir README, `svm_probe_curves.md` e as notas de marker-norm
 **Risco: nenhum.** Ver §5.G.
 
 ---

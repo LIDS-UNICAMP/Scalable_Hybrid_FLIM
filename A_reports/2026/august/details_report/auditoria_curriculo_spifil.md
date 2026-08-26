@@ -219,7 +219,7 @@ Três confirmações independentes de que a camada nova é a mais profunda:
    (`scripts/spifil_grow.py:287`), não da imagem — logo a camada nova consome as antigas.
 2. `--freeze-spifil-layer` congela `blocks[f"conv{n_layers}"]`, com o comentário "Last block
    only = the grafted SPiFiL layer" (`src/modules/autoencoder_flim_module.py:222-228`).
-3. O doc diz "SPiFiL corta a camada N+1" (`docs/spifil_growth.md:28`).
+3. O doc diz "SPiFiL corta a camada N+1" (`spifil_growth.md:28`).
 
 Do lado do **decoder** o inverso acontece e está correto: o bloco novo entra no índice 0
 (`src/models/autoencoder_resnet.py:111`), que é o espelho de um append no encoder.
@@ -253,13 +253,13 @@ return Seeds(coords=seeds.coords * new // old, labels=seeds.labels, ranks=seeds.
 É uma função escrita à mão porque a API nativa da biblioteca (`Seeds.project`,
 `SPiFiL/src/spifil/coords.py:53-56`) só faz divisão inteira por stride, e a cadeia de
 `MaxPool2d(3, stride=2)` do encoder vai 200 → 99 → 49 → 24, onde 200/24 não é inteiro
-(`docs/spifil_growth.md:278-286`).
+(`spifil_growth.md:278-286`).
 
 Duas ressalvas que impedem um "sim" limpo no ponto 5:
 
 1. **A partição de superpixel é sempre no nível da imagem.** `preparation.prepare` é chamado
    sobre as imagens cortadas, nunca sobre features. Só os medoides viajam. É deliberado e
-   documentado (`scripts/spifil_grow.py:272-277`, `docs/spifil_grafting.md:36-39`).
+   documentado (`scripts/spifil_grow.py:272-277`, `spifil_grafting.md:36-39`).
 2. **Com o padrão `--pool-stride 1` a grade nunca muda entre rodadas**
    (`scripts/spifil_grow.py:358-359`). `trunk.grid` fica em 24 para sempre, então
    `rescale(200 → 24)` devolve coordenadas idênticas em toda rodada. A reprojeção está viva e
@@ -269,7 +269,7 @@ Duas ressalvas que impedem um "sim" limpo no ponto 5:
 ### Uma hipótese que foi levantada e se mostrou falsa
 
 O título do doc diz "cortada do backbone já treinado"
-(`docs/spifil_growth.md:1`), o que levantou a suspeita de que o código estivesse fatiando
+(`spifil_growth.md:1`), o que levantou a suspeita de que o código estivesse fatiando
 camadas de uma rede pré-treinada em vez de calcular SPiFiL. **Não é isso.** "Cortada do
 backbone" quer dizer que os filtros são recortes dos mapas de features que o backbone
 treinado produz. É um SPiFiL de verdade, refeito a cada rodada, sobre ativações ao vivo
@@ -285,10 +285,10 @@ e congelar o último bloco (`src/modules/autoencoder_flim_module.py:226-228`) �
 vez de tirá-la. Não há grupos de parâmetro com `lr=0`.
 
 Vale dizer: **isso é deliberado no projeto, não um esquecimento.** O
-`docs/spifil_growth.md:28` tabela o estágio 3 como "congelado + uma camada nova";
-`docs/spifil_growth.md:60-62` dá a razão ("o bloco novo do decoder é aleatório de novo. Toda
+`spifil_growth.md:28` tabela o estágio 3 como "congelado + uma camada nova";
+`spifil_growth.md:60-62` dá a razão ("o bloco novo do decoder é aleatório de novo. Toda
 rodada reintroduz exatamente o problema que o estágio 1 resolveu"); e
-`docs/spifil_growth.md:96-110` argumenta que deixar o gradiente de um decoder aleatório bater
+`spifil_growth.md:96-110` argumenta que deixar o gradiente de um decoder aleatório bater
 em filtros recém-recortados é justamente o que se quer evitar. O repositório e o currículo
 discordam de propósito neste ponto.
 
@@ -431,7 +431,7 @@ Em ordem de impacto. **Nada disso foi feito** — é lista, não patch.
 2. **Decidir o que "reprojetar" significa.** Se for "mover as sementes", já está feito. Se for
    "re-segmentar na profundidade nova", a biblioteca SPiFiL não oferece isso —
    `SPiFiL/src/spifil/preparation.py:74-75` é o único ponto onde o algoritmo de superpixel
-   roda em todo o pacote. Seria código novo, e o próprio `docs/spifil_grafting.md:125-127`
+   roda em todo o pacote. Seria código novo, e o próprio `spifil_grafting.md:125-127`
    argumenta que fazer isso seria "outro método".
 3. **Confirmar a direção do ponto 3.** Se "na frente" for perto da entrada, é uma reescrita
    grande. Se for "mais fundo", não há nada a fazer.
@@ -496,10 +496,10 @@ Ele cobre três coisas, e as três batem com o código: forma do decoder crescid
 toca estado de congelamento, `requires_grad`, o par estágio 3 / estágio 4, `--init-ckpt`, o
 remap de índice do decoder, ou o repasse de peso entre rodadas. Em particular o `delta`
 (`src/modules/autoencoder_flim_module.py:905-912`) — o único ponto onde o decoder treinado
-pode ser descartado em silêncio, e que `docs/spifil_growth.md:377-399` aponta como uma carga
+pode ser descartado em silêncio, e que `spifil_growth.md:377-399` aponta como uma carga
 que falha *sem erro* — **não tem teste nenhum**.
 
-**8. `docs/spifil_growth.md` está correto no conteúdo, mas com as linhas defasadas.**
+**8. `spifil_growth.md` está correto no conteúdo, mas com as linhas defasadas.**
 Todas as afirmações de protocolo que conferi batem. As referências de linha, não: por
 exemplo `spifil_growth_loop.py:246-267` → hoje `299-321`; `:248` → `301`; `:130-131` →
 `227-228`; `autoencoder_flim_module.py:810-812` → `834-838`; `:872-895` → `897-919`.

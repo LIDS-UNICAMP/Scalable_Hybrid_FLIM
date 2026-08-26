@@ -11,7 +11,7 @@ Retrato de 2026-08-22 22:57. Grade `grid4`, em `artifacts/spifil_growth/grid4/`.
 > a sonda usa um `SVC` próprio (`src/modules/autoencoder_flim_module.py:485`), enquanto o
 > avaliador oficial usa o `fit_svm` compartilhado (`src/utils/evaluate.py:372`) sobre o teste.
 >
-> **Não misture estes números com os de `docs/tabela_resultados.md`**, que são de teste. E não
+> **Não misture estes números com os de `tabela_resultados.md`**, que são de teste. E não
 > cite nenhum número daqui como resultado final de tese sem rodar a avaliação de teste antes.
 
 Todo o grid rodou com `--embed-mode flatten`. Não há contraparte no braço de 48 dimensões.
@@ -222,8 +222,8 @@ Se a ideia merecer mais uma tentativa antes de ser abandonada, a ordem que faz s
 | Gráficos em linha do tempo contínua | `artifacts/analysis_continuidade/` |
 | Script dos gráficos sobrepostos, e o `fetch()` do W&B | `tools/plot_partial_train_spifil_hybrid.py` |
 | Script da linha do tempo contínua | `tools/plot_continuity_spifil_hybrid.py` |
-| Auditoria do currículo contra o código | `docs/auditoria_curriculo_spifil.md` |
-| Resultados de **teste** (não confundir com este documento) | `docs/tabela_resultados.md` |
+| Auditoria do currículo contra o código | `auditoria_curriculo_spifil.md` |
+| Resultados de **teste** (não confundir com este documento) | `tabela_resultados.md` |
 
 Para atualizar tudo com dados novos do W&B:
 

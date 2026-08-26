@@ -765,8 +765,8 @@ camada por rodada**, cortada pelo SPiFiL do backbone que já foi treinado. A per
 experimento responde é se cada camada nova paga o próprio custo — o laço mede o κ do probe SVM
 depois de cada rodada e para sozinho quando o κ deixa de melhorar.
 
-Protocolo em [`docs/spifil_growth.md`](docs/spifil_growth.md); resultados de teste consolidados em
-[`docs/table_result_stages.md`](docs/table_result_stages.md).
+Protocolo em [`A_reports/2026/august/details_report/spifil_growth.md`](A_reports/2026/august/details_report/spifil_growth.md); resultados de teste consolidados em
+[`A_reports/2026/august/details_report/table_result_stages.md`](A_reports/2026/august/details_report/table_result_stages.md).
 
 ### O laço
 

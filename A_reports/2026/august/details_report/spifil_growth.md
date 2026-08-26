@@ -598,6 +598,6 @@ primeiro assert que falhar.
 | `build_encoder_from_arch`, `shift_weights`, `load_FLIM_encoder` | [`src/models/models.py`](../src/models/models.py) |
 | `ResNetDecoder`, o espelho do JSON, o `out_size` | [`src/models/autoencoder_resnet.py`](../src/models/autoencoder_resnet.py) |
 | A sonda κ, `_encode_pooled` | [`src/utils/evaluate.py`](../src/utils/evaluate.py) |
-| O SPiFiL em si, e o graft do qual este script descende | [`docs/spifil_grafting.md`](spifil_grafting.md), [`scripts/spifil_resnet_graft.py`](../scripts/spifil_resnet_graft.py) |
+| O SPiFiL em si, e o graft do qual este script descende | [`spifil_grafting.md`](spifil_grafting.md), [`scripts/spifil_resnet_graft.py`](../scripts/spifil_resnet_graft.py) |
 | `FitStrategy` / `SequentialStrategy`, a costura usada | `spifil/strategies.py` |
 | `Seeds.project`, "duplicates and all" | `spifil/types.py:108` |

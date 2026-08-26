@@ -11,7 +11,7 @@ linear, `C=1e2`, `ovo`, `max_iter=-1` (convergido). As métricas saem da funçã
 única `compute_metrics` (`src/metrics/classification.py:31`).
 
 **Não misture com os números de validação.** O documento
-[`docs/evolucao_dos_estagios_validacao.md`](evolucao_dos_estagios_validacao.md)
+[`evolucao_dos_estagios_validacao.md`](evolucao_dos_estagios_validacao.md)
 traz kappa da **sonda interna**, que roda a cada época durante o treino. É outro
 conjunto (validação) e outro classificador (um `SVC` próprio,
 `src/modules/autoencoder_flim_module.py:485`). **Os dois não são comparáveis** —
