@@ -77,6 +77,7 @@ from src.models.distillation import (
     kd_loss,
     add_distill_flags,
     resolve_distill_flags,
+    derive_flim_paths,
     distill_run_tags,
 )
 from src.models.lejepa_flim import LeJEPAFLIMModel
@@ -434,7 +435,7 @@ def _build_parser():
     p.add_argument("--split",     required=True, type=int)
     p.add_argument("--percentage",required=True, type=int)
     # Architecture
-    p.add_argument("--arch-json", required=True, help="Path to FLIM architecture.json")
+    p.add_argument("--arch-json", default=None, help="Path to FLIM architecture.json")
     # Experiment
     p.add_argument("--run-name",          required=True)
     p.add_argument("--distillation-type", default="direct", choices=list(DISTILLATION_TYPES))
@@ -496,6 +497,7 @@ def main() -> int:
     args   = parser.parse_args()
 
     # The new flags win over --encoder-init/--distillation-type when used.
+    derive_flim_paths(args)
     _overrides = resolve_distill_flags(args)
 
     pl.seed_everything(args.seed, workers=True)

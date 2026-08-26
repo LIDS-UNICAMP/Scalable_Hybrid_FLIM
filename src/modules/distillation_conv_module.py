@@ -80,6 +80,7 @@ from src.models.distillation import (
     kd_loss,
     add_distill_flags,
     resolve_distill_flags,
+    derive_flim_paths,
     distill_run_tags,
 )
 from src.models.lejepa_flim import LeJEPAFLIMModel
@@ -419,7 +420,7 @@ def _build_parser():
     p.add_argument("--dataset",    required=True, choices=["eggs", "larvae", "protozoan"])
     p.add_argument("--split",      required=True, type=int)
     p.add_argument("--percentage", required=True, type=int)
-    p.add_argument("--arch-json",  required=True, help="Path to FLIM architecture.json")
+    p.add_argument("--arch-json",  default=None, help="Path to FLIM architecture.json")
     p.add_argument("--run-name",          required=True)
     p.add_argument("--distillation-type", default="direct", choices=list(DISTILLATION_TYPES))
     p.add_argument("--encoder-init",      default="trunc_normal", choices=list(ENCODER_INITS))
@@ -470,6 +471,7 @@ def main() -> int:
     args   = parser.parse_args()
 
     # As flags novas vencem as antigas quando alguma delas e usada.
+    derive_flim_paths(args)
     _overrides = resolve_distill_flags(args)
 
     pl.seed_everything(args.seed, workers=True)
