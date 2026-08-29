@@ -55,11 +55,16 @@ Uso::
 
     python -m src.evaluate.eval_growth_stages --pct 50 --dataset larvae \\
       --stage round2_stage4 --skip-existing
+
+    # VALIDACAO (nao passa por checkpoint: o numero ja existe no W&B)
+    python -m src.evaluate.eval_growth_stages --pct 5 --fetch-wandb \\
+      --family g5_random_in_feature g5_head_larvae
 """
 
 import argparse
 import csv
 import glob
+import json
 import os
 import re
 import sys
@@ -110,6 +115,17 @@ _FIELDS = ["method", "run_name", "stage_label", "round", "dataset", "split",
            # `--skip-existing` contra os CSVs de 26 campos ja escritos. Vazias
            # em quem nao tem Head (`restval=""` do DictWriter).
            "head_kappa", "head_acc", "head_f1"]
+
+# O CSV de VALIDACAO e outro artefato: outra medida (a sonda do proprio treino, no
+# conjunto de validacao), outro schema. `kappa`/`acc`/`f1` sem prefixo de proposito —
+# o plot resolve a coluna com `metric.rsplit("_", 1)[-1]`.
+_VAL_METHOD = "WANDB_probe_svm_val"
+_VAL_FIELDS = ["method", "run_name", "stage_label", "round", "dataset", "split",
+               "percentage", "eval_split", "family", "run_id", "run_state",
+               "stage_epoch", "kappa", "acc", "f1", "val_recon_loss",
+               "head_kappa", "head_acc", "flim_ref_kappa", "ckpt"]
+# Rodar duas vezes SOBRESCREVE: quem colide nesta chave sai do CSV velho antes do concat.
+_VAL_KEY = ["family", "run_name", "stage_label", "split", "percentage", "eval_split"]
 
 
 def _jobs(pct: int, families, stages, datasets, splits):
@@ -186,6 +202,126 @@ def _done(out: str):
                  int(r["split"])) for r in csv.DictReader(fh)}
 
 
+def _summary(rows) -> None:
+    """Media por rotulo de estagio, na ordem cronologica. `float()` porque as linhas
+    podem vir do `DictWriter` (ja float) ou de um `DictReader` do CSV (string)."""
+    for label in sorted({r["stage_label"] for r in rows},
+                        key=lambda s: (int(_STAGE.match(s)[1] or 0),
+                                       int(_STAGE.match(s)[2] or 5))):
+        sel = [r for r in rows if r["stage_label"] == label]
+        print(f"{label:>13}  n={len(sel):<3d} "
+              f"kappa={np.mean([float(r['kappa']) for r in sel]):+.4f} "
+              f"acc={np.mean([float(r['acc']) for r in sel]):.4f} "
+              f"f1={np.mean([float(r['f1']) for r in sel]):.4f}")
+
+
+def _wandb_val(args, out: str) -> None:
+    """Baixa os runs das familias pedidas e (re)escreve o CSV de VALIDACAO por estagio.
+
+    O download bruto e o `fetch()` do plot — o unico downloader do repo, com o retry de
+    rede ja pago. `PROJECT` la e constante de modulo, entao `--wandb-entity/--wandb-project`
+    entram por rebind, do mesmo jeito que `_ev.EMBED_MODE` no `main()`.
+
+    ARMADILHA: `probe/flim_ref_svm_kappa` so existe no SUMMARY do run — e logado uma vez,
+    em `on_fit_start`, e nao sobrevive ao `scan_history()` que alimenta os CSVs por-run.
+    Sai da listagem, que ja traz o summary junto: nenhum request a mais por run.
+
+    ARMADILHA 2: a familia vem do `RUN_RE`, nunca do `config["stage"]` — aquele campo vale
+    2 num `round1_head` e nem tem numero para o head.
+    """
+    import pandas as pd
+    import wandb
+
+    sys.path.insert(0, os.path.join(_ROOT, "tools"))
+    import plot_partial_train_spifil_hybrid as _pt
+
+    project = f"{args.wandb_entity}/{args.wandb_project}"
+    _pt.PROJECT = project
+    _pt.fetch(families=set(args.family))
+
+    flim_ref, seen_fams = {}, set()
+    for run in wandb.Api(timeout=60).runs(project):
+        m = _pt.RUN_RE.match(run.name)
+        fam = (m["family"] or "grid4") if m else None
+        if fam in args.family:
+            seen_fams.add(fam)
+            flim_ref[run.name] = run.summary.get("probe/flim_ref_svm_kappa")
+
+    # Falhar alto: nunca plotar incompleto calado.
+    for fam in args.family:
+        if fam not in seen_fams:
+            raise SystemExit(f"[FALHA] --family {fam!r}: 0 runs em {project}.")
+    disk = set()
+    for fam in args.family:
+        for meta_path in _pt.grid_dir(fam).glob("*/*/run_metadata.json"):
+            meta = json.loads(meta_path.read_text())
+            if meta.get("percentage") == args.pct:
+                disk.add(meta["run_name"])
+    faltam = sorted(disk - flim_ref.keys())
+    if faltam and not args.allow_missing_runs:
+        raise SystemExit(f"[FALHA] {len(faltam)} braco(s) em disco sem run no W&B: "
+                         f"{' '.join(faltam)}\n  Use --allow-missing-runs para ignorar.")
+
+    def cell(row, key):
+        """Coluna ausente e coluna vazia sao a mesma coisa aqui: string vazia."""
+        v = row.get(key)
+        return "" if v is None or pd.isna(v) else v
+
+    rows = []
+    for path in tqdm(sorted(_pt.CSV_DIR.glob("spifil_growth_*.csv")),
+                     desc="val stages", unit="run"):
+        m = _pt.RUN_RE.match(path.stem)
+        if not m or (m["family"] or "grid4") not in args.family:
+            continue
+        label, st = m["label"], _STAGE.match(m["label"])
+        if (not st or int(m["pct"]) != args.pct
+                or (args.stage and label not in args.stage)
+                or (args.dataset and m["dataset"] not in args.dataset)
+                or (args.split and int(m["split"]) not in args.split)):
+            continue
+        hist = pd.read_csv(path)
+        # `scan_history()` traz todo log point; a maioria nao tem a sonda. `stage_epoch`
+        # e o contador zerado no inicio do estagio — `epoch` e o global do Lightning e
+        # abre num offset diferente por split no braco com Head.
+        hist = hist[hist["probe/svm_kappa"].notna() & hist["stage_epoch"].notna()]
+        if hist.empty:
+            continue
+        hist = hist.sort_values("_step")
+        pick = (hist.loc[hist["probe/svm_kappa"].idxmax()] if args.stage_agg == "best"
+                else hist.iloc[-1])
+        fam = m["family"] or "grid4"
+        arm = f"{m['dataset']}_split{m['split']}_pct{m['pct']}"
+        rows.append({
+            "method": _VAL_METHOD, "run_name": pick["run_name"], "stage_label": label,
+            "round": int(st[1] or 0), "dataset": m["dataset"],
+            "split": int(m["split"]), "percentage": int(m["pct"]),
+            "eval_split": "val", "family": fam, "run_id": pick["run_id"],
+            "run_state": pick["run_state"], "stage_epoch": int(pick["stage_epoch"]),
+            "kappa": cell(pick, "probe/svm_kappa"), "acc": cell(pick, "probe/svm_acc"),
+            "f1": cell(pick, "probe/svm_f1"),
+            "val_recon_loss": cell(pick, "probe/val_recon_loss"),
+            "head_kappa": cell(pick, "probe/head_kappa"),
+            "head_acc": cell(pick, "probe/head_acc"),
+            "flim_ref_kappa": "" if flim_ref.get(pick["run_name"]) is None
+                              else flim_ref[pick["run_name"]],
+            # So por compat com o `.str[2]` do plot, que le a familia do caminho.
+            "ckpt": f"artifacts/spifil_growth/{fam}/{arm}/{label}/checkpoints/"
+                    f"best_kappa.ckpt",
+        })
+
+    new = pd.DataFrame(rows, columns=_VAL_FIELDS)
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    if os.path.exists(out) and os.path.getsize(out) > 0:
+        old = pd.read_csv(out)
+        # `astype(str)` porque o CSV relido volta com int64 onde o DataFrame novo tem int
+        # nativo, e o `isin` de MultiIndex compara por tipo.
+        key = pd.MultiIndex.from_frame(new[_VAL_KEY].astype(str))
+        old = old[~pd.MultiIndex.from_frame(old[_VAL_KEY].astype(str)).isin(key)]
+        new = pd.concat([old, new], ignore_index=True)[_VAL_FIELDS]
+    new.to_csv(out, index=False)
+    print(f"\n[OK] {out}  ({len(rows)} linhas de validacao)")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--pct", required=True, type=int, choices=[5, 50],
@@ -197,7 +333,8 @@ def main() -> None:
                     help="Grades de artifacts/spifil_growth/ a varrer. A "
                          "familia e o basename do --work-dir do "
                          "scripts/spifil_growth_loop.py (`_exp()`, linha 122): "
-                         "grid3, grid4, g5_in_feature, g5_in_image. Sem "
+                         "grid3, grid4, g5_in_feature, g5_in_image, g5_random, "
+                         "g5_random_in_feature, g5_head, g5_head_larvae. Sem "
                          "`choices` travado — grade nova entra sem editar isto.")
     ap.add_argument("--stage", nargs="+", default=None,
                     choices=["stage1", "stage2", "round1_stage3",
@@ -222,7 +359,29 @@ def main() -> None:
                     help="Pula linha ja presente no CSV e acrescenta o resto.")
     ap.add_argument("--dry-run", action="store_true",
                     help="Lista os trabalhos selecionados e sai.")
+    ap.add_argument("--eval-split", choices=("test", "val"), default="test",
+                    help="Qual medicao alimenta o eixo dos estagios. `test` (default) = "
+                         "este avaliador, rodando o SVM sobre os checkpoints. `val` = CSV "
+                         "de validacao vindo do W&B (`probe/svm_*`), que nao passa por "
+                         "checkpoint nenhum. Entra no nome do CSV como infixo `_val`.")
+    ap.add_argument("--fetch-wandb", action="store_true",
+                    help="Baixa os runs das familias pedidas e (re)escreve o CSV de "
+                         "validacao antes de qualquer uso. Implica --eval-split val.")
+    ap.add_argument("--wandb-entity", default="ophira-ai")
+    ap.add_argument("--wandb-project", default="phd_thesis_grid4")
+    ap.add_argument("--stage-agg", choices=("best", "last"), default="best",
+                    help="Como colapsar a curva de um estagio num ponto. `best` = epoca "
+                         "de maior probe/svm_kappa (e o que o best_kappa.ckpt guardou); "
+                         "`last` = ultima stage_epoch.")
+    ap.add_argument("--allow-missing-runs", action="store_true",
+                    help="Desliga a falha alta quando um braco presente em disco nao tem "
+                         "run correspondente no W&B.")
     args = ap.parse_args()
+
+    # --fetch-wandb so sabe produzir o CSV de validacao: forcar aqui mantem o nome do
+    # arquivo coerente com o que foi de fato medido.
+    if args.fetch_wandb:
+        args.eval_split = "val"
 
     device = torch.device(args.device or
                           ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -239,8 +398,26 @@ def main() -> None:
                      f"Grades em disco: {' '.join(sorted(os.listdir(_GRID)))}")
 
     tag = "" if args.family == ["grid4"] else "_" + "_".join(args.family)
+    kind = "_val" if args.eval_split == "val" else ""
     out = args.out or os.path.join(_ROOT, "results",
-                                   f"eval_growth_stages{tag}_pct{args.pct}.csv")
+                                   f"eval_growth_stages{kind}{tag}_pct{args.pct}.csv")
+
+    # A validacao nao vem de checkpoint: nao ha nada para avaliar aqui, so o CSV do W&B.
+    if args.eval_split == "val":
+        if args.fetch_wandb:
+            _wandb_val(args, out)
+        if not os.path.exists(out):
+            raise SystemExit(f"[FALHA] {out} nao existe. Rode com --fetch-wandb.")
+        with open(out, newline="") as fh:
+            vrows = list(csv.DictReader(fh))
+        falta = [c for c in _VAL_FIELDS if not vrows or c not in vrows[0]]
+        if falta:
+            raise SystemExit(f"[FALHA] {out}: schema de validacao sem {falta}")
+        print(f"[OK] {out}  ({len(vrows)} linhas, eval_split=val, "
+              f"stage_agg={args.stage_agg})")
+        _summary(vrows)
+        return
+
     jobs = _jobs(args.pct, args.family, args.stage, args.dataset, args.split)
 
     print(f"[CONTRATO] embed_mode='{_EMBED_MODE}' (o do treino; default do "
@@ -250,6 +427,13 @@ def main() -> None:
     print(f"[CONTRATO] solver  = train_svm(..., max_iter={args.max_iter}) -> fit_svm")
     print(f"[CONTRATO] {len(jobs)} trabalhos | family={' '.join(args.family)} "
           f"| pct={args.pct} | device={device} | out={out}\n")
+
+    # Zero trabalho e erro, nao CSV vazio: sem isto um filtro que nao casa nada
+    # so vira arquivo de cabecalho e o NaN aparece la na frente, na tabela.
+    if not jobs:
+        ap.error(f"nenhum estagio casou o filtro: family={' '.join(args.family)} "
+                 f"pct={args.pct} stage={args.stage} dataset={args.dataset} "
+                 f"split={args.split}")
 
     if args.dry_run:
         for j in jobs:
@@ -358,15 +542,7 @@ def main() -> None:
                        f"({extract_s:.1f}s/{fit_s:.1f}s/{predict_s:.1f}s)")
 
     print(f"\n[OK] {out}  ({len(rows)} linhas novas)")
-
-    for label in sorted({r["stage_label"] for r in rows},
-                        key=lambda s: (int(_STAGE.match(s)[1] or 0),
-                                       int(_STAGE.match(s)[2] or 5))):
-        sel = [r for r in rows if r["stage_label"] == label]
-        print(f"{label:>13}  n={len(sel):<3d} "
-              f"kappa={np.mean([r['kappa'] for r in sel]):+.4f} "
-              f"acc={np.mean([r['acc'] for r in sel]):.4f} "
-              f"f1={np.mean([r['f1'] for r in sel]):.4f}")
+    _summary(rows)
 
 
 if __name__ == "__main__":

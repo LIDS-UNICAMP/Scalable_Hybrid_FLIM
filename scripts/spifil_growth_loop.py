@@ -454,9 +454,11 @@ def main() -> None:
                         "e impureza. DEFAULT do grow: --no-impurities, com mascara")
     p.add_argument("--one-per-class", action=argparse.BooleanOptionalAction, default=None,
                    help="uma unica imagem por classe")
-    # Controle do crescimento: mesma camada, pesos sorteados. Repassada ao grow, que segue
-    # calculando o superpixel e o orcamento normalmente e so troca os VALORES no fim — e o
-    # que garante que a familia aleatoria cresca nos MESMOS bracos que a SPiFiL.
+    # Controle do crescimento: mesma camada, pesos sorteados, sem SPiFiL nenhum. Repassada
+    # SO ao grow — o treinador nunca a ve. Como o caminho aleatorio nao cobra o orcamento
+    # N<=D, a familia aleatoria NAO cresce nos mesmos bracos que a SPiFiL: os 6 bracos de
+    # larvae, que a SPiFiL recusa na rodada 1 (exit GROW_EXHAUSTED), aqui crescem ate o
+    # --max-rounds. A comparacao entre as duas familias e pareada so onde a SPiFiL cresceu.
     p.add_argument("--random-layer", action="store_true", default=False,
                    help="camada nova com pesos aleatorios de mesmo shape (ablacao de controle)")
     args = p.parse_args()

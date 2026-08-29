@@ -37,7 +37,9 @@ avaliador (``src/evaluate/eval_growth_stages.py``), que tem uma linha final por
 ``(familia, estagio, dataset, split)`` e nenhuma coluna ``epoch``. O eixo X passa a ser o
 estagio e cada FAMILIA (grid4, g5_in_feature, g5_in_image, ...) vira uma linha no mesmo
 eixo. Atencao ao que muda junto com o eixo: aquele CSV pontua no TESTE, a serie por epoca
-pontua na VALIDACAO — nao sao continuacao um do outro.
+pontua na VALIDACAO — nao sao continuacao um do outro. ``--eval-split val`` troca a fonte
+deste eixo pelo CSV de validacao (sonda SVM do W&B), que o proprio avaliador escreve com
+``--fetch-wandb``; o plot so o le.
 
 Os dois modos aceitam ``--family``, mas a leem diferente. O ``epoch`` desenha UM painel por
 familia (a trajetoria continua so faz sentido dentro de uma, com os pontos herdados dela);
@@ -50,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -71,9 +74,15 @@ FAMILY_COLORS = {"grid3": "#000000", "grid4": "#0072B2",
                  # Controles de camada aleatoria e o braco com Head. Fecham as oito cores da
                  # Okabe-Ito; uma familia nova daqui em diante precisa de outra fonte.
                  "g5_random": "#CC79A7", "g5_random_in_feature": "#D55E00",
-                 "g5_head": "#56B4E9"}
+                 "g5_head": "#56B4E9",
+                 # A nona familia, e a Okabe-Ito acabou na linha de cima. Roxo escuro do
+                 # ColorBrewer Dark2: e o unico tom que nao encosta em nenhuma das oito
+                 # (o mais proximo, o #CC79A7, e rosa claro — separa por luminancia, que e
+                 # o canal que sobrevive ao daltonismo).
+                 "g5_head_larvae": "#6A3D9A"}
 FAMILY_MARKERS = {"grid3": "o", "grid4": "s", "g5_in_feature": "^", "g5_in_image": "D",
-                  "g5_random": "v", "g5_random_in_feature": "P", "g5_head": "X"}
+                  "g5_random": "v", "g5_random_in_feature": "P", "g5_head": "X",
+                  "g5_head_larvae": "*"}
 
 
 def inherited(metric: str = "probe/svm_kappa", family: str = "grid4") -> dict:
@@ -192,7 +201,8 @@ def plot(dataset: str, percentage: int, metric: str = "probe/svm_kappa",
 def plot_stages(dataset: str, percentage: int, df: pd.DataFrame, families: list[str],
                 metric: str = "probe/svm_kappa", out_dir: Path = OUT_DIR,
                 splits: list[int] | None = None,
-                stages: list[str] | None = None) -> Path:
+                stages: list[str] | None = None,
+                eval_split: str = "test") -> Path:
     """Uma linha por familia sobre o eixo dos estagios, do CSV do avaliador."""
     # Este painel COMPARA familias, entao a pasta e a comparacao inteira, nao uma familia:
     # `g5_in_feature_vs_g5_in_image/`. Com uma familia so, e o nome dela e a pasta fica
@@ -205,9 +215,12 @@ def plot_stages(dataset: str, percentage: int, df: pd.DataFrame, families: list[
     if column not in df.columns:
         raise SystemExit(f"--metric {metric}: o CSV nao tem a coluna '{column}'")
     panel = df[(df["dataset"] == dataset) & (df["percentage"] == percentage)]
-    # A familia nao e coluna do CSV e nao deve virar uma: ela ja mora no ckpt, que e
-    # artifacts/spifil_growth/<FAMILY>/<braco>/<estagio>/checkpoints/best_kappa.ckpt.
-    panel = panel.assign(family=panel["ckpt"].str.split("/").str[2])
+    # No CSV do avaliador a familia nao e coluna: ela mora no ckpt, que e
+    # artifacts/spifil_growth/<FAMILY>/<braco>/<estagio>/checkpoints/best_kappa.ckpt. O CSV
+    # de validacao (--eval-split val) ja traz a coluna real — prefira ela, porque o ckpt la
+    # e so compatibilidade.
+    if "family" not in panel.columns:
+        panel = panel.assign(family=panel["ckpt"].str.split("/").str[2])
     panel = panel[panel["family"].isin(families)]
     if splits:
         panel = panel[panel["split"].isin(splits)]
@@ -248,16 +261,25 @@ def plot_stages(dataset: str, percentage: int, df: pd.DataFrame, families: list[
         ax.grid(alpha=0.25, lw=0.7)
         ax.set_axisbelow(True)
     ax.set_xlabel("estagio do curriculo — ordem cronologica, uma medicao final por estagio")
-    ax.set_ylabel(metric)
+    # A nota vermelha de hoje diz TESTE, e isso so vale para o CSV do avaliador. Com
+    # --eval-split val a fonte e outra (sonda SVM do W&B, fit=train/score=validation) e a
+    # nota mentiria — entao o eixo Y e o rodape dizem qual das duas esta no painel.
+    ax.set_ylabel(metric if eval_split == "test" else f"{metric} — VALIDACAO")
     ax.set_title(f"{dataset} · pct{percentage} · {metric}  ({', '.join(families)})\n"
                  "media +/- desvio sobre os splits; familias no mesmo eixo, comparaveis",
                  fontsize=11)
-    fig.text(0.012, 0.012, "CSV do avaliador: pontuado no TESTE — o modo `--by epoch` "
-             "pontua na VALIDACAO; um nao e continuacao do outro",
+    fig.text(0.012, 0.012,
+             "CSV do avaliador: pontuado no TESTE — o modo `--by epoch` "
+             "pontua na VALIDACAO; um nao e continuacao do outro" if eval_split == "test"
+             else "CSV de validacao (sonda SVM do W&B: fit=train, score=validation) — "
+                  "mesma medicao do `--by epoch`, NAO o TESTE do avaliador",
              fontsize=8.5, color="#c0392b")
     fig.tight_layout(rect=(0, 0.035, 1, 1))
     fig.subplots_adjust(bottom=0.30)
-    path = out_dir / f"{dataset}_pct{percentage}_{metric.split('/')[-1]}_estagios.png"
+    # O infixo `_val` no nome segue o do CSV: sem ele o painel de validacao sobrescreveria
+    # o de teste na mesma pasta, calado, e as duas medicoes nao sao intercambiaveis.
+    kind = "" if eval_split == "test" else "_val"
+    path = out_dir / f"{dataset}_pct{percentage}_{metric.split('/')[-1]}_estagios{kind}.png"
     fig.savefig(path, dpi=170)
     plt.close(fig)
     return path
@@ -280,9 +302,27 @@ def main() -> None:
     ap.add_argument("--split", type=int, nargs="+", default=None)
     ap.add_argument("--stage", nargs="+", choices=STAGES, default=None)
     ap.add_argument("--csv", default=None,
-                    help="CSV do avaliador; default derivado de --family e --pct.")
+                    help="CSV do avaliador; default derivado de --family, --pct e "
+                         "--eval-split. Um so CSV para todas as pct quando explicito.")
+    ap.add_argument("--eval-split", choices=("test", "val"), default="test",
+                    help="Qual medicao alimenta o eixo dos estagios. test: CSV do "
+                         "avaliador (hoje). val: CSV de validacao vindo do W&B, com o "
+                         "infixo `_val` no nome default.")
+    ap.add_argument("--fetch-wandb", action="store_true",
+                    help="(Re)escreve o CSV de validacao a partir do W&B antes de "
+                         "plotar. Implica --eval-split val.")
+    ap.add_argument("--wandb-entity", default="ophira-ai")
+    ap.add_argument("--wandb-project", default="phd_thesis_grid4")
+    ap.add_argument("--stage-agg", choices=("best", "last"), default="best",
+                    help="Como colapsar a curva de um estagio num ponto: best = epoca de "
+                         "maior probe/svm_kappa (o que o best_kappa.ckpt guarda); "
+                         "last = ultima stage_epoch.")
+    ap.add_argument("--allow-missing-runs", action="store_true",
+                    help="Nao falha quando um braco em disco nao tem run no W&B.")
     ap.add_argument("--out-dir", default=OUT_DIR)
     args = ap.parse_args()
+    if args.fetch_wandb:
+        args.eval_split = "val"
     if args.fetch:
         fetch(families=set(args.family))
     if args.by == "epoch":
@@ -296,12 +336,23 @@ def main() -> None:
     # Um CSV por porcentagem: e assim que o avaliador escreve, para pct5 e pct50 rodarem
     # em paralelo sem disputar o mesmo arquivo. So grid4 mantem o nome curto de hoje.
     tag = "" if tuple(args.family) == ("grid4",) else "_" + "_".join(args.family)
+    kind = "_val" if args.eval_split == "val" else ""
     for percentage in args.pct:
-        csv = Path(args.csv or ROOT / "results" / f"eval_growth_stages{tag}_pct{percentage}.csv")
+        csv = Path(args.csv
+                   or ROOT / "results" / f"eval_growth_stages{kind}{tag}_pct{percentage}.csv")
+        if args.fetch_wandb:
+            # Este plot NUNCA fala com o W&B no modo `stage`: quem sabe montar o CSV de
+            # validacao e o avaliador, e ele e a UNICA implementacao da agregacao — dois
+            # `--stage-agg best` em lugares diferentes divergiriam no primeiro empate.
+            sys.path.insert(0, str(ROOT))
+            from src.evaluate.eval_growth_stages import _wandb_val
+            # Ele le `args.pct` como ESCALAR (um CSV por porcentagem); aqui `--pct` e
+            # nargs="+". O Namespace trocado resolve sem tocar na assinatura de la.
+            _wandb_val(argparse.Namespace(**{**vars(args), "pct": percentage}), str(csv))
         df = pd.read_csv(csv)
         for dataset in args.dataset:
             print(plot_stages(dataset, percentage, df, args.family, args.metric,
-                              args.out_dir, args.split, args.stage))
+                              args.out_dir, args.split, args.stage, args.eval_split))
 
 
 if __name__ == "__main__":

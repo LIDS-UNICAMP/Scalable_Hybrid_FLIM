@@ -62,6 +62,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from tqdm import tqdm  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CSV_DIR = ROOT / "wandb_phd_thesis_grid4"
@@ -134,7 +135,7 @@ def fetch(dataset: str | None = None, tries: int = 3, wait: float = 5.0,
             if attempt == tries:
                 raise
             time.sleep(wait * attempt)
-    for run in listing:
+    for run in tqdm(listing, desc="wandb", unit="run"):
         meta = RUN_RE.match(run.name)
         if not meta or (dataset and meta["dataset"] != dataset):
             continue

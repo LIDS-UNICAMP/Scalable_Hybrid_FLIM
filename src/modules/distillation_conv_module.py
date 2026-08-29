@@ -48,6 +48,8 @@ Usage (subprocess call from distillation_conv_ray.py)::
 """
 from __future__ import annotations
 
+import copy
+import gc
 import json
 import logging
 import os
@@ -75,11 +77,18 @@ from src.models.distillation import (
     ConvDistillationProjectionHead,
     StudentClassificationHead,
     FrozenTeacher,
+    FrozenTeacherCheckpointMixin,
     TEACHER_DIM,
     prepare_teacher_input,
     kd_loss,
     add_distill_flags,
+    add_student_flags,
+    add_queue_flags,
+    add_runtime_flags,
+    apply_cpu_budget,
+    run_grid,
     resolve_distill_flags,
+    resolve_student,
     derive_flim_paths,
     distill_run_tags,
 )
@@ -106,7 +115,7 @@ ENCODER_INITS      = ("random", "he", "xavier", "trunc_normal", "flim")
 DISTILLATION_TYPES = ("direct", "direct_cosine", "hybrid", "kd_hybrid")
 
 
-class DistillationConvModule(pl.LightningModule):
+class DistillationConvModule(FrozenTeacherCheckpointMixin, pl.LightningModule):
     """Lightning module for knowledge distillation from frozen I-JEPA to FLIM CNN.
 
     Uses a purely convolutional projection head (next_layers variant):
@@ -417,9 +426,12 @@ def _build_parser():
         description="Train one distillation experiment (conv projection head — next_layers variant).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--dataset",    required=True, choices=["eggs", "larvae", "protozoan"])
-    p.add_argument("--split",      required=True, type=int)
-    p.add_argument("--percentage", required=True, type=int)
+    p.add_argument("--dataset",    required=True, choices=["eggs", "larvae", "protozoan", "all"],
+                   help="'all' roda os tres datasets em serie, no mesmo processo.")
+    p.add_argument("--split",      required=True, type=str,
+                   help="Split, ou lista CSV de splits (ex.: 1,2,3).")
+    p.add_argument("--percentage", required=True, type=str,
+                   help="Percentual, ou lista CSV de percentuais (ex.: 1,5,25,50,75,100).")
     p.add_argument("--arch-json",  default=None, help="Path to FLIM architecture.json")
     p.add_argument("--run-name",          required=True)
     p.add_argument("--distillation-type", default="direct", choices=list(DISTILLATION_TYPES))
@@ -429,7 +441,9 @@ def _build_parser():
                         "Required when --encoder-init flim.")
     p.add_argument("--alpha",             type=float, default=0.5)
     p.add_argument("--temperature",       type=float, default=4.0)
-    p.add_argument("--num-classes",       type=int,   default=9)
+    p.add_argument("--num-classes",       type=int,   default=9,
+                   help="IGNORADA: num_classes e resolvido por dataset (scripts/constants.py NUM_CLASSES). "
+                        "Mantida so para nao quebrar launchers que ainda a passam.")
     p.add_argument("--lam-ssl",           type=float, default=0.05)
     p.add_argument("--sigreg-type",       default="simple", choices=["simple", "real"])
     p.add_argument("--max-epochs",        type=int,   default=100)
@@ -446,7 +460,14 @@ def _build_parser():
     p.add_argument("--wandb-entity",      default="ophira-ai")
     p.add_argument("--seed",              type=int, default=42)
     add_distill_flags(p)
+    add_student_flags(p)
+    add_queue_flags(p)
+    add_runtime_flags(p)
     return p
+
+
+def _csv_ints(value: str) -> list:
+    return [int(s.strip()) for s in str(value).split(",") if s.strip()]
 
 
 def _dataset_short_to_parasite_name(dataset: str) -> str:
@@ -458,26 +479,37 @@ def _dataset_short_to_parasite_name(dataset: str) -> str:
     return _MAP[dataset]
 
 
-def main() -> int:
-    import argparse
+def _run_one(args, dataset: str, split: int, pct: int, num_classes: int,
+             idx: int, total: int) -> int:
+    """Treina UMA combinacao (dataset, split, percentage). Retorna 0 ok / 1 erro."""
+    _log.info("[%d/%d] %s split=%d pct=%d num_classes=%d",
+              idx, total, dataset, split, pct, num_classes)
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        stream=sys.stdout,
-    )
+    # Namespace proprio da iteracao: derive_flim_paths so preenche campo vazio,
+    # entao reusar o mesmo args congelaria os caminhos do primeiro dataset.
+    a = copy.copy(args)
+    a.dataset, a.split, a.percentage = dataset, split, pct
+    a.arch_json, a.flim_weights_path = args.arch_json, args.flim_weights_path
 
-    parser = _build_parser()
-    args   = parser.parse_args()
+    # Grade de uma celula so mantem o nome intocado: o lancador de producao procura
+    # o run em artifacts/distillation/<run_name>/ (distillation_conv_ray.py:270),
+    # e sufixar ali quebraria a retomada. So a grade com varias celulas desempata.
+    if total > 1:
+        a.run_name = f"{args.run_name}_{dataset}_s{split}_p{pct}"
+        # --output-dir explicito tambem precisa aninhar, senao as celulas
+        # compartilham checkpoints/ e a seguinte retoma a anterior.
+        if a.output_dir:
+            a.output_dir = os.path.join(args.output_dir, a.run_name)
 
+    # Antes de resolve_distill_flags: ela exige flim_weights_path com --init_flim.
+    derive_flim_paths(a)
     # As flags novas vencem as antigas quando alguma delas e usada.
-    derive_flim_paths(args)
-    _overrides = resolve_distill_flags(args)
+    _overrides = resolve_distill_flags(a)
+    # Reseeda a cada combinacao: sem isso a iteracao k herda o RNG da k-1.
+    pl.seed_everything(a.seed, workers=True)
 
-    pl.seed_everything(args.seed, workers=True)
-
-    output_dir = args.output_dir or os.path.join(
-        _ROOT, "artifacts", "distillation", args.run_name
+    output_dir = a.output_dir or os.path.join(
+        _ROOT, "artifacts", "distillation", a.run_name
     )
     ckpt_dir = os.path.join(output_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -486,36 +518,36 @@ def main() -> int:
         ParasiteLejepaDataModuleSplited,
     )
 
-    parasite_name = _dataset_short_to_parasite_name(args.dataset)
+    parasite_name = _dataset_short_to_parasite_name(a.dataset)
     datamodule = ParasiteLejepaDataModuleSplited(
         parasite_name=parasite_name,
-        split=args.split,
-        percentage=args.percentage,
-        image_size=args.image_size,
-        V_train=args.num_views,
+        split=a.split,
+        percentage=a.percentage,
+        image_size=a.image_size,
+        V_train=a.num_views,
         V_eval=1,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
+        batch_size=a.batch_size,
+        num_workers=a.num_workers,
         pin_memory=True,
-        persistent_workers=(args.num_workers > 0),
+        persistent_workers=(a.num_workers > 0),
         loader="ift_lab",
     )
 
     _module_kwargs = dict(
-        arch_json=args.arch_json,
-        dataset=args.dataset,
-        distillation_type=args.distillation_type,
-        encoder_init=args.encoder_init,
-        flim_weights_path=args.flim_weights_path,
-        alpha=args.alpha,
-        temperature=args.temperature,
-        lam_ssl=args.lam_ssl,
-        sigreg_type=args.sigreg_type,
-        num_classes=args.num_classes,
-        lr=args.lr,
-        weight_decay=args.weight_decay,
-        max_epochs=args.max_epochs,
-        warmup_epochs=args.warmup_epochs,
+        arch_json=a.arch_json,
+        dataset=a.dataset,
+        distillation_type=a.distillation_type,
+        encoder_init=a.encoder_init,
+        flim_weights_path=a.flim_weights_path,
+        alpha=a.alpha,
+        temperature=a.temperature,
+        lam_ssl=a.lam_ssl,
+        sigreg_type=a.sigreg_type,
+        num_classes=num_classes,
+        lr=a.lr,
+        weight_decay=a.weight_decay,
+        max_epochs=a.max_epochs,
+        warmup_epochs=a.warmup_epochs,
     )
     _module_kwargs.update(_overrides)
     module = DistillationConvModule(**_module_kwargs)
@@ -525,39 +557,40 @@ def main() -> int:
         filename="best",
         monitor="val/loss",
         mode="min",
-        save_last=True,
+        save_last=False,
         save_top_k=1,
+        save_weights_only=True,
     )
 
-    if args.wandb:
+    if a.wandb:
         os.environ["WANDB_CONSOLE"] = "off"
 
     logger_list: list = []
-    if args.wandb:
+    if a.wandb:
         try:
             wandb_logger = WandbLogger(
-                project=args.wandb_project,
-                entity=args.wandb_entity,
-                name=args.run_name,
+                project=a.wandb_project,
+                entity=a.wandb_entity,
+                name=a.run_name,
                 save_dir=output_dir,
             )
             wandb_logger.experiment.tags = tuple(dict.fromkeys(
                 list(wandb_logger.experiment.tags or ()) + distill_run_tags(module.hparams)
             ))
             wandb_logger.log_hyperparams({
-                "dataset":           args.dataset,
-                "split":             args.split,
-                "percentage":        args.percentage,
+                "dataset":           a.dataset,
+                "split":             a.split,
+                "percentage":        a.percentage,
                 "distillation_type": module.hparams.distillation_type,
                 "encoder_init":      module.hparams.encoder_init,
                 "fine_tune":         module.hparams.fine_tune,
                 "teacher_frozen":    module.hparams.teacher_frozen,
                 "kd_temperature":    module.hparams.kd_temperature,
                 "kd_alpha":          module.hparams.kd_alpha,
-                "lam_ssl":           args.lam_ssl,
-                "alpha":             args.alpha,
-                "temperature":       args.temperature,
-                "arch_json":         args.arch_json,
+                "lam_ssl":           a.lam_ssl,
+                "alpha":             a.alpha,
+                "temperature":       a.temperature,
+                "arch_json":         a.arch_json,
                 "teacher":           "facebook/ijepa_vith14_1k",
                 "student_embed_dim": module.student_embed_dim,
                 "proj_head":         "conv_next_layers",
@@ -567,9 +600,10 @@ def main() -> int:
             _log.warning("W&B logger init failed: %s — continuing without W&B.", _e)
 
     trainer = pl.Trainer(
-        max_epochs=args.max_epochs,
+        max_epochs=a.max_epochs,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=1,
+        # Sem --gpu, devices=1 = a primeira GPU visivel; com --gpu, essa GPU e so ela.
+        devices=1 if a.gpu is None else [a.gpu],
         callbacks=[checkpoint_cb],
         logger=logger_list or False,
         log_every_n_steps=10,
@@ -578,33 +612,81 @@ def main() -> int:
     )
 
     t0 = time.time()
+    rc = 0
     try:
         trainer.fit(module, datamodule=datamodule)
+        elapsed   = time.time() - t0
+        best_ckpt = checkpoint_cb.best_model_path or ""
+        _log.info("Training complete in %.1fs. Best ckpt: %s", elapsed, best_ckpt)
+        _save_metadata(a, module, output_dir, ckpt_dir, status="ok",
+                       best_ckpt=best_ckpt, elapsed=elapsed)
     except Exception as exc:
-        _log.error("Training failed: %s", exc, exc_info=True)
-        _save_metadata(args, module, output_dir, ckpt_dir, status="error", error=str(exc))
-        if args.wandb:
+        # A combinacao morre sozinha; o laco continua nas outras.
+        _log.error("Training failed (%s split=%d pct=%d): %s", dataset, split, pct, exc,
+                   exc_info=True)
+        _save_metadata(a, module, output_dir, ckpt_dir, status="error", error=str(exc))
+        rc = 1
+    finally:
+        if a.wandb:
+            # Tambem no caminho de erro: run pendurada faria a proxima iteracao
+            # se anexar a ela.
             try:
                 import wandb as _wandb
-                _wandb.finish(exit_code=1)
+                _wandb.finish(exit_code=rc)
             except Exception:
                 pass
-        return 1
+        # Cada iteracao carrega um teacher de ~2.4 GB — sem soltar aqui a 3a/4a
+        # combinacao da OOM.
+        del trainer, module, datamodule
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    return rc
 
-    elapsed = time.time() - t0
-    best_ckpt = checkpoint_cb.best_model_path or ""
-    _log.info("Training complete in %.1fs. Best ckpt: %s", elapsed, best_ckpt)
 
-    _save_metadata(args, module, output_dir, ckpt_dir, status="ok",
-                   best_ckpt=best_ckpt, elapsed=elapsed)
+def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stdout,
+    )
 
-    if args.wandb:
-        try:
-            import wandb as _wandb
-            _wandb.finish()
-        except Exception:
-            pass
-    return 0
+    args = _build_parser().parse_args()
+    apply_cpu_budget(args)
+
+    # A flag de student so NOMEIA e VALIDA: distill_4 e o student deste modulo e nao
+    # fixa kernel nenhum, entao sem flag nada muda.
+    resolve_student(args, "distillation_conv_module")
+
+    datasets = ["eggs", "larvae", "protozoan"] if args.dataset == "all" else [args.dataset]
+    splits   = _csv_ints(args.split)
+    pcts     = _csv_ints(args.percentage)
+    total    = len(datasets) * len(splits) * len(pcts)
+    if not total:
+        raise SystemExit(
+            f"[grid] nada a rodar: --dataset {args.dataset} --split {args.split!r} "
+            f"--percentage {args.percentage!r} expandiu para zero combinacoes.")
+
+    cells = []
+    for dataset in datasets:
+        # Resolvido por dataset, dentro do laco. Valores conferem com
+        # scripts/constants.py:101.
+        if dataset == "eggs":
+            num_classes = 9
+        elif dataset == "larvae":
+            num_classes = 2
+        elif dataset == "protozoan":
+            num_classes = 7
+        else:
+            raise ValueError(f"dataset desconhecido: {dataset}")
+        for split in splits:
+            for pct in pcts:
+                cells.append((dataset, split, pct, num_classes))
+
+    failures = run_grid(cells, _run_one, args, "distillation_conv_module")
+    if failures:
+        _log.error("%d/%d combinacoes falharam.", failures, total)
+    return 1 if failures else 0
 
 
 def _save_metadata(

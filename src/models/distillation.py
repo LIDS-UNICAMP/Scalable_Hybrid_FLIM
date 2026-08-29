@@ -350,6 +350,127 @@ STUDENTS: dict = {
 }
 
 
+def add_runtime_flags(parser: "argparse.ArgumentParser") -> "argparse.ArgumentParser":
+    """Declara `--gpu` e `--cpus-per-experiment`: recurso por flag, nao por variavel de
+    ambiente, para que a linha de comando diga sozinha onde e com quanto o run roda."""
+    parser.add_argument("--gpu", type=int, default=None, metavar="N",
+                        help="Indice da GPU deste run. Omitido = devices=1 (a primeira "
+                             "visivel), que e o que um run sozinho quer. Mesmo contrato de "
+                             "src/modules/autoencoder_flim_module.py:934.")
+    parser.add_argument("--cpus-per-experiment", type=int, default=None, metavar="N",
+                        help="Teto de threads de CPU deste run (BLAS/OpenMP + torch). "
+                             "Omitido = o que estiver no ambiente. Sem teto, cada treino "
+                             "abre um pool do tamanho da maquina.")
+    return parser
+
+
+def apply_cpu_budget(args: "argparse.Namespace") -> None:
+    """Aplica `--cpus-per-experiment` DE VERDADE, ja com o processo em pe.
+
+    O docstring de scripts/spifil_growth_loop.py afirma que esse teto so da por variavel de
+    ambiente, porque o OpenBLAS le `OMP_NUM_THREADS` no import — antes de qualquer argparse.
+    Isso vale para a rota ingenua (mexer em os.environ tarde nao redimensiona pool ja
+    criado), mas o `threadpoolctl` redimensiona pool VIVO, entao aqui a flag funciona:
+
+      * threadpool_limits  — encolhe os pools BLAS/OpenMP que o import ja abriu;
+      * torch.set_num_threads — o intra-op do torch, que nao passa pelo BLAS;
+      * os.environ         — para quem nasce DEPOIS: os workers do dataloader e os
+                             subprocessos que o run_grid dispara.
+
+    Sem `threadpoolctl` instalado os dois ultimos ainda valem, e o pool do pai fica como
+    estava — degrada, nao quebra.
+    """
+    n = getattr(args, "cpus_per_experiment", None)
+    if not n or n < 1:
+        return
+    os.environ["OMP_NUM_THREADS"] = str(n)
+    torch.set_num_threads(n)
+    try:
+        import threadpoolctl
+        threadpoolctl.threadpool_limits(n)
+    except Exception as err:  # biblioteca ausente ou backend exotico
+        print(f"[cpu] threadpoolctl indisponivel ({err}); o pool do processo pai fica como "
+              f"o ambiente deixou. Workers e subprocessos seguem com {n}.", flush=True)
+
+
+def add_queue_flags(parser: "argparse.ArgumentParser") -> "argparse.ArgumentParser":
+    """Declara `--max-concurrent-per-gpu`: quantas celulas da grade rodam AO MESMO TEMPO."""
+    parser.add_argument("--max-concurrent-per-gpu", type=int, default=1, metavar="N",
+                        help="Celulas da grade em voo ao mesmo tempo na GPU. 1 (default) = "
+                             "serie, no proprio processo — identico ao de sempre. N>1 = uma "
+                             "celula por subprocesso, N simultaneas.")
+    return parser
+
+
+def _cell_argv(argv: list, dataset: str, split: int, pct: int, run_name: str,
+               cpus: int | None = None) -> list:
+    """A linha do filho: a MESMA do pai, com a grade estreitada para UMA celula.
+
+    Reescrever argv em vez de remontar do zero e o que garante que qualquer flag que eu nao
+    conheca (as de hoje e as de amanha) chegue no filho sem eu ter que list a-las.
+    """
+    trocar = {"--dataset": str(dataset), "--split": str(split),
+              "--percentage": str(pct), "--run-name": run_name,
+              # O filho e uma folha: se herdasse N, cada um abriria mais N netos.
+              "--max-concurrent-per-gpu": "1"}
+    if cpus:
+        # SEM isto a divisao do teto se perde: o pai poe OMP=teto/N no env do filho, mas o
+        # filho roda `apply_cpu_budget` com o --cpus-per-experiment CHEIO que herdou na
+        # linha e sobrescreve o env de volta para o teto inteiro, N vezes.
+        trocar["--cpus-per-experiment"] = str(cpus)
+    out, i = [], 0
+    while i < len(argv):
+        a = argv[i]
+        chave = a.split("=", 1)[0]
+        if chave in trocar:
+            i += 1 if "=" in a else 2          # pula o valor, junto ou separado
+            continue
+        out.append(a)
+        i += 1
+    for k, v in trocar.items():
+        out += [k, v]
+    return out
+
+
+def run_grid(cells: list, run_one, args: "argparse.Namespace", module_name: str) -> int:
+    """Roda as celulas da grade e devolve quantas falharam.
+
+    `cells` = [(dataset, split, pct, num_classes), ...]. Com N=1 chama `run_one` no proprio
+    processo, em serie — o caminho de sempre, byte a byte. Com N>1 cada celula vira um
+    SUBPROCESSO do mesmo modulo e `ThreadPoolExecutor` mantem N em voo; e o mesmo desenho de
+    scripts/spifil_growth_loop.py, e pela mesma razao: cada treino precisa de processo
+    proprio (run W&B, checkpoint, memoria de GPU devolvida no fim).
+    """
+    import subprocess
+    from concurrent.futures import ThreadPoolExecutor
+
+    n = max(1, int(getattr(args, "max_concurrent_per_gpu", 1) or 1))
+    total = len(cells)
+    if n == 1:
+        return sum(run_one(args, ds, sp, pct, nc, i, total)
+                   for i, (ds, sp, pct, nc) in enumerate(cells, 1))
+
+    # OMP dividido entre os filhos: o pai recebeu o orcamento da maquina inteira e N filhos
+    # simultaneos com o valor CHEIO multiplicariam a carga por N. Mesma armadilha que o
+    # docstring de spifil_growth_loop.py documenta (96 nucleos a load 835).
+    teto = getattr(args, "cpus_per_experiment", None) or int(
+        os.environ.get("OMP_NUM_THREADS", "1"))
+    omp = max(1, int(teto) // n)
+    base = getattr(args, "run_name", "run")
+
+    def _um(cell):
+        ds, sp, pct, _ = cell
+        cmd = [sys.executable, "-m", f"src.modules.{module_name}"] + _cell_argv(
+            sys.argv[1:], ds, sp, pct, f"{base}_{ds}_s{sp}_p{pct}", cpus=omp)
+        env = {**os.environ, "OMP_NUM_THREADS": str(omp)}
+        return subprocess.run(cmd, env=env, check=False).returncode
+
+    print(f"[grid] {total} celulas, {n} por vez, OMP_NUM_THREADS={omp} em cada filho",
+          flush=True)
+    with ThreadPoolExecutor(max_workers=n) as pool:
+        return sum(1 for rc in pool.map(_um, cells) if rc)
+
+
 def add_student_flags(parser: "argparse.ArgumentParser") -> "argparse.ArgumentParser":
     """Declare `--distill_1..4`: qual dos quatro students o comando esta treinando.
 

@@ -72,6 +72,7 @@ from src.models.distillation import (
     StudentClassificationHead,
     DistillationProjectionHead,
     FrozenTeacher,
+    FrozenTeacherCheckpointMixin,
     TEACHER_DIM,
     prepare_teacher_input,
     kd_loss,
@@ -103,7 +104,7 @@ ENCODER_INITS      = ("random", "he", "xavier", "trunc_normal", "flim")
 DISTILLATION_TYPES = ("direct", "direct_cosine", "hybrid", "kd_hybrid")
 
 
-class DistillationModule(pl.LightningModule):
+class DistillationModule(FrozenTeacherCheckpointMixin, pl.LightningModule):
     """Lightning module for knowledge distillation from frozen I-JEPA to FLIM CNN.
 
     Two distillation strategies:
@@ -555,8 +556,9 @@ def main() -> int:
         filename="best",
         monitor="val/loss",
         mode="min",
-        save_last=True,
+        save_last=False,
         save_top_k=1,
+        save_weights_only=True,
     )
 
     # ── Logger ────────────────────────────────────────────────────────────

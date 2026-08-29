@@ -62,6 +62,31 @@ A Mahalanobis inverte uma covariancia `D x D` com `D = in_channels * kernel^2`.
 RECUSA (exit 3) quando `N <= D`: o Ledoit-Wolf mantem a metrica *definida*, o que
 nao e a mesma coisa que informativa.
 
+Isto vale tambem para `--random-layer`, que e o MESMO caminho: o orcamento e
+cobrado antes da troca dos pesos. So `--random-layer-classic` escapa dele, porque
+nao fita nada — sem fit nao ha N, nao ha covariancia e nao ha exit 3.
+
+Os dois controles: `--random-layer` e `--random-layer-classic`
+--------------------------------------------------------------
+Sao perguntas diferentes, por isso sao duas flags (mutuamente exclusivas).
+
+`--random-layer` (PAREADO) responde "a camada do SPiFiL e melhor que uma aleatoria
+DO MESMO SHAPE?". Roda o pipeline inteiro — checkpoint, features, SLIC, sementes,
+ranking, allocator, orcamento — e troca so os VALORES dos pesos no ultimo instante,
+logo antes do `write_weights`, preservando a norma FILTRO A FILTRO. Consequencias
+que definem o pareamento: a camada sai com os 45 canais do allocator (nao 48), o
+`architecture.json` fica byte-identico ao do caminho SPiFiL, e ela RECUSA os mesmos
+bracos (larvae sai com exit 3). Mesmo shape, mesmos bracos, mesmo protocolo: a unica
+diferenca e a DIRECAO dos filtros.
+
+`--random-layer-classic` responde "acrescentar uma camada qualquer ajuda?". Le a
+`architecture.json` e os pesos de entrada, sorteia `kaiming_normal_` (fan_out, relu)
+com bias zero e grava no mesmo formato. Sem checkpoint, sem dado, sem superpixel, sem
+semente, sem allocator — e portanto sem orcamento de covariancia. Consequencias: a
+camada sai com o numero de canais PEDIDO (48, e nao os 45 do allocator) e cresce em
+braco onde o SPiFiL recusa por `N <= D`. Shape e bracos DIFERENTES da variante SPiFiL,
+por isso ela nao serve de controle pareado.
+
 Como as imagens da camada nova sao escolhidas
 ---------------------------------------------
 `--one-per-class` (default) e o protocolo do artigo: UMA imagem por classe. A
@@ -105,6 +130,7 @@ import random
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import torch
@@ -130,7 +156,7 @@ from spifil.types import Seeds
 from config import get_single_parasite_paths
 from src.data_modules.datasets.dataset import ift_lab_loader
 from src.data_modules.datasets.lejepa_dataset import _build_test
-from src.models.models import parse_architecture
+from src.models.models import get_actual_channels_from_weights, parse_architecture
 from src.modules.autoencoder_flim_module import (
     AutoEncoderFlimModule,
     _dataset_short_to_parasite_name,
@@ -510,6 +536,50 @@ def grown_arch(arch: dict, kernel_size: int, out_channels: int, pool_stride: int
     return grown
 
 
+def grow_random(args) -> int:
+    """`--random-layer-classic`: acrescenta a camada como se o SPiFiL nao existisse.
+
+    O caminho CLASSICO. Nao carrega checkpoint, nao le imagem, nao roda superpixel
+    nem semente, nao instancia `Learner`: le a arquitetura de entrada, sorteia a
+    camada e grava. Por isso ele NAO PODE sair com EXIT_BUDGET — o orcamento
+    `N <= D` e uma condicao da Mahalanobis que fita os filtros SPiFiL, e sem fit
+    nao existe N para comparar. Na pratica o controle cresce ate onde o SPiFiL
+    recusa (larvae), e a comparacao vira "SPiFiL onde ele cabe" contra "qualquer
+    camada deste tamanho".
+
+    Tambem nao ha allocator, entao nao ha o arredondamento por classe: a camada
+    sai com os `--out-channels` pedidos (48, nao os 45 do `UniformAllocator`).
+
+    `in_channels` sai do `conv{N}-bias.txt` do proprio diretorio de pesos, nao da
+    `architecture.json`: quando o FLIM tem menos classes que canais pedidos os
+    dois discordam, e quem manda e o arquivo que o encoder de fato carrega.
+    """
+    arch = parse_architecture(args.arch_json)
+    layer = arch["nlayers"] + 1
+    in_channels = get_actual_channels_from_weights(args.flim_weights_path, arch)[-1]
+    out_channels = args.out_channels or in_channels
+
+    # kaiming_normal_ fan_out/relu: a inicializacao padrao de conv+ReLU. Bias zero
+    # porque o do SPiFiL e -(K . media do patch) e aqui nao ha patch nenhum.
+    conv = torch.nn.Conv2d(in_channels, out_channels, args.kernel_size)
+    torch.nn.init.kaiming_normal_(conv.weight, mode="fan_out", nonlinearity="relu")
+    torch.nn.init.zeros_(conv.bias)
+
+    print(f"[grow] --random-layer-classic: camada {layer} SEM SPiFiL (sem dado, sem semente, "
+          f"sem orcamento) | {in_channels} -> {out_channels} canais, k={args.kernel_size}, "
+          f"pool_stride={args.pool_stride} | kaiming_normal_ fan_out/relu seed={args.seed}, bias=0")
+
+    # `write_weights` so quer `.conv`; sem `Learner` nao ha bloco de onde tira-lo.
+    write_weights(args.out, args.flim_weights_path,
+                  grown_arch(arch, args.kernel_size, out_channels, args.pool_stride),
+                  layer, SimpleNamespace(conv=conv))
+
+    print(f"[grow] camada {layer} com {out_channels} filtros em {args.out}\n"
+          f"  --arch-json {args.out / 'architecture.json'}\n"
+          f"  --flim-weights-path {args.out}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--ckpt", required=True, type=Path,
@@ -544,15 +614,52 @@ def main() -> int:
                              "(veja Cropped.load_mask)")
     parser.add_argument("--one-per-class", action=argparse.BooleanOptionalAction, default=True,
                         help="UMA imagem por classe: id do artigo se ele cair no treino, senao sorteio por --seed")
-    parser.add_argument("--random-layer", action="store_true", default=False,
-                        help="ABLACAO DE CONTROLE: mantem todo o fluxo (superpixel, orcamento, "
-                             "shape) e troca so os VALORES dos filtros por ruido de mesma norma. "
-                             "Responde 'a camada SPiFiL ajuda, ou qualquer camada deste tamanho "
-                             "ajudaria?'")
+    # Mutuamente exclusivas porque sao perguntas diferentes, nao intensidades da mesma:
+    # uma mantem o protocolo e troca a direcao, a outra troca o protocolo inteiro.
+    controle = parser.add_mutually_exclusive_group()
+    controle.add_argument("--random-layer", action="store_true", default=False,
+                          help="ABLACAO PAREADA — responde 'a camada do SPiFiL e melhor que uma "
+                               "aleatoria DO MESMO SHAPE?'. Roda TODO o pipeline SPiFiL (checkpoint, "
+                               "features, SLIC, sementes, allocator, orcamento N<=D) e troca so os "
+                               "VALORES dos filtros por ruido de mesma norma por filtro, bias 0. "
+                               "Mesmo shape (45 canais), mesmos bracos (larvae recusa com exit 3) e "
+                               "mesmo protocolo da variante SPiFiL")
+    controle.add_argument("--random-layer-classic", action="store_true", default=False,
+                          help="ABLACAO CLASSICA — responde 'acrescentar uma camada qualquer "
+                               "ajuda?'. Sem SPiFiL nenhum: kaiming_normal_ (fan_out/relu) semeado "
+                               "por --seed, bias 0, sem checkpoint, sem dado, sem superpixel e sem "
+                               "orcamento N<=D. Shape e bracos DIFERENTES da variante SPiFiL (48 "
+                               "canais pedidos, e cresce onde o SPiFiL recusa)")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     torch.manual_seed(args.seed)
+
+    # Antes do checkpoint de proposito: o caminho classico nao usa nada do que vem
+    # abaixo, e carregar encoder e dataset para joga-los fora custa minutos por braco.
+    # So o CLASSICO sai por aqui: no pareado o superpixel roda de verdade, entao ele
+    # segue o fluxo normal e so troca os valores dos pesos la embaixo.
+    if args.random_layer_classic:
+        # RECUSA em vez de ignorar: no caminho classico nao ha SLIC, nem semente, nem
+        # mascara, entao estas flags nao teriam efeito NENHUM — e um comando que as carrega
+        # faz o leitor concluir que o experimento usou SPiFiL quando ele nao usou. Falhar
+        # aqui e mais barato do que descobrir isso lendo a tabela de resultados depois.
+        # Olha o sys.argv, nao o valor: `--one-per-class` tem default True, entao o valor
+        # nao distingue "o usuario pediu" de "o argparse preencheu".
+        digitadas = {a.split("=", 1)[0] for a in sys.argv[1:]}
+        mortas = [f for f in ("--spifil-in-image", "--spifil-in-feature",
+                              "--impurities", "--no-impurities",
+                              "--one-per-class", "--no-one-per-class",
+                              "--n-superpixels", "--n-images")
+                  if f in digitadas]
+        if mortas:
+            raise SystemExit(
+                f"[grow] --random-layer-classic nao usa SPiFiL: {', '.join(mortas)} nao teria "
+                f"efeito nenhum.\n        Tire {'essa flag' if len(mortas) == 1 else 'essas flags'} "
+                f"do comando — a camada nasce de kaiming_normal_, sem superpixel.\n"
+                f"        Se o que voce quer e o controle PAREADO, que USA superpixel, e "
+                f"--random-layer.")
+        return grow_random(args)
 
     module = AutoEncoderFlimModule.load_from_checkpoint(
         args.ckpt, map_location=args.device

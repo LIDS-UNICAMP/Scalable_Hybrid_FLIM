@@ -465,7 +465,7 @@ def train_svm(model, dataloader, max_iter: int = -1, C: float = 1e2, degree: int
     all_y = torch.Tensor([]).long()
 
     print("[INFO] Preparing data for SVM")
-    for inputs, labels in tqdm(dataloader):
+    for inputs, labels in tqdm(dataloader, desc="  Extracting train features"):
         inputs = inputs.to(DEVICE)
         all_feats = torch.cat((all_feats, _encode_pooled(model, inputs, embed_mode)))
 

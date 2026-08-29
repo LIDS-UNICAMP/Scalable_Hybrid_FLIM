@@ -88,8 +88,12 @@ from src.models.distillation import (
     TEACHER_DIM,
     StudentClassificationHead,
     add_distill_flags,
+    add_queue_flags,
+    add_runtime_flags,
     add_student_flags,
+    apply_cpu_budget,
     resolve_student,
+    run_grid,
     kd_loss,
     prepare_teacher_input,
     resolve_distill_flags,
@@ -466,6 +470,8 @@ def _build_parser():
     p.add_argument("--seed",               type=int, default=42)
     add_distill_flags(p)
     add_student_flags(p)
+    add_queue_flags(p)
+    add_runtime_flags(p)
     return p
 
 
@@ -549,13 +555,13 @@ def _run_one(args, dataset: str, split: int, pct: int, num_classes: int,
         dirpath=ckpt_dir,
         filename="best_knn_kappa",
         monitor="val/knn_kappa", mode="max",
-        save_last=True, save_top_k=1,
+        save_last=False, save_top_k=1, save_weights_only=True,
     )
     checkpoint_loss = ModelCheckpoint(
         dirpath=ckpt_dir,
         filename="best_loss",
         monitor="val/loss", mode="min",
-        save_last=False, save_top_k=1,
+        save_last=False, save_top_k=1, save_weights_only=True,
     )
 
     logger_list: list = []
@@ -605,12 +611,15 @@ def _run_one(args, dataset: str, split: int, pct: int, num_classes: int,
     trainer = pl.Trainer(
         max_epochs=a.max_epochs,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=1, callbacks=[checkpoint_knn, checkpoint_loss],
+        # Sem --gpu, devices=1 = a primeira GPU visivel; com --gpu, essa GPU e so ela.
+        devices=1 if a.gpu is None else [a.gpu],
+        callbacks=[checkpoint_knn, checkpoint_loss],
         logger=logger_list or False,
         log_every_n_steps=10, enable_progress_bar=True, deterministic=False,
     )
 
-    # ── Resume support (e.g. after a crash). save_last lives on checkpoint_knn.
+    # ── Resume support: so acha last.ckpt de treinos antigos (hoje os callbacks
+    # gravam save_weights_only, sem save_last). Sem o arquivo, treina do zero.
     resume_ckpt = os.path.join(ckpt_dir, "last.ckpt")
     if os.path.isfile(resume_ckpt) and os.path.getsize(resume_ckpt) > 0:
         _log.info("[DistillationOneLayerModule] Resuming from checkpoint: %s", resume_ckpt)
@@ -657,6 +666,7 @@ def main() -> int:
                         stream=sys.stdout)
 
     args = _build_parser().parse_args()
+    apply_cpu_budget(args)
 
     # A flag de student NOMEIA o experimento e fixa o kernel; sem ela nada muda.
     _student = resolve_student(args, "distillation_onelayer_module")
@@ -681,7 +691,7 @@ def main() -> int:
             f"[grid] nada a rodar: --dataset {args.dataset} --split {args.split!r} "
             f"--percentage {args.percentage!r} expandiu para zero combinacoes.")
 
-    failures = idx = 0
+    cells = []
     for dataset in datasets:
         # Resolvido por dataset, dentro do laco. Valores conferem com
         # scripts/constants.py:101 e src/evaluate/constants.py:54.
@@ -695,8 +705,8 @@ def main() -> int:
             raise ValueError(f"dataset desconhecido: {dataset}")
         for split in splits:
             for pct in pcts:
-                idx += 1
-                failures += _run_one(args, dataset, split, pct, num_classes, idx, total)
+                cells.append((dataset, split, pct, num_classes))
+    failures = run_grid(cells, _run_one, args, "distillation_onelayer_module")
     if failures:
         _log.error("%d/%d combinacoes falharam.", failures, total)
     return 1 if failures else 0
