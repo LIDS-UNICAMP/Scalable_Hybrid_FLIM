@@ -347,7 +347,7 @@ def main() -> int:
     checkpoint_kappa = ModelCheckpoint(
         dirpath=ckpt_dir, filename="best_kappa",
         monitor="val/kappa", mode="max",
-        save_last=True, save_top_k=1,
+        save_last=False, save_top_k=1,
     )
 
     logger_list: list = []
@@ -396,6 +396,8 @@ def main() -> int:
         log_every_n_steps=10, enable_progress_bar=True, deterministic=False,
     )
 
+    # So acha last.ckpt de treinos antigos: hoje o callback nao emite save_last.
+    # Sem o arquivo, treina do zero.
     resume_ckpt = os.path.join(ckpt_dir, "last.ckpt")
     if os.path.isfile(resume_ckpt) and os.path.getsize(resume_ckpt) > 0:
         _log.info("[ClassificationFlimModule] Resuming from checkpoint: %s", resume_ckpt)

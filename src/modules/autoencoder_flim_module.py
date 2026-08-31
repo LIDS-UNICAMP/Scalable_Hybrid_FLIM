@@ -1088,7 +1088,7 @@ def main() -> int:
     checkpoint_cb = ModelCheckpoint(
         dirpath=ckpt_dir, filename=ckpt_name,
         monitor=monitor, mode=mode,
-        save_last=True, save_top_k=1,
+        save_last=False, save_top_k=1,
     )
     early_stop = EarlyStopping(
         monitor=monitor, mode=mode, patience=args.patience, strict=False,
@@ -1173,9 +1173,10 @@ def main() -> int:
         log_every_n_steps=args.log_every_n_steps, enable_progress_bar=True, deterministic=False,
     )
 
-    # Crash resume of *this* run only, never the stage-1 -> stage-2 handoff: each stage
-    # writes to its own artifacts directory, so a fresh stage 2 finds no last.ckpt here and
-    # starts from --init-ckpt weights with a fresh optimizer and scheduler.
+    # Only finds last.ckpt from older runs: the callback no longer emits save_last, so a
+    # crashed stage restarts from scratch. Never the stage-1 -> stage-2 handoff either: each
+    # stage writes to its own artifacts directory, so stage 2 starts from --init-ckpt weights
+    # with a fresh optimizer and scheduler.
     resume_ckpt = os.path.join(ckpt_dir, "last.ckpt")
     if not (os.path.isfile(resume_ckpt) and os.path.getsize(resume_ckpt) > 0):
         resume_ckpt = None
