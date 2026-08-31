@@ -386,6 +386,6 @@ primeira época já foi a melhor pelo critério de seleção do treino. Os demai
 CSVs antigos do repositório não têm essa coluna; só `extract_s` e `fit_s`.
 
 **Colunas constantes nos 82 trabalhos:** `method =
-SVM_SPiFiL_growth_flatten_labcru`, `embed_mode = flatten`, `imagenet_norm =
+SVM_SPiFiL_growth_flatten_lab_raw`, `embed_mode = flatten`, `imagenet_norm =
 False`, `max_iter = -1`, `fit_status = 0` (todos os ajustes convergiram sem
 aviso). Nenhum `kappa`, `acc` ou `f1` nulo.

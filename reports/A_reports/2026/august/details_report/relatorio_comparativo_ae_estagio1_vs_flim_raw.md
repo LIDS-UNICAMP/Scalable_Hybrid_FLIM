@@ -175,7 +175,7 @@ reproduz o pipeline bit a bit; as 5 células novas entram na mesma escala das 31
 ## Apêndice — a conferência contra o avaliador do FLIM cru
 
 Um terceiro CSV, `artifacts/plots/comparacao_flim_protocolo_original/eval_48d_norm_off.csv`
-(método `SVM_FLIM_48d_labcru_conv`), avalia o **FLIM cru** com GAP 48-d por um caminho de código
+(método `SVM_FLIM_48d_lab_raw_conv`), avalia o **FLIM cru** com GAP 48-d por um caminho de código
 independente. Ele cobre só `protozoan`, mas nos 6 pontos em comum bate dígito por dígito com o
 estágio 1 `lab`:
 
