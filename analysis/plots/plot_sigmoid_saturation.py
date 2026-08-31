@@ -36,16 +36,20 @@ unfrozen por dataset); três vêm dos CSVs agregados. Descrição de cada plot:
                             layer2 não a lê (gap de treinabilidade).
 
 Backend matplotlib Agg (sem display). Uso:
-    python tools/plot_sigmoid_saturation.py
-    python tools/plot_sigmoid_saturation.py --csv results/relu_vs_sigmoid_flatten.csv \
-        --test-csv results/sigmoid2l_test_results.csv --out-dir results/plots_flatten
+    python -m analysis.plots.plot_sigmoid_saturation
+
+Sem CLI: os antigos --csv, --test-csv e --out-dir sao parametros nomeados de ``main()``,
+com os mesmos defaults. Para outra entrada, chame a funcao:
+    main(csv="results/relu_vs_sigmoid_flatten.csv",
+         test_csv="results/sigmoid2l_test_results.csv",
+         out_dir="results/plots_flatten")
 """
 from __future__ import annotations
-import argparse
 import glob
 import json
 import os
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -56,8 +60,9 @@ from scipy.stats import spearmanr
 
 _ROOT = "/dados/home/moliveira/Scalable_Hybrid_FLIM"
 sys.path.insert(0, _ROOT)
-from src.data_modules.parasite_data_module_lejepa_splited import ParasiteLejepaDataModuleSplited
-from src.modules.classification_flim_module import ClassificationFlimModule, _dataset_short_to_parasite_name
+from core.data import ParasiteDataModule
+from methods.classification import ClassificationFlimModule
+from core.constants import PARASITE_NAME
 import torch
 
 _ART = os.path.join(_ROOT, "artifacts", "classification_flim")
@@ -72,8 +77,8 @@ def extract(run_dir, device):
     ck = os.path.join(run_dir, "checkpoints", "best_kappa.ckpt")
     mod = ClassificationFlimModule.load_from_checkpoint(ck, map_location=device).eval().to(device)
     enc, head = mod.model.encoder, mod.model.head
-    dm = ParasiteLejepaDataModuleSplited(
-        parasite_name=_dataset_short_to_parasite_name(meta["dataset"]), split=int(meta["split"]),
+    dm = ParasiteDataModule(
+        parasite_name=PARASITE_NAME[meta["dataset"]], split=int(meta["split"]),
         percentage=int(meta["percentage"]), image_size=200, V_train=1, V_eval=1, batch_size=32,
         num_workers=4, pin_memory=True, persistent_workers=False, loader="ift_lab",
         imagenet_norm=not bool(meta.get("no_imagenet_norm", False)))
@@ -97,20 +102,18 @@ def rep_run(ds):
     return p if os.path.isdir(p) else None
 
 
-def parse_args():
-    p = argparse.ArgumentParser(
-        description="Gera os 6 PNGs do achatamento ReLU->Sigmoid em results/plots_flatten/.")
-    p.add_argument("--csv", default=os.path.join(_ROOT, "results", "relu_vs_sigmoid_flatten.csv"),
-                   help="CSV de métricas agregadas (saída do analyze_sigmoid_saturation.py).")
-    p.add_argument("--test-csv", default=os.path.join(_ROOT, "results", "sigmoid2l_test_results.csv"),
-                   help="CSV com test_accuracy do modelo treinado (para o plot D).")
-    p.add_argument("--out-dir", default=os.path.join(_ROOT, "results", "plots_flatten"),
-                   help="diretório de saída dos PNGs (default: results/plots_flatten).")
-    return p.parse_args()
+def main(csv: str = os.path.join(_ROOT, "results", "relu_vs_sigmoid_flatten.csv"),
+         test_csv: str = os.path.join(_ROOT, "results", "sigmoid2l_test_results.csv"),
+         out_dir: str = os.path.join(_ROOT, "results", "plots_flatten")):
+    """Gera os 6 PNGs do achatamento ReLU->Sigmoid em results/plots_flatten/.
 
-
-def main():
-    args = parse_args()
+    Um parametro por flag do argparse antigo, com o mesmo default: `csv` e o CSV de
+    metricas agregadas (saida do analyze_sigmoid_saturation.py), `test_csv` traz o
+    test_accuracy do modelo treinado (plot D) e `out_dir` recebe os PNGs.
+    """
+    # O corpo ja le tudo por `args.x`: o shim nasce so dos parametros, entao esta e a
+    # primeira linha viva e locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
     OUT = args.out_dir if os.path.isabs(args.out_dir) else os.path.join(_ROOT, args.out_dir)
     os.makedirs(OUT, exist_ok=True)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -32,20 +32,23 @@ Este script so INSPECIONA. Quem reescreve ckpt antigo continua sendo
 ``scripts/strip_teacher_only.py``, que remove ``teacher.*`` preservando o resto.
 
 Uso:
-  python tools/check_ckpt_slim.py artifacts/distillation/<run>/checkpoints/best.ckpt
-  python tools/check_ckpt_slim.py            # glob default de artifacts/distillation
+  python -m analysis.checks.check_ckpt_slim  # glob default de artifacts/distillation
+  # os antigos flags sao parametros de check_ckpt_slim(): ckpt, self_test
 """
 from __future__ import annotations
 
-import argparse
 import glob as globlib
 import os
 import sys
+from types import SimpleNamespace
 
 import torch
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for _p in (_ROOT, os.path.join(_ROOT, "scripts")):
+# analysis/checks/ esta a 2 niveis da raiz do repo (o arquivo veio de tools/, que era 1).
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# strip_teacher_only.py foi para experiments/ckpt/ no refactor; scripts/ fica no
+# path so enquanto os launchers antigos ainda viverem la.
+for _p in (_ROOT, os.path.join(_ROOT, "scripts"), os.path.join(_ROOT, "experiments", "ckpt")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -116,8 +119,8 @@ def _self_test() -> int:
     import tempfile             # noqa: PLC0415
     from safetensors.torch import load_file   # noqa: PLC0415
 
-    from src.models.ijepa_encoder import _find_safetensors_path  # noqa: PLC0415
-    from src.modules.distillation_conv_module import DistillationConvModule  # noqa: PLC0415
+    from methods.lejepa.ijepa_encoder import _find_safetensors_path  # noqa: PLC0415
+    from methods.distillation import DistillationConvModule  # noqa: PLC0415
 
     arch = os.path.join(FLIM_ARCH_BASE["eggs"], "train1", ARCH_JSON_FILENAME)
     kw = dict(arch_json=arch, distillation_type="direct", encoder_init="trunc_normal")
@@ -178,7 +181,7 @@ def _self_test() -> int:
         env = {**os.environ, "HF_HOME": empty, "CUDA_VISIBLE_DEVICES": ""}
         r = subprocess.run(
             [sys.executable, "-c",
-             "from src.models.ijepa_encoder import IJEPAEncoder; IJEPAEncoder()"],
+             "from methods.lejepa import IJEPAEncoder; IJEPAEncoder()"],
             cwd=_ROOT, env=env, capture_output=True, text=True)
     msg = r.stderr.strip().splitlines()[-1] if r.stderr.strip() else ""
     check("falha alta sem o peso de origem",
@@ -189,16 +192,13 @@ def _self_test() -> int:
     return int(bool(fails))
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[1],
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    ap.add_argument("--self-test", action="store_true",
-                    help="Roda o round-trip do ckpt magro em vez de inspecionar arquivos.")
-    ap.add_argument("ckpt", nargs="*",
-                    default=sorted(globlib.glob(os.path.join(
-                        ARTIFACTS_DISTILLATION_DIR, "*", "checkpoints", "*.ckpt"))),
-                    help="Caminhos de .ckpt. Sem argumento, usa o glob de artifacts/distillation.")
-    a = ap.parse_args()
+def check_ckpt_slim(ckpt=(), self_test: bool = False) -> int:
+    # O corpo abaixo continua lendo `a.x`: o shim nasce so dos parametros e e a
+    # primeira linha viva da funcao, entao locals() e exatamente a assinatura.
+    a = SimpleNamespace(**locals())
+    # Sem ckpt nenhum vale o mesmo default de antes: o glob de artifacts/distillation.
+    a.ckpt = list(a.ckpt) or sorted(globlib.glob(os.path.join(
+        ARTIFACTS_DISTILLATION_DIR, "*", "checkpoints", "*.ckpt")))
     if a.self_test:
         return _self_test()
     if not a.ckpt:
@@ -214,4 +214,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(check_ckpt_slim())

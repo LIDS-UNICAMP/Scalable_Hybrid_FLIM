@@ -35,7 +35,7 @@ Le e escreve apenas dentro de artifacts/plots/comparacao_flim_protocolo_original
 Nao toca em src/, scripts/, configs/ nem em CSV registrado.
 
 Uso:
-    conda run -n scalable_FLIM python tools/plot_comparacao_flim_protocolo.py
+    conda run -n scalable_FLIM python -m analysis.plots.plot_comparacao_flim_protocolo
 """
 
 import os
@@ -47,7 +47,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt                                        # noqa: E402
 import pandas as pd                                                    # noqa: E402
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# analysis/plots/ esta a 2 niveis da raiz do repo (o arquivo veio de tools/, que era 1).
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _DIR = os.path.join(_ROOT, "artifacts", "plots",
                     "comparacao_flim_protocolo_original")
 _CSV_MAIN = os.path.join(_DIR, "comparacao_unified_svm_com_reproducao.csv")

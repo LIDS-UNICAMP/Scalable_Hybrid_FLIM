@@ -35,33 +35,32 @@ Saída::
 
 Uso::
 
-    # dimensionar antes de disparar (não escreve nada)
-    python tools/heatmap_stages.py --dry-run
+    # tudo: 171.912 PNGs — veja antes a contagem do dry_run=True
+    python -m analysis.activations.heatmap_stages
 
-    # amostra rápida de uma célula
-    python tools/heatmap_stages.py --dataset eggs --split 1 --percentage 5 --limit 3
+Os antigos flags viraram parametros nomeados de ``heatmap_stages()``, com os
+mesmos defaults; as listas (``dataset``, ``split``, ``percentage``, ``stage``,
+``image_id``) tomam o lugar do ``action="append"``::
 
-    # só os estágios extremos, tudo o mais
-    python tools/heatmap_stages.py --stage stage1 --stage round2_stage4
+    heatmap_stages(dry_run=True)                     # dimensiona, nao escreve nada
+    heatmap_stages(dataset=["eggs"], split=[1], percentage=[5], limit=3)
+    heatmap_stages(stage=["stage1", "round2_stage4"])   # so os estagios extremos
+    heatmap_stages(sigma=3.0, alpha=2.0, cmap="turbo", limit=5)
+    heatmap_stages(skip_existing=True, device="cuda:1")  # retomar de onde parou
 
-    # ajustar o desenho: nuvem mais fechada, mais opaca, outra paleta
-    python tools/heatmap_stages.py --sigma 3 --alpha 2.0 --cmap turbo --limit 5
+O mesmo conjunto de chaves pode vir de um YAML, que sobrescreve os parametros::
 
-    # retomar de onde parou (sem a flag, sobrescreve)
-    python tools/heatmap_stages.py --skip-existing --device cuda:1
-
-    # tudo: 171.912 PNGs — veja a contagem do --dry-run antes
-    python tools/heatmap_stages.py
+    heatmap_stages(config="<caminho>.yaml")
 """
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import sys
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 
 import matplotlib
 
@@ -75,17 +74,15 @@ import torch.nn.functional as F  # noqa: E402
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 from scipy.ndimage import gaussian_filter  # noqa: E402
 from tqdm import tqdm  # noqa: E402
+import yaml  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[1]
+# analysis/activations/ esta a 2 niveis da raiz do repo (o arquivo veio de tools/, que era 1).
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from src.data_modules.parasite_data_module_lejepa_splited import (  # noqa: E402
-    ParasiteLejepaDataModuleSplited,
-)
-from src.modules.autoencoder_flim_module import (  # noqa: E402
-    AutoEncoderFlimModule,
-    _dataset_short_to_parasite_name,
-)
+from core.data import ParasiteDataModule  # noqa: E402
+from methods.autoencoder import AutoEncoderFlimModule  # noqa: E402
+from core.constants import PARASITE_NAME  # noqa: E402
 
 GRID = ROOT / "artifacts" / "spifil_growth" / "grid4"
 OUT = ROOT / "artifacts" / "heatmap" / "stages"
@@ -248,8 +245,8 @@ def _plan(args):
                 stages = _find_stages(ds, split, pct, args.stage)
                 if not stages:
                     continue
-                dm = ParasiteLejepaDataModuleSplited(
-                    parasite_name=_dataset_short_to_parasite_name(ds),
+                dm = ParasiteDataModule(
+                    parasite_name=PARASITE_NAME[ds],
                     split=split, percentage=pct, image_size=200,
                     V_train=1, V_eval=1, batch_size=BATCH, num_workers=args.num_workers,
                     pin_memory=True, persistent_workers=args.num_workers > 0,
@@ -326,35 +323,30 @@ def _run_cell(ds, split, pct, stages, dm, n_imgs, args, pbar):
         pbar.set_postfix_str(f"{ds} s{split} pct{pct} {done}/{n_imgs}")
 
 
-def main() -> None:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--dataset", choices=DATASETS, action="append")
-    p.add_argument("--split", type=int, choices=SPLITS, action="append")
-    p.add_argument("--percentage", type=int, choices=PERCENTAGES, action="append")
-    p.add_argument("--stage", action="append", help="rótulo do diretório, ex.: round1_stage3")
-    p.add_argument("--image-id", action="append", metavar="ID",
-                   help="gera so para esta(s) imagem(ns) de validacao, ex.: 000001_00000218. "
-                        "Repita a flag para varias. Sem ela, gera para a celula inteira.")
-    p.add_argument("--limit", type=int, help="só as N primeiras imagens de cada célula")
-    p.add_argument("--sigma", type=float, default=6.0,
-                   help="desvio da gaussiana que suaviza a saliência, em pixels. As imagens são "
-                        "200x200 e o mapa já sai borrado do upsample bilinear: valores altos "
-                        "(o 25 típico de imagem grande) borram tudo num blob só (default: 6.0)")
-    p.add_argument("--alpha", type=float, default=1.4,
-                   help="ganho da opacidade: saliência x ganho, cortado em 0,75. Junto com "
-                        "--sigma é o ajuste fino conforme a resolução (default: 1.4)")
-    p.add_argument("--scale", type=int, default=2,
-                   help="fator de ampliacao do PNG; a imagem nativa e 200x200 (default: 2 -> 400x400)")
-    p.add_argument("--cmap", default="RdYlGn_r",
-                   help="paleta; RdYlGn_r é o verde→amarelo→vermelho padrão de eye-tracking. "
-                        "Alternativas: jet, Spectral_r, turbo (default: RdYlGn_r)")
-    p.add_argument("--skip-existing", action="store_true",
-                   help="RETOMADA: pula o PNG que já existe. Sem a flag (padrão) o script "
-                        "sobrescreve, então rodar de novo regenera tudo por cima")
-    p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    p.add_argument("--num-workers", type=int, default=4)
-    p.add_argument("--dry-run", action="store_true", help="conta os PNGs e sai")
-    args = p.parse_args()
+def heatmap_stages(config=None, dataset=None, split=None, percentage=None, stage=None,
+                   image_id=None, limit=None, sigma=6.0, alpha=1.4, scale=2, cmap="RdYlGn_r",
+                   skip_existing=False, device=None, num_workers=4, dry_run=False) -> None:
+    """Escreve os PNGs de heatmap das celulas pedidas (ou so conta, com ``dry_run``).
+
+    Os antigos ``action="append"`` viraram listas: ``dataset``, ``split``,
+    ``percentage``, ``stage`` e ``image_id`` recebem a lista inteira. Vazias
+    (``None``) valem, como antes, "todas" — menos ``stage`` e ``image_id``, que
+    valem "sem filtro". ``limit`` corta nas N primeiras imagens de cada celula,
+    ``sigma``/``alpha`` sao o ajuste fino da nuvem, ``scale`` amplia o PNG de
+    200x200 e ``skip_existing`` retoma sem reescrever o que ja existe.
+
+    O que os ``choices=`` do argparse validavam agora e responsabilidade de quem
+    chama: ``dataset`` em DATASETS, ``split`` em SPLITS, ``percentage`` em
+    PERCENTAGES. ``config`` e um YAML opcional cujas chaves sobrescrevem os
+    parametros recebidos.
+    """
+    # o corpo ja falava `args.x`: os parametros viram o shim, com o YAML por cima.
+    params = dict(locals()); params.pop("config")
+    if config:
+        params.update(yaml.safe_load(Path(config).read_text()))
+    args = SimpleNamespace(**params)
+    # o default de --device era dinamico; resolvido aqui para nao rodar no import
+    args.device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     args.dataset = args.dataset or DATASETS
     args.split = args.split or SPLITS
     args.percentage = args.percentage or PERCENTAGES
@@ -379,4 +371,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    heatmap_stages()

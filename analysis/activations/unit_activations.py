@@ -48,8 +48,9 @@ from sklearn.feature_selection import f_classif
 
 _ROOT = "/dados/home/moliveira/Scalable_Hybrid_FLIM"
 sys.path.insert(0, _ROOT)
-from src.data_modules.parasite_data_module_lejepa_splited import ParasiteLejepaDataModuleSplited
-from src.modules.classification_flim_module import ClassificationFlimModule, _dataset_short_to_parasite_name
+from core.data import ParasiteDataModule
+from methods.classification import ClassificationFlimModule
+from core.constants import PARASITE_NAME
 import torch
 
 _ART = os.path.join(_ROOT, "artifacts", "classification_flim")
@@ -64,8 +65,8 @@ def extract_S(run_dir, device):
     ck = os.path.join(run_dir, "checkpoints", "best_kappa.ckpt")
     mod = ClassificationFlimModule.load_from_checkpoint(ck, map_location=device).eval().to(device)
     enc, head = mod.model.encoder, mod.model.head
-    dm = ParasiteLejepaDataModuleSplited(
-        parasite_name=_dataset_short_to_parasite_name(meta["dataset"]), split=int(meta["split"]),
+    dm = ParasiteDataModule(
+        parasite_name=PARASITE_NAME[meta["dataset"]], split=int(meta["split"]),
         percentage=int(meta["percentage"]), image_size=200, V_train=1, V_eval=1, batch_size=32,
         num_workers=4, pin_memory=True, persistent_workers=False, loader="ift_lab",
         imagenet_norm=not bool(meta.get("no_imagenet_norm", False)))

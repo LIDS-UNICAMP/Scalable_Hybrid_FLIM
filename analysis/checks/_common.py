@@ -16,17 +16,15 @@
 # ║  ⠀⠀⠀⠈⣿⣿⣿⡆⠀⠀⠀⣿⣿⣿⡟⣼⡿⠁⢹⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀                                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
 
-"""_common.py — Shared helpers for the check_experiments suite.
+"""_common.py — Shared helpers for the analysis.checks suite.
 
 Provides:
   - Expected experiment matrix (DATASETS × SPLITS × PCTS × INITS)
   - ids_wandb.json loading → {canonical_name: run_id}
   - Local artifact existence checks (SSL ckpt, MLP weights, result CSVs)
-  - Common CLI argument parser factory
 """
 from __future__ import annotations
 
-import argparse
 import glob
 import json
 import os
@@ -34,7 +32,8 @@ import re
 from dataclasses import dataclass
 
 # ── Repository root ────────────────────────────────────────────────────────────
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# analysis/checks/ esta a 2 niveis da raiz do repo (o arquivo veio de check_experiments/, que era 1).
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ── Expected experiment matrix ─────────────────────────────────────────────────
 DATASETS = ["helminth-eggs", "helminth-larvae", "protozoan-cysts"]
@@ -88,7 +87,7 @@ def load_ids_wandb() -> dict[str, str]:
 
     When multiple W&B runs share the same name the newest one (by
     ``created_at``) is kept — matching the deduplication logic in
-    ``src.utils.wandb_cache.get_runs_dict_cached``.
+    ``core.wandb.cached_history``.
     """
     with open(_CACHE_FILE, encoding="utf-8") as fh:
         cache = json.load(fh)
@@ -106,9 +105,10 @@ def load_ids_wandb() -> dict[str, str]:
 
 def update_wandb_cache() -> None:
     """Refresh ids_wandb.json from the live W&B API."""
-    from src.utils.wandb_cache import save_cache          # noqa: PLC0415
-    from src.utils.get_names_wandb import ENTITY, PROJECT  # noqa: PLC0415
-    save_cache(ENTITY, PROJECT)
+    from core.wandb import ENTITY, PROJECT, cached_history  # noqa: PLC0415
+    # `update=True` faz o mesmo que o antigo `save_cache(ENTITY, PROJECT)`:
+    # busca no W&B e sobrescreve o cache. Ver core/wandb.py:157.
+    cached_history(ENTITY, PROJECT, update=True)
 
 
 # ── SSL checkpoint check ───────────────────────────────────────────────────────
@@ -190,22 +190,3 @@ def load_svm_ok_set() -> set[str]:
         df = df[df["status"] == "ok"]
         result.update(df["wandb_run_id"].dropna().astype(str).tolist())
     return result
-
-
-# ── CLI argument parser factory ────────────────────────────────────────────────
-
-def make_arg_parser(description: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=description)
-    parser.add_argument(
-        "--update_wandb", action="store_true",
-        help="Refresh the local W&B metadata cache before checking.",
-    )
-    parser.add_argument(
-        "--json", action="store_true",
-        help="Print machine-readable JSON summary to stdout.",
-    )
-    parser.add_argument(
-        "--fail-on-missing", action="store_true",
-        help="Exit with code 1 if any missing items are detected.",
-    )
-    return parser

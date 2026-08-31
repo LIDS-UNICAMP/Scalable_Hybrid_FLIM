@@ -51,16 +51,20 @@ Saída: um CSV com UMA linha por checkpoint válido (default
 `results/relu_vs_sigmoid_flatten.csv`).
 
 Uso:
-    python tools/analyze_sigmoid_saturation.py
-    python tools/analyze_sigmoid_saturation.py --pattern 'sigmoid2l_classhead_*' \
-        --out results/relu_vs_sigmoid_flatten.csv --image-size 200
+    python -m analysis.activations.saturation
+
+Os antigos flags viraram parametros nomeados de ``saturation()``, com os mesmos
+defaults; para variar algo, chame a funcao::
+
+    saturation(pattern="sigmoid2l_classhead_*",
+               out="results/relu_vs_sigmoid_flatten.csv", image_size=200)
 """
 from __future__ import annotations
-import argparse
 import glob
 import json
 import os
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -68,8 +72,9 @@ import torch
 
 _ROOT = "/dados/home/moliveira/Scalable_Hybrid_FLIM"
 sys.path.insert(0, _ROOT)
-from src.data_modules.parasite_data_module_lejepa_splited import ParasiteLejepaDataModuleSplited
-from src.modules.classification_flim_module import ClassificationFlimModule, _dataset_short_to_parasite_name
+from core.data import ParasiteDataModule
+from methods.classification import ClassificationFlimModule
+from core.constants import PARASITE_NAME
 
 _ART = os.path.join(_ROOT, "artifacts", "classification_flim")
 
@@ -161,8 +166,8 @@ def analyze_run(run_dir, device, image_size=200):
     mod = ClassificationFlimModule.load_from_checkpoint(ck, map_location=device).eval().to(device)
     enc, head = mod.model.encoder, mod.model.head
 
-    dm = ParasiteLejepaDataModuleSplited(
-        parasite_name=_dataset_short_to_parasite_name(ds), split=split, percentage=pct,
+    dm = ParasiteDataModule(
+        parasite_name=PARASITE_NAME[ds], split=split, percentage=pct,
         image_size=image_size, V_train=1, V_eval=1, batch_size=32, num_workers=4,
         pin_memory=True, persistent_workers=False, loader="ift_lab", imagenet_norm=imagenet_norm)
     dm.setup("test")
@@ -211,21 +216,19 @@ def analyze_run(run_dir, device, image_size=200):
     }
 
 
-def parse_args():
-    p = argparse.ArgumentParser(
-        description="Extrai métricas de achatamento ReLU->Sigmoid dos checkpoints sigmoid2l.")
-    p.add_argument("--pattern", default="sigmoid2l_classhead_*",
-                   help="glob dos diretórios de checkpoint dentro de artifacts/classification_flim "
-                        "(default: sigmoid2l_classhead_*).")
-    p.add_argument("--out", default=os.path.join(_ROOT, "results", "relu_vs_sigmoid_flatten.csv"),
-                   help="caminho do CSV de saída (default: results/relu_vs_sigmoid_flatten.csv).")
-    p.add_argument("--image-size", type=int, default=200,
-                   help="tamanho da imagem passado ao data module (default: 200).")
-    return p.parse_args()
+def saturation(pattern="sigmoid2l_classhead_*",
+               out=os.path.join(_ROOT, "results", "relu_vs_sigmoid_flatten.csv"),
+               image_size=200):
+    """Extrai as métricas de achatamento ReLU->Sigmoid dos checkpoints sigmoid2l.
 
-
-def main():
-    args = parse_args()
+    ``pattern`` e o glob dos diretorios dentro de artifacts/classification_flim,
+    ``out`` o CSV de saida (relativo e resolvido contra a raiz do repo) e
+    ``image_size`` o tamanho passado ao data module — os mesmos defaults dos
+    antigos flags.
+    """
+    # o corpo ja falava `args.x`: o shim nasce so dos parametros, entao esta e a
+    # primeira linha viva e locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     runs = sorted(d for d in glob.glob(os.path.join(_ART, args.pattern)) if os.path.isdir(d))
     print(f"device={dev}  runs={len(runs)}  pattern={args.pattern!r}")
@@ -247,4 +250,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    saturation()

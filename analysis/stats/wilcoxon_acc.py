@@ -74,15 +74,15 @@ motivo. Por isso o teste e feito direto com scipy e a correcao com statsmodels.
 
 USO
 ---
-    LD_LIBRARY_PATH=$CONDA_PREFIX/lib python statistics/tools/wilcoxon_acc.py
+    LD_LIBRARY_PATH=$CONDA_PREFIX/lib python -m analysis.stats.wilcoxon_acc
 
 Saidas: statistics/tools/wilcoxon_acc.csv e statistics/tools/wilcoxon_acc.md
 """
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -113,8 +113,12 @@ SEED = 42
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 DEFAULT_CSV = REPO / "artifacts" / "normalized" / "unified_svm_comparison.csv"
-OUT_CSV = HERE / f"wilcoxon_{METRIC}.csv"
-OUT_MD = HERE / f"wilcoxon_{METRIC}.md"
+# Os .csv/.md gerados continuam caindo em statistics/tools/, ao lado dos que ja estao
+# versionados la: mover o .py nao pode, sozinho, mudar onde o relatorio nasce. Mesmo
+# OUT_DIR de analysis/stats/compute_cost.py:62 — um lugar so para redirecionar depois.
+OUT_DIR = REPO / "statistics" / "tools"
+OUT_CSV = OUT_DIR / f"wilcoxon_{METRIC}.csv"
+OUT_MD = OUT_DIR / f"wilcoxon_{METRIC}.md"
 
 
 # --------------------------------------------------------------------------- #
@@ -395,18 +399,17 @@ def build_md(main: pd.DataFrame, per_ds: pd.DataFrame, alpha: float,
       "logo o efeito agregado nao vem de um dataset isolado.")
     A("")
     A(f"Numeros brutos em `{csv_path.name}`. Reproduzir com "
-      f"`python statistics/tools/wilcoxon_{METRIC}.py`.")
+      f"`python -m analysis.stats.wilcoxon_{METRIC}`.")
     A("")
     return "\n".join(L)
 
 
 # --------------------------------------------------------------------------- #
-def main() -> None:
-    ap = argparse.ArgumentParser(description=f"Wilcoxon pareado um-contra-todos na metrica {METRIC}")
-    ap.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="CSV unificado de entrada")
-    ap.add_argument("--baseline", default="SVM_FLIM", help="method usado como baseline")
-    ap.add_argument("--alpha", type=float, default=0.05, help="nivel de significancia")
-    args = ap.parse_args()
+def wilcoxon_acc(csv: Path = DEFAULT_CSV, baseline: str = "SVM_FLIM",
+                 alpha: float = 0.05) -> None:
+    # O corpo abaixo continua lendo `args.x`: o shim nasce so dos parametros e e a
+    # primeira linha viva da funcao, entao locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     if args.baseline not in OFFICIAL_MODELS:
         raise SystemExit(f"[FATAL] baseline {args.baseline!r} nao esta na lista de modelos oficiais")
@@ -483,4 +486,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    wilcoxon_acc()

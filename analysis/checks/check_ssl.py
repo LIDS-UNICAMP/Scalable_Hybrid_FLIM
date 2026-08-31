@@ -26,30 +26,32 @@ script checks:
 Missing experiments are listed explicitly and grouped by dataset.
 
 Usage:
-    python -m check_experiments.check_ssl
-    python -m check_experiments.check_ssl --update_wandb
-    python -m check_experiments.check_ssl --json
-    python -m check_experiments.check_ssl --fail-on-missing
+    python -m analysis.checks.check_ssl
+    # os antigos flags sao parametros de check_ssl():
+    #   update_wandb, json, fail_on_missing
 """
 from __future__ import annotations
 
-import json
+import json as _json
 import sys
 from collections import defaultdict
+from types import SimpleNamespace
 
-from check_experiments._common import (
+from analysis.checks._common import (
     Experiment,
     all_expected,
     has_ssl_checkpoint,
     load_ids_wandb,
-    make_arg_parser,
     update_wandb_cache,
 )
 
 
-def main() -> int:
-    parser = make_arg_parser("Check which LeJEPA SSL experiments have local checkpoints.")
-    args = parser.parse_args()
+def check_ssl(update_wandb: bool = False, json: bool = False,
+              fail_on_missing: bool = False) -> int:
+    """Check which LeJEPA SSL experiments have local checkpoints."""
+    # O corpo abaixo continua lendo `args.x`: o shim nasce so dos parametros e e a
+    # primeira linha viva da funcao, entao locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     if args.update_wandb:
         print("[W&B] Refreshing metadata cache...")
@@ -125,10 +127,10 @@ def main() -> int:
                 for e, rid in missing_checkpoint
             ],
         }
-        print(json.dumps(report, indent=2))
+        print(_json.dumps(report, indent=2))
 
     return 1 if (args.fail_on_missing and n_miss > 0) else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(check_ssl())

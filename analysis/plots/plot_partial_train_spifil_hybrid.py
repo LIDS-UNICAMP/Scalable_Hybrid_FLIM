@@ -44,17 +44,17 @@ Tres armadilhas dos dados, todas tratadas aqui:
 
 Uso::
 
-    python tools/plot_partial_train_spifil_hybrid.py
-    python tools/plot_partial_train_spifil_hybrid.py --fetch --metric probe/svm_acc
+    python -m analysis.plots.plot_partial_train_spifil_hybrid
+
+Sem CLI: os antigos --fetch e --metric sao parametros nomeados de ``main()``, com os
+mesmos defaults — ``main(fetch=True, metric="probe/svm_acc")``.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
-import re
-import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import matplotlib
 
@@ -62,12 +62,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from tqdm import tqdm  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[1]
-CSV_DIR = ROOT / "wandb_phd_thesis_grid4"
+# O lookup dos runs (`fetch`, `CSV_DIR`, `grid_dir`) vive na camada que acessa dado, nao
+# aqui: `analysis/` e folha e ninguem importa dela. Reexportados de proposito — o modulo
+# irmao (`plot_continuity_spifil_hybrid`) importa `fetch` e `grid_dir` por este nome.
+from eval.growth_stages import CSV_DIR, fetch, grid_dir  # noqa: E402,F401
+
+# analysis/plots/ esta a 2 niveis da raiz do repo (o arquivo veio de tools/, que era 1).
+ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT / "artifacts" / "analysis" / "partial_train_spifil_hybrid"
-PROJECT = "ophira-ai/phd_thesis_grid4"
 
 DATASETS = ("eggs", "larvae", "protozoan")
 PCTS = (5, 50)
@@ -93,81 +96,7 @@ STAGE_TRAINS = {"stage1": "enc congelado", "stage2": "tudo treina",
 # CSVs do W&B nao carregam.
 GRID_DIR = ROOT / "artifacts" / "spifil_growth" / "grid4"
 
-
-def grid_dir(family: str = "grid4"):
-    """Diretorio de artefatos da familia. ``GRID_DIR`` continua sendo o da grid4."""
-    return ROOT / "artifacts" / "spifil_growth" / family
-
-
-# Ancorado no prefixo e com o dataset numa alternancia fechada: e o que separa o segmento
-# da FAMILIA (`g5_in_feature`, `g5_head`, ...) do resto. Com `.search()` e `[a-z]+` no
-# dataset, `spifil_growth_g5_in_feature_eggs_...` casava a partir de `_eggs_` e a familia
-# sumia calada — as duas familias caiam na mesma celula do painel. O grupo e opcional
-# porque os 82 runs da grid4 nao tem esse segmento; quem nao casa vira "grid4".
-RUN_RE = re.compile(r"^spifil_growth_(?:(?P<family>\w+?)_)?"
-                    r"(?P<dataset>eggs|larvae|protozoan)"
-                    r"_split(?P<split>\d+)_pct(?P<pct>\d+)_(?P<label>.+)$")
 KEYS = ["dataset", "percentage", "stage_label", "epoch"]
-
-
-def fetch(dataset: str | None = None, tries: int = 3, wait: float = 5.0,
-          families=None) -> None:
-    """Rebaixa o historico completo de cada run do W&B para ``wandb_phd_thesis_grid4/``.
-
-    Sobrescreve os CSVs, entao pode ser chamada quantas vezes quiser enquanto o
-    treino roda — run ``running`` so volta com mais linhas. A rede e intermitente:
-    cada run tem ``tries`` tentativas e, se ainda assim falhar, a funcao registra
-    e segue para a proxima em vez de abortar o lote.
-    """
-    import wandb
-
-    CSV_DIR.mkdir(parents=True, exist_ok=True)
-    failed = []
-    # A listagem tem retry PROPRIO: o laco de baixo protege so o `scan_history()` de cada
-    # run, e e a listagem que ja estourou timeout nesta maquina — sem isto o lote inteiro
-    # cai antes do primeiro download.
-    for attempt in range(1, tries + 1):
-        try:
-            listing = list(wandb.Api(timeout=60).runs(PROJECT))
-            break
-        except Exception as err:  # rede intermitente
-            print(f"[listagem {attempt}/{tries}] {err}")
-            if attempt == tries:
-                raise
-            time.sleep(wait * attempt)
-    for run in tqdm(listing, desc="wandb", unit="run"):
-        meta = RUN_RE.match(run.name)
-        if not meta or (dataset and meta["dataset"] != dataset):
-            continue
-        family = meta["family"] or "grid4"
-        if families is not None and family not in families:
-            continue
-        for attempt in range(1, tries + 1):
-            try:
-                rows = pd.DataFrame(list(run.scan_history()))
-                break
-            except Exception as err:  # rede intermitente
-                print(f"[{attempt}/{tries}] {run.name}: {err}")
-                if attempt == tries:
-                    failed.append(run.name)
-                    rows = None
-                else:
-                    time.sleep(wait * attempt)
-        if rows is None or rows.empty:
-            continue
-        label = meta["label"]
-        rows.insert(0, "run_name", run.name)
-        rows.insert(1, "run_id", run.id)
-        rows.insert(2, "run_state", run.state)
-        rows.insert(3, "dataset", meta["dataset"])
-        rows.insert(4, "split", int(meta["split"]))
-        rows.insert(5, "percentage", int(meta["pct"]))
-        rows.insert(6, "stage_label", label)
-        rows.insert(7, "family", family)
-        rows.to_csv(CSV_DIR / f"{run.name}.csv", index=False)
-        print(f"[OK] {run.name} ({len(rows)} linhas, {run.state})")
-    if failed:
-        print(f"[FALHOU] {len(failed)} run(s): {', '.join(failed)}")
 
 
 def load() -> pd.DataFrame:
@@ -230,7 +159,8 @@ def out_shapes(family: str = "grid4") -> dict:
 
     Cuidado com o cwd: nos estagios crescidos o ``arch_json`` do metadado e RELATIVO, entao
     rodar de fora da raiz do repo faz o ``except`` engolir esses estagios em silencio e a
-    legenda perde a forma deles (14 formas da raiz contra 6 de dentro de ``tools/``).
+    legenda perde a forma deles (14 formas da raiz contra 6 de dentro de
+    ``analysis/plots/``).
     """
     shapes = {}
     for meta_path in grid_dir(family).glob("*/*/run_metadata.json"):
@@ -257,7 +187,7 @@ def plot(dataset: str, percentage: int, metric: str = "probe/svm_kappa",
     portanto na mesma pasta de CSVs, e sem ele `grid4`, `g5_in_feature`, `g5_in_image` e
     `g5_head` caem na mesma celula de `(dataset, percentage)` e sao mediadas juntas.
 
-    Nao ha flag `--family` no CLI deste modulo de proposito: o nome do PNG nao carrega a
+    A `main()` deste modulo nao expoe `family` de proposito: o nome do PNG nao carrega a
     familia, entao rodar outra familia aqui sobrescreveria o painel da grid4. Painel por
     familia e o do modulo irmao (`plot_continuity_spifil_hybrid`), que ja escreve numa
     pasta por familia.
@@ -331,13 +261,23 @@ def plot(dataset: str, percentage: int, metric: str = "probe/svm_kappa",
     return path
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Curvas contrastivas do curriculo SPiFiL.")
-    ap.add_argument("--fetch", action="store_true", help="rebaixa os CSVs do W&B antes")
-    ap.add_argument("--metric", default="probe/svm_kappa")
-    args = ap.parse_args()
+
+# Alias interno: o parametro `fetch` de main() sombreia a funcao homonima, importada de
+# eval/growth_stages.py. O nome publico `fetch` continua existindo aqui — e por ele que
+# plot_continuity_spifil_hybrid.py o importa.
+_fetch = fetch
+
+def main(fetch: bool = False, metric: str = "probe/svm_kappa") -> None:
+    """Curvas contrastivas do curriculo SPiFiL: um painel por dataset x percentage.
+
+    Um parametro por flag do argparse antigo, com o mesmo default: `fetch` rebaixa os
+    CSVs do W&B antes de plotar.
+    """
+    # O corpo ja le tudo por `args.x`: o shim nasce so dos parametros, entao esta e a
+    # primeira linha viva e locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
     if args.fetch:
-        fetch()
+        _fetch()
     df = load()
     for dataset in DATASETS:
         for pct in PCTS:

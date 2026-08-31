@@ -67,7 +67,7 @@ Execucao
     cd /dados/home/moliveira/Scalable_Hybrid_FLIM
     LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib \
     /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python \
-        statistics/tools/wilcoxon_kappa.py
+        -m analysis.stats.wilcoxon_kappa
 
 Saidas: ``statistics/tools/wilcoxon_kappa.csv`` e
 ``statistics/tools/wilcoxon_kappa.md``.
@@ -75,9 +75,9 @@ Saidas: ``statistics/tools/wilcoxon_kappa.csv`` e
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -106,8 +106,12 @@ SEED = 42
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_CSV = REPO / "artifacts" / "normalized" / "unified_svm_comparison.csv"
-OUT_CSV = Path(__file__).resolve().parent / f"wilcoxon_{METRIC}.csv"
-OUT_MD = Path(__file__).resolve().parent / f"wilcoxon_{METRIC}.md"
+# Os .csv/.md gerados continuam caindo em statistics/tools/, ao lado dos que ja estao
+# versionados la: mover o .py nao pode, sozinho, mudar onde o relatorio nasce. Mesmo
+# OUT_DIR de analysis/stats/compute_cost.py:62 — um lugar so para redirecionar depois.
+OUT_DIR = REPO / "statistics" / "tools"
+OUT_CSV = OUT_DIR / f"wilcoxon_{METRIC}.csv"
+OUT_MD = OUT_DIR / f"wilcoxon_{METRIC}.md"
 
 
 def die(msg: str) -> None:
@@ -197,12 +201,11 @@ def fmt_p(p: float) -> str:
     return f"{p:.4f}"
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=f"Wilcoxon pareado um-contra-todos em {METRIC}")
-    ap.add_argument("--csv", default=str(DEFAULT_CSV), help="CSV unificado de entrada")
-    ap.add_argument("--baseline", default="SVM_FLIM", help="method usado como baseline")
-    ap.add_argument("--alpha", type=float, default=0.05, help="nivel de significancia")
-    args = ap.parse_args()
+def wilcoxon_kappa(csv: str = str(DEFAULT_CSV), baseline: str = "SVM_FLIM",
+                   alpha: float = 0.05) -> None:
+    # O corpo abaixo continua lendo `args.x`: o shim nasce so dos parametros e e a
+    # primeira linha viva da funcao, entao locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     csv_path = Path(args.csv)
     if not csv_path.is_file():
@@ -543,4 +546,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    wilcoxon_kappa()

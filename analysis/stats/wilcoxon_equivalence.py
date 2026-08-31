@@ -78,16 +78,16 @@ Uso
     cd /dados/home/moliveira/Scalable_Hybrid_FLIM
     LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib \
     /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python \
-        statistics/tools/wilcoxon_equivalence.py
+        -m analysis.stats.wilcoxon_equivalence
 
 Saidas: statistics/tools/wilcoxon_equivalence.csv e statistics/tools/wilcoxon_equivalence.md
 """
 
 from __future__ import annotations
 
-import argparse
 import itertools
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -131,8 +131,12 @@ SEED = 42
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_CSV = REPO / "artifacts" / "normalized" / "unified_svm_comparison.csv"
-OUT_CSV = Path(__file__).resolve().parent / "wilcoxon_equivalence.csv"
-OUT_MD = Path(__file__).resolve().parent / "wilcoxon_equivalence.md"
+# Os .csv/.md gerados continuam caindo em statistics/tools/, ao lado dos que ja estao
+# versionados la: mover o .py nao pode, sozinho, mudar onde o relatorio nasce. Mesmo
+# OUT_DIR de analysis/stats/compute_cost.py:62 — um lugar so para redirecionar depois.
+OUT_DIR = REPO / "statistics" / "tools"
+OUT_CSV = OUT_DIR / "wilcoxon_equivalence.csv"
+OUT_MD = OUT_DIR / "wilcoxon_equivalence.md"
 
 
 def load_series(df: pd.DataFrame, method: str, metric: str,
@@ -314,11 +318,10 @@ def analyse(df: pd.DataFrame, pairs: list[tuple[str, str, str]], familia: str,
     return res
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--csv", type=Path, default=DEFAULT_CSV)
-    ap.add_argument("--alpha", type=float, default=0.05)
-    args = ap.parse_args()
+def wilcoxon_equivalence(csv: Path = DEFAULT_CSV, alpha: float = 0.05) -> int:
+    # O corpo abaixo continua lendo `args.x`: o shim nasce so dos parametros e e a
+    # primeira linha viva da funcao, entao locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     df = pd.read_csv(args.csv)
     needed = {"method", "init", "dataset_short", "pretrained_pct"} | {m for m, _ in METRICS}
@@ -912,7 +915,7 @@ def main() -> int:
     L.append("cd /dados/home/moliveira/Scalable_Hybrid_FLIM")
     L.append("LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib \\")
     L.append("/dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python \\")
-    L.append("    statistics/tools/wilcoxon_equivalence.py")
+    L.append("    -m analysis.stats.wilcoxon_equivalence")
     L.append("```")
     L.append("")
     L.append(
@@ -933,4 +936,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    wilcoxon_equivalence()

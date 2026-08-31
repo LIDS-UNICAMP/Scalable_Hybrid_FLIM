@@ -26,7 +26,7 @@ Auto-teste com `assert`, sem pytest. Verifica duas coisas:
 2. Os dois modos de embedding devolvem a forma esperada: avgpool2d -> [B, 48],
    flatten -> [B, 27648].
 
-Uso:  python tools/check_probe_matches_evaluator.py
+Uso:  python -m analysis.checks.check_probe_matches_evaluator
 """
 
 from __future__ import annotations
@@ -37,18 +37,18 @@ import sys
 import numpy as np
 import torch
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# analysis/checks/ esta a 2 niveis da raiz do repo (o arquivo veio de tools/, que era 1).
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for _p in (_ROOT, os.path.join(_ROOT, "scripts")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 from sklearn.svm import SVC                                             # noqa: E402
 
-import src.utils.evaluate as _ev                                        # noqa: E402
-from src.metrics.classification import compute_metrics                  # noqa: E402
-from src.modules.autoencoder_flim_module import (                       # noqa: E402
-    NUM_CLASSES, AutoEncoderFlimModule,
-)
+import eval.svm as _ev                                                  # noqa: E402
+from core.metrics import compute_metrics                                # noqa: E402
+from core.constants import NUM_CLASSES                                  # noqa: E402
+from methods.autoencoder import AutoEncoderFlimModule                   # noqa: E402
 from autoencoder_flim_ray import _arch_json, _flim_weights_path         # noqa: E402
 
 # ponytail: um dataset/split fixo, sem CLI. O que se testa e a igualdade de dois caminhos de

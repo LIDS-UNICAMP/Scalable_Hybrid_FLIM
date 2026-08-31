@@ -32,38 +32,55 @@ queda do crescimento aparece --- e ela acontece ANTES de o estagio treinar qualq
 
 Reusa ``load``, ``aggregate`` e a paleta do modulo irmao: uma fonte de dados, uma paleta.
 
-``--by stage`` e um eixo OUTRO, nao uma troca de fonte do caminho acima: le o CSV do
-avaliador (``src/evaluate/eval_growth_stages.py``), que tem uma linha final por
+``by="stage"`` e um eixo OUTRO, nao uma troca de fonte do caminho acima: le o CSV do
+avaliador (``eval/growth_stages.py``), que tem uma linha final por
 ``(familia, estagio, dataset, split)`` e nenhuma coluna ``epoch``. O eixo X passa a ser o
 estagio e cada FAMILIA (grid4, g5_in_feature, g5_in_image, ...) vira uma linha no mesmo
 eixo. Atencao ao que muda junto com o eixo: aquele CSV pontua no TESTE, a serie por epoca
-pontua na VALIDACAO — nao sao continuacao um do outro. ``--eval-split val`` troca a fonte
+pontua na VALIDACAO — nao sao continuacao um do outro. ``eval_split="val"`` troca a fonte
 deste eixo pelo CSV de validacao (sonda SVM do W&B), que o proprio avaliador escreve com
-``--fetch-wandb``; o plot so o le.
+``fetch_wandb=True``; o plot so o le.
 
-Os dois modos aceitam ``--family``, mas a leem diferente. O ``epoch`` desenha UM painel por
+Os dois modos aceitam ``family``, mas a leem diferente. O ``epoch`` desenha UM painel por
 familia (a trajetoria continua so faz sentido dentro de uma, com os pontos herdados dela);
-o ``stage`` sobrepoe as familias num eixo so, para compara-las. ``--fetch`` rebaixa do W&B
-os runs das familias pedidas — todas moram no mesmo projeto ``phd_thesis_grid4``, separadas
-pelo segmento de familia no nome do run.
+o ``stage`` sobrepoe as familias num eixo so, para compara-las. ``fetch=True`` rebaixa do
+W&B os runs das familias pedidas — todas moram no mesmo projeto ``phd_thesis_grid4``,
+separadas pelo segmento de familia no nome do run.
+
+Uso::
+
+    python -m analysis.plots.plot_continuity_spifil_hybrid
+
+Sem CLI: as 16 flags antigas sao parametros nomeados de ``plot_continuity()``, com os
+mesmos defaults. Como sao muitas, ha tambem ``config=<arquivo.yaml>``: o YAML e lido com
+``yaml.safe_load`` e sobrescreve os parametros de mesmo nome.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+import yaml  # noqa: E402
 
-from plot_partial_train_spifil_hybrid import (  # noqa: E402
-    ROOT, STAGE_COLORS, STAGE_MARKERS, STAGE_PT, STAGE_TRAINS, STAGES,
-    aggregate, fetch, grid_dir, load, out_shapes,
+# analysis/plots/ esta a 2 niveis da raiz do repo (o arquivo veio de tools/, que era 1).
+# A raiz entra no sys.path aqui porque o modulo irmao passa a ser importado pelo caminho
+# de PACOTE, e nao mais pelo nome solto que so funcionava com os dois na mesma pasta.
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from analysis.plots.plot_partial_train_spifil_hybrid import (  # noqa: E402
+    STAGE_COLORS, STAGE_MARKERS, STAGE_PT, STAGE_TRAINS, STAGES,
+    aggregate, grid_dir, load, out_shapes,
+    fetch as _fetch,   # `fetch` sombrearia o parametro homonimo de plot_continuity()
 )
 
 OUT_DIR = ROOT / "artifacts" / "analysis_continuidade"
@@ -209,15 +226,15 @@ def plot_stages(dataset: str, percentage: int, df: pd.DataFrame, families: list[
     # lado a lado com a do modo `epoch`.
     out_dir = Path(out_dir) / "_vs_".join(families)
     out_dir.mkdir(parents=True, exist_ok=True)
-    # O CSV grava `kappa`/`acc`/`f1` crus; o --metric vem no dialeto do W&B. Tirar o
+    # O CSV grava `kappa`/`acc`/`f1` crus; o `metric` vem no dialeto do W&B. Tirar o
     # prefixo faz o default de hoje (`probe/svm_kappa`) valer sem flag extra.
     column = metric.rsplit("_", 1)[-1]
     if column not in df.columns:
-        raise SystemExit(f"--metric {metric}: o CSV nao tem a coluna '{column}'")
+        raise SystemExit(f"metric={metric!r}: o CSV nao tem a coluna '{column}'")
     panel = df[(df["dataset"] == dataset) & (df["percentage"] == percentage)]
     # No CSV do avaliador a familia nao e coluna: ela mora no ckpt, que e
     # artifacts/spifil_growth/<FAMILY>/<braco>/<estagio>/checkpoints/best_kappa.ckpt. O CSV
-    # de validacao (--eval-split val) ja traz a coluna real — prefira ela, porque o ckpt la
+    # de validacao (eval_split="val") ja traz a coluna real — prefira ela, porque o ckpt la
     # e so compatibilidade.
     if "family" not in panel.columns:
         panel = panel.assign(family=panel["ckpt"].str.split("/").str[2])
@@ -262,7 +279,7 @@ def plot_stages(dataset: str, percentage: int, df: pd.DataFrame, families: list[
         ax.set_axisbelow(True)
     ax.set_xlabel("estagio do curriculo — ordem cronologica, uma medicao final por estagio")
     # A nota vermelha de hoje diz TESTE, e isso so vale para o CSV do avaliador. Com
-    # --eval-split val a fonte e outra (sonda SVM do W&B, fit=train/score=validation) e a
+    # eval_split="val" a fonte e outra (sonda SVM do W&B, fit=train/score=validation) e a
     # nota mentiria — entao o eixo Y e o rodape dizem qual das duas esta no painel.
     ax.set_ylabel(metric if eval_split == "test" else f"{metric} — VALIDACAO")
     ax.set_title(f"{dataset} · pct{percentage} · {metric}  ({', '.join(families)})\n"
@@ -285,46 +302,62 @@ def plot_stages(dataset: str, percentage: int, df: pd.DataFrame, families: list[
     return path
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--by", choices=("epoch", "stage"), default="epoch",
-                    help="epoch: trajetoria continua por epoca, do W&B, um painel por "
-                         "familia. stage: eixo dos estagios, do CSV do avaliador, as "
-                         "familias sobrepostas no mesmo eixo.")
-    ap.add_argument("--metric", default="probe/svm_kappa")
-    ap.add_argument("--family", nargs="+", default=["grid4"],
-                    help="grades de artifacts/spifil_growth/ — o `_exp()` do laco de "
-                         "treino, basename do --work-dir.")
-    ap.add_argument("--fetch", action="store_true",
-                    help="Rebaixa do W&B os runs das familias pedidas antes de plotar.")
-    ap.add_argument("--pct", type=int, nargs="+", default=[5, 50])
-    ap.add_argument("--dataset", nargs="+", default=["eggs", "larvae", "protozoan"])
-    ap.add_argument("--split", type=int, nargs="+", default=None)
-    ap.add_argument("--stage", nargs="+", choices=STAGES, default=None)
-    ap.add_argument("--csv", default=None,
-                    help="CSV do avaliador; default derivado de --family, --pct e "
-                         "--eval-split. Um so CSV para todas as pct quando explicito.")
-    ap.add_argument("--eval-split", choices=("test", "val"), default="test",
-                    help="Qual medicao alimenta o eixo dos estagios. test: CSV do "
-                         "avaliador (hoje). val: CSV de validacao vindo do W&B, com o "
-                         "infixo `_val` no nome default.")
-    ap.add_argument("--fetch-wandb", action="store_true",
-                    help="(Re)escreve o CSV de validacao a partir do W&B antes de "
-                         "plotar. Implica --eval-split val.")
-    ap.add_argument("--wandb-entity", default="ophira-ai")
-    ap.add_argument("--wandb-project", default="phd_thesis_grid4")
-    ap.add_argument("--stage-agg", choices=("best", "last"), default="best",
-                    help="Como colapsar a curva de um estagio num ponto: best = epoca de "
-                         "maior probe/svm_kappa (o que o best_kappa.ckpt guarda); "
-                         "last = ultima stage_epoch.")
-    ap.add_argument("--allow-missing-runs", action="store_true",
-                    help="Nao falha quando um braco em disco nao tem run no W&B.")
-    ap.add_argument("--out-dir", default=OUT_DIR)
-    args = ap.parse_args()
+def plot_continuity(config=None,
+                    by: str = "epoch",
+                    metric: str = "probe/svm_kappa",
+                    family: list | None = None,
+                    fetch: bool = False,
+                    pct: list | None = None,
+                    dataset: list | None = None,
+                    split: list | None = None,
+                    stage: list | None = None,
+                    csv: str | None = None,
+                    eval_split: str = "test",
+                    fetch_wandb: bool = False,
+                    wandb_entity: str = "ophira-ai",
+                    wandb_project: str = "phd_thesis_grid4",
+                    stage_agg: str = "best",
+                    allow_missing_runs: bool = False,
+                    out_dir=OUT_DIR) -> None:
+    """Um parametro por flag do argparse antigo, com o mesmo default.
+
+    `by`: epoch = trajetoria continua por epoca, do W&B, um painel por familia;
+    stage = eixo dos estagios, do CSV do avaliador, as familias sobrepostas no mesmo
+    eixo. `family`: grades de artifacts/spifil_growth/ — o `_exp()` do laco de treino,
+    basename do --work-dir do treino. `fetch`: rebaixa do W&B os runs das familias
+    pedidas antes de plotar. `csv`: CSV do avaliador; default derivado de `family`,
+    `pct` e `eval_split` — um so CSV para todas as pct quando explicito. `eval_split`:
+    qual medicao alimenta o eixo dos estagios (test = CSV do avaliador; val = CSV de
+    validacao vindo do W&B, com o infixo `_val` no nome default). `fetch_wandb`:
+    (re)escreve o CSV de validacao a partir do W&B antes de plotar, e implica
+    eval_split="val". `stage_agg`: como colapsar a curva de um estagio num ponto
+    (best = epoca de maior probe/svm_kappa, o que o best_kappa.ckpt guarda;
+    last = ultima stage_epoch). `allow_missing_runs`: nao falha quando um braco em
+    disco nao tem run no W&B.
+
+    Sao 16 parametros, entao `config` aceita um YAML de analise: o que estiver la
+    sobrescreve o parametro de mesmo nome. O que os `choices=` do argparse validavam
+    agora e responsabilidade de quem chama.
+    """
+    # Listas nascem aqui, nao na assinatura: default mutavel e compartilhado entre
+    # chamadas. Mesmo padrao de eval/growth_stages.py:406.
+    if family is None:
+        family = ["grid4"]
+    if pct is None:
+        pct = [5, 50]
+    if dataset is None:
+        dataset = ["eggs", "larvae", "protozoan"]
+    # O corpo ja le tudo por `args.x`. `config` nao e um antigo flag: sai do dicionario
+    # antes de virar atributo.
+    params = dict(locals())
+    params.pop("config")
+    if config:
+        params.update(yaml.safe_load(Path(config).read_text()))
+    args = SimpleNamespace(**params)
     if args.fetch_wandb:
         args.eval_split = "val"
     if args.fetch:
-        fetch(families=set(args.family))
+        _fetch(families=set(args.family))
     if args.by == "epoch":
         df = load()
         for family in args.family:
@@ -343,12 +376,17 @@ def main() -> None:
         if args.fetch_wandb:
             # Este plot NUNCA fala com o W&B no modo `stage`: quem sabe montar o CSV de
             # validacao e o avaliador, e ele e a UNICA implementacao da agregacao — dois
-            # `--stage-agg best` em lugares diferentes divergiriam no primeiro empate.
-            sys.path.insert(0, str(ROOT))
-            from src.evaluate.eval_growth_stages import _wandb_val
-            # Ele le `args.pct` como ESCALAR (um CSV por porcentagem); aqui `--pct` e
-            # nargs="+". O Namespace trocado resolve sem tocar na assinatura de la.
-            _wandb_val(argparse.Namespace(**{**vars(args), "pct": percentage}), str(csv))
+            # `stage_agg="best"` em lugares diferentes divergiriam no primeiro empate.
+            from eval.growth_stages import _wandb_val
+            # Ele le `args.pct` como ESCALAR (um CSV por porcentagem); aqui `pct` e lista.
+            # O objeto trocado resolve sem tocar na assinatura de la. Sao exatamente os 9
+            # atributos que `_wandb_val` (eval/growth_stages.py:271) le — nada alem disso
+            # atravessa, entao o contrato fica visivel neste lado.
+            _wandb_val(SimpleNamespace(
+                allow_missing_runs=args.allow_missing_runs, dataset=args.dataset,
+                family=args.family, pct=percentage, split=args.split, stage=args.stage,
+                stage_agg=args.stage_agg, wandb_entity=args.wandb_entity,
+                wandb_project=args.wandb_project), str(csv))
         df = pd.read_csv(csv)
         for dataset in args.dataset:
             print(plot_stages(dataset, percentage, df, args.family, args.metric,
@@ -356,4 +394,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    plot_continuity()

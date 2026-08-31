@@ -34,13 +34,12 @@ Métricas por modelo:
 Uso:
   cd /dados/home/moliveira/Scalable_Hybrid_FLIM
   CUDA_VISIBLE_DEVICES=1 LD_LIBRARY_PATH=$CONDA_PREFIX/lib \
-      python statistics/tools/measure_compute_cost.py
+      python -m analysis.stats.compute_cost
 
 Saídas: statistics/tools/compute_cost.csv e statistics/tools/compute_cost.md
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import platform
@@ -50,6 +49,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Callable, Optional
 
 import torch
@@ -117,7 +117,7 @@ class EncoderProj(nn.Module):
 
 
 def _arch(in_channels: int = 3):
-    from src.models.models import get_channels_from_arch, parse_architecture
+    from flim.arch import get_channels_from_arch, parse_architecture
 
     arch = parse_architecture(str(ARCH_JSON))
     channels = get_channels_from_arch(arch, in_channels)
@@ -126,7 +126,8 @@ def _arch(in_channels: int = 3):
 
 def build_flim() -> tuple[nn.Module, str, bool]:
     """Encoder FLIM com os kernels reais (sem backprop) do split eggs/train1."""
-    from src.models.models import Encoder, load_FLIM_encoder
+    from flim.encoder import Encoder
+    from flim.weights import load_FLIM_encoder
 
     arch, channels = _arch()
     enc = Encoder(arch, 3)
@@ -137,7 +138,7 @@ def build_flim() -> tuple[nn.Module, str, bool]:
 
 def build_lejepa() -> tuple[nn.Module, str, bool]:
     """Encoder LeJEPA pós pré-treino SSL (checkpoint Lightning, init trunc_normal)."""
-    from src.modules.lejepa_line_module import LejepaLineModule
+    from methods.lejepa import LejepaLineModule
 
     module = LejepaLineModule.load_from_checkpoint(str(LEJEPA_CKPT), map_location="cpu")
     enc = module.model.encoder
@@ -147,7 +148,8 @@ def build_lejepa() -> tuple[nn.Module, str, bool]:
 
 def build_ijepa() -> tuple[nn.Module, str, bool]:
     """ViT-H/14 I-JEPA (facebook/ijepa_vith14_1k) do cache HuggingFace local."""
-    from src.models.ijepa_encoder import IJEPAEncoder, _find_safetensors_path
+    from methods.lejepa import IJEPAEncoder
+    from methods.lejepa.ijepa_encoder import _find_safetensors_path
 
     path = _find_safetensors_path("facebook/ijepa_vith14_1k")
     enc = IJEPAEncoder(device=torch.device("cpu"))
@@ -165,7 +167,7 @@ def _distill_arch_only(proj_factory: Callable[[int], nn.Module]) -> tuple[nn.Mod
     init trunc_normal (a mesma usada no treino).
     """
     from src.models.lejepa_flim import LeJEPAFLIMModel
-    from src.models.models import init_weights_trunc_normal
+    from core.blocks.init import init_weights_trunc_normal
 
     arch, _ = _arch()
     student = LeJEPAFLIMModel(arch=arch, in_channels=3, proj_dim=256, proj_hidden=2048)
@@ -175,13 +177,13 @@ def _distill_arch_only(proj_factory: Callable[[int], nn.Module]) -> tuple[nn.Mod
 
 
 def build_distill4() -> tuple[nn.Module, str, bool]:
-    from src.models.distillation import ConvDistillationProjectionHead
+    from methods.distillation import ConvDistillationProjectionHead
 
     return _distill_arch_only(lambda c: ConvDistillationProjectionHead(student_channels=c))
 
 
 def build_distill3() -> tuple[nn.Module, str, bool]:
-    from src.models.distillation import OneLayerConvDistillationProjectionHead
+    from methods.distillation import OneLayerConvDistillationProjectionHead
 
     return _distill_arch_only(
         lambda c: OneLayerConvDistillationProjectionHead(student_channels=c)
@@ -189,7 +191,7 @@ def build_distill3() -> tuple[nn.Module, str, bool]:
 
 
 def build_distill1() -> tuple[nn.Module, str, bool]:
-    from src.models.distillation import OneLayer1x1ConvDistillationProjectionHead
+    from methods.distillation import OneLayer1x1ConvDistillationProjectionHead
 
     return _distill_arch_only(
         lambda c: OneLayer1x1ConvDistillationProjectionHead(student_channels=c)
@@ -197,7 +199,7 @@ def build_distill1() -> tuple[nn.Module, str, bool]:
 
 
 def build_distill2() -> tuple[nn.Module, str, bool]:
-    from src.models.distillation import TwoLayer1x1ConvBN2dDistillationProjectionHead
+    from methods.distillation import TwoLayer1x1ConvBN2dDistillationProjectionHead
 
     return _distill_arch_only(
         lambda c: TwoLayer1x1ConvBN2dDistillationProjectionHead(
@@ -227,7 +229,7 @@ def _rebase_path(p: str) -> str:
 
 def build_distill1_flim() -> tuple[nn.Module, str, bool]:
     """Encoder FLIM congelado + proj head 1x1 treinada (best_loss.ckpt real)."""
-    import src.evaluate.svm_distill_with_projection as sdp
+    import eval.svm_variants.svm_distill_with_projection as sdp
 
     orig_parse = sdp.parse_architecture
     orig_chan = sdp.get_actual_channels_from_weights
@@ -432,10 +434,10 @@ def fmt_ms(mean: Optional[float], std: Optional[float]) -> str:
     return f"{mean:.2f} ± {std:.2f}"
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--skip-cpu", action="store_true", help="não medir latência de CPU")
-    args = ap.parse_args()
+def compute_cost(skip_cpu: bool = False) -> None:
+    # O corpo abaixo continua lendo `args.x`: o shim nasce so dos parametros e e a
+    # primeira linha viva da funcao, entao locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     torch.manual_seed(SEED)
     torch.backends.cudnn.benchmark = False
@@ -718,7 +720,7 @@ def main() -> None:
                  "processos, o que explica o desvio padrão alto na coluna de CPU do I-JEPA; "
                  "o CSV traz também a mediana (`cpu_ms_median`, `gpu_ms_median`), mais "
                  "robusta a essa contenção.")
-    lines.append("- Gerado por `statistics/tools/measure_compute_cost.py`; dados brutos em "
+    lines.append("- Gerado por `analysis/stats/compute_cost.py`; dados brutos em "
                  "`statistics/tools/compute_cost.csv`.")
     lines.append("")
 
@@ -728,4 +730,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    compute_cost()

@@ -16,3 +16,4 @@
 # ║  ⠀⠀⠀⠈⣿⣿⣿⡆⠀⠀⠀⣿⣿⣿⡟⣼⡿⠁⢹⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀                                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
 
+"""Analise de ativacao do encoder e da cabeca: relu_vs_sigmoid, saturation, unit_activations, heatmap_stages."""

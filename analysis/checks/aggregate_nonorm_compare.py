@@ -79,27 +79,34 @@ def build(ruler):
 def fmt(x):
     return f"{x:5.3f}" if x is not None else "  -  "
 
-print("=" * 78)
-for ruler in ("encoder48", "proj1280"):
-    acc, have = build(ruler)
-    print(f"\n### RULER: {ruler}   (OLD csv present={have.get('OLD')}, NEW csv present={have.get('NEW')})")
-    print(f"{'dataset':9} {'pct':>4} | {'OLD κ':>6} {'NEW κ':>6} {'Δκ':>7} | nO nN")
-    print("-" * 60)
-    dataset_deltas = collections.defaultdict(list)
-    for ds in DATASETS:
-        for pct in PCTS:
-            o = acc.get((ds, pct, "OLD")); n = acc.get((ds, pct, "NEW"))
-            om = statistics.mean(o) if o else None
-            nm = statistics.mean(n) if n else None
-            d = (nm - om) if (om is not None and nm is not None) else None
-            if d is not None:
-                dataset_deltas[ds].append(d)
-            print(f"{ds:9} {pct:>4} | {fmt(om):>6} {fmt(nm):>6} "
-                  f"{('%+0.3f'%d) if d is not None else '   -   ':>7} | "
-                  f"{len(o) if o else 0:>2} {len(n) if n else 0:>2}")
-    print("-" * 60)
-    for ds in DATASETS:
-        dd = dataset_deltas[ds]
-        if dd:
-            print(f"  mean Δκ {ds:9}: {statistics.mean(dd):+0.3f}  (over {len(dd)} pcts, NEW-OLD)")
-print("=" * 78)
+# O corpo de topo virou funcao: como modulo de pacote, ele rodava a analise inteira
+# no `import analysis.checks.aggregate_nonorm_compare`. So le CSV e imprime, nao escreve.
+def aggregate_nonorm_compare():
+    print("=" * 78)
+    for ruler in ("encoder48", "proj1280"):
+        acc, have = build(ruler)
+        print(f"\n### RULER: {ruler}   (OLD csv present={have.get('OLD')}, NEW csv present={have.get('NEW')})")
+        print(f"{'dataset':9} {'pct':>4} | {'OLD κ':>6} {'NEW κ':>6} {'Δκ':>7} | nO nN")
+        print("-" * 60)
+        dataset_deltas = collections.defaultdict(list)
+        for ds in DATASETS:
+            for pct in PCTS:
+                o = acc.get((ds, pct, "OLD")); n = acc.get((ds, pct, "NEW"))
+                om = statistics.mean(o) if o else None
+                nm = statistics.mean(n) if n else None
+                d = (nm - om) if (om is not None and nm is not None) else None
+                if d is not None:
+                    dataset_deltas[ds].append(d)
+                print(f"{ds:9} {pct:>4} | {fmt(om):>6} {fmt(nm):>6} "
+                      f"{('%+0.3f'%d) if d is not None else '   -   ':>7} | "
+                      f"{len(o) if o else 0:>2} {len(n) if n else 0:>2}")
+        print("-" * 60)
+        for ds in DATASETS:
+            dd = dataset_deltas[ds]
+            if dd:
+                print(f"  mean Δκ {ds:9}: {statistics.mean(dd):+0.3f}  (over {len(dd)} pcts, NEW-OLD)")
+    print("=" * 78)
+
+
+if __name__ == "__main__":
+    aggregate_nonorm_compare()

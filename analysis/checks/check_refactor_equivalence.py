@@ -21,7 +21,7 @@ Run it after touching ``src/utils/evaluate.py:fit_svm``,
 ``src/metrics/classification.py:compute_metrics`` or the SVM probe in
 ``src/modules/autoencoder_flim_module.py``:
 
-    python tools/check_refactor_equivalence.py
+    python -m analysis.checks.check_refactor_equivalence
 
 Every check is a bare ``assert`` against a hardcoded expectation or against the
 *old* implementation spelled out inline, so a silent behaviour change fails
@@ -43,11 +43,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from torchmetrics.functional.classification import multiclass_accuracy
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# analysis/checks/ esta a 2 niveis da raiz do repo (o arquivo veio de tools/, que era 1).
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
 
-from src.metrics.classification import compute_metrics  # noqa: E402
-from src.utils.evaluate import fit_svm, svm_protocol  # noqa: E402
+from core.metrics import compute_metrics  # noqa: E402
+from eval.svm import fit_svm, svm_protocol  # noqa: E402
 
 # The one and only SVM config, retyped here on purpose: if it is imported the
 # comparison is circular and proves nothing.

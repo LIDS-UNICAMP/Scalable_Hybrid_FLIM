@@ -22,20 +22,22 @@ Este script escolhe, por diretorio, o ckpt com o melhor `best_model_score` grava
 ModelCheckpoint (respeitando `mode` min/max) e apaga os demais. Nao e "um grupo de bests":
 sobra exatamente um arquivo por experimento.
 
-Empate ou score ausente: desempata pelo mtime mais novo.
+Empate: `best*` vence `last*` (ambos gravam o mesmo `best_model_score`).
+Empate remanescente ou score ausente: desempata pelo mtime mais novo.
 Ckpt ilegivel (truncado por disco cheio) e sempre lixo — entra na lista de remocao.
 
 Seguranca:
-  - dry-run por padrao; --apply e obrigatorio para apagar;
-  - pula diretorios escritos nos ultimos --skip-recent-min minutos (run ainda vivo);
+  - dry-run por padrao; apply=True e obrigatorio para apagar;
+  - pula diretorios escritos nos ultimos skip_recent_min minutos (run ainda vivo);
   - le com mmap, nao carrega os 2.4 GB de peso para inspecionar.
 
 Uso:
-  python tools/keep_only_best_ckpt.py
-  python tools/keep_only_best_ckpt.py --apply
-  python tools/keep_only_best_ckpt.py --glob 'artifacts/distillation/*_unfrozen_*/checkpoints/*.ckpt' --apply
+  python -m analysis.checks.keep_only_best_ckpt
+  # os antigos flags sao parametros de keep_only_best(): glob, apply, skip_recent_min
+  # apply=False por padrao: sem ele o script so lista o que apagaria
 """
-import argparse, glob as globlib, os, time
+import glob as globlib, os, time
+from types import SimpleNamespace
 
 import torch
 from tqdm import tqdm
@@ -65,13 +67,11 @@ def score_of(path):
     return None, None
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--glob", default="artifacts/distillation/*/checkpoints/*.ckpt")
-    ap.add_argument("--apply", action="store_true", help="apaga de fato (senao dry-run)")
-    ap.add_argument("--skip-recent-min", type=float, default=30.0,
-                    help="pula dirs escritos ha menos de N minutos (run vivo)")
-    args = ap.parse_args()
+def keep_only_best(glob: str = "artifacts/distillation/*/checkpoints/*.ckpt",
+                   apply: bool = False, skip_recent_min: float = 30.0):
+    # O corpo abaixo continua lendo `args.x`: o shim nasce so dos parametros e e a
+    # primeira linha viva da funcao, entao locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     dirs = {}
     for p in globlib.glob(args.glob):
@@ -93,13 +93,13 @@ def main():
         for f in files:
             mode, sc = score_of(f)
             ranked.append((sc is not None, sc if mode != "min" else (-sc if sc is not None else None),
-                           os.path.getmtime(f), f))
+                           os.path.basename(f).startswith("best"), os.path.getmtime(f), f))
         # tem score vence sem score; entre os com score, maior chave (ja invertida p/ min);
-        # empate ou sem score -> mtime mais novo
-        ranked.sort(key=lambda r: (r[0], r[1] if r[1] is not None else float("-inf"), r[2]))
-        best = ranked[-1][3]
+        # empate: best* vence last* (gravam o mesmo score); depois, mtime mais novo
+        ranked.sort(key=lambda r: (r[0], r[1] if r[1] is not None else float("-inf"), r[2], r[3]))
+        best = ranked[-1][4]
         kept += 1
-        for _, _, _, f in ranked[:-1]:
+        for *_, f in ranked[:-1]:
             freed += os.path.getsize(f)
             doomed.append(f)
 
@@ -115,4 +115,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    keep_only_best()
