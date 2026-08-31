@@ -40,14 +40,18 @@ import yaml as _yaml
 
 import wandb
 
-from src.evaluate.constants import DATASET_NUM_CLASSES
-from src.utils.evaluate import (
+from core.constants import DATASET_NUM_CLASSES, PROJECT_ROOT
+from core.wandb import ENTITY, PROJECT
+from eval.svm import (
     find_best_checkpoint,
     get_local_run_ids,
     parse_experiment_name,
     resolve_available_experiments,
 )
-from src.utils.get_names_wandb import ENTITY, PROJECT
+
+# Antes era o _ROOT importado de src/utils/evaluate.py; a raiz canonica agora
+# vive em core.constants e o import local dentro de resolve_finetune_runs saiu.
+_ROOT = PROJECT_ROOT
 
 # ── Dataset name mappings ──────────────────────────────────────────────────────
 
@@ -159,7 +163,9 @@ def _yaml_ssl_fallback(
     since each encoder run_id appears in both freeze and unfreeze with the same
     experiment_name.
     """
-    config_root = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "generated", "mlp", "freeze")
+    # Os 112 YAMLs do MLP agora vivem em
+    # configs/generated/mlp/{freeze,unfreeze}/<dataset>/<run_id>.yaml.
+    config_root = os.path.join(_ROOT, "configs", "generated", "mlp", "freeze")
     config_root = os.path.normpath(config_root)
     if not os.path.isdir(config_root):
         return {}
@@ -192,7 +198,7 @@ def resolve_ssl_runs(
 ) -> list[SSLRunInfo]:
     """Return SSL pretrained encoder runs that have local checkpoints.
 
-    Wraps ``resolve_available_experiments()`` from src.utils.evaluate and
+    Wraps ``resolve_available_experiments()`` from eval.svm and
     applies optional filters before returning structured SSLRunInfo objects.
 
     Args:
@@ -330,8 +336,6 @@ def resolve_finetune_runs(
         List of FinetuneRunInfo objects.  Runs that cannot be resolved
         have ``skip_reason`` set (non-None).
     """
-    from src.utils.evaluate import _ROOT  # noqa: PLC0415
-
     if verbose:
         print("[wandb_resolver] Resolving fine-tune runs from W&B (X_finetune_ filter)...")
 

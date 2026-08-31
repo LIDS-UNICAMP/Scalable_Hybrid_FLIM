@@ -1,3 +1,21 @@
+# ╔══════════════════════════════════════════════════════════════════════════════════════╗
+# ║  ⠀⠀⠀⠀⣠⠶⡒⠒⢬⡲⣮⠂⣆⣀⠀⠀⠀⠀⠀⠀⢀⣤⣴⣦⣤⡀⠀⠀⠀⠀   MATEUS OLIVEIRA                        ║
+# ║  ⠀⠀⠀⣀⣥⠠⣿⠆⠐⣻⣾⣿⣿⢷⡄⠀⠀⠀⠀⢠⡿⠋⠉⠉⠙⢿⡄⠀⠀⠀   m203656@dac.unicamp.edu.br             ║
+# ║  ⠀⠀⢘⡵⢋⠄⡙⠒⣤⣄⣉⠙⣿⣗⠑⡄⠀⠀⠀⠘⡇⠀⠀⠀⠀⠈⡇⠀⠀⠀   UNICAMP — Universidade Estadual de     ║
+# ║  ⠀⣴⢿⡜⢡⡞⢀⢼⣿⣿⣿⣿⣿⣿⠟⣂⠀⠀⢀⣀⠱⡀⠀⠀⠀⢰⠁⠀⠀⠀               Campinas                     ║
+# ║  ⠰⢫⢟⡇⢸⡇⢸⢾⣿⣿⣿⣿⣿⣿⡷⠰⠀⢰⡏⠀⠀⢡⠀⠀⢠⠃⠀⠀⠀⠀   FEEC — School of Electrical and        ║
+# ║  ⢰⠁⣿⢣⣿⠇⢀⣿⣿⡿⠿⠤⣭⣥⣶⡆⠀⠸⣷⣤⣠⡾⠀⢀⡇⠀⠀⠀⠀⠀           Computer Engineering             ║
+# ║  ⡞⣰⣧⠟⡝⢸⢸⣿⣥⠖⣴⡆⣤⣬⠉⠀⠀⠀⠈⠉⠉⠀⠀⢸⣇⠀⠀⠀⠀⠀   github.com/oliveiraMats2              ║
+# ║  ⠀⡿⡟⢸⡇⠸⡄⢹⣿⢸⣿⣇⡏⠟⣰⣄⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠁⠀⠀⠀   linkedin.com/in/mateus-eng            ║
+# ║  ⠀⠇⣧⠘⡇⠦⣹⣸⣿⡇⡿⡿⣡⣼⣿⣿⣷⣦⣄⡀⠀⠀⣸⣿⣿⠄⠻⢷⣦⠀                                            ║
+# ║  ⠀⢀⠘⣇⢹⡸⣿⣿⣿⢹⢃⣠⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠑⠋⠉⠀⠀⠈⣿⣧   UNICAMP · FEEC · 2026                  ║
+# ║  ⠀⢸⣿⡌⠘⢷⣿⣿⡏⢀⣾⣿⣿⣿⣿⣿⣿⢻⣿⣿⣿⡆⠀⠀⠀⠀⠀⠀⣿⡿                                            ║
+# ║  ⠀⠈⣿⣿⣦⡌⢿⠏⣰⣿⣿⣿⣿⣿⣿⡿⡏⣼⣿⣿⣿⡇⣄⠀⠀⠀⢀⣼⣿⠇                                            ║
+# ║  ⠀⠀⠹⣿⣿⢻⡀⣼⣿⣿⢻⣿⣿⣿⣿⡇⡇⢻⣿⣿⣿⡇⣿⣿⣶⣿⣿⠟⠁⠀                                            ║
+# ║  ⠀⠀⠀⢻⣿⣦⡓⢿⣿⣿⡆⣿⣿⣿⣿⢃⣶⡸⣿⣿⣿⡇⠀⠉⠉⠁⠀⠀⠀⠀                                            ║
+# ║  ⠀⠀⠀⠈⣿⣿⣿⡆⠀⠀⠀⣿⣿⣿⡟⣼⡿⠁⢹⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀                                            ║
+# ╚══════════════════════════════════════════════════════════════════════════════════════╝
+
 """eval_growth_stages.py — SVM de TESTE sobre os encoders das grades de crescimento SPiFiL.
 
 EXPERIMENTO VERSIONADO (nao e script descartavel). Re-executavel.
@@ -61,7 +79,6 @@ Uso::
       --family g5_random_in_feature g5_head_larvae
 """
 
-import argparse
 import csv
 import glob
 import json
@@ -70,26 +87,36 @@ import re
 import sys
 import time
 import warnings
+from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import torch
 
 warnings.filterwarnings("ignore")
 
-# Tres niveis: src/evaluate/<este arquivo> -> src/evaluate -> src -> raiz.
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Dois niveis: eval/<este arquivo> -> eval -> raiz (eram tres em src/evaluate/).
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from tqdm import tqdm                                                   # noqa: E402
 
-import src.utils.evaluate as _ev                                        # noqa: E402
-from src.evaluate.eval_autoencoder import _loader                       # noqa: E402
-from src.metrics.classification import compute_metrics                  # noqa: E402
-from src.modules.autoencoder_flim_module import (                       # noqa: E402
-    NUM_CLASSES, AutoEncoderFlimModule,
+from torch.utils.data import DataLoader                                 # noqa: E402
+
+import eval.svm as _ev                                                  # noqa: E402
+# NUM_CLASSES nao acompanhou o AutoEncoderFlimModule: o dict de
+# src/modules/autoencoder_flim_module.py:850 virou core/constants.py:67.
+from core.constants import IMAGE_SIZE, NUM_CLASSES                      # noqa: E402
+from core.data.parasite_dataset import ParasiteDataset                  # noqa: E402
+from core.data.transforms import build_test                             # noqa: E402
+from core.metrics import compute_metrics                                # noqa: E402
+from eval.svm import (                                                  # noqa: E402
+    _OneHotDataset, cli_kwargs, extract_features, train_svm,
 )
-from src.utils.evaluate import extract_features, train_svm              # noqa: E402
+from methods.autoencoder.autoencoder_flim_module import (               # noqa: E402
+    AutoEncoderFlimModule,
+)
 
 # Raiz das grades: cada familia e um subdiretorio daqui, escolhido por --family.
 _GRID = os.path.join(_ROOT, "artifacts", "spifil_growth")
@@ -126,6 +153,122 @@ _VAL_FIELDS = ["method", "run_name", "stage_label", "round", "dataset", "split",
                "head_kappa", "head_acc", "flim_ref_kappa", "ckpt"]
 # Rodar duas vezes SOBRESCREVE: quem colide nesta chave sai do CSV velho antes do concat.
 _VAL_KEY = ["family", "run_name", "stage_label", "split", "percentage", "eval_split"]
+
+# ---------------------------------------------------------------------------
+# Lookup dos runs da grade no W&B. Morava em
+# analysis/plots/plot_partial_train_spifil_hybrid.py:71-173 e veio para ca inteiro:
+# acesso a dado e desta camada, `analysis/` e folha (ninguem importa de la). Agora o
+# plot importa daqui — `fetch`, `RUN_RE`, `CSV_DIR` e `grid_dir` sao os mesmos objetos,
+# com o mesmo corpo, o mesmo regex e os mesmos caminhos de antes.
+#
+# `PROJECT` continua constante DE MODULO porque `fetch()` a le por ela: e assim que
+# `--wandb-entity/--wandb-project` entram (rebind em `_wandb_val`), do mesmo jeito que
+# `_ev.EMBED_MODE` no `main()`.
+CSV_DIR = Path(_ROOT) / "wandb_phd_thesis_grid4"
+PROJECT = "ophira-ai/phd_thesis_grid4"
+
+
+def grid_dir(family: str = "grid4"):
+    """Diretorio de artefatos da familia. `_GRID` e a raiz comum a todas."""
+    return Path(_GRID) / family
+
+
+# Ancorado no prefixo e com o dataset numa alternancia fechada: e o que separa o segmento
+# da FAMILIA (`g5_in_feature`, `g5_head`, ...) do resto. Com `.search()` e `[a-z]+` no
+# dataset, `spifil_growth_g5_in_feature_eggs_...` casava a partir de `_eggs_` e a familia
+# sumia calada — as duas familias caiam na mesma celula do painel. O grupo e opcional
+# porque os 82 runs da grid4 nao tem esse segmento; quem nao casa vira "grid4".
+RUN_RE = re.compile(r"^spifil_growth_(?:(?P<family>\w+?)_)?"
+                    r"(?P<dataset>eggs|larvae|protozoan)"
+                    r"_split(?P<split>\d+)_pct(?P<pct>\d+)_(?P<label>.+)$")
+
+
+def fetch(dataset: str | None = None, tries: int = 3, wait: float = 5.0,
+          families=None) -> None:
+    """Rebaixa o historico completo de cada run do W&B para ``wandb_phd_thesis_grid4/``.
+
+    Sobrescreve os CSVs, entao pode ser chamada quantas vezes quiser enquanto o
+    treino roda — run ``running`` so volta com mais linhas. A rede e intermitente:
+    cada run tem ``tries`` tentativas e, se ainda assim falhar, a funcao registra
+    e segue para a proxima em vez de abortar o lote.
+    """
+    import pandas as pd
+    import wandb
+
+    CSV_DIR.mkdir(parents=True, exist_ok=True)
+    failed = []
+    # A listagem tem retry PROPRIO: o laco de baixo protege so o `scan_history()` de cada
+    # run, e e a listagem que ja estourou timeout nesta maquina — sem isto o lote inteiro
+    # cai antes do primeiro download.
+    for attempt in range(1, tries + 1):
+        try:
+            listing = list(wandb.Api(timeout=60).runs(PROJECT))
+            break
+        except Exception as err:  # rede intermitente
+            print(f"[listagem {attempt}/{tries}] {err}")
+            if attempt == tries:
+                raise
+            time.sleep(wait * attempt)
+    for run in tqdm(listing, desc="wandb", unit="run"):
+        meta = RUN_RE.match(run.name)
+        if not meta or (dataset and meta["dataset"] != dataset):
+            continue
+        family = meta["family"] or "grid4"
+        if families is not None and family not in families:
+            continue
+        for attempt in range(1, tries + 1):
+            try:
+                rows = pd.DataFrame(list(run.scan_history()))
+                break
+            except Exception as err:  # rede intermitente
+                print(f"[{attempt}/{tries}] {run.name}: {err}")
+                if attempt == tries:
+                    failed.append(run.name)
+                    rows = None
+                else:
+                    time.sleep(wait * attempt)
+        if rows is None or rows.empty:
+            continue
+        label = meta["label"]
+        rows.insert(0, "run_name", run.name)
+        rows.insert(1, "run_id", run.id)
+        rows.insert(2, "run_state", run.state)
+        rows.insert(3, "dataset", meta["dataset"])
+        rows.insert(4, "split", int(meta["split"]))
+        rows.insert(5, "percentage", int(meta["pct"]))
+        rows.insert(6, "stage_label", label)
+        rows.insert(7, "family", family)
+        rows.to_csv(CSV_DIR / f"{run.name}.csv", index=False)
+        print(f"[OK] {run.name} ({len(rows)} linhas, {run.state})")
+    if failed:
+        print(f"[FALHOU] {len(failed)} run(s): {', '.join(failed)}")
+
+
+# origem: src/evaluate/eval_autoencoder.py:103
+# NAO e o core.constants.PARASITE_NAME: aqui os nomes vem sem o sufixo `_split_2`.
+_PARASITE = {"eggs": "helminth-eggs", "larvae": "helminth-larvae",
+             "protozoan": "protozoan-cysts"}
+
+
+# origem: src/evaluate/eval_autoencoder.py:157
+# Veio para ca porque eval_autoencoder.py nao existe na arvore nova. Corpo
+# byte-fiel ao original, tirando os dois nomes que a refatoracao renomeou
+# (DatasetParasite -> ParasiteDataset, _build_test -> build_test).
+def _loader(dataset: str, split: int, pct: int, set_name: str,
+            num_workers: int, one_hot: int = 0):
+    """Dataloader identico ao dos irmaos (eval_svm_flim_flatten.py:161-172).
+
+    `imagenet_norm=False` nao e escolha deste script: e o que os bracos `_lab`
+    viram no treino (autoencoder_flim_ray.py:995-1002).
+    """
+    base = ParasiteDataset(
+        set_name=set_name, split=split, percentage=pct,
+        transform=build_test(IMAGE_SIZE, imagenet_norm=False),
+        loader="ift_lab", path_dataset=_PARASITE[dataset],
+    )
+    ds = _OneHotDataset(base, one_hot) if one_hot else base
+    return DataLoader(ds, batch_size=32, shuffle=False,
+                      num_workers=num_workers, pin_memory=True)
 
 
 def _jobs(pct: int, families, stages, datasets, splits):
@@ -218,8 +361,8 @@ def _summary(rows) -> None:
 def _wandb_val(args, out: str) -> None:
     """Baixa os runs das familias pedidas e (re)escreve o CSV de VALIDACAO por estagio.
 
-    O download bruto e o `fetch()` do plot — o unico downloader do repo, com o retry de
-    rede ja pago. `PROJECT` la e constante de modulo, entao `--wandb-entity/--wandb-project`
+    O download bruto e o `fetch()` deste modulo — o unico downloader do repo, com o retry
+    de rede ja pago. `PROJECT` e constante de modulo, entao `--wandb-entity/--wandb-project`
     entram por rebind, do mesmo jeito que `_ev.EMBED_MODE` no `main()`.
 
     ARMADILHA: `probe/flim_ref_svm_kappa` so existe no SUMMARY do run — e logado uma vez,
@@ -232,16 +375,15 @@ def _wandb_val(args, out: str) -> None:
     import pandas as pd
     import wandb
 
-    sys.path.insert(0, os.path.join(_ROOT, "tools"))
-    import plot_partial_train_spifil_hybrid as _pt
-
-    project = f"{args.wandb_entity}/{args.wandb_project}"
-    _pt.PROJECT = project
-    _pt.fetch(families=set(args.family))
+    # Rebind do GLOBAL DO MODULO, nunca de um nome local: `fetch()` le `PROJECT` por ela,
+    # e quem importou `fetch` de fora (o plot) continua enxergando este mesmo valor.
+    global PROJECT
+    project = PROJECT = f"{args.wandb_entity}/{args.wandb_project}"
+    fetch(families=set(args.family))
 
     flim_ref, seen_fams = {}, set()
     for run in wandb.Api(timeout=60).runs(project):
-        m = _pt.RUN_RE.match(run.name)
+        m = RUN_RE.match(run.name)
         fam = (m["family"] or "grid4") if m else None
         if fam in args.family:
             seen_fams.add(fam)
@@ -253,7 +395,7 @@ def _wandb_val(args, out: str) -> None:
             raise SystemExit(f"[FALHA] --family {fam!r}: 0 runs em {project}.")
     disk = set()
     for fam in args.family:
-        for meta_path in _pt.grid_dir(fam).glob("*/*/run_metadata.json"):
+        for meta_path in grid_dir(fam).glob("*/*/run_metadata.json"):
             meta = json.loads(meta_path.read_text())
             if meta.get("percentage") == args.pct:
                 disk.add(meta["run_name"])
@@ -268,9 +410,9 @@ def _wandb_val(args, out: str) -> None:
         return "" if v is None or pd.isna(v) else v
 
     rows = []
-    for path in tqdm(sorted(_pt.CSV_DIR.glob("spifil_growth_*.csv")),
+    for path in tqdm(sorted(CSV_DIR.glob("spifil_growth_*.csv")),
                      desc="val stages", unit="run"):
-        m = _pt.RUN_RE.match(path.stem)
+        m = RUN_RE.match(path.stem)
         if not m or (m["family"] or "grid4") not in args.family:
             continue
         label, st = m["label"], _STAGE.match(m["label"])
@@ -322,61 +464,37 @@ def _wandb_val(args, out: str) -> None:
     print(f"\n[OK] {out}  ({len(rows)} linhas de validacao)")
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--pct", required=True, type=int, choices=[5, 50],
-                    help="Porcentagem de treino do SVM. Define o CSV de saida — "
-                         "um por porcentagem, para pct5 e pct50 rodarem em "
-                         "paralelo sem disputar o mesmo arquivo. O TESTE e "
-                         "byte-identico entre as duas.")
-    ap.add_argument("--family", nargs="+", default=["grid4"],
-                    help="Grades de artifacts/spifil_growth/ a varrer. A "
-                         "familia e o basename do --work-dir do "
-                         "scripts/spifil_growth_loop.py (`_exp()`, linha 122): "
-                         "grid3, grid4, g5_in_feature, g5_in_image, g5_random, "
-                         "g5_random_in_feature, g5_head, g5_head_larvae. Sem "
-                         "`choices` travado — grade nova entra sem editar isto.")
-    ap.add_argument("--stage", nargs="+", default=None,
-                    choices=["stage1", "stage2", "round1_stage3",
-                             "round1_stage4", "round2_stage3", "round2_stage4",
-                             "round1_head", "round2_head"],
-                    help="Default: todos os rotulos presentes no grid.")
-    ap.add_argument("--dataset", nargs="+", default=None,
-                    choices=["eggs", "larvae", "protozoan"])
-    ap.add_argument("--split", nargs="+", type=int, default=None,
-                    choices=[1, 2, 3])
-    ap.add_argument("--device", default=None,
-                    help="cuda:N ou cpu (default: cuda se disponivel).")
-    ap.add_argument("--csv", "--out", dest="out", default=None,
-                    help="Override do CSV (default: results/eval_growth_stages"
-                         "[_<familia>...]_pct<PCT>.csv; a familia so entra no "
-                         "nome quando nao e a grid4, para o caminho de hoje "
-                         "ficar identico). `--out` e alias historico.")
-    ap.add_argument("--max-iter", type=int, default=-1,
-                    help="-1 = convergido. Um teto positivo fica declarado no CSV.")
-    ap.add_argument("--num-workers", type=int, default=8)
-    ap.add_argument("--skip-existing", action="store_true",
-                    help="Pula linha ja presente no CSV e acrescenta o resto.")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Lista os trabalhos selecionados e sai.")
-    ap.add_argument("--eval-split", choices=("test", "val"), default="test",
-                    help="Qual medicao alimenta o eixo dos estagios. `test` (default) = "
-                         "este avaliador, rodando o SVM sobre os checkpoints. `val` = CSV "
-                         "de validacao vindo do W&B (`probe/svm_*`), que nao passa por "
-                         "checkpoint nenhum. Entra no nome do CSV como infixo `_val`.")
-    ap.add_argument("--fetch-wandb", action="store_true",
-                    help="Baixa os runs das familias pedidas e (re)escreve o CSV de "
-                         "validacao antes de qualquer uso. Implica --eval-split val.")
-    ap.add_argument("--wandb-entity", default="ophira-ai")
-    ap.add_argument("--wandb-project", default="phd_thesis_grid4")
-    ap.add_argument("--stage-agg", choices=("best", "last"), default="best",
-                    help="Como colapsar a curva de um estagio num ponto. `best` = epoca "
-                         "de maior probe/svm_kappa (e o que o best_kappa.ckpt guardou); "
-                         "`last` = ultima stage_epoch.")
-    ap.add_argument("--allow-missing-runs", action="store_true",
-                    help="Desliga a falha alta quando um braco presente em disco nao tem "
-                         "run correspondente no W&B.")
-    args = ap.parse_args()
+def main(pct: int,
+         family: list | None = None,
+         stage: list | None = None,
+         dataset: list | None = None,
+         split: list | None = None,
+         device: str | None = None,
+         out: str | None = None,
+         max_iter: int = -1,
+         num_workers: int = 8,
+         skip_existing: bool = False,
+         dry_run: bool = False,
+         eval_split: str = "test",
+         fetch_wandb: bool = False,
+         wandb_entity: str = "ophira-ai",
+         wandb_project: str = "phd_thesis_grid4",
+         stage_agg: str = "best",
+         allow_missing_runs: bool = False) -> None:
+    """Um parametro por flag do argparse antigo, com o mesmo default.
+
+    `pct` (5 ou 50) nao tem default porque era `required=True`. `family` sai como
+    ["grid4"] abaixo em vez de na assinatura, para nao deixar lista mutavel de
+    default. O que os `choices=` do argparse validavam agora e responsabilidade de
+    quem chama — menos `--family`, que ja era validado contra o disco.
+    """
+    if family is None:
+        family = ["grid4"]
+    # `_wandb_val` continua recebendo um objeto com atributos: quem chama de fora
+    # (analysis/plots/plot_continuity_spifil_hybrid.py) monta um SimpleNamespace e
+    # passa direto. O shim nasce so dos parametros — e a primeira linha viva da
+    # funcao, entao locals() e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     # --fetch-wandb so sabe produzir o CSV de validacao: forcar aqui mantem o nome do
     # arquivo coerente com o que foi de fato medido.
@@ -394,8 +512,9 @@ def main() -> None:
     # Sem `choices`, quem valida e o disco — e erra com a lista do que existe.
     for fam in args.family:
         if not os.path.isdir(os.path.join(_GRID, fam)):
-            ap.error(f"--family {fam!r}: nao existe {os.path.join(_GRID, fam)}. "
-                     f"Grades em disco: {' '.join(sorted(os.listdir(_GRID)))}")
+            raise SystemExit(
+                f"--family {fam!r}: nao existe {os.path.join(_GRID, fam)}. "
+                f"Grades em disco: {' '.join(sorted(os.listdir(_GRID)))}")
 
     tag = "" if args.family == ["grid4"] else "_" + "_".join(args.family)
     kind = "_val" if args.eval_split == "val" else ""
@@ -431,9 +550,10 @@ def main() -> None:
     # Zero trabalho e erro, nao CSV vazio: sem isto um filtro que nao casa nada
     # so vira arquivo de cabecalho e o NaN aparece la na frente, na tabela.
     if not jobs:
-        ap.error(f"nenhum estagio casou o filtro: family={' '.join(args.family)} "
-                 f"pct={args.pct} stage={args.stage} dataset={args.dataset} "
-                 f"split={args.split}")
+        raise SystemExit(
+            f"nenhum estagio casou o filtro: family={' '.join(args.family)} "
+            f"pct={args.pct} stage={args.stage} dataset={args.dataset} "
+            f"split={args.split}")
 
     if args.dry_run:
         for j in jobs:
@@ -546,4 +666,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(**cli_kwargs(sys.argv[1:]))

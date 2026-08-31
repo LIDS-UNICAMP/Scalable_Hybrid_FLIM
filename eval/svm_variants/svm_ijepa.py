@@ -22,7 +22,7 @@ Runs across all datasets / splits / percentages and saves results to
 ``results/ijepa_svm_results.json`` and ``results/ijepa_svm_results.csv``.
 
 Reuses:
-    * ``DatasetParasite`` — dataset loading
+    * ``ParasiteDataset`` — dataset loading
     * ``_OneHotDataset``  — one-hot label wrapper for SVM training
     * ``train_svm``       — linear SVM fit on extracted features
     * ``compute_metrics`` — kappa / acc / f1
@@ -30,17 +30,16 @@ Reuses:
 Usage::
 
     # Run all datasets × splits × percentages
-    python -m src.evaluate.svm_ijepa
+    python -m eval.svm_variants.svm_ijepa
 
     # With W&B logging
-    python -m src.evaluate.svm_ijepa --wandb
+    python -m eval.svm_variants.svm_ijepa --wandb
 
     # Single dataset / split / pct (for debugging)
-    python -m src.evaluate.svm_ijepa --dataset helminth-eggs --split 1 --pct 25
+    python -m eval.svm_variants.svm_ijepa --dataset helminth-eggs --split 1 --pct 25
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 
@@ -50,14 +49,15 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.data_modules.datasets.dataset import DatasetParasite
-from src.data_modules.datasets.lejepa_dataset import _build_test
-from src.evaluate.constants import DATASET_NUM_CLASSES, PERCENTAGES as PCTS, SPLITS
-from src.metrics.classification import compute_metrics
-from src.models.ijepa_encoder import IJEPAEncoder
-from src.utils.evaluate import (
+from core.data.parasite_dataset import ParasiteDataset
+from core.data.transforms import build_test
+from core.constants import DATASET_NUM_CLASSES, PERCENTAGES as PCTS, SPLITS
+from core.metrics import compute_metrics
+from methods.lejepa import IJEPAEncoder
+from eval.svm import (
     SVM_DIAG_MISSING,
     fit_svm,
+    cli_kwargs,
     _OneHotDataset,
     _ROOT,
 )
@@ -212,38 +212,26 @@ def _save_aggregated(df: pd.DataFrame) -> str:
 # ── Main evaluation loop ────────────────────────────────────────────────────────
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="SVM evaluation using I-JEPA (ViT-H/14) embeddings."
-    )
-    parser.add_argument(
-        "--wandb", action="store_true",
-        help="Log per-experiment metrics to W&B.",
-    )
-    parser.add_argument(
-        "--dataset", choices=DATASETS, default=None,
-        help="Restrict to a single dataset (default: all).",
-    )
-    parser.add_argument(
-        "--split", type=int, choices=SPLITS, default=None,
-        help="Restrict to a single split (default: all).",
-    )
-    parser.add_argument(
-        "--pct", type=int, choices=PCTS, default=None,
-        help="Restrict to a single percentage (default: all).",
-    )
-    parser.add_argument(
-        "--aggregate-only", action="store_true",
-        help=(
-            "Skip SVM evaluation. Load existing ijepa_svm_results.csv and "
-            "compute mean ± std per (dataset, pct) across splits. "
-            "Use this when raw results already exist."
-        ),
-    )
-    args = parser.parse_args()
+def main(
+    wandb: bool = False,
+    dataset: str | None = None,
+    split: int | None = None,
+    pct: int | None = None,
+    aggregate_only: bool = False,
+) -> None:
+    """Avalia com SVM os embeddings do I-JEPA (ViT-H/14) sobre a grade.
+
+    Args:
+        wandb:          Loga as metricas por experimento no W&B (`--wandb`).
+        dataset:        Restringe a um dataset de `DATASETS` (`--dataset`).
+        split:          Restringe a um split de `SPLITS` (`--split`).
+        pct:            Restringe a um percentual de `PCTS` (`--pct`).
+        aggregate_only: Pula a avaliacao e so agrega o CSV ja existente
+                        (`--aggregate-only`).
+    """
 
     # ── Aggregate-only shortcut ────────────────────────────────────────────────
-    if args.aggregate_only:
+    if aggregate_only:
         csv_path = os.path.join(_RESULTS_DIR, "ijepa_svm_results.csv")
         if not os.path.exists(csv_path):
             print(f"[ERROR] Raw results not found at {csv_path}. Run without --aggregate-only first.")
@@ -252,12 +240,12 @@ def main() -> None:
         _save_aggregated(df)
         return
 
-    datasets = [args.dataset] if args.dataset else DATASETS
-    splits   = [args.split]   if args.split   else SPLITS
-    pcts     = [args.pct]     if args.pct     else PCTS
+    datasets = [dataset] if dataset else DATASETS
+    splits   = [split]   if split   else SPLITS
+    pcts     = [pct]     if pct     else PCTS
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    transform = _build_test(_IMAGE_SIZE)
+    transform = build_test(_IMAGE_SIZE)
 
     os.makedirs(_RESULTS_DIR, exist_ok=True)
 
@@ -292,7 +280,7 @@ def main() -> None:
 
                 try:
                     # ── Train ──────────────────────────────────────────────
-                    train_base = DatasetParasite(
+                    train_base = ParasiteDataset(
                         set_name="train",
                         split=split,
                         percentage=pct,
@@ -310,7 +298,7 @@ def main() -> None:
                     clf = _train_svm_ijepa(encoder, train_loader)
 
                     # ── Test ───────────────────────────────────────────────
-                    test_ds = DatasetParasite(
+                    test_ds = ParasiteDataset(
                         set_name="test",
                         split=split,
                         percentage=pct,
@@ -343,17 +331,17 @@ def main() -> None:
                     rows.append({**base_row, **metrics, **diag, "status": "ok", "error": ""})
 
                     # ── Optional W&B logging ───────────────────────────────
-                    if args.wandb:
-                        import wandb  # noqa: PLC0415
-                        from src.utils.get_names_wandb import ENTITY, PROJECT  # noqa: PLC0415
-                        wandb_run = wandb.init(
+                    if wandb:
+                        import wandb as _wandb  # noqa: PLC0415
+                        from core.wandb import ENTITY, PROJECT  # noqa: PLC0415
+                        wandb_run = _wandb.init(
                             project=PROJECT,
                             entity=ENTITY,
                             name=run_name,
                             config={**base_row, "num_classes": num_classes},
                             reinit=True,
                         )
-                        wandb.log({f"svm/{k}": v for k, v in metrics.items()})
+                        _wandb.log({f"svm/{k}": v for k, v in metrics.items()})
                         wandb_run.finish()
 
                 except Exception as exc:
@@ -414,30 +402,30 @@ def main() -> None:
     print(f"{'=' * 70}")
 
     # ── Optional W&B summary ──────────────────────────────────────────────────
-    if args.wandb:
-        import wandb  # noqa: PLC0415
-        from src.utils.get_names_wandb import ENTITY, PROJECT  # noqa: PLC0415
+    if wandb:
+        import wandb as _wandb  # noqa: PLC0415
+        from core.wandb import ENTITY, PROJECT  # noqa: PLC0415
         df_ok = df[df["status"] == "ok"]
         summary_metrics: dict = {}
         for m in ("kappa", "acc", "f1"):
             if m in df_ok.columns and not df_ok[m].isna().all():
                 summary_metrics[f"summary/mean_{m}"] = float(df_ok[m].mean())
                 summary_metrics[f"summary/std_{m}"]  = float(df_ok[m].std())
-        summary_run = wandb.init(
+        summary_run = _wandb.init(
             project=PROJECT,
             entity=ENTITY,
             name="svm_ijepa_summary",
             job_type="evaluation_summary",
             reinit=True,
         )
-        wandb.log(summary_metrics)
+        _wandb.log(summary_metrics)
         _meta_cols = ["run_name", "dataset", "dataset_short", "split", "pretrained_pct", "embedding"]
-        wandb.log({
-            "svm_ijepa/results_table": wandb.Table(
+        _wandb.log({
+            "svm_ijepa/results_table": _wandb.Table(
                 dataframe=df_ok[_meta_cols + ["kappa", "acc", "f1"]].reset_index(drop=True)
             )
         })
-        artifact = wandb.Artifact("ijepa_svm_results", type="evaluation_results")
+        artifact = _wandb.Artifact("ijepa_svm_results", type="evaluation_results")
         artifact.add_file(csv_path, name="ijepa_svm_results.csv")
         summary_run.log_artifact(artifact)
         summary_run.finish()
@@ -445,4 +433,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))

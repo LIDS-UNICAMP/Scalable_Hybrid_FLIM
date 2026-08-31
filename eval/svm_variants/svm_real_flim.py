@@ -21,15 +21,15 @@ Pergunta: quanto o FLIM real (pesos dos marcadores, sem destilacao, sem checkpoi
 nenhum) entrega sob EXATAMENTE o mesmo protocolo de avaliacao que produziu o
 "Distill 4" (``results/svm_distill_proj1280_results.csv``)?
 
-O que e reaproveitado sem alteracao de ``src/evaluate/svm_distill_with_projection.py``:
+O que e reaproveitado sem alteracao de ``eval/svm_variants/svm_distill_with_projection.py``:
   * o classificador  — Pipeline(StandardScaler, SVC(C=1e2, gamma='auto',
     kernel='linear', decision_function_shape='ovo', max_iter=-1))
     NOTA: max_iter passou de 20000 para -1 (solver sem limite) nas duas arms;
     numeros novos nao sao comparaveis com os CSVs gerados sob o cap antigo.
     O protocolo efetivo vai gravado na coluna ``svm_protocol`` de cada linha.
-  * o transform de eval — ``_build_test(IMAGE_SIZE=200, imagenet_norm=...)``
-  * os dataloaders      — ``DatasetParasite`` + ``_OneHotDataset``, batch 32, sem shuffle
-  * as metricas         — ``src.metrics.classification.compute_metrics``
+  * o transform de eval — ``build_test(IMAGE_SIZE=200, imagenet_norm=...)``
+  * os dataloaders      — ``ParasiteDataset`` + ``_OneHotDataset``, batch 32, sem shuffle
+  * as metricas         — ``core.metrics.compute_metrics``
   * a grade             — dataset x split x percentage identica ao Distill 4
 
 O que muda e so o extrator de features:
@@ -37,7 +37,7 @@ O que muda e so o extrator de features:
     Distill 4:  input -> student FLIM (ckpt destilado) -> proj_kd -> [B, 1280]
     aqui:       input -> encoder FLIM raw              -> AvgPool -> [B, 48]
 
-O pooling final e ``src.utils.evaluate._encode_pooled`` (``nn.AdaptiveAvgPool2d(1)``
+O pooling final e ``eval.svm._encode_pooled`` (``nn.AdaptiveAvgPool2d(1)``
 sobre o mapa da conv3), ou seja: average pooling, um valor por canal de saida.
 
 O encoder e construido do zero a partir do ``architecture.json`` + pesos FLIM pelo
@@ -52,18 +52,17 @@ Saidas:
 Uso::
 
     CUDA_VISIBLE_DEVICES=3 conda run -n scalable_FLIM --no-capture-output \
-        python -m src.evaluate.svm_real_flim
+        python -m eval.svm_variants.svm_real_flim
 
     # so uma celula, para conferir
     CUDA_VISIBLE_DEVICES=3 conda run -n scalable_FLIM --no-capture-output \
-        python -m src.evaluate.svm_real_flim \
+        python -m eval.svm_variants.svm_real_flim \
         --datasets protozoan --splits 1 --percentages 100 --imagenet-norm true
 """
 from __future__ import annotations
 
-import argparse
 import os
-import sys
+from types import SimpleNamespace
 import warnings
 
 import numpy as np
@@ -75,30 +74,31 @@ from tqdm import tqdm
 
 warnings.filterwarnings("ignore")
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-for _p in (_ROOT, os.path.join(_ROOT, "scripts")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 # ── Infra reaproveitada do avaliador de destilacao ────────────────────────────
-from src.evaluate.svm_distillation import (            # noqa: E402
+from eval.svm_variants.svm_distillation import (            # noqa: E402
     _OneHotDataset,
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
     DEVICE,
     _RESULTS_DIR,
 )
-from src.evaluate.constants import IMAGE_SIZE                      # noqa: E402
-from src.data_modules.datasets.dataset import DatasetParasite      # noqa: E402
-from src.data_modules.datasets.lejepa_dataset import _build_test   # noqa: E402
-from src.metrics.classification import compute_metrics             # noqa: E402
-from src.modules.autoencoder_flim_module import (                  # noqa: E402
-    NUM_CLASSES, AutoEncoderFlimModule,
+from core.constants import IMAGE_SIZE, NUM_CLASSES, PROJECT_ROOT                      # noqa: E402
+from core.data.parasite_dataset import ParasiteDataset      # noqa: E402
+from core.data.transforms import build_test   # noqa: E402
+from core.metrics import compute_metrics             # noqa: E402
+from methods.autoencoder import AutoEncoderFlimModule  # noqa: E402
+from eval.svm import (                                   # noqa: E402
+    SVM_DIAG_MISSING, _encode_pooled, cli_kwargs, fit_svm,
 )
-from src.utils.evaluate import (                                   # noqa: E402
-    SVM_DIAG_MISSING, _encode_pooled, fit_svm,
-)
-from autoencoder_flim_ray import _arch_json, _flim_weights_path    # noqa: E402
+# `experiments.ray.paths.arch_json` recebe o nome LONGO do dataset
+# (paths.py:342 faz `DATASET_LONG_TO_SHORT[dataset]`), enquanto o
+# `_arch_json` de origem (scripts/autoencoder_flim_ray.py:266) indexava
+# a base direto pela chave CURTA. `PARASITE_DIR` e a traducao canonica.
+from experiments.ray.paths import arch_json, flim_weights_path    # noqa: E402
+from experiments.constants import PARASITE_DIR  # noqa: E402
+
+_ROOT = PROJECT_ROOT
 
 _METHOD   = "SVM_Real_FLIM"
 _OUT_DIR  = os.path.join(_ROOT, "artifacts", "real_FLIM")
@@ -120,9 +120,9 @@ def _build_encoder(dataset: str, split: int):
     canais por dataset (protozoan: conv2 com 30, nao 32).
     """
     mod = AutoEncoderFlimModule(
-        arch_json=_arch_json(dataset, split),
+        arch_json=arch_json(PARASITE_DIR[dataset], split),
         dataset=dataset,
-        flim_weights_path=_flim_weights_path(dataset, split),
+        flim_weights_path=flim_weights_path(PARASITE_DIR[dataset], split),
         num_classes=NUM_CLASSES[dataset],
         image_size=IMAGE_SIZE,
         imagenet_norm=True,          # so afeta o alvo da reconstrucao; nao usamos o decoder
@@ -137,9 +137,9 @@ def _build_encoder(dataset: str, split: int):
 def _loader(dataset: str, split: int, pct: int, set_name: str, imagenet_norm: bool,
             num_workers: int, one_hot: int = 0) -> DataLoader:
     """Identico ao dataloader do avaliador de destilacao (batch 32, sem shuffle)."""
-    base = DatasetParasite(
+    base = ParasiteDataset(
         set_name=set_name, split=split, percentage=pct,
-        transform=_build_test(IMAGE_SIZE, imagenet_norm=imagenet_norm),
+        transform=build_test(IMAGE_SIZE, imagenet_norm=imagenet_norm),
         loader="ift_lab", path_dataset=_DATASET_PARASITE_NAME[dataset],
     )
     ds = _OneHotDataset(base, one_hot) if one_hot else base
@@ -177,20 +177,32 @@ def _fit_svm(X: np.ndarray, y: np.ndarray, C: float = 1e2,
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    ap = argparse.ArgumentParser(
-        description=__doc__.splitlines()[0],
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    ap.add_argument("--datasets",    nargs="+", default=_DATASETS, choices=_DATASETS)
-    ap.add_argument("--splits",      nargs="+", type=int, default=_SPLITS)
-    ap.add_argument("--percentages", nargs="+", type=int, default=_PERCENTAGES)
-    ap.add_argument("--imagenet-norm", choices=["true", "false", "both"], default="both",
-                    help="'true' = mesmo transform do Distill 4; 'false' = LAB[0,1] raw.")
-    ap.add_argument("--num-workers", type=int, default=8)
-    ap.add_argument("--out-dir",     default=_OUT_DIR)
-    ap.add_argument("--csv-stem",    default=_CSV_STEM)
-    args = ap.parse_args()
+def main(
+    datasets: list[str] | None = None,
+    splits: list[int] | None = None,
+    percentages: list[int] | None = None,
+    imagenet_norm: str = "both",
+    num_workers: int = 8,
+    out_dir: str = _OUT_DIR,
+    csv_stem: str = _CSV_STEM,
+) -> None:
+    """Um parametro por flag do argparse antigo, com o mesmo default.
+
+    Os tres `nargs="+"` saem como `None` na assinatura para nao deixar lista
+    mutavel de default; os defaults `_DATASETS` / `_SPLITS` / `_PERCENTAGES` da
+    origem sao restaurados logo abaixo.
+    """
+    # `nargs="+"` do argparse sempre devolvia lista; `cli_kwargs` devolve escalar
+    # quando so um valor e passado. A normalizacao mora aqui, na propria funcao.
+    datasets = _DATASETS if datasets is None else (
+        [datasets] if isinstance(datasets, str) else datasets)
+    splits = _SPLITS if splits is None else (
+        [splits] if isinstance(splits, int) else splits)
+    percentages = _PERCENTAGES if percentages is None else (
+        [percentages] if isinstance(percentages, int) else percentages)
+    # Shim de uma linha: o corpo abaixo e o da origem, que lia `args.<flag>`.
+    # `locals()` na primeira linha viva e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     norms = {"true": [True], "false": [False], "both": [True, False]}[args.imagenet_norm]
 
@@ -282,4 +294,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))

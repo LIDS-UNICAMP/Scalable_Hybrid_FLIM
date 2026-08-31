@@ -29,7 +29,7 @@ Os tres compartilham dados, SVM e metrica; divergem em QUEM e o encoder:
   ---------|----------------------|-----------------------|--------------------
   encoder  | FLIM cru, sem ckpt   | FLIM cru, sem ckpt     | ckpt do autoencoder
   features | GAP 48-d             | flatten 27.648-d       | segue o braco
-  entrada  | _build_test(200,F)   | IDEM                   | IDEM
+  entrada  | build_test(200,F)   | IDEM                   | IDEM
   solver   | max_iter=-1          | IDEM                   | IDEM
 
 BRACOS DE PESO. O braco e a identidade do run, gravada no proprio nome do
@@ -49,7 +49,7 @@ O avaliador oficial e IMPORTADO, nunca reescrito:
   * extract_features src/utils/evaluate.py   (idem embed_mode)
   * fit_svm          src/utils/evaluate.py   (a UNICA SVC do repositorio)
   * compute_metrics  src/metrics/classification.py:31
-  * rotulos          1-indexed no fit, predict(feats)-1  (src/evaluate/svm.py:135)
+  * rotulos          1-indexed no fit, predict(feats)-1  (eval/svm.py:135)
 
 Encoder: `AutoEncoderFlimModule.load_from_checkpoint(...)` — o mesmo caminho que
 o estagio 2 usa para partir do estagio 1 (autoencoder_flim_module.py:830). O
@@ -58,22 +58,21 @@ precisa ser reconstruido a mao.
 
 RESSALVA: o probe de treino (`_svm_probe`, autoencoder_flim_module.py:431)
 pontua na **validacao**; este avaliador pontua no **teste**, como todo o resto de
-`src/evaluate/`. Os dois numeros nao sao comparaveis entre si — compare cada
+`eval/svm_variants/`. Os dois numeros nao sao comparaveis entre si — compare cada
 linha daqui com a curva FLIM cru dos irmaos, nao com `stage{N}/svm_kappa`.
 
 Uso:
-    python -m src.evaluate.eval_autoencoder --weights lab --dry-run
+    python -m eval.svm_variants.eval_autoencoder --weights lab --dry-run
 
     OMP_NUM_THREADS=2 OMP_WAIT_POLICY=PASSIVE CUDA_VISIBLE_DEVICES=0 \
       conda run -n scalable_FLIM --no-capture-output \
-      python -m src.evaluate.eval_autoencoder --weights lab \
+      python -m eval.svm_variants.eval_autoencoder --weights lab \
         --out results/eval_autoencoder_lab.csv
 """
 
-import argparse
 import csv
+from types import SimpleNamespace
 import os
-import sys
 import time
 import warnings
 
@@ -82,23 +81,19 @@ import torch
 
 warnings.filterwarnings("ignore")
 
-# Tres niveis: src/evaluate/<este arquivo> -> src/evaluate -> src -> raiz.
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
 from torch.utils.data import DataLoader                                 # noqa: E402
 
-from src.data_modules.datasets.dataset import DatasetParasite           # noqa: E402
-from src.data_modules.datasets.lejepa_dataset import _build_test        # noqa: E402
-from src.metrics.classification import compute_metrics                  # noqa: E402
-from src.modules.autoencoder_flim_module import (                       # noqa: E402
-    NUM_CLASSES, AutoEncoderFlimModule,
+from core.data.parasite_dataset import ParasiteDataset           # noqa: E402
+from core.data.transforms import build_test        # noqa: E402
+from core.metrics import compute_metrics                  # noqa: E402
+from methods.autoencoder import AutoEncoderFlimModule  # noqa: E402
+from core.constants import IMAGE_SIZE, NUM_CLASSES, PROJECT_ROOT                           # noqa: E402
+from eval.svm import (                                        # noqa: E402
+    DEVICE, _OneHotDataset, cli_kwargs, extract_features, train_svm,
 )
-from src.evaluate.constants import IMAGE_SIZE                           # noqa: E402
-from src.utils.evaluate import (                                        # noqa: E402
-    DEVICE, _OneHotDataset, extract_features, train_svm,
-)
+
+_ROOT = PROJECT_ROOT
 
 _PARASITE = {"eggs": "helminth-eggs", "larvae": "helminth-larvae",
              "protozoan": "protozoan-cysts"}
@@ -112,8 +107,8 @@ _MANIFEST = os.path.join(_ROOT, "artifacts", "autoencoder_resnet_init_flim",
 # Sufixo do nome do run -> embed_mode com que aquele braco foi treinado e tem de
 # ser avaliado (autoencoder_flim_ray.py:293,299).
 _WEIGHTS = {"lab": "avgpool2d", "lab_flat": "flatten"}
-_METHOD = {"lab": "SVM_AE_FLIM_48d_labcru",
-           "lab_flat": "SVM_AE_FLIM_flatten27648_labcru"}
+_METHOD = {"lab": "SVM_AE_FLIM_48d_lab_raw",
+           "lab_flat": "SVM_AE_FLIM_flatten27648_lab_raw"}
 
 _FIELDS = ["method", "run_name", "stage", "dataset", "split", "percentage",
            "n_train", "n_test", "dim", "imagenet_norm", "max_iter",
@@ -161,9 +156,9 @@ def _loader(dataset: str, split: int, pct: int, set_name: str,
     `imagenet_norm=False` nao e escolha deste script: e o que os bracos `_lab`
     viram no treino (autoencoder_flim_ray.py:995-1002).
     """
-    base = DatasetParasite(
+    base = ParasiteDataset(
         set_name=set_name, split=split, percentage=pct,
-        transform=_build_test(IMAGE_SIZE, imagenet_norm=False),
+        transform=build_test(IMAGE_SIZE, imagenet_norm=False),
         loader="ift_lab", path_dataset=_PARASITE[dataset],
     )
     ds = _OneHotDataset(base, one_hot) if one_hot else base
@@ -171,29 +166,37 @@ def _loader(dataset: str, split: int, pct: int, set_name: str,
                       num_workers=num_workers, pin_memory=True)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--weights", required=True, choices=sorted(_WEIGHTS),
-                    help="Braco de peso: sufixo do nome do run. 'lab' -> GAP "
-                         "48-d, 'lab_flat' -> conv3 achatado 27.648-d.")
-    ap.add_argument("--out", default=None,
-                    help="CSV de saida (default: results/eval_autoencoder_"
-                         "<weights>.csv — um por braco, nunca se sobrescrevem).")
-    ap.add_argument("--manifest", default=_MANIFEST)
-    ap.add_argument("--datasets", nargs="+", default=None,
-                    choices=["protozoan", "eggs", "larvae"],
-                    help="Default: tudo que o manifesto tiver neste braco.")
-    ap.add_argument("--splits", nargs="+", type=int, default=None)
-    ap.add_argument("--percentages", nargs="+", type=int, default=None)
-    ap.add_argument("--stages", nargs="+", type=int, default=None,
-                    choices=[1, 2], help="1 = encoder congelado, 2 = fine-tune.")
-    ap.add_argument("--max-iter", type=int, default=-1,
-                    help="-1 = convergido. Um teto positivo fica declarado no CSV.")
-    ap.add_argument("--num-workers", type=int, default=8)
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Lista os runs selecionados e confere os checkpoints; "
-                         "nao ajusta SVM nenhum.")
-    args = ap.parse_args()
+def main(
+    weights: str | None = None,
+    out: str | None = None,
+    manifest: str = _MANIFEST,
+    datasets: list[str] | None = None,
+    splits: list[int] | None = None,
+    percentages: list[int] | None = None,
+    stages: list[int] | None = None,
+    max_iter: int = -1,
+    num_workers: int = 8,
+    dry_run: bool = False,
+) -> None:
+    """Um parametro por flag do argparse antigo, com o mesmo default.
+
+    `weights` nao tem default porque era `required=True`; sem ele a funcao
+    aborta como o parser abortava. Os quatro `nargs="+"` mantem o default
+    `None` da origem — quem consome (`_runs`) ja trata `None` como "tudo".
+    """
+    if weights not in _WEIGHTS:
+        raise SystemExit(
+            f"--weights e obrigatorio e deve ser um de {sorted(_WEIGHTS)}; "
+            f"recebi {weights!r}")
+    # `nargs="+"` do argparse sempre devolvia lista; `cli_kwargs` devolve escalar
+    # quando so um valor e passado. A normalizacao mora aqui, na propria funcao.
+    datasets = [datasets] if isinstance(datasets, str) else datasets
+    splits = [splits] if isinstance(splits, int) else splits
+    percentages = [percentages] if isinstance(percentages, int) else percentages
+    stages = [stages] if isinstance(stages, int) else stages
+    # Shim de uma linha: o corpo abaixo e o da origem, que lia `args.<flag>`.
+    # `locals()` na primeira linha viva e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     embed_mode = _WEIGHTS[args.weights]
     out = args.out or os.path.join(_ROOT, "results",
@@ -203,7 +206,7 @@ def main() -> None:
 
     print(f"[CONTRATO] weights ={args.weights} -> embed_mode='{embed_mode}'")
     print(f"[CONTRATO] encoder =load_from_checkpoint(<run>/checkpoints/*.ckpt)")
-    print(f"[CONTRATO] entrada =_build_test({IMAGE_SIZE}, imagenet_norm=False)")
+    print(f"[CONTRATO] entrada =build_test({IMAGE_SIZE}, imagenet_norm=False)")
     print(f"[CONTRATO] solver  = train_svm(..., max_iter={args.max_iter})")
     print(f"[CONTRATO] {len(runs)} runs | device={DEVICE} | out={out}\n")
 
@@ -297,4 +300,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))

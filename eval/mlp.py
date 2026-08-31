@@ -18,23 +18,29 @@
 
 """mlp.py — MLP fine-tuning evaluation of pretrained LeJEPA Line encoders.
 
-Discovers YAML configs from configs/evaluate/mlp/{freeze,unfreeze}/ and for
+Origem: `src/evaluate/mlp.py` (656 linhas), movido fiel. As unicas edicoes sao o
+reponto dos imports para a arvore nova e a troca do argparse (`main()` da origem,
+linha 485) por uma funcao com defaults nomeados.
+
+Discovers YAML configs from configs/generated/mlp/{freeze,unfreeze}/ and for
 each experiment:
   1. Loads the pretrained encoder from the best checkpoint.
-  2. Attaches an MLP head (ClassificationModel from src.models.models).
+  2. Attaches an MLP head (ClassificationModel from core.blocks).
   3. Fine-tunes with encoder frozen or unfrozen.
-  4. Evaluates on the test split using compute_metrics.
+  4. Evaluates on the test split using core.metrics.compute_metrics.
   5. Appends all results to results/mlp_results.csv.
 
 Usage:
-    python -m src.evaluate.mlp                              # all yamls
-    python -m src.evaluate.mlp --mode freeze                # only freeze mode
-    python -m src.evaluate.mlp --mode unfreeze              # only unfreeze mode
-    python -m src.evaluate.mlp --config <path/to/cfg.yaml>  # single yaml
+    python -m eval.mlp                              # all yamls
+    python -m eval.mlp --mode freeze                # only freeze mode
+    python -m eval.mlp --mode unfreeze              # only unfreeze mode
+    python -m eval.mlp --config <path/to/cfg.yaml>  # single yaml
+
+Este e o modulo que `experiments/ray/runners/eval.py:build_cmd` invoca por
+subprocesso, com `--config <path> --ckpt-selection=<best|last> [--wandb]`.
 """
 from __future__ import annotations
 
-import argparse
 import glob
 import os
 from typing import Optional
@@ -50,24 +56,32 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.data_modules.datasets.dataset import DatasetParasite
-from src.data_modules.datasets.lejepa_dataset import _build_test
-from src.evaluate.constants import DATASET_NUM_CLASSES, IMAGE_SIZE
-from src.metrics.classification import compute_metrics
-from src.models.models import (
-    ClassificationModel,
-    freeze_encoder,
+from core.blocks.classification_model import ClassificationModel
+from core.blocks.init import freeze_encoder, unfreeze_encoder
+from core.constants import DATASET_NUM_CLASSES, IMAGE_SIZE, PROJECT_ROOT
+from core.data.parasite_dataset import ParasiteDataset
+from core.data.transforms import build_test
+from core.metrics import compute_metrics
+from core.wandb import ENTITY, PROJECT, resolve_run
+from flim.arch import (
     get_channels_from_arch,
     override_arch_channels,
     parse_architecture,
-    unfreeze_encoder,
 )
-from src.modules.lejepa_line_module import LejepaLineModule
-from src.utils.evaluate import _ROOT, find_best_checkpoint, parse_experiment_name, resolve_available_experiments
-from src.utils.get_names_wandb import ENTITY, PROJECT, build_finetune_name_dict
+from methods.lejepa.lejepa_line_module import LejepaLineModule
+from eval.svm import (
+    cli_kwargs,
+    find_best_checkpoint,
+    parse_experiment_name,
+    resolve_available_experiments,
+)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+_ROOT = PROJECT_ROOT
+
+# Os 112 YAMLs do MLP vivem em configs/generated/mlp/{freeze,unfreeze}/<ds>/<run_id>.yaml.
+# Mesmo diretorio que experiments/constants.py:MLP_CONFIGS_DIR aponta para o runner.
 _CONFIGS_DIR = os.path.join(_ROOT, "configs", "generated", "mlp")
 _RESULTS_DIR = os.path.join(_ROOT, "results")
 
@@ -392,7 +406,7 @@ def run_from_yaml(
         })
 
         num_classes = DATASET_NUM_CLASSES.get(info.dataset_name, 9)
-        transform = _build_test(IMAGE_SIZE)
+        transform = build_test(IMAGE_SIZE)
 
         print(f"  [INFO] Loading encoder from checkpoint...")
         model, ckpt_path = load_classification_model(
@@ -411,13 +425,13 @@ def run_from_yaml(
         loader_kwargs = dict(batch_size=batch_size, num_workers=4, pin_memory=True)
 
         train_loader = DataLoader(
-            DatasetParasite(set_name="train", **ds_kwargs), shuffle=True, **loader_kwargs
+            ParasiteDataset(set_name="train", **ds_kwargs), shuffle=True, **loader_kwargs
         )
         val_loader = DataLoader(
-            DatasetParasite(set_name="validation", **ds_kwargs), shuffle=False, **loader_kwargs
+            ParasiteDataset(set_name="validation", **ds_kwargs), shuffle=False, **loader_kwargs
         )
         test_loader = DataLoader(
-            DatasetParasite(set_name="test", **ds_kwargs), shuffle=False, **loader_kwargs
+            ParasiteDataset(set_name="test", **ds_kwargs), shuffle=False, **loader_kwargs
         )
 
         mode_str = "frozen encoder" if frozen else "unfrozen encoder"
@@ -482,40 +496,51 @@ def run_from_yaml(
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="MLP fine-tuning evaluation for LeJEPA Line encoders."
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["freeze", "unfreeze", "all"],
-        default="all",
-        help="Which subset of configs to run (default: all).",
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        default=None,
-        help="Path to a single YAML config. Overrides --mode.",
-    )
-    parser.add_argument(
-        "--dataset",
-        choices=["eggs", "protozoan", "larvae", "all"],
-        default="all",
-        help=(
-            "Filter configs by dataset short name. "
-            "eggs=helminth-eggs, protozoan=protozoan-cysts, larvae=helminth-larvae. "
-            "Default: all."
-        ),
-    )
-    parser.add_argument(
-        "--wandb-update", action="store_true",
-        help=(
-            "Refresh the local W&B metadata cache (ids_wandb.json) from the "
-            "live W&B API before running.  By default the cache is used as-is."
-        ),
-    )
-    args = parser.parse_args()
+def main(
+    mode: str = "all",
+    config: Optional[str] = None,
+    dataset: str = "all",
+    wandb_update: bool = False,
+    ckpt_selection: str = "best",
+    wandb: bool = True,
+) -> str:
+    """Roda a avaliacao MLP sobre os YAMLs de `configs/generated/mlp/`.
+
+    Substitui o `argparse.ArgumentParser` de `src/evaluate/mlp.py:486`. Cada
+    parametro abaixo era uma flag daquele parser, com o MESMO default:
+
+        --mode          -> mode          (default "all";  freeze|unfreeze|all)
+        --config        -> config        (default None;   sobrepoe --mode)
+        --dataset       -> dataset       (default "all";  eggs|protozoan|larvae|all)
+        --wandb-update  -> wandb_update  (default False)
+
+    Os dois ultimos parametros NAO existiam no argparse de origem; entraram para
+    honrar o comando que `experiments/ray/runners/eval.py:build_cmd` ja monta:
+
+        ckpt_selection  Contrato do runner (`--ckpt-selection=best|last`).
+                        `best` e o unico implementado — e exatamente o que
+                        `eval/svm.py:find_best_checkpoint` faz (best.ckpt, com
+                        fallback para last.ckpt). `last` levanta erro em vez de
+                        avaliar silenciosamente o checkpoint errado.
+        wandb           Contrato do runner (`--wandb`). Default True para nao
+                        mudar o comportamento da origem, que sempre subia o
+                        resumo. Com False, o upload de resumo e pulado; o
+                        `wandb.init` por experimento dentro de `run_from_yaml`
+                        NAO e afetado, porque a origem tambem nao o gateava.
+
+    Returns:
+        Caminho do CSV escrito em `results/mlp_results.csv`.
+    """
+    # Alias local: o parametro `wandb` (bool, exigido pelo nome da flag do
+    # runner) sombreia o modulo dentro desta funcao.
+    import wandb as wandb_sdk  # noqa: PLC0415
+
+    if ckpt_selection != "best":
+        raise NotImplementedError(
+            f"ckpt_selection={ckpt_selection!r}: so 'best' existe hoje. "
+            "A politica de selecao mora em eval/svm.py:find_best_checkpoint "
+            "(best.ckpt, com fallback para last.ckpt) e nao tem seletor 'last'."
+        )
 
     _DATASET_SHORT_TO_FULL = {
         "eggs": "helminth-eggs",
@@ -526,11 +551,12 @@ def main() -> None:
     os.makedirs(_RESULTS_DIR, exist_ok=True)
     rows: list[dict] = []
 
-    # Resolve W&B metadata once (uses cache unless --wandb-update was passed)
-    available_experiments = resolve_available_experiments(update_wandb=args.wandb_update)
+    # Resolve W&B metadata once (uses cache unless wandb_update was passed)
+    available_experiments = resolve_available_experiments(update_wandb=wandb_update)
 
-    # Build collision-safe W&B run names from the already-resolved experiments
-    finetune_names = build_finetune_name_dict(experiments=available_experiments)
+    # Build collision-safe W&B run names from the already-resolved experiments.
+    # `core.wandb.resolve_run` e o antigo `build_finetune_name_dict`.
+    finetune_names = resolve_run(available_experiments)
 
     # Execution report
     report: dict[str, list] = {
@@ -540,22 +566,22 @@ def main() -> None:
         "collision_resolved": [],
     }
 
-    if args.config:
-        yaml_files = [args.config]
+    if config:
+        yaml_files = [config]
     else:
         yaml_files: list[str] = []
-        if args.mode in ("freeze", "all"):
+        if mode in ("freeze", "all"):
             yaml_files += sorted(
                 glob.glob(os.path.join(_CONFIGS_DIR, "freeze", "**", "*.yaml"), recursive=True)
             )
-        if args.mode in ("unfreeze", "all"):
+        if mode in ("unfreeze", "all"):
             yaml_files += sorted(
                 glob.glob(os.path.join(_CONFIGS_DIR, "unfreeze", "**", "*.yaml"), recursive=True)
             )
 
         # Dataset filter
-        if args.dataset != "all":
-            ds_full = _DATASET_SHORT_TO_FULL[args.dataset]
+        if dataset != "all":
+            ds_full = _DATASET_SHORT_TO_FULL[dataset]
             yaml_files = [f for f in yaml_files if os.sep + ds_full + os.sep in f]
 
     print(f"\n{'=' * 70}")
@@ -600,29 +626,30 @@ def main() -> None:
             summary_metrics[f"summary/mean_{m}"] = float(df_ok[m].mean())
             summary_metrics[f"summary/std_{m}"]  = float(df_ok[m].std())
 
-    mode_tag = args.mode if not args.config else "single"
-    print(f"\n[W&B] Uploading CSV and summary to project '{PROJECT}'...")
-    for k, v in summary_metrics.items():
-        print(f"  {k}: {v:.4f}")
+    mode_tag = mode if not config else "single"
+    if wandb:
+        print(f"\n[W&B] Uploading CSV and summary to project '{PROJECT}'...")
+        for k, v in summary_metrics.items():
+            print(f"  {k}: {v:.4f}")
 
-    summary_run = wandb.init(
-        project=PROJECT,
-        entity=ENTITY,
-        name=f"mlp_summary_{mode_tag}",
-        job_type="evaluation_summary",
-        config={"mode": mode_tag, "n_experiments": len(df_ok)},
-        reinit=True,
-    )
-    wandb.log(summary_metrics)
-    # Log full results as a W&B Table
-    table_cols = [c for c in _meta + _metrics if c in df_ok.columns]
-    wandb.log({"mlp/results_table": wandb.Table(dataframe=df_ok[table_cols].reset_index(drop=True))})
-    # Upload CSV as an artifact
-    artifact = wandb.Artifact("mlp_results", type="evaluation_results")
-    artifact.add_file(csv_path, name="mlp_results.csv")
-    summary_run.log_artifact(artifact)
-    summary_run.finish()
-    print("[W&B] Upload complete.")
+        summary_run = wandb_sdk.init(
+            project=PROJECT,
+            entity=ENTITY,
+            name=f"mlp_summary_{mode_tag}",
+            job_type="evaluation_summary",
+            config={"mode": mode_tag, "n_experiments": len(df_ok)},
+            reinit=True,
+        )
+        wandb_sdk.log(summary_metrics)
+        # Log full results as a W&B Table
+        table_cols = [c for c in _meta + _metrics if c in df_ok.columns]
+        wandb_sdk.log({"mlp/results_table": wandb_sdk.Table(dataframe=df_ok[table_cols].reset_index(drop=True))})
+        # Upload CSV as an artifact
+        artifact = wandb_sdk.Artifact("mlp_results", type="evaluation_results")
+        artifact.add_file(csv_path, name="mlp_results.csv")
+        summary_run.log_artifact(artifact)
+        summary_run.finish()
+        print("[W&B] Upload complete.")
 
     # ── Final execution report ────────────────────────────────────────────
     print(f"\n{'=' * 70}")
@@ -651,6 +678,10 @@ def main() -> None:
 
     print(f"{'=' * 70}")
 
+    return csv_path
+
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))

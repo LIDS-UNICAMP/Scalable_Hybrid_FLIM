@@ -37,7 +37,7 @@ metrica; divergem em UMA linha — como o mapa conv3 vira vetor:
   slot       | oficial (src/utils/evaluate.py) | eval_avg_pooling_48d | aqui
   -----------|---------------------------------|-------------------|------------------
   features   | AdaptiveAvgPool2d(1) -> 48-d    | IDEM (48-d)       | flatten -> 27.648-d
-  entrada    | _build_test(200, True)          | (200, False)      | (200, False)
+  entrada    | build_test(200, True)          | (200, False)      | (200, False)
   solver     | max_iter=10000                  | max_iter=-1       | max_iter=-1
 
 As 27.648 dimensoes sao 48 x 24 x 24 — o mapa conv3 inteiro, sem pooling. A troca
@@ -50,25 +50,24 @@ O avaliador oficial e IMPORTADO, nunca reescrito:
   * extract_features src/utils/evaluate.py       (idem embed_mode)
   * _encode_pooled   src/utils/evaluate.py       (e quem le o embed_mode)
   * compute_metrics  src/metrics/classification.py:31
-  * rotulos          1-indexed no fit, predict(feats)-1  (src/evaluate/svm.py:135)
+  * rotulos          1-indexed no fit, predict(feats)-1  (eval/svm.py:135)
 
 Encoder: FLIM cru, sem checkpoint — mesmo caminho que o estagio 1 congela
 (src/modules/autoencoder_flim_module.py:155-168).
 
 Uso:
-    python -m src.evaluate.eval_svm_flim_flatten --dry-run
+    python -m eval.svm_variants.eval_svm_flim_flatten --dry-run
     OMP_NUM_THREADS=2 OMP_WAIT_POLICY=PASSIVE CUDA_VISIBLE_DEVICES=0 \
       conda run -n scalable_FLIM --no-capture-output \
-      python -m src.evaluate.eval_svm_flim_flatten --datasets larvae eggs protozoan --compare
+      python -m eval.svm_variants.eval_svm_flim_flatten --datasets larvae eggs protozoan --compare
 """
 
-import argparse
 import csv
+from types import SimpleNamespace
 import glob
 import json
 import os
 import re
-import sys
 import time
 import warnings
 
@@ -77,24 +76,25 @@ import torch
 
 warnings.filterwarnings("ignore")
 
-# Tres niveis: src/evaluate/<este arquivo> -> src/evaluate -> src -> raiz.
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
 from torch.utils.data import DataLoader                                 # noqa: E402
 
-from src.data_modules.datasets.dataset import DatasetParasite           # noqa: E402
-from src.data_modules.datasets.lejepa_dataset import _build_test        # noqa: E402
-from src.metrics.classification import compute_metrics                  # noqa: E402
-from src.modules.autoencoder_flim_module import (                       # noqa: E402
-    NUM_CLASSES, AutoEncoderFlimModule,
+from core.data.parasite_dataset import ParasiteDataset           # noqa: E402
+from core.data.transforms import build_test        # noqa: E402
+from core.metrics import compute_metrics                  # noqa: E402
+from methods.autoencoder import AutoEncoderFlimModule  # noqa: E402
+from core.constants import IMAGE_SIZE, NUM_CLASSES, PROJECT_ROOT                           # noqa: E402
+from eval.svm import (                                        # noqa: E402
+    DEVICE, _OneHotDataset, cli_kwargs, extract_features, train_svm,
 )
-from src.evaluate.constants import IMAGE_SIZE                           # noqa: E402
-from src.utils.evaluate import (                                        # noqa: E402
-    DEVICE, _OneHotDataset, extract_features, train_svm,
-)
-from scripts.autoencoder_flim_ray import _arch_json, _flim_weights_path  # noqa: E402
+# `experiments.ray.paths.arch_json` recebe o nome LONGO do dataset
+# (paths.py:342 faz `DATASET_LONG_TO_SHORT[dataset]`), enquanto o
+# `_arch_json` de origem (scripts/autoencoder_flim_ray.py:266) indexava
+# a base direto pela chave CURTA. `PARASITE_DIR` e a traducao canonica.
+from experiments.ray.paths import arch_json, flim_weights_path  # noqa: E402
+from experiments.constants import PARASITE_DIR  # noqa: E402
+
+_ROOT = PROJECT_ROOT
 
 _PARASITE = {"eggs": "helminth-eggs", "larvae": "helminth-larvae",
              "protozoan": "protozoan-cysts"}
@@ -106,7 +106,7 @@ _CURVE_DIR = os.path.join(_ROOT, "artifacts", "plots",
 _OUT_CSV = os.path.join(_CURVE_DIR, "eval_svm_flim_flatten.csv")
 _REF_DIR = os.path.join(_CURVE_DIR, "dados_brutos")
 
-_METHOD = "SVM_FLIM_flatten27648_labcru"
+_METHOD = "SVM_FLIM_flatten27648_lab_raw"
 # Passado explicitamente para extract_features/train_svm — e a unica divergencia
 # em relacao a eval_avg_pooling_48d.py.
 _EMBED_MODE = "flatten"
@@ -144,9 +144,9 @@ def _reference() -> dict:
 def _build_encoder(dataset: str, split: int):
     """Encoder FLIM cru — o mesmo que o estagio 1 congela, sem checkpoint."""
     mod = AutoEncoderFlimModule(
-        arch_json=_arch_json(dataset, split),
+        arch_json=arch_json(PARASITE_DIR[dataset], split),
         dataset=dataset,
-        flim_weights_path=_flim_weights_path(dataset, split),
+        flim_weights_path=flim_weights_path(PARASITE_DIR[dataset], split),
         num_classes=NUM_CLASSES[dataset],
         image_size=IMAGE_SIZE,
         imagenet_norm=True,      # so afeta o alvo da reconstrucao; irrelevante aqui
@@ -162,9 +162,9 @@ def _loader(dataset: str, split: int, pct: int, set_name: str,
             num_workers: int, one_hot: int = 0):
     """Dataloader identico ao do avaliador oficial (evaluate.py:413-449),
     trocando SO imagenet_norm=False."""
-    base = DatasetParasite(
+    base = ParasiteDataset(
         set_name=set_name, split=split, percentage=pct,
-        transform=_build_test(IMAGE_SIZE, imagenet_norm=False),
+        transform=build_test(IMAGE_SIZE, imagenet_norm=False),
         loader="ift_lab", path_dataset=_PARASITE[dataset],
     )
     ds = _OneHotDataset(base, one_hot) if one_hot else base
@@ -172,28 +172,38 @@ def _loader(dataset: str, split: int, pct: int, set_name: str,
                       num_workers=num_workers, pin_memory=True)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--datasets", nargs="+", default=["protozoan", "eggs", "larvae"],
-                    choices=["protozoan", "eggs", "larvae"],
-                    help="Varios de uma vez: o CSV de saida e unico e traz a coluna dataset.")
-    ap.add_argument("--splits", nargs="+", type=int, default=[1, 2, 3])
-    ap.add_argument("--percentages", nargs="+", type=int,
-                    default=[1, 5, 25, 50, 75, 100])
-    ap.add_argument("--max-iter", type=int, default=-1,
-                    help="-1 = convergido. Um teto positivo fica declarado no CSV.")
-    ap.add_argument("--num-workers", type=int, default=8)
-    ap.add_argument("--out", default=_OUT_CSV)
-    ap.add_argument("--compare", action="store_true",
-                    help="Confere cada celula contra dados_brutos/*.json (a curva laranja plotada).")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Valida arch JSON, pesos e splits; nao ajusta SVM nenhum.")
-    args = ap.parse_args()
+def main(
+    datasets: list[str] | None = None,
+    splits: list[int] | None = None,
+    percentages: list[int] | None = None,
+    max_iter: int = -1,
+    num_workers: int = 8,
+    out: str = _OUT_CSV,
+    compare: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """Um parametro por flag do argparse antigo, com o mesmo default.
+
+    Os tres `nargs="+"` saem como `None` na assinatura para nao deixar lista
+    mutavel de default; o valor de origem e restaurado logo abaixo. O que os
+    `choices=` validavam agora e responsabilidade de quem chama.
+    """
+    # `nargs="+"` do argparse sempre devolvia lista; `cli_kwargs` devolve escalar
+    # quando so um valor e passado. A normalizacao mora aqui, na propria funcao.
+    datasets = ["protozoan", "eggs", "larvae"] if datasets is None else (
+        [datasets] if isinstance(datasets, str) else datasets)
+    splits = [1, 2, 3] if splits is None else (
+        [splits] if isinstance(splits, int) else splits)
+    percentages = [1, 5, 25, 50, 75, 100] if percentages is None else (
+        [percentages] if isinstance(percentages, int) else percentages)
+    # Shim de uma linha: o corpo abaixo e o da origem, que lia `args.<flag>`.
+    # `locals()` na primeira linha viva e exatamente a assinatura.
+    args = SimpleNamespace(**locals())
 
     # A UNICA divergencia em relacao a eval_avg_pooling_48d.py: o modo de embedding
     # vai explicito em cada chamada do avaliador oficial (nada de estado global).
     print(f"[CONTRATO] features=embed_mode='{_EMBED_MODE}' -> flatten(conv3) = 48*24*24")
-    print(f"[CONTRATO] entrada =_build_test({IMAGE_SIZE}, imagenet_norm=False)")
+    print(f"[CONTRATO] entrada =build_test({IMAGE_SIZE}, imagenet_norm=False)")
     print(f"[CONTRATO] solver  = train_svm(..., max_iter={args.max_iter})")
     print(f"[CONTRATO] datasets={args.datasets} | device={DEVICE}\n")
 
@@ -201,14 +211,14 @@ def main() -> None:
         ok = True
         for ds in args.datasets:
             for sp in args.splits:
-                aj, wp = _arch_json(ds, sp), _flim_weights_path(ds, sp)
+                aj, wp = arch_json(PARASITE_DIR[ds], sp), flim_weights_path(PARASITE_DIR[ds], sp)
                 for path in (aj, wp):
                     flag = os.path.exists(path)
                     ok &= flag
                     print(f"  [{'OK ' if flag else 'FALTA'}] {path}")
                 for pct in args.percentages:
                     try:
-                        n = len(DatasetParasite(set_name="train", split=sp, percentage=pct,
+                        n = len(ParasiteDataset(set_name="train", split=sp, percentage=pct,
                                                 transform=None, loader="ift_lab",
                                                 path_dataset=_PARASITE[ds]))
                         print(f"  [OK ] {ds} split{sp} pct{pct:<3d} train={n}")
@@ -297,4 +307,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))

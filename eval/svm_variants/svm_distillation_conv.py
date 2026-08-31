@@ -26,26 +26,21 @@ Embedding usado: student.encode() → [B, 48]   (FLIM encoder puro, SEM proj hea
 
 Usage::
 
-    python -m src.evaluate.svm_distillation_conv
-    python -m src.evaluate.svm_distillation_conv --wandb-update
-    python -m src.evaluate.svm_distillation_conv --run eggs_split1_pct100
+    python -m eval.svm_variants.svm_distillation_conv
+    python -m eval.svm_variants.svm_distillation_conv --wandb-update
+    python -m eval.svm_variants.svm_distillation_conv --run eggs_split1_pct100
 """
 from __future__ import annotations
 
-import argparse
 import os
-import sys
 
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
 # ── Reutiliza tudo do script de distillation original ─────────────────────────
-from src.evaluate.svm_distillation import (
+from eval.svm_variants.svm_distillation import (
     _OneHotDataset,
     find_distillation_runs,
     train_svm_distillation,
@@ -55,30 +50,36 @@ from src.evaluate.svm_distillation import (
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
 )
-from src.data_modules.datasets.dataset import DatasetParasite
-from src.data_modules.datasets.lejepa_dataset import _build_test
-from src.evaluate.constants import IMAGE_SIZE
-from src.metrics.classification import compute_metrics
-from src.utils.evaluate import (
+from core.data.parasite_dataset import ParasiteDataset
+from core.data.transforms import build_test
+from core.constants import IMAGE_SIZE, PROJECT_ROOT
+from core.metrics import compute_metrics
+from eval.svm import (
     SVM_DIAG_MISSING,
+    cli_kwargs,
     extract_features_encode,
     extract_proj_features,
     fit_svm,
 )
 
 # ── Carrega só o student do checkpoint, sem instanciar o teacher (I-JEPA) ─────
-from src.models.lejepa_flim import LeJEPAFLIMModel
-from src.models.models import (
+from methods.lejepa.lejepa_flim_model import LeJEPAFLIMModel
+from flim.arch import (
     parse_architecture,
     get_channels_from_arch,
     get_actual_channels_from_weights,
     override_arch_channels,
 )
-from src.models.distillation import (
-    TEACHER_DIM,
+from methods.distillation import (
     OneLayerConvDistillationProjectionHead,
     OneLayer1x1ConvDistillationProjectionHead,
 )
+# TEACHER_DIM fica fora do __init__ curto de propósito (methods/distillation/
+# __init__.py:57): vem pelo módulo, como em eval/tsne.py.
+from methods.distillation.teacher_constants import TEACHER_DIM
+
+
+_ROOT = PROJECT_ROOT
 
 
 def _load_student_from_ckpt(ckpt_path: str, device: torch.device) -> LeJEPAFLIMModel:
@@ -104,16 +105,16 @@ def _load_student_from_ckpt(ckpt_path: str, device: torch.device) -> LeJEPAFLIMM
     encoder_init      = hparams.get("encoder_init", "trunc_normal")
     flim_weights_path = hparams.get("flim_weights_path", None)
 
-    arch = parse_architecture(arch_json)
-
-    # Para flim_init os canais reais podem diferir do architecture.json
-    # (ex: protozoan conv2 tem 30 canais, não 32)
-    if encoder_init == "flim" and flim_weights_path:
-        channels = get_actual_channels_from_weights(flim_weights_path, arch, in_channels)
-        arch = override_arch_channels(arch, channels)
-
+    # `LeJEPAFLIMModel` (methods/lejepa/lejepa_flim_model.py) recebe o CAMINHO do
+    # architecture.json, nao o dict parseado — a assinatura `arch=` e a da classe
+    # antiga (src/models/lejepa_flim.py). A deteccao de canais reais a partir dos
+    # bias (protozoan tem 30 canais na conv2, nao 32) nao se perde: quem faz e
+    # `Encoder.from_flim` (flim/encoder.py:111-112), com as MESMAS duas funcoes
+    # que eram chamadas aqui.
     student = LeJEPAFLIMModel(
-        arch=arch,
+        arch_json=arch_json,
+        init=encoder_init,
+        weights_path=flim_weights_path,
         in_channels=in_channels,
         proj_dim=proj_dim,
         proj_hidden=proj_hidden,
@@ -283,44 +284,48 @@ def _discover_ckpts(meta: dict) -> list[dict]:
     return found
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="SVM no FLIM encoder [B,48] dos checkpoints next_layers_direct.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument("--run",           default=None,
-                        help="Substring filter no nome do run.")
-    parser.add_argument("--run-filter",    default=None,
-                        help="Sobrescreve o filtro base (padrão: next_layers_direct).")
-    parser.add_argument("--output-csv",    default=None,
-                        help="Nome do CSV de saída (em results/). Derivado do filtro se omitido.")
-    parser.add_argument("--artifacts-dir", default=_ARTIFACTS_DIR)
-    parser.add_argument("--wandb-update",  action="store_true")
-    parser.add_argument("--wandb-entity",  default="ophira-ai")
-    parser.add_argument("--wandb-project", default="flim-ssl")
-    parser.add_argument("--no-imagenet-norm", action="store_true",
-                        help="Eval transform stays LAB[0,1] (no ImageNet RGB norm). "
-                             "Use for checkpoints trained with --no-imagenet-norm.")
-    parser.add_argument("--only-ok", action="store_true",
-                        help="Skip runs whose run_metadata.json status != 'ok' "
-                             "(safe to run while other runs are still training).")
-    args = parser.parse_args()
+def main(
+    run: str | None = None,
+    run_filter: str | None = None,
+    output_csv: str | None = None,
+    artifacts_dir: str = _ARTIFACTS_DIR,
+    wandb_update: bool = False,
+    wandb_entity: str = "ophira-ai",
+    wandb_project: str = "flim-ssl",
+    no_imagenet_norm: bool = False,
+    only_ok: bool = False,
+) -> None:
+    """SVM sobre o encoder FLIM [B,48] dos checkpoints next_layers_direct.
+
+    Args:
+        run:              Substring de filtro no nome do run (`--run`).
+        run_filter:       Sobrescreve o filtro base (`--run-filter`); default
+                          `next_layers_direct`, resolvido no corpo.
+        output_csv:       Nome do CSV em `results/` (`--output-csv`); derivado do
+                          filtro quando omitido.
+        artifacts_dir:    Raiz dos artefatos (`--artifacts-dir`).
+        wandb_update:     Loga no W&B (`--wandb-update`).
+        wandb_entity:     Entidade do W&B (`--wandb-entity`).
+        wandb_project:    Projeto do W&B (`--wandb-project`).
+        no_imagenet_norm: Transform de eval fica em LAB[0,1] (`--no-imagenet-norm`).
+        only_ok:          Pula runs com `status != "ok"` (`--only-ok`).
+    """
 
     os.makedirs(_RESULTS_DIR, exist_ok=True)
     # transform base (encoder 48d, runs não-frozen). Para runs frozen derivamos a
     # norma da metadata por run (no_imagenet_norm) — ver loop abaixo.
-    transform = _build_test(IMAGE_SIZE, imagenet_norm=not args.no_imagenet_norm)
+    transform = build_test(IMAGE_SIZE, imagenet_norm=not no_imagenet_norm)
 
-    base_filter = args.run_filter if args.run_filter else "next_layers_direct"
-    run_filter = base_filter
-    if args.run:
-        run_filter = args.run if base_filter in args.run else f"{base_filter}_{args.run}"
+    base_filter = run_filter if run_filter else "next_layers_direct"
+    resolved_filter = base_filter
+    if run:
+        resolved_filter = run if base_filter in run else f"{base_filter}_{run}"
 
-    runs = find_distillation_runs(args.artifacts_dir, run_filter=run_filter)
-    if args.only_ok:
+    runs = find_distillation_runs(artifacts_dir, run_filter=resolved_filter)
+    if only_ok:
         runs = [r for r in runs if r.get("status") == "ok"]
     if not runs:
-        print(f"[WARN] Nenhum run com filtro '{run_filter}' e checkpoint encontrado.")
+        print(f"[WARN] Nenhum run com filtro '{resolved_filter}' e checkpoint encontrado.")
         return
 
     print(f"\n{'='*70}")
@@ -345,8 +350,8 @@ def main() -> None:
         if "no_imagenet_norm" in meta:
             run_no_norm = bool(meta["no_imagenet_norm"])
         else:
-            run_no_norm = args.no_imagenet_norm
-        run_transform = _build_test(IMAGE_SIZE, imagenet_norm=not run_no_norm)
+            run_no_norm = no_imagenet_norm
+        run_transform = build_test(IMAGE_SIZE, imagenet_norm=not run_no_norm)
 
         # best_knn_kappa do run (val/knn_kappa do best.ckpt); usado nas duas linhas.
         run_best_knn = meta.get("best_knn_kappa", float("nan"))
@@ -397,11 +402,11 @@ def main() -> None:
             }
 
             try:
-                train_ds = DatasetParasite(
+                train_ds = ParasiteDataset(
                     set_name="train", split=split, percentage=pct,
                     transform=run_transform, loader="ift_lab", path_dataset=parasite_name,
                 )
-                test_ds = DatasetParasite(
+                test_ds = ParasiteDataset(
                     set_name="test", split=split, percentage=pct,
                     transform=run_transform, loader="ift_lab", path_dataset=parasite_name,
                 )
@@ -454,11 +459,11 @@ def main() -> None:
                 print(f"   kappa={metrics['kappa']:.4f}  acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}"
                       f"  fit_status={diag['svm_fit_status']}  n_sv={diag['svm_n_sv']}")
 
-                if args.wandb_update:
+                if wandb_update:
                     try:
                         import wandb as _wandb  # noqa: PLC0415
                         wr = _wandb.init(
-                            project=args.wandb_project, entity=args.wandb_entity,
+                            project=wandb_project, entity=wandb_entity,
                             name=f"svm_distil_conv_{run_name}",
                             config={**base, "num_classes": num_classes}, reinit=True,
                         )
@@ -474,8 +479,8 @@ def main() -> None:
                              "status": "error", "error": str(exc)})
 
     # ── CSV ────────────────────────────────────────────────────────────────
-    if args.output_csv:
-        csv_name = args.output_csv if args.output_csv.endswith(".csv") else f"{args.output_csv}.csv"
+    if output_csv:
+        csv_name = output_csv if output_csv.endswith(".csv") else f"{output_csv}.csv"
     else:
         safe = base_filter.replace("/", "_").replace(" ", "_")
         csv_name = f"svm_{safe}_results.csv"
@@ -493,4 +498,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))

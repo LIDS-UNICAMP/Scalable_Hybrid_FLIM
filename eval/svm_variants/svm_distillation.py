@@ -24,28 +24,26 @@ student model, extracts raw encoder embeddings (no projection head), trains a
 linear SVM on the training split, and evaluates on the test split.
 
 Reuses from the existing evaluate infrastructure:
-    * ``DatasetParasite`` — dataset loading (same parasite/split/pct as training)
+    * ``ParasiteDataset`` — dataset loading (same parasite/split/pct as training)
     * ``_OneHotDataset``  — label wrapper for SVM training
     * ``compute_metrics`` — kappa / acc / f1
     * ``train_svm`` logic — adapted for ``student.encode()`` instead of conv layers
 
-The ``train_svm`` from ``src.utils.evaluate`` accesses ``.conv1/.conv2/.conv3``
+The ``train_svm`` from ``eval.svm`` accesses ``.conv1/.conv2/.conv3``
 directly (FLIM-specific interface), so a distillation-compatible variant is
 provided here that calls ``student.encode()``.
 
 Usage::
 
-    python -m src.evaluate.svm_distillation
-    python -m src.evaluate.svm_distillation --wandb-update
-    python -m src.evaluate.svm_distillation --run distillation_eggs_split1_pct1_modeldirect
+    python -m eval.svm_variants.svm_distillation
+    python -m eval.svm_variants.svm_distillation --wandb-update
+    python -m eval.svm_variants.svm_distillation --run distillation_eggs_split1_pct1_modeldirect
 """
 from __future__ import annotations
 
-import argparse
 import glob
 import json
 import os
-import sys
 
 import numpy as np
 import pandas as pd
@@ -54,21 +52,25 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
-from src.data_modules.datasets.dataset import DatasetParasite
-from src.data_modules.datasets.lejepa_dataset import _build_test
-from src.evaluate.constants import IMAGE_SIZE
-from src.metrics.classification import compute_metrics
-from src.models.lejepa_flim import LeJEPAFLIMModel
-from src.models.models import (
+from core.data.parasite_dataset import ParasiteDataset
+from core.data.transforms import build_test
+from core.constants import IMAGE_SIZE, PROJECT_ROOT
+from core.metrics import compute_metrics
+from methods.lejepa.lejepa_flim_model import LeJEPAFLIMModel
+from flim.arch import (
     parse_architecture,
     get_actual_channels_from_weights,
     override_arch_channels,
 )
-from src.utils.evaluate import SVM_DIAG_MISSING, extract_features_encode, fit_svm
+from eval.svm import (
+    SVM_DIAG_MISSING,
+    cli_kwargs,
+    extract_features_encode,
+    fit_svm,
+)
+
+_ROOT = PROJECT_ROOT
 
 _ARTIFACTS_DIR = os.path.join(_ROOT, "artifacts", "distillation")
 _RESULTS_DIR   = os.path.join(_ROOT, "results")
@@ -120,13 +122,16 @@ def _load_student_from_ckpt(ckpt_path: str, device: torch.device) -> LeJEPAFLIMM
             "reconstruir o student sem a arquitetura."
         )
 
-    arch = parse_architecture(arch_json)
-    if encoder_init == "flim" and flim_weights_path:
-        channels = get_actual_channels_from_weights(flim_weights_path, arch, in_channels)
-        arch = override_arch_channels(arch, channels)
-
+    # `LeJEPAFLIMModel` (methods/lejepa/lejepa_flim_model.py) recebe o CAMINHO do
+    # architecture.json, nao o dict parseado — a assinatura `arch=` e a da classe
+    # antiga (src/models/lejepa_flim.py). A deteccao de canais reais a partir dos
+    # bias (protozoan tem 30 canais na conv2, nao 32) nao se perde: quem faz e
+    # `Encoder.from_flim` (flim/encoder.py:111-112), com as MESMAS duas funcoes
+    # que eram chamadas aqui.
     student = LeJEPAFLIMModel(
-        arch=arch,
+        arch_json=arch_json,
+        init=encoder_init,
+        weights_path=flim_weights_path,
         in_channels=in_channels,
         proj_dim=proj_dim,
         proj_hidden=proj_hidden,
@@ -150,7 +155,7 @@ def _load_student_from_ckpt(ckpt_path: str, device: torch.device) -> LeJEPAFLIMM
 
 
 class _OneHotDataset(Dataset):
-    """Wraps DatasetParasite and converts integer labels to one-hot vectors."""
+    """Wraps ParasiteDataset and converts integer labels to one-hot vectors."""
 
     def __init__(self, base: Dataset, num_classes: int) -> None:
         self.base = base
@@ -289,33 +294,26 @@ def find_distillation_runs(artifacts_dir: str, run_filter: str | None = None) ->
 # ── Main evaluation loop ───────────────────────────────────────────────────────
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="SVM evaluation of distilled FLIM CNN student models.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "--wandb-update", action="store_true",
-        help="Log per-experiment SVM metrics to W&B.",
-    )
-    parser.add_argument(
-        "--run", default=None,
-        help="Restrict to a single run name (substring match).",
-    )
-    parser.add_argument(
-        "--artifacts-dir", default=_ARTIFACTS_DIR,
-        help="Root of distillation artifacts (default: artifacts/distillation/).",
-    )
-    args = parser.parse_args()
+def main(
+    wandb_update: bool = False,
+    run: str | None = None,
+    artifacts_dir: str = _ARTIFACTS_DIR,
+) -> None:
+    """Avalia com SVM os students destilados encontrados em *artifacts_dir*.
 
+    Args:
+        wandb_update: Loga as metricas por experimento no W&B (`--wandb-update`).
+        run:          Restringe a um run so, por substring do nome (`--run`).
+        artifacts_dir: Raiz dos artefatos de destilacao (`--artifacts-dir`).
+    """
     os.makedirs(_RESULTS_DIR, exist_ok=True)
-    transform = _build_test(IMAGE_SIZE)
+    transform = build_test(IMAGE_SIZE)
 
     # ── Discover runs ──────────────────────────────────────────────────────
-    runs = find_distillation_runs(args.artifacts_dir, run_filter=args.run)
+    runs = find_distillation_runs(artifacts_dir, run_filter=run)
 
     if not runs:
-        print(f"[WARN] No valid distillation runs found under: {args.artifacts_dir}")
+        print(f"[WARN] No valid distillation runs found under: {artifacts_dir}")
         print("       Train at least one run with distillation_ray.py first.")
         return
 
@@ -369,7 +367,7 @@ def main() -> None:
             print(f"  [INFO] Student embed_dim = {actual_emb_dim}")
 
             # ── Train SVM on training split ────────────────────────────────
-            train_base = DatasetParasite(
+            train_base = ParasiteDataset(
                 set_name="train",
                 split=split,
                 percentage=pct,
@@ -387,7 +385,7 @@ def main() -> None:
             clf = train_svm_distillation(student, train_loader)
 
             # ── Evaluate on test split ────────────────────────────────────
-            test_ds = DatasetParasite(
+            test_ds = ParasiteDataset(
                 set_name="test",
                 split=split,
                 percentage=pct,
@@ -415,10 +413,10 @@ def main() -> None:
             )
 
             # ── Optional W&B logging ───────────────────────────────────────
-            if args.wandb_update:
+            if wandb_update:
                 try:
                     import wandb  # noqa: PLC0415
-                    from src.utils.get_names_wandb import ENTITY, PROJECT  # noqa: PLC0415
+                    from core.wandb import ENTITY, PROJECT  # noqa: PLC0415
                     wandb_run = wandb.init(
                         project=PROJECT,
                         entity=ENTITY,
@@ -466,10 +464,10 @@ def main() -> None:
     print(f"{'=' * 70}")
 
     # ── W&B summary upload ─────────────────────────────────────────────────
-    if args.wandb_update:
+    if wandb_update:
         try:
             import wandb  # noqa: PLC0415
-            from src.utils.get_names_wandb import ENTITY, PROJECT  # noqa: PLC0415
+            from core.wandb import ENTITY, PROJECT  # noqa: PLC0415
 
             df_ok = df[df["status"] == "ok"]
             summary: dict = {}
@@ -502,4 +500,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))

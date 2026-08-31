@@ -17,7 +17,7 @@
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
 """svm_flim_residual.py — SVM evaluation of residual FLIM encoders (eggs only).
 
-Mirrors ``src/evaluate/svm.py`` but evaluates two hand-built residual FLIM
+Mirrors ``eval/svm.py`` but evaluates two hand-built residual FLIM
 encoders (output-side skip-concat after conv3) instead of trained SSL
 checkpoints:
 
@@ -37,25 +37,25 @@ Evaluated on the **eggs** dataset only, splits 1/2/3, percentages
 1/5/25/50/75/100 (36 SVM fits total: 2 variants x 3 splits x 6 percentages).
 
 Usage:
-    python -m src.evaluate.svm_flim_residual --flim_residual_assessment
+    python -m eval.svm_variants.svm_flim_residual --flim_residual_assessment
 """
 from __future__ import annotations
 
-import argparse
 import os
 
 import pandas as pd
 from torch.utils.data import DataLoader
 
-from src.data_modules.datasets.dataset import DatasetParasite
-from src.data_modules.datasets.lejepa_dataset import _build_test
-from src.metrics.classification import compute_metrics
-from src.models.models import build_flim_residual_encoder
-from src.evaluate.constants import IMAGE_SIZE
-from src.utils.evaluate import (
+from core.data.parasite_dataset import ParasiteDataset
+from core.data.transforms import build_test
+from core.metrics import compute_metrics
+from flim.flim_residual_encoder import build_flim_residual_encoder
+from core.constants import IMAGE_SIZE
+from eval.svm import (
     DEVICE,
     _OneHotDataset,
     _ROOT,
+    cli_kwargs,
     extract_features,
     train_svm,
 )
@@ -111,7 +111,7 @@ def _evaluate_variant(encoder, split: int, percentage: int, transform) -> dict:
     how much of the downstream train split feeds the SVM. The test split is
     always the same fixed set regardless of percentage (see module docstring).
     """
-    train_base = DatasetParasite(
+    train_base = ParasiteDataset(
         set_name="train",
         split=split,
         percentage=percentage,
@@ -125,7 +125,7 @@ def _evaluate_variant(encoder, split: int, percentage: int, transform) -> dict:
     )
     clf = train_svm(encoder, train_loader)
 
-    test_ds = DatasetParasite(
+    test_ds = ParasiteDataset(
         set_name="test",
         split=split,
         percentage=percentage,
@@ -144,7 +144,7 @@ def _evaluate_variant(encoder, split: int, percentage: int, transform) -> dict:
 
 def run_flim_residual_assessment() -> str:
     """Evaluate both residual variants over eggs splits x percentages; write the CSV."""
-    transform = _build_test(IMAGE_SIZE)
+    transform = build_test(IMAGE_SIZE)
     os.makedirs(_RESULTS_DIR, exist_ok=True)
     rows: list[dict] = []
 
@@ -199,21 +199,16 @@ def run_flim_residual_assessment() -> str:
     return csv_path
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="SVM evaluation of residual FLIM encoders (eggs)."
-    )
-    parser.add_argument(
-        "--flim_residual_assessment", action="store_true",
-        help=(
-            "Run the SVM assessment of BOTH residual FLIM variants "
-            "(1_3 and 2_3) on eggs, splits 1/2/3, percentages 1/5/25/50/75/100."
-        ),
-    )
-    args = parser.parse_args()
+def main(flim_residual_assessment: bool = False) -> None:
+    """Roda a avaliacao SVM das duas variantes residuais FLIM em eggs.
 
-    if not args.flim_residual_assessment:
-        parser.error("nothing to do: pass --flim_residual_assessment")
+    Args:
+        flim_residual_assessment: Continua obrigatorio, como o
+            `--flim_residual_assessment` do argparse de origem: sem ele o
+            script nao tinha nada a fazer e o parser abortava.
+    """
+    if not flim_residual_assessment:
+        raise SystemExit("nothing to do: pass --flim_residual_assessment")
 
     csv_path = run_flim_residual_assessment()
 
@@ -226,4 +221,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))

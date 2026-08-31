@@ -39,18 +39,16 @@ variantes macro. Ver a ressalva C3 em `A_reports/july/check_sanity.md`.
 
 Usage::
 
-    python -m src.evaluate.svm_classification_flim
-    python -m src.evaluate.svm_classification_flim --pattern 'classhead_*_softplus2l'
-    python -m src.evaluate.svm_classification_flim --pattern 'classhead_*_relu2l' --out results/svm_relu2l_results.csv
-    python -m src.evaluate.svm_classification_flim --run classhead_eggs_split1_pct75_softplus2l --wandb-update
+    python -m eval.svm_variants.svm_classification_flim
+    python -m eval.svm_variants.svm_classification_flim --pattern 'classhead_*_softplus2l'
+    python -m eval.svm_variants.svm_classification_flim --pattern 'classhead_*_relu2l' --out results/svm_relu2l_results.csv
+    python -m eval.svm_variants.svm_classification_flim --run classhead_eggs_split1_pct75_softplus2l --wandb-update
 """
 from __future__ import annotations
 
-import argparse
 import glob
 import json
 import os
-import sys
 
 import numpy as np
 import pandas as pd
@@ -64,12 +62,9 @@ from sklearn.metrics import (
 )
 from torch.utils.data import DataLoader
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
 # ── Reutiliza o pipeline de SVM já existente ──────────────────────────────────
-from src.evaluate.svm_distillation import (  # noqa: E402
+from eval.svm_variants.svm_distillation import (  # noqa: E402
     _OneHotDataset,
     train_svm_distillation,
     _RESULTS_DIR,
@@ -77,11 +72,13 @@ from src.evaluate.svm_distillation import (  # noqa: E402
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
 )
-from src.evaluate.constants import IMAGE_SIZE  # noqa: E402
-from src.utils.evaluate import extract_features_encode  # noqa: E402
-from src.data_modules.datasets.dataset import DatasetParasite  # noqa: E402
-from src.data_modules.datasets.lejepa_dataset import _build_test  # noqa: E402
-from src.modules.classification_flim_module import ClassificationFlimModule  # noqa: E402
+from core.constants import IMAGE_SIZE, PROJECT_ROOT  # noqa: E402
+from eval.svm import cli_kwargs, extract_features_encode  # noqa: E402
+from core.data.parasite_dataset import ParasiteDataset  # noqa: E402
+from core.data.transforms import build_test  # noqa: E402
+from methods.classification import ClassificationFlimModule  # noqa: E402
+
+_ROOT = PROJECT_ROOT
 
 _ARTIFACTS_DIR = os.path.join(_ROOT, "artifacts", "classification_flim")
 _DEFAULT_PATTERN = "classhead_*_softplus2l"
@@ -165,34 +162,38 @@ def _metrics_both_conventions(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="SVM linear sobre o encoder FLIM dos runs de classification_flim.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument("--pattern", default=_DEFAULT_PATTERN,
-                        help="Glob dos diretórios de run sob artifacts/classification_flim/.")
-    parser.add_argument("--run", default=None,
-                        help="Restringe a um run (match por substring).")
-    parser.add_argument("--out", default=None,
-                        help="CSV de saída. Default: results/svm_<tag>_results.csv, "
-                             "onde <tag> vem da variante de cabeça encontrada.")
-    parser.add_argument("--artifacts-dir", default=_ARTIFACTS_DIR)
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--no-imagenet-norm", action="store_true", default=False,
-                        help="Desliga a Normalize ImageNet no transform de teste. "
-                             "O treino do Experimento 3 usa imagenet_norm=True.")
-    parser.add_argument("--wandb-update", action="store_true",
-                        help="Loga as métricas de SVM por experimento no W&B.")
-    args = parser.parse_args()
+def main(
+    pattern: str = _DEFAULT_PATTERN,
+    run: str | None = None,
+    out: str | None = None,
+    artifacts_dir: str = _ARTIFACTS_DIR,
+    batch_size: int = 32,
+    num_workers: int = 4,
+    no_imagenet_norm: bool = False,
+    wandb_update: bool = False,
+) -> int:
+    """SVM linear sobre o encoder FLIM dos runs de classification_flim.
+
+    Args:
+        pattern:          Glob dos diretorios de run (`--pattern`).
+        run:              Restringe a um run, por substring (`--run`).
+        out:              CSV de saida (`--out`); default derivado da variante
+                          de cabeca encontrada.
+        artifacts_dir:    Raiz dos artefatos (`--artifacts-dir`).
+        batch_size:       Batch dos dois loaders (`--batch-size`).
+        num_workers:      Workers dos dois loaders (`--num-workers`).
+        no_imagenet_norm: Desliga a Normalize ImageNet no teste
+                          (`--no-imagenet-norm`).
+        wandb_update:     Loga as metricas por experimento no W&B
+                          (`--wandb-update`).
+    """
 
     os.makedirs(_RESULTS_DIR, exist_ok=True)
-    transform = _build_test(IMAGE_SIZE, imagenet_norm=not args.no_imagenet_norm)
+    transform = build_test(IMAGE_SIZE, imagenet_norm=not no_imagenet_norm)
 
-    runs = find_classification_runs(args.artifacts_dir, args.pattern, run_filter=args.run)
+    runs = find_classification_runs(artifacts_dir, pattern, run_filter=run)
     if not runs:
-        print(f"[WARN] Nenhum run válido em {args.artifacts_dir} com pattern '{args.pattern}'.")
+        print(f"[WARN] Nenhum run válido em {artifacts_dir} com pattern '{pattern}'.")
         return 1
 
     print(f"\n{'=' * 70}")
@@ -238,24 +239,24 @@ def main() -> int:
             for p in probe.parameters():
                 p.requires_grad_(False)
 
-            train_base = DatasetParasite(
+            train_base = ParasiteDataset(
                 set_name="train", split=split, percentage=pct,
                 transform=transform, loader="ift_lab", path_dataset=parasite_name,
             )
             train_loader = DataLoader(
                 _OneHotDataset(train_base, num_classes),
-                batch_size=args.batch_size, shuffle=False,
-                num_workers=args.num_workers, pin_memory=True,
+                batch_size=batch_size, shuffle=False,
+                num_workers=num_workers, pin_memory=True,
             )
             clf = train_svm_distillation(probe, train_loader)
 
-            test_ds = DatasetParasite(
+            test_ds = ParasiteDataset(
                 set_name="test", split=split, percentage=pct,
                 transform=transform, loader="ift_lab", path_dataset=parasite_name,
             )
             test_loader = DataLoader(
-                test_ds, batch_size=args.batch_size, shuffle=False,
-                num_workers=args.num_workers, pin_memory=True,
+                test_ds, batch_size=batch_size, shuffle=False,
+                num_workers=num_workers, pin_memory=True,
             )
             feats, y_true = extract_features_encode(probe, test_loader)
 
@@ -270,10 +271,10 @@ def main() -> int:
                   f"kappa={metrics['test_cohen_kappa']:.4f}  "
                   f"(acc_bal={metrics['test_accuracy_balanced']:.4f})")
 
-            if args.wandb_update:
+            if wandb_update:
                 try:
                     import wandb  # noqa: PLC0415
-                    from src.utils.get_names_wandb import ENTITY, PROJECT  # noqa: PLC0415
+                    from core.wandb import ENTITY, PROJECT  # noqa: PLC0415
                     wandb_run = wandb.init(
                         project=PROJECT, entity=ENTITY,
                         name=f"svm_{variant}_{run_name}",
@@ -296,8 +297,8 @@ def main() -> int:
             })
 
     df = pd.DataFrame(rows)
-    if args.out:
-        csv_path = args.out if os.path.isabs(args.out) else os.path.join(_ROOT, args.out)
+    if out:
+        csv_path = out if os.path.isabs(out) else os.path.join(_ROOT, out)
     else:
         variants = sorted(set(df["head_variant"]))
         tag = variants[0] if len(variants) == 1 else "classification_flim"
@@ -324,4 +325,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import sys
+
+    raise SystemExit(main(**cli_kwargs(sys.argv[1:])))

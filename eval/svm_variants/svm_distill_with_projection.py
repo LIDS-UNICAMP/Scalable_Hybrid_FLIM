@@ -38,15 +38,13 @@ Method name no CSV: SVM_Distill_Proj1280
 
 Usage::
 
-    python -m src.evaluate.svm_distill_with_projection
-    python -m src.evaluate.svm_distill_with_projection --wandb-update
-    python -m src.evaluate.svm_distill_with_projection --run eggs_split1_pct100
+    python -m eval.svm_variants.svm_distill_with_projection
+    python -m eval.svm_variants.svm_distill_with_projection --wandb-update
+    python -m eval.svm_variants.svm_distill_with_projection --run eggs_split1_pct100
 """
 from __future__ import annotations
 
-import argparse
 import os
-import sys
 
 import numpy as np
 import pandas as pd
@@ -55,12 +53,9 @@ from sklearn.pipeline import Pipeline
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 
 # ── Reutiliza infraestrutura comum ────────────────────────────────────────────
-from src.evaluate.svm_distillation import (
+from eval.svm_variants.svm_distillation import (
     _OneHotDataset,
     find_distillation_runs,
     _ARTIFACTS_DIR,
@@ -69,26 +64,35 @@ from src.evaluate.svm_distillation import (
     _DATASET_NUM_CLASSES,
     _DATASET_PARASITE_NAME,
 )
-from src.evaluate.constants import IMAGE_SIZE
-from src.data_modules.datasets.dataset import DatasetParasite
-from src.data_modules.datasets.lejepa_dataset import _build_test
-from src.metrics.classification import compute_metrics
-from src.utils.evaluate import SVM_DIAG_MISSING, extract_proj_features, fit_svm
-from src.models.lejepa_flim import LeJEPAFLIMModel
-from src.models.distillation import (
+from core.constants import IMAGE_SIZE, PROJECT_ROOT
+from core.data.parasite_dataset import ParasiteDataset
+from core.data.transforms import build_test
+from core.metrics import compute_metrics
+from eval.svm import (
+    SVM_DIAG_MISSING,
+    cli_kwargs,
+    extract_proj_features,
+    fit_svm,
+)
+from methods.lejepa.lejepa_flim_model import LeJEPAFLIMModel
+from methods.distillation import (
     ConvDistillationProjectionHead,
     OneLayerConvDistillationProjectionHead,
     OneLayer1x1ConvDistillationProjectionHead,
     TwoLayer1x1ConvBN2dDistillationProjectionHead,
-    TEACHER_DIM,
 )
-from src.models.models import (
+# TEACHER_DIM fica fora do __init__ curto de propósito (methods/distillation/
+# __init__.py:57): vem pelo módulo, como em eval/tsne.py.
+from methods.distillation.teacher_constants import TEACHER_DIM
+from flim.arch import (
     parse_architecture,
     get_channels_from_arch,
     get_actual_channels_from_weights,
     override_arch_channels,
 )
 
+
+_ROOT = PROJECT_ROOT
 _EMBED_DIM = TEACHER_DIM  # 1280
 
 
@@ -213,50 +217,51 @@ def _train_svm_proj(
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description=(
-            "SVM com Red Projection ativa — embedding [B, 1280] "
-            "(encoder FLIM + ConvDistillationProjectionHead)."
-        ),
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument("--run",           default=None,
-                        help="Substring filter no nome do run.")
-    parser.add_argument("--run-filter",    default=None,
-                        help="Sobrescreve o filtro base (padrão: next_layers_direct).")
-    parser.add_argument("--output-csv",    default=None,
-                        help="Nome do CSV de saída (em results/). Derivado do filtro se omitido.")
-    parser.add_argument("--artifacts-dir", default=_ARTIFACTS_DIR)
-    parser.add_argument("--wandb-update",  action="store_true")
-    parser.add_argument("--wandb-entity",  default="ophira-ai")
-    parser.add_argument("--wandb-project", default="flim-ssl")
-    parser.add_argument("--no-imagenet-norm", action="store_true",
-                        help="Eval transform stays LAB[0,1] (no ImageNet RGB norm). "
-                             "Use for checkpoints trained with --no-imagenet-norm.")
-    parser.add_argument("--only-ok", action="store_true",
-                        help="Skip runs whose run_metadata.json status != 'ok' "
-                             "(safe to run while other runs are still training).")
-    args = parser.parse_args()
+def main(
+    run: str | None = None,
+    run_filter: str | None = None,
+    output_csv: str | None = None,
+    artifacts_dir: str = _ARTIFACTS_DIR,
+    wandb_update: bool = False,
+    wandb_entity: str = "ophira-ai",
+    wandb_project: str = "flim-ssl",
+    no_imagenet_norm: bool = False,
+    only_ok: bool = False,
+) -> None:
+    """SVM com a projecao ativa — embedding [B, 1280] (encoder FLIM + proj head).
+
+    Args:
+        run:              Substring de filtro no nome do run (`--run`).
+        run_filter:       Sobrescreve o filtro base (`--run-filter`); default
+                          `next_layers_direct`, resolvido no corpo.
+        output_csv:       Nome do CSV em `results/` (`--output-csv`); derivado do
+                          filtro quando omitido.
+        artifacts_dir:    Raiz dos artefatos (`--artifacts-dir`).
+        wandb_update:     Loga no W&B (`--wandb-update`).
+        wandb_entity:     Entidade do W&B (`--wandb-entity`).
+        wandb_project:    Projeto do W&B (`--wandb-project`).
+        no_imagenet_norm: Transform de eval fica em LAB[0,1] (`--no-imagenet-norm`).
+        only_ok:          Pula runs com `status != "ok"` (`--only-ok`).
+    """
 
     os.makedirs(_RESULTS_DIR, exist_ok=True)
-    transform = _build_test(IMAGE_SIZE, imagenet_norm=not args.no_imagenet_norm)
+    transform = build_test(IMAGE_SIZE, imagenet_norm=not no_imagenet_norm)
 
-    base_filter = args.run_filter if args.run_filter else "next_layers_direct"
-    run_filter = base_filter
-    if args.run:
-        run_filter = args.run if base_filter in args.run else f"{base_filter}_{args.run}"
+    base_filter = run_filter if run_filter else "next_layers_direct"
+    resolved_filter = base_filter
+    if run:
+        resolved_filter = run if base_filter in run else f"{base_filter}_{run}"
 
-    runs = find_distillation_runs(args.artifacts_dir, run_filter=run_filter)
-    if args.only_ok:
+    runs = find_distillation_runs(artifacts_dir, run_filter=resolved_filter)
+    if only_ok:
         runs = [r for r in runs if r.get("status") == "ok"]
     if not runs:
-        print(f"[WARN] Nenhum run com filtro '{run_filter}' e checkpoint encontrado.")
+        print(f"[WARN] Nenhum run com filtro '{resolved_filter}' e checkpoint encontrado.")
         return
 
     # ── Resolve nomes de CSV e pasta parcial antes do loop ───────────────────
-    if args.output_csv:
-        csv_name = args.output_csv if args.output_csv.endswith(".csv") else f"{args.output_csv}.csv"
+    if output_csv:
+        csv_name = output_csv if output_csv.endswith(".csv") else f"{output_csv}.csv"
     else:
         safe = base_filter.replace("/", "_").replace(" ", "_")
         csv_name = f"svm_proj1280_{safe}_results.csv"
@@ -307,7 +312,7 @@ def main() -> None:
             print(f"   embedding: encoder[B,{student.embed_dim}] → proj_kd → [B,{_EMBED_DIM}]")
 
             # Train
-            train_ds = DatasetParasite(
+            train_ds = ParasiteDataset(
                 set_name="train", split=split, percentage=pct,
                 transform=transform, loader="ift_lab", path_dataset=parasite_name,
             )
@@ -318,7 +323,7 @@ def main() -> None:
             clf = _train_svm_proj(student, proj_kd, train_loader)
 
             # Eval
-            test_ds = DatasetParasite(
+            test_ds = ParasiteDataset(
                 set_name="test", split=split, percentage=pct,
                 transform=transform, loader="ift_lab", path_dataset=parasite_name,
             )
@@ -339,11 +344,11 @@ def main() -> None:
             print(f"   kappa={metrics['kappa']:.4f}  acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}"
                   f"  fit_status={diag['svm_fit_status']}  n_sv={diag['svm_n_sv']}")
 
-            if args.wandb_update:
+            if wandb_update:
                 try:
                     import wandb as _wandb  # noqa: PLC0415
                     wr = _wandb.init(
-                        project=args.wandb_project, entity=args.wandb_entity,
+                        project=wandb_project, entity=wandb_entity,
                         name=f"svm_distil_proj1280_{run_name}",
                         config={**base, "num_classes": num_classes}, reinit=True,
                     )
@@ -376,4 +381,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    main(**cli_kwargs(sys.argv[1:]))
