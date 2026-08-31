@@ -153,3 +153,11 @@ A_reports/2026/august/report_auditoria_figura_kappa_2026-08-03.md
 *.snm
 *.synctex.gz
 *.toc
+
+# configs/generated/ — saida do gerador, nao fonte versionada.
+# Os YAMLs de avaliacao MLP sao 100% reproduzidos por
+# scripts/generate_mlp_configs.py (build_yaml_content :63-74 + yaml_path :77-87)
+# a partir do cache do W&B em configs/wandb_update/ids_wandb.json.
+# Verificado: os 112 YAMLs que moraram em configs/evaluate/mlp/ sao byte-identicos
+# ao que o gerador produz hoje (git log --diff-filter=R mostra o move).
+configs/generated/

@@ -95,7 +95,7 @@ _MANIFEST_PATH      = os.path.join(_ROOT, "artifacts", "run_manifest.csv")
 _RUN_LOG_PATH       = os.path.join(_ROOT, "logs", "run_experiments_run_ids.log")
 _IDS_WANDB_PATH     = os.path.join(_ROOT, "configs", "wandb_update", "ids_wandb.json")
 _LOGS_SSL_DIR       = os.path.join(_ROOT, "logs", "flim-ssl")
-_CONFIGS_MLP_DIR    = os.path.join(_ROOT, "configs", "evaluate", "mlp")
+_CONFIGS_MLP_DIR    = os.path.join(_ROOT, "configs", "generated", "mlp")
 _RESULTS_DIR        = os.path.join(_ROOT, "results")
 
 # Ordered sources for MLP result confirmation
