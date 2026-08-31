@@ -1,0 +1,83 @@
+# E1 — o comando de hoje traduzido campo a campo (spec_refactor.md:1738-1744):
+#
+#   python scripts/spifil_growth_loop.py \
+#     --work-dir artifacts/spifil_growth/grid4 --percentages 5 50 \
+#     --gpus 1 2 3 --max-concurrent-per-gpu 3 --cpus-per-experiment 10 \
+#     --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 \
+#     2>&1 | tee logs/spifil_growth_$(date +%Y%m%d_%H%M%S).log
+#
+# O `tee` sai: o launcher grava <log_dir>/<name>_<timestamp>.log sozinho
+# (experiments/ray/launch.py:251-257).
+
+# BASENAME historico do --work-dir ("grid4") com o prefixo `spifil_growth` ja
+# escrito. Nao e redundancia: `name` e lido em DOIS lugares com regras
+# diferentes.
+#   1. paths._name_growth (experiments/ray/paths.py:313-326) tira o prefixo
+#      duplicado, entao "grid4" e "spifil_growth_grid4" dao o mesmo run_name.
+#   2. runners/growth.py:229 usa o `name` CRU no
+#      --trainer.logger.init_args.name={name}_{tag}_{stage}. So a forma com
+#      prefixo reproduz o nome de W&B historico
+#      (scripts/spifil_growth_loop.py:209, RUN_NAME_PREFIX + basename do
+#      --work-dir), ex.: spifil_growth_grid4_eggs_split1_pct5_stage1.
+name:   spifil_growth_grid4
+
+# DIVERGENCIA DELIBERADA da spec, que escreve `lejepa` aqui.
+# O protocolo de crescimento treina o AutoEncoderFlimModule, nao o LeJEPA:
+#   runners/growth.py:258  AutoEncoderFlimModule.load_from_checkpoint(...)
+#   runners/growth.py:223-240 acrescenta --model.init_args.arch_json,
+#     flim_weights_path, embed_mode, freeze_encoder_flag, head_finetune e
+#     init_ckpt, que sao init_args do autoencoder e nao existem no LejepaLineModule
+#   scripts/constants.py:237  TRAINER_MODULE = "src.modules.autoencoder_flim_module"
+# `method` so escolhe o caminho do model config
+# (configs/model/{method}/{init}/{dataset}/split_{split}.yaml, paths.py:90-92);
+# com `lejepa` o comando montaria o modulo errado e o `grow` abriria um
+# checkpoint que nao e de autoencoder.
+method: autoencoder
+runner: growth
+
+# 1 init x 3 datasets x 3 splits x 2 percentuais = 18 bracos.
+# init: [flim] e o unico que existe para o autoencoder — o modulo levanta
+# ValueError sem pesos FLIM, e configs/model/autoencoder/ so tem `flim`.
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [5, 50]
+
+resources:
+  # --gpus 1 2 3
+  gpu_ids:             [1, 2, 3]
+  # --max-concurrent-per-gpu 3 (9 bracos simultaneos)
+  max_per_gpu:         3
+  # --cpus-per-experiment 10; vira OMP_NUM_THREADS do filho e num_cpus da task Ray
+  cpus_per_experiment: 10
+  # --num-workers 2. ATENCAO: o schema valida (schema.py:175) mas nenhum runner
+  # traduz isso em override hoje; ver a secao de achados do relatorio E1-E4.
+  num_workers:         2
+
+runner_args:
+  # --max-rounds 2
+  max_rounds:      2
+  # --kappa-tolerance (default KAPPA_TOLERANCE de core/constants.py)
+  kappa_tolerance: 0.01
+  # --rounds-patience 1
+  rounds_patience: 1
+  # --embed-mode flatten: espaco em que a sonda SVM mede o kappa. Sempre
+  # explicito, e escolha deste experimento (runners/growth.py:140-145).
+  embed_mode:      flatten
+
+output:
+  # --work-dir; os bracos caem em <work_dir>/<short>_split<N>_pct<P>/<estagio>
+  work_dir: artifacts/spifil_growth/grid4
+
+wandb:
+  # --wandb
+  enabled: true
+  # --wandb-project phd_thesis_grid4
+  project: phd_thesis_grid4
+
+# ATENCAO: `wandb` faz grid.build consultar o servidor via
+# experiments/ray/skip.py:129 -> core.wandb.cached_history(update=True), que
+# REESCREVE configs/wandb_update/ids_wandb.json (core/wandb.py:48) — inclusive
+# em --dry-run. Troque por `--set skip=state` quando so quiser ver o plano.
+skip: wandb

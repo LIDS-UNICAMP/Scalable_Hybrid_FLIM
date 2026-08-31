@@ -34,14 +34,20 @@ Segurança:
   - após gravar, RELÊ o arquivo e valida (teacher ausente, student presente,
     optimizer_states preservado) — se falhar, RESTAURA o original do backup em memória.
 
-Uso:
-  python scripts/strip_teacher_only.py --dry-run
-  python scripts/strip_teacher_only.py --apply
-  python scripts/strip_teacher_only.py --apply --shard 0/4   # 4 workers em paralelo
-"""
-import argparse, glob as globlib, os, sys, time
+Uso (da raiz do repositorio; o argparse morreu no refactor, os parametros sao
+defaults nomeados de ``strip_teacher_only``):
 
-from constants import KEEP_STUDENT_PREFIXES, TEACHER_PREFIX
+  # dry-run com os defaults:
+  python -m experiments.ckpt.strip_teacher_only
+
+  # gravar de fato, ou 4 workers em paralelo:
+  python -c "from experiments.ckpt.strip_teacher_only import strip_teacher_only as f; f(apply=True)"
+  python -c "from experiments.ckpt.strip_teacher_only import strip_teacher_only as f; f(apply=True, shard='0/4')"
+"""
+import glob as globlib, os, time
+
+from core.constants import TEACHER_PREFIX
+from experiments.constants import KEEP_STUDENT_PREFIXES
 
 
 def human(n):
@@ -52,32 +58,36 @@ def human(n):
         n /= 1024
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    # Default RELATIVO ao cwd de propósito: absolutizar via ARTIFACTS_DISTILLATION_DIR
-    # faria o script reescrever checkpoints rodado de fora da raiz — bug fix, não refactor.
-    ap.add_argument("--glob", default="artifacts/distillation/*/checkpoints/*.ckpt")
-    ap.add_argument("--min-gb", type=float, default=1.5,
-                    help="só processa ckpts maiores que isto (evita re-processar já-stripados)")
-    ap.add_argument("--apply", action="store_true", help="grava de fato (senão dry-run)")
-    ap.add_argument("--shard", default=None, metavar="I/N",
-                    help="processa só ckpts com idx%%N==I (rodar N workers)")
-    args = ap.parse_args()
+def strip_teacher_only(
+    glob_pattern: str = "artifacts/distillation/*/checkpoints/*.ckpt",
+    min_gb: float = 1.5,
+    apply: bool = False,
+    shard: str | None = None,
+) -> int:
+    """Remove APENAS as chaves ``teacher.*``, preservando o resto do checkpoint.
 
+    glob_pattern  RELATIVO ao cwd de propósito: absolutizar via
+                  ARTIFACTS_DISTILLATION_DIR faria o script reescrever
+                  checkpoints rodado de fora da raiz — bug fix, não refactor.
+    min_gb        só processa ckpts maiores que isto (evita re-processar
+                  já-stripados)
+    apply         grava de fato (senão dry-run)
+    shard         "I/N": processa só ckpts com idx%N==I (rodar N workers)
+    """
     import torch
 
-    ckpts = sorted(globlib.glob(args.glob))
-    min_bytes = args.min_gb * 1024 ** 3
+    ckpts = sorted(globlib.glob(glob_pattern))
+    min_bytes = min_gb * 1024 ** 3
     ckpts = [c for c in ckpts if os.path.getsize(c) > min_bytes]
 
-    if args.shard:
-        i, n = (int(x) for x in args.shard.split("/"))
+    if shard:
+        i, n = (int(x) for x in shard.split("/"))
         ckpts = [c for idx, c in enumerate(ckpts) if idx % n == i]
         tag = f"[shard {i}/{n}] "
     else:
         tag = ""
 
-    print(f"{tag}{'APPLY' if args.apply else 'DRY-RUN'} — {len(ckpts)} ckpt(s) > {args.min_gb} GB\n")
+    print(f"{tag}{'APPLY' if apply else 'DRY-RUN'} — {len(ckpts)} ckpt(s) > {min_gb} GB\n")
     tot_old = tot_new = 0
     done = failed = 0
     for i, src in enumerate(ckpts, 1):
@@ -107,7 +117,7 @@ def main():
         ck["state_dict"] = {k: v for k, v in sd.items() if not k.startswith(TEACHER_PREFIX)}
         had_opt = "optimizer_states" in ck
 
-        if not args.apply:
+        if not apply:
             est = sum(v.numel() * v.element_size() for v in ck["state_dict"].values()
                       if hasattr(v, "numel"))
             new = est  # aproximação; ignora overhead de optimizer/pickle
@@ -149,9 +159,10 @@ def main():
     print(f"{tag}processados: {done}/{len(ckpts)}   falhas: {failed}")
     print(f"{tag}antes:  {human(tot_old)}")
     print(f"{tag}depois: {human(tot_new)}   (economia ~{human(tot_old-tot_new)})")
-    if not args.apply:
+    if not apply:
         print("(dry-run — nada gravado)")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(strip_teacher_only())

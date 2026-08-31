@@ -25,11 +25,11 @@ and collects results — respecting the GPU slot budget.
 Usage::
 
     # Freeze mode, 2 GPUs, up to 4 jobs running at once
-    python scripts/run_missing_mlp.py --mode freeze --num-gpus 2 --jobs 4 \\
+    python -m experiments.oneoff.run_missing_mlp --mode freeze --num-gpus 2 --jobs 4 \\
         --run-ids qd7ie6xu 62n3kg3i 75m92cgn
 
     # Unfreeze mode, pipe from file
-    python scripts/run_missing_mlp.py --mode unfreeze --num-gpus 2 --jobs 4 \\
+    python -m experiments.oneoff.run_missing_mlp --mode unfreeze --num-gpus 2 --jobs 4 \\
         --run-ids 4e11iyuo p4uj8mnn 63d9iqf9 7cus9dk9 zvv3xn5o
 """
 from __future__ import annotations
@@ -37,15 +37,13 @@ from __future__ import annotations
 import argparse
 import glob
 import os
-import sys
 
 import pandas as pd
 import yaml
 
-from constants import MLP_CONFIGS_DIR, PROJECT_ROOT, RESULTS_DIR
-
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+# Rodado como ``python -m experiments.oneoff.run_missing_mlp`` da raiz do
+# repositorio: a raiz ja e sys.path[0], entao o antigo sys.path.insert saiu.
+from experiments.constants import MLP_CONFIGS_DIR, RESULTS_DIR
 
 try:
     import ray

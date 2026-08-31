@@ -1,0 +1,26 @@
+# Destilacao — TODOS os alunos, braco SEM init FLIM (trunc_normal).
+# 794 runs em artifacts/distillation/ (conv 147 + one_layer 382 + two_layer 125 + base 140).
+# E o unico init nao-FLIM que a destilacao rodou.
+# Contrafactual: all_init_flim.yaml
+
+name:   distill_init_no_flim
+method: distillation
+runner: train
+
+grid:
+  init:        [trunc_normal]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+runner_args: {}
+overrides:
+  model.class_path:            methods.distillation.DistillationOneLayerModule
+  model.init_args.distillation_type: direct
+  model.init_args.alpha:       0.5
+  model.init_args.temperature: 4.0
+
+resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/distillation/init_no_flim}
+wandb:     {enabled: true, project: phd_thesis_distill}
+skip: state

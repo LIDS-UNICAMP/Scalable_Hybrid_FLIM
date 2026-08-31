@@ -1,0 +1,19 @@
+# LeJEPA SSL — braco COM inicializacao FLIM.
+# Reconstruido do cache do W&B: 545 runs (eggs 163, larvae 168, protozoan 214),
+# splits 1-3, todos os percentuais.
+# Contrafactual: experiments/lejepa/init_no_flim.yaml
+
+name:   lejepa_init_flim
+method: lejepa
+runner: train
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/lejepa/init_flim}
+wandb:     {enabled: true, project: flim-ssl}
+skip: state

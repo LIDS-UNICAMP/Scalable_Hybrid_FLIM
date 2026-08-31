@@ -127,7 +127,7 @@ CONFIGS_DIR: str = os.path.join(PROJECT_ROOT, "configs")
 LOGS_DIR: str = os.path.join(PROJECT_ROOT, "logs")
 
 DEFAULT_CONFIG_YAML: str = os.path.join(CONFIGS_DIR, "default.yaml")
-MLP_CONFIGS_DIR: str = os.path.join(CONFIGS_DIR, "evaluate", "mlp")
+MLP_CONFIGS_DIR: str = os.path.join(CONFIGS_DIR, "generated", "mlp")
 
 # Splits incrementais consumidos pelos launchers.
 DATASET_SPLITS_ROOT: str = os.path.join(DATA_ROOT, "to_modules", "new_split_parasito")

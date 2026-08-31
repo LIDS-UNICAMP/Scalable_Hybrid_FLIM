@@ -1,0 +1,31 @@
+# Destilacao: distill4_all_kd_unfrozen
+# KD hibrido, professor DESCONGELADO. E a maior familia rodada.
+#
+# RECONSTRUIDO do argv real gravado em wandb-metadata.json (135 runs em artifacts/).
+# Comando antigo equivalente:
+#   python -m src.modules.distillation_conv_module \
+#     --distill_4 --init_flim --teacher_unfrozen --fine_tune True --dataset <ds> --split <N> --percentage <P>
+#
+# O class_path e a escolha do student; as flags --distill_1..4 nao existem mais.
+
+name:   distill4_all_kd_unfrozen
+method: distillation
+runner: train
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+runner_args: {}
+
+overrides:
+  model.class_path: methods.distillation.DistillationConvModule
+  model.init_args.distillation_type: kd_hybrid
+  model.init_args.teacher_frozen: false
+
+resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/distillation/distill4_all_kd_unfrozen}
+wandb:     {enabled: true, project: phd_thesis_distill}
+skip: state

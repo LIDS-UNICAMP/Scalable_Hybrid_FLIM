@@ -69,34 +69,38 @@ import time
 from typing import Any, Optional
 
 # ─── Constantes compartilhadas ────────────────────────────────────────────────
-# Rodando como ``python scripts/retry_protozoan_experiment.py``, scripts/ é o
-# sys.path[0] — constants.py importa direto. FLIM_ARCH_BASE["protozoan"] é o
-# diretório ch24_30_48 (arquitetura), não o ch24_32_48 dos pesos.
-from constants import (
+# Rodado como ``python -m experiments.oneoff.retry_protozoan_experiment`` da raiz
+# do repositorio: a raiz ja e sys.path[0], entao o antigo sys.path.insert saiu.
+# FLIM_ARCH_BASE["protozoan"] é o diretório ch24_30_48 (arquitetura), não o
+# ch24_32_48 dos pesos.
+from core.constants import (
     ARCH_JSON_FILENAME,
-    CONFIGS_DIR,
-    CUDA_ENV_VAR,
     DEFAULT_CONFIG_YAML,
     DEFAULT_CPUS_PER_EXPERIMENT,
     FLIM_ARCH_BASE,
-    LOG_LEVEL_DEFAULT,
-    LOG_LEVELS as _LOG_LEVELS,
-    LOG_TIME_FMT,
     OMP_ENV_VAR,
     PERCENTAGES as _PCTS,
     PROJECT_ROOT as _ROOT,
+    SPLITS as _SPLITS,
+)
+from experiments.constants import (
+    CUDA_ENV_VAR,
+    LOG_LEVEL_DEFAULT,
+    LOG_LEVELS as _LOG_LEVELS,
+    LOG_TIME_FMT,
     RAY_INIT_KWARGS,
     RESULTS_DIR,
     SEP_WIDTH,
-    SPLITS as _SPLITS,
     STDERR_TRUNCATE_HEAD,
     STDERR_TRUNCATE_MAX_CHARS,
     STDERR_TRUNCATE_TAIL,
-    train_dir,
 )
+from experiments.ray.paths import train_dir
 
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+# CONFIGS_DIR nao virou constante de pacote nenhuma: este arquivo era o unico
+# consumidor externo dela, e experiments/constants.py:113-114 registra a decisao.
+# Mesmo valor de scripts/constants.py:126.
+CONFIGS_DIR: str = f"{_ROOT}/configs"
 
 
 # ─── Ensure 30-channel arch JSONs exist in THIS repo copy ─────────────────────
@@ -381,7 +385,7 @@ def run_ssl_experiment(
     # Absolute arch_json path — overrides whatever is in the YAML config.
     # This avoids any CWD-relative path issues with jsonargparse/parse_architecture.
     # NÃO troque o f-string por train_dir(): cloudpickle serializa uma FUNÇÃO de
-    # constants.py por referência, e o worker do Ray não tem scripts/ no sys.path
+    # constants.py por referência, e o worker do Ray não tem a raiz no sys.path
     # (ModuleNotFoundError: constants). Valores — str, int, dict — vão por cópia
     # e podem ser usados aqui à vontade.
     arch_json_abs = _os.path.join(

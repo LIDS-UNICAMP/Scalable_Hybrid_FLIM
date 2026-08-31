@@ -1,0 +1,32 @@
+# Destilacao: distill_direct_flim
+# Baseline direto com init FLIM. Rodada em one_layer e two_layer.
+#
+# RECONSTRUIDO do argv real gravado em wandb-metadata.json (450 runs em artifacts/).
+# Comando antigo equivalente:
+#   python -m src.modules.distillation_onelayer_module \
+#     --distillation-type direct --encoder-init flim --alpha 0.5 --temperature 4.0 --dataset <ds> --split <N> --percentage <P>
+#
+# O class_path e a escolha do student; as flags --distill_1..4 nao existem mais.
+
+name:   distill_direct_flim
+method: distillation
+runner: train
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+runner_args: {}
+
+overrides:
+  model.class_path: methods.distillation.DistillationOneLayerModule
+  model.init_args.distillation_type: direct
+  model.init_args.alpha: 0.5
+  model.init_args.temperature: 4.0
+
+resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/distillation/distill_direct_flim}
+wandb:     {enabled: true, project: phd_thesis_distill}
+skip: state

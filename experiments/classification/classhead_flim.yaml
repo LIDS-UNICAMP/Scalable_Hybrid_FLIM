@@ -1,0 +1,18 @@
+# Cabeca de classificacao sobre encoder FLIM — 204 runs em artifacts/classification_flim/.
+# So existe o braco FLIM: o modulo levanta ValueError sem pesos FLIM.
+# Percentuais realmente rodados: 1, 5, 75.
+
+name:   classhead_flim
+method: classification
+runner: train
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 75]
+
+resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/classification_flim}
+wandb:     {enabled: true, project: flim-ssl}
+skip: state

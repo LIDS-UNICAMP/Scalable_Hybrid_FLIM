@@ -1,0 +1,62 @@
+# E3 — destilacao com cabeca de projecao conv 1x1 de uma camada.
+# Substitui scripts/distillation_conv_ray.py.
+#
+# Comando antigo mais proximo (flags reais em scripts/distillation_conv_ray.py:962-1031):
+#
+#   python scripts/distillation_conv_ray.py \
+#     --datasets helminth-eggs --splits 1 2 3 --percentages 100 \
+#     --inits flim --distillation-types direct \
+#     --proj-type 1x1_bn2d_1280 --alpha 0.5 --temperature 4.0 \
+#     --num-gpus 2 --gpu-slots 2,2 --cpus-per-experiment 10 \
+#     --wandb --wandb-project distill_conv --skip-existing --check-wandb
+#
+# "mais proximo" e nao "identico" por um motivo: o lancador antigo so sabia
+# --num-gpus N, isto e, os device ids 0..N-1. Escolher as GPUs FISICAS 2 e 5,
+# como abaixo, e capacidade nova do motor (resources.gpu_ids).
+
+name:   distill_conv_1x1
+method: distillation
+runner: train
+
+# 1 init x 1 dataset x 3 splits x 1 percentual = 3 pontos.
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs]
+  splits:      [1, 2, 3]
+  percentages: [100]
+
+# RUNNER_ARGS["train"] e vazio (schema.py:49): o runner train nao tem knob
+# proprio; tudo que muda hparam entra em `overrides`.
+runner_args: {}
+
+# DIVERGENCIA da spec, que escreve `model.init_args.proj_type: one_layer_1x1`.
+# Duas coisas quebram nessa linha:
+#   1. `one_layer_1x1` nunca existiu como proj_type. Os validos estao em
+#      scripts/distillation_conv_ray.py:335-357 e o 1x1 de uma camada e
+#      `1x1_bn2d_1280`.
+#   2. proj_type nunca foi init_arg de modulo nenhum: ele ESCOLHIA A CLASSE
+#      (scripts/distillation_conv_ray.py:560-566). No motor novo essa escolha e
+#      o `model.class_path` do config de modelo da celula, nao um override.
+# O que sobra do "1x1" como hparam de verdade e o proj_kernel do
+# DistillationOneLayerModule
+# (methods/distillation/distillation_one_layer_module.py:134, validos 1 ou 3).
+overrides:
+  model.init_args.proj_kernel:    1
+  model.init_args.alpha:          0.5
+  model.init_args.temperature:    4.0
+  # existe no DistillationOneLayerModule:135 e no DistillationTwoLayerModule:139;
+  # NAO existe no DistillationConvModule (distillation_conv_module.py:122-146).
+  model.init_args.freeze_encoder: true
+
+resources: {gpu_ids: [2, 5], max_per_gpu: 2, cpus_per_experiment: 10}
+output:    {work_dir: artifacts/distillation/conv_1x1}
+wandb:     {enabled: true, project: distill_conv}
+
+# BLOQUEIO CONHECIDO: este e o unico dos quatro que ainda nao passa em
+# --dry-run. O pre-voo para na checagem 13 porque faltam os tres configs de
+# modelo da celula:
+#   configs/model/distillation/flim/helminth-eggs/split_1.yaml
+#   configs/model/distillation/flim/helminth-eggs/split_2.yaml
+#   configs/model/distillation/flim/helminth-eggs/split_3.yaml
+# Eles precisam declarar
+# `class_path: methods.distillation.DistillationOneLayerModule`.

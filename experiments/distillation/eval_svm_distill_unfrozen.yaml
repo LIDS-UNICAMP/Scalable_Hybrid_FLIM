@@ -1,0 +1,58 @@
+# Sonda SVM sobre os checkpoints da destilacao PURA unfrozen (`direct_cosine`) —
+# a familia treinada por experiments/distillation/distill4_cos_unfrozen.yaml.
+# Aqui nao se treina nada: le-se o encoder do checkpoint, extrai-se a feature e
+# ajusta-se um SVM sobre ela.
+#
+# Recorte da grade (5% e 50% apenas) — o que existe de fato em disco hoje:
+#
+#   pct  |  1   |  5   |  25  |  50  |  75  | 100
+#   ckpt | 1/9  | 9/9  | 0/9  | 9/9  | 0/9  | 0/9
+#
+# 25/75/100 tem ZERO checkpoint: as 27 celulas morreram antes do primeiro save e
+# estao todas com status: error. O 1% so produziu eggs/s1, ponto isolado demais
+# para entrar numa curva. Sobram 5 e 50, que e o que a grade abaixo pede.
+#
+# Das 18 celulas pedidas (3 datasets x 3 splits x 2 pcts), 13 tem checkpoint E
+# status ok (larvae 6/6, protozoan 6/6, eggs so o s3_p50). As outras 5 sao eggs
+# com checkpoint gravado mas run marcado error — interrompido depois do save.
+# `require_status_ok: true` corta essas 5.
+#
+# Existe ainda uma TERCEIRA familia unfrozen, `_mse_unfrozen_` (metodo `direct`,
+# tambem destilacao pura): 7 diretorios em artifacts/distillation e 0 arquivos
+# .ckpt. Fica de fora deste grupo por nao ter peso nenhum para avaliar.
+
+name:   svm_distill_cos_unfrozen
+method: distillation
+runner: eval
+
+# Nomes LONGOS de dataset (o schema so aceita esses); os diretorios de run usam
+# os curtos — eggs, larvae, protozoan.
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [5, 50]
+
+runner_args:
+  probe:  svm
+  source: distillation
+  artifacts_dir: artifacts/distillation
+  # ARMADILHA: `frozen` e substring de `unfrozen`, entao filtrar por "unfrozen"
+  # ou por "cos" sozinho pegaria tambem a familia frozen. O underscore na frente
+  # e o que separa `_cos_unfrozen_` de `_cos_frozen_`.
+  # Verificado: `_cos_unfrozen_` = 26 .ckpt, `_kd_unfrozen_` = 25 .ckpt, zero
+  # arquivo em comum.
+  run_filter: _cos_unfrozen_
+  # Descarta as celulas que gravaram checkpoint mas terminaram em erro.
+  require_status_ok: true
+  ckpt_selection: best
+  results_csv: results/svm_distill_cos_unfrozen.csv
+
+# max_per_gpu: 1 e deliberado. Cada checkpoint desta familia tem ~7,1 GB porque
+# carrega o teacher I-JEPA inteiro junto com o student; dois na mesma GPU
+# estouram a memoria antes de qualquer forward.
+resources: {gpu_ids: [0], max_per_gpu: 1, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/eval/svm_distill_cos_unfrozen}
+
+# `state` e nao `wandb`: estes runs de treino ja estao encerrados no W&B (a
+# maioria como error), entao a checagem remota nao ajuda a decidir o que reavaliar.
+skip: state

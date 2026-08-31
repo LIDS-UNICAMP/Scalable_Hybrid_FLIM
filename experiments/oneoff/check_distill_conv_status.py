@@ -28,9 +28,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 
-from constants import (
+# Rodado como ``python -m experiments.oneoff.check_distill_conv_status`` da raiz
+# do repositorio: a raiz ja e sys.path[0], entao o antigo sys.path.insert saiu.
+from core.constants import (
     ARTIFACTS_DISTILLATION_DIR,
     CHECKPOINTS_SUBDIR,
     DATASETS as _DATASETS,
@@ -38,12 +39,12 @@ from constants import (
     PROJECT_ROOT as _ROOT,
     RUN_METADATA_FILENAME,
     SPLITS as _SPLITS,
+)
+from experiments.constants import (
     WANDB_ENTITY as _ENTITY,
     WANDB_FAILED_STATES as _WANDB_FAILED,
     WANDB_PROJECT as _PROJECT,
 )
-
-sys.path.insert(0, _ROOT)
 
 import wandb
 

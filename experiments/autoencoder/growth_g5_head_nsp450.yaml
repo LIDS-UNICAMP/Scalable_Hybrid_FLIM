@@ -1,0 +1,46 @@
+# Familia de crescimento SPiFiL: g5_head_nsp450
+# Varredura de n_superpixels=450. O 450 vem do NOME, nao do log - confirme antes de rodar.
+#
+# RECONSTRUIDO a partir de logs/g5_head_nsp450.log e de artifacts/spifil_growth/g5_head_nsp450/.
+# Os knobs de grow nao sao gravados no run_metadata.json, entao vieram das flags
+# do log. Rode com --dry-run e confira antes da primeira vez.
+
+name:   g5_head_nsp450
+method: autoencoder
+runner: growth
+
+grid:
+  init: [flim]
+  datasets:
+    - helminth-larvae
+  splits: [1, 2, 3]
+  percentages: [5, 50]
+
+resources:
+  # --gpus 1 2 3
+  gpu_ids:             [1, 2, 3]
+  # --max-concurrent-per-gpu 3 (9 bracos simultaneos)
+  max_per_gpu:         3
+  # --cpus-per-experiment 10; vira OMP_NUM_THREADS do filho e num_cpus da task Ray
+  cpus_per_experiment: 10
+  # --num-workers 2. ATENCAO: o schema valida (schema.py:175) mas nenhum runner
+  # traduz isso em override hoje; ver a secao de achados do relatorio E1-E4.
+  num_workers:         2
+
+runner_args:
+  max_rounds:      2
+  kappa_tolerance: 0.01
+  rounds_patience: 1
+  embed_mode:      flatten
+  impurities: true
+  one_per_class: true
+  n_superpixels: 450
+
+output:
+  work_dir: artifacts/spifil_growth/g5_head_nsp450
+
+wandb:
+  enabled: true
+  project: phd_thesis_g5_head_nsp450
+
+skip: state

@@ -1,0 +1,23 @@
+# LeJEPA SSL — braco SEM inicializacao FLIM (o contrafactual).
+# Reconstruido do cache do W&B: 1252 runs no total —
+#   he 397 | xavier 338 | random 338 | trunc_normal 179
+# splits 1-3, todos os percentuais, nos tres datasets.
+#
+# ATENCAO: trunc_normal usa lr=5.0e-4 e weight_decay=1.0e-5; os outros tres usam
+# lr=3.0e-3 e weight_decay=5.0e-2. Isso ja esta em cada config de celula — nao
+# sobreponha por `overrides` sem querer.
+
+name:   lejepa_init_no_flim
+method: lejepa
+runner: train
+
+grid:
+  init:        [he, xavier, random, trunc_normal]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/lejepa/init_no_flim}
+wandb:     {enabled: true, project: flim-ssl}
+skip: state

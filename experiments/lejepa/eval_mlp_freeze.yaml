@@ -1,0 +1,48 @@
+# E4 — runner eval: sonda MLP com encoder congelado sobre os checkpoints LeJEPA
+# ja treinados. Substitui src/evaluate/ray_mlp_queue.py.
+#
+# Comando antigo equivalente (flags reais em src/evaluate/ray_mlp_queue.py:513-557):
+#
+#   python -m src.evaluate.ray_mlp_queue \
+#     --mode freeze --num-gpus 1 --max-concurrent-per-gpu 4 \
+#     --cpus-per-experiment 4 --resume
+#
+# A grade NAO e cartesiana aqui: o plano sai de um glob em
+# configs/generated/mlp/<freeze|unfreeze>/**/*.yaml (runners/eval.py:163) e a
+# secao `grid` abaixo so FILTRA esses arquivos pelos campos que eles carregam
+# (runners/eval.py:133-145). Isso e capacidade nova: o lancador antigo so tinha
+# --dataset-group e --experiment-filter.
+
+name:   mlp_freeze_lejepa
+method: lejepa
+runner: eval
+
+# `init` fica de fora de proposito: eixo ausente e "sem filtro". Com ele, os 54
+# configs (que sao quase todos trunc_normal) seriam cortados sem necessidade.
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+runner_args:
+  probe:  mlp
+  # --mode freeze. true = so a subpasta freeze/; ausente cobriria as duas
+  freeze: true
+  # DIVERGENCIA da spec, que escreve `best_model_kappa_with_proj`. Os unicos
+  # valores aceitos sao `best` e `last` (runners/eval.py:81, CKPT_SELECTIONS);
+  # qualquer outro levanta ValueError em parse_runner_args (runners/eval.py:121).
+  # Quem escolhe o arquivo de checkpoint e o probe, dentro do subprocesso
+  # (eval/svm.py:find_best_checkpoint) — e hoje so `best` esta implementado:
+  # `last` levanta NotImplementedError em eval/mlp.py:538-543.
+  ckpt_selection: best
+
+# --num-gpus 1 / --max-concurrent-per-gpu 4 / --cpus-per-experiment 4
+resources: {gpu_ids: [0], max_per_gpu: 4, cpus_per_experiment: 4}
+output:    {work_dir: artifacts/MLP/freeze}
+
+# Era o --resume, que lia results/queue_state.json. O runner eval le este campo
+# em runners/eval.py:266-296: com `wandb` ele exige estado terminal do run e usa
+# o ExecutionState local como desempate. Em --dry-run o skip nem e consultado
+# (runners/eval.py:332-340), entao este arquivo roda em dry-run sem tocar no
+# W&B nem em disco.
+skip: wandb

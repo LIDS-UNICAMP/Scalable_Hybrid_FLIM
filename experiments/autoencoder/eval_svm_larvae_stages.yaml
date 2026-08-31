@@ -1,0 +1,69 @@
+# AVALIACAO DOS ESTAGIOS DO LARVAE — SONDA **SVM**, NAO PERCEPTRON.
+#
+# Decisao explicita do usuario: aqui se extrai o EMBEDDING de cada estagio do
+# treino multi-estagio e se roda **SVM** em cima. NAO e MLP/perceptron.
+# Motivo: o avaliador de cabeca perceptron sobre checkpoint de estagio NAO
+# existe no repo e nao sera criado — o caminho MLP-sobre-estagio simplesmente
+# nao ha. Por isso `probe: svm`, e por isso o `name` e o `results_csv` carregam
+# `svm_` no nome: a linha que sair daqui nunca pode ser confundida, na tabela,
+# com resultado de MLP.
+name:   svm_larvae_stages
+
+# `method` tem que ser diretorio existente em methods/ — `autoencoder` e o
+# metodo das grades de crescimento SPiFiL (mesmo do growth_grid4.yaml), que
+# treinam o AutoEncoderFlimModule e produziram estes checkpoints.
+method: autoencoder
+runner: eval
+
+# So o larvae. Os checkpoints ficam em
+#   artifacts/spifil_growth/grid4/larvae_split<N>_pct<P>/<estagio>/checkpoints/best_kappa.ckpt
+# 1 dataset x 3 splits x 2 percentuais = 6 bracos.
+grid:
+  datasets:    [helminth-larvae]
+  splits:      [1, 2, 3]
+  percentages: [5, 50]
+
+runner_args:
+  # SVM sobre o embedding — ver o cabecalho: nao existe sonda perceptron aqui.
+  probe: svm
+
+  # O ESTAGIO E UM NIVEL DE DIRETORIO, nao um token do nome do run: o braco e
+  # `larvae_split1_pct5` e o estagio e o subdiretorio dentro dele. Os seis
+  # rotulos de estagio do larvae no grid4 sao:
+  #   stage1, stage2, round1_stage3, round1_stage4, round2_stage3, round2_stage4
+  # (os irmaos `round1_grow` / `round2_grow` sao passos de crescimento, nao
+  # estagios de treino, e nao entram.)
+  source: growth_stages
+  family: grid4
+
+  # NAO ha `stages:` restringindo a lista — e deliberado. Avaliamos TODOS os
+  # seis estagios; quem escolhe o vencedor e a regra aplicada DEPOIS, sobre o
+  # CSV: o estagio de MAIOR KAPPA MEDIO daquele dataset, nunca a media sobre
+  # estagios, e com F1/kappa/Acc sempre saindo do mesmo estagio
+  # (reports/A_reports/2026/august/details_report/table_result_methods.md:68-73).
+  # Para o larvae essa regra ja deu `round2_stage3` em 5% e `round2_stage4`
+  # em 50% — mas isso e conclusao, nao filtro de entrada.
+
+  # No grid4 so existe `best_kappa.ckpt`; nao ha `last.ckpt` para escolher.
+  ckpt_selection: best
+
+  # COBERTURA INCOMPLETA CONHECIDA, e legitima: `larvae_split3_pct50` nao tem
+  # `round2_stage3` nem `round2_stage4` (nem `round2_grow`). O laco de
+  # crescimento terminou ali por criterio proprio — nao foi crash. Logo as
+  # celulas de pct50 dos estagios round2_* saem com n=2 (splits 1 e 2), e nao
+  # n=3. Nao trate a ausencia como falha nem tente re-rodar aquele braco.
+  results_csv: results/svm_larvae_stages.csv
+
+resources:
+  gpu_ids: [0]
+  # 2 e deliberado: checkpoint de estagio e pequeno (59k-101k params no
+  # encoder), ao contrario dos de destilacao, entao cabem dois por GPU.
+  max_per_gpu: 2
+  cpus_per_experiment: 8
+
+output:
+  work_dir: artifacts/eval/svm_larvae_stages
+
+# `state` e nao `wandb`: evita que grid.build consulte o servidor e reescreva
+# configs/wandb_update/ids_wandb.json.
+skip: state

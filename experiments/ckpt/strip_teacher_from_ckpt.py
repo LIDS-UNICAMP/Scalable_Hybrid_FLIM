@@ -29,17 +29,20 @@ O formato de saída continua sendo um .ckpt Lightning normal — os avaliadores
 (svm_distillation_conv / svm_distill_with_projection) carregam sem qualquer mudança,
 pois já filtram apenas student.*/proj_kd.*.
 
-Uso:
-  # dry-run (lista o que faria, não grava nada):
-  python scripts/strip_teacher_from_ckpt.py --glob 'artifacts/distillation/*/checkpoints/best*.ckpt'
-  # gravar de fato:
-  python scripts/strip_teacher_from_ckpt.py --glob '...' --apply
-  # só os best referenciados pelo run_metadata.json (recomendado):
-  python scripts/strip_teacher_from_ckpt.py --from-metadata --apply
-"""
-import argparse, glob as globlib, json, os, sys, time
+Uso (da raiz do repositorio; o argparse morreu no refactor, os parametros sao
+defaults nomeados de ``strip_teacher_from_ckpt``):
 
-from constants import KEEP_STUDENT_PREFIXES as KEEP_PREFIXES, RUN_METADATA_FILENAME
+  # dry-run com os defaults (lista o que faria, nao grava nada):
+  python -m experiments.ckpt.strip_teacher_from_ckpt
+
+  # qualquer outro parametro: chamada direta da funcao
+  python -c "from experiments.ckpt.strip_teacher_from_ckpt import strip_teacher_from_ckpt as f; \
+             f(from_metadata=True, apply=True)"
+"""
+import glob as globlib, json, os, time
+
+from core.constants import RUN_METADATA_FILENAME
+from experiments.constants import KEEP_STUDENT_PREFIXES as KEEP_PREFIXES
 
 KEEP_TOP = ("hyper_parameters", "epoch", "global_step",
             "pytorch-lightning_version", "loops", "state_dict")
@@ -71,48 +74,59 @@ def collect_from_metadata():
     return sorted(set(out))
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--glob", default=None, help="padrão glob de checkpoints")
-    ap.add_argument("--from-metadata", action="store_true",
-                    help="usa o best_checkpoint de cada run_metadata.json")
-    ap.add_argument("--apply", action="store_true", help="grava os arquivos (senão dry-run)")
-    ap.add_argument("--overwrite", action="store_true",
-                    help="SOBRESCREVE o próprio .ckpt original (in-place, atômico via .tmp+replace). "
-                         "DESTRUTIVO: o teacher é perdido (redownloadável p/ treino novo).")
-    ap.add_argument("--suffix", default=".student.ckpt", help="sufixo do arquivo de saída (modo não-overwrite)")
-    ap.add_argument("--skip-running", default="protozoan",
-                    help="pula caminhos que contenham esta substring E 'no_imagenet_norm' (treino vivo)")
-    ap.add_argument("--shard", default=None, metavar="I/N",
-                    help="processa só os ckpts com índice i%%N==I (para rodar N workers em paralelo)")
-    args = ap.parse_args()
+def strip_teacher_from_ckpt(
+    glob_pattern: str | None = None,
+    from_metadata: bool = False,
+    apply: bool = False,
+    overwrite: bool = False,
+    suffix: str = ".student.ckpt",
+    skip_running: str = "protozoan",
+    shard: str | None = None,
+) -> int:
+    """Encolhe checkpoints de destilacao guardando so student + proj.
 
+    Os defaults reproduzem o `ap.error("informe --glob ou --from-metadata")` de
+    antes: sem parametro nenhum o script recusa e explica. Um parametro so
+    muda por chamada de funcao.
+
+    glob_pattern  padrao glob de checkpoints (exclusivo com from_metadata)
+    from_metadata usa o best_checkpoint de cada run_metadata.json
+    apply         grava os arquivos (senao dry-run)
+    overwrite     SOBRESCREVE o proprio .ckpt original (in-place, atomico via
+                  .tmp+replace). DESTRUTIVO: o teacher e perdido.
+    suffix        sufixo do arquivo de saida (modo nao-overwrite)
+    skip_running  pula caminhos que contenham esta substring E
+                  'no_imagenet_norm' (treino vivo)
+    shard         "I/N": processa so os ckpts com indice i%N==I
+    """
     import torch  # importado só agora p/ dry-run não exigir o env
 
-    if args.from_metadata:
+    if from_metadata and glob_pattern:
+        raise SystemExit("strip_teacher_from_ckpt: informe glob_pattern OU from_metadata, nao os dois")
+    if from_metadata:
         ckpts = collect_from_metadata()
-    elif args.glob:
-        ckpts = sorted(globlib.glob(args.glob))
+    elif glob_pattern:
+        ckpts = sorted(globlib.glob(glob_pattern))
     else:
-        ap.error("informe --glob ou --from-metadata")
+        raise SystemExit("strip_teacher_from_ckpt: informe glob_pattern ou from_metadata")
 
-    if args.shard:
-        i, n = (int(x) for x in args.shard.split("/"))
+    if shard:
+        i, n = (int(x) for x in shard.split("/"))
         ckpts = [c for idx, c in enumerate(ckpts) if idx % n == i]
         print(f"[shard {i}/{n}] {len(ckpts)} checkpoint(s) neste worker\n")
 
     # pula treino vivo e arquivos já encolhidos
     def skip(p):
-        if p.endswith(args.suffix):
+        if p.endswith(suffix):
             return "já é saída"
-        if args.skip_running and args.skip_running in p and "no_imagenet_norm" in p:
+        if skip_running and skip_running in p and "no_imagenet_norm" in p:
             # só pula se o run ainda não tem metadata (sinal de treino em andamento)
             run = os.path.dirname(os.path.dirname(p))
             if not os.path.exists(os.path.join(run, RUN_METADATA_FILENAME)):
                 return "treino em andamento"
         return None
 
-    print(f"{'APPLY' if args.apply else 'DRY-RUN'} — {len(ckpts)} checkpoint(s)\n")
+    print(f"{'APPLY' if apply else 'DRY-RUN'} — {len(ckpts)} checkpoint(s)\n")
     tot_old = tot_new = 0
     done = 0
     for i, src in enumerate(ckpts, 1):
@@ -121,10 +135,10 @@ def main():
         if reason:
             print(f"{bar(i, len(ckpts))}  {i}/{len(ckpts)}  SKIP ({reason}): {rel}")
             continue
-        if args.overwrite:
+        if overwrite:
             dst = src
         else:
-            dst = src[:-len(".ckpt")] + args.suffix if src.endswith(".ckpt") else src + args.suffix
+            dst = src[:-len(".ckpt")] + suffix if src.endswith(".ckpt") else src + suffix
         old = os.path.getsize(src)
         t0 = time.time()
         ck = torch.load(src, map_location="cpu", weights_only=False)
@@ -135,8 +149,8 @@ def main():
         out["state_dict"] = new_sd
         out["_stripped_teacher"] = True  # marcador do novo formato
         est = sum(v.numel() for v in new_sd.values() if hasattr(v, "numel"))
-        if args.apply:
-            if args.overwrite:
+        if apply:
+            if overwrite:
                 tmp = src + ".tmp_strip"   # escrita atômica: não corrompe se interromper
                 torch.save(out, tmp)
                 os.replace(tmp, src)
@@ -151,15 +165,16 @@ def main():
         print(f"{bar(i, len(ckpts))}  {i}/{len(ckpts)}  {rel}\n"
               f"        {human(old)} → {human(new)}  | params mantidos={est/1e3:.0f}k "
               f"| chaves teacher removidas={dropped} | {time.time()-t0:.1f}s"
-              + ("" if args.apply else "  (estimativa, dry-run)"))
+              + ("" if apply else "  (estimativa, dry-run)"))
 
     print(f"\n{'='*60}\nconvertidos: {done}/{len(ckpts)}")
     print(f"antes:  {human(tot_old)}")
     print(f"depois: {human(tot_new)}   (economia ~{human(tot_old-tot_new)})")
-    if not args.apply:
-        print("\n(dry-run — nada gravado; adicione --apply para gerar os .student.ckpt)")
+    if not apply:
+        print("\n(dry-run — nada gravado; passe apply=True para gerar os .student.ckpt)")
     print("NENHUM checkpoint original foi removido.")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(strip_teacher_from_ckpt())

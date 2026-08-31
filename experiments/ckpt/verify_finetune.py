@@ -25,37 +25,35 @@ Checks:
      (by run.created_at) — flags AMBIGUOUS entries.
   4. Reports missing, duplicate, and ambiguous cases in a clean table.
 
-Usage::
+Usage (da raiz do repositorio; o argparse morreu no refactor, os filtros sao
+defaults nomeados de ``verify``)::
 
-    conda run -n scalable_FLIM python scripts/verify_finetune_weights.py
-    conda run -n scalable_FLIM python scripts/verify_finetune_weights.py --dataset protozoan
-    conda run -n scalable_FLIM python scripts/verify_finetune_weights.py --mode freeze
+    conda run -n scalable_FLIM python -m experiments.ckpt.verify_finetune
+    conda run -n scalable_FLIM python -c "from experiments.ckpt.verify_finetune \
+        import verify; raise SystemExit(verify(dataset_filter='protozoan'))"
+    conda run -n scalable_FLIM python -c "from experiments.ckpt.verify_finetune \
+        import verify; raise SystemExit(verify(mode_filter='freeze'))"
 """
 from __future__ import annotations
 
-import argparse
 import os
-import sys
 from datetime import datetime
 from pathlib import Path
 
 import yaml
 import wandb
 
-# Import only the lightweight constants — avoid pulling the full dataset stack
-from constants import (
+# Import only the lightweight constants — avoid pulling the full dataset stack.
+# PROJECT_ROOT saiu junto com o sys.path.insert que ele alimentava: rodado como
+# `python -m experiments.ckpt.verify_finetune` da raiz, a raiz ja e sys.path[0].
+from core.constants import DATASETS
+from experiments.constants import (
     DATASET_ALIASES as DATASET_FULL_TO_SHORT,
-    DATASETS,
     MLP_CONFIGS_DIR,
-    PROJECT_ROOT,
     RESULTS_DIR,
     WANDB_ENTITY as ENTITY,
     WANDB_PROJECT as PROJECT,
 )
-
-# ── Ensure project root is on sys.path ────────────────────────────────────────
-_ROOT = Path(PROJECT_ROOT)
-sys.path.insert(0, str(_ROOT))
 
 _WANDB_FILTER = {
     "$or": [
@@ -206,7 +204,19 @@ def verify(
     mode_filter: str | None = None,
     verbose: bool = False,
 ) -> int:
-    """Run the full audit. Returns number of problems found."""
+    """Run the full audit. Returns number of problems found.
+
+    dataset_filter  short name, ou "parasito" (o dataset agregado: nao esta em
+                    DATASETS, mas aparece nos YAML). None = todos.
+    mode_filter     "freeze" | "unfreeze". None = os dois.
+    verbose         extra W&B debug output.
+    """
+    if dataset_filter is not None and dataset_filter not in (*DATASETS, "parasito"):
+        raise SystemExit(f"verify: dataset_filter invalido: {dataset_filter!r} "
+                         f"(esperado um de {[*DATASETS, 'parasito']})")
+    if mode_filter is not None and mode_filter not in MODES:
+        raise SystemExit(f"verify: mode_filter invalido: {mode_filter!r} "
+                         f"(esperado um de {list(MODES)})")
 
     modes = [mode_filter] if mode_filter else list(MODES)
 
@@ -404,25 +414,5 @@ def verify(
     return n_critical
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
-def main():
-    p = argparse.ArgumentParser(description="Audit fine-tune weights vs YAML configs vs W&B.")
-    # "parasito" e o dataset agregado: nao esta em DATASETS, mas aparece nos YAML.
-    p.add_argument("--dataset", choices=[*DATASETS, "parasito"],
-                   default=None, help="Filter by dataset short name.")
-    p.add_argument("--mode", choices=["freeze", "unfreeze"],
-                   default=None, help="Filter by freeze/unfreeze mode.")
-    p.add_argument("--verbose", action="store_true", help="Extra W&B debug output.")
-    args = p.parse_args()
-
-    n_problems = verify(
-        dataset_filter=args.dataset,
-        mode_filter=args.mode,
-        verbose=args.verbose,
-    )
-    sys.exit(0 if n_problems == 0 else 1)
-
-
 if __name__ == "__main__":
-    main()
+    raise SystemExit(verify())

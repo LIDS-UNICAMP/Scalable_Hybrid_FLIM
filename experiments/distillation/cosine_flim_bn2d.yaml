@@ -1,0 +1,33 @@
+# Destilacao: distill_cosine_flim_bn2d
+# Cosseno + init FLIM + cabeca 1x1 BN2d 1280. So pcts 1 e 75.
+#
+# RECONSTRUIDO do argv real gravado em wandb-metadata.json (36 runs em artifacts/).
+# Comando antigo equivalente:
+#   python -m src.modules.distillation_onelayer_module \
+#     --distillation-type direct_cosine --encoder-init flim --proj-type 1x1_bn2d_1280 --proj-kernel 1 --dataset <ds> --split <N> --percentage <P>
+#
+# O class_path e a escolha do student; as flags --distill_1..4 nao existem mais.
+
+name:   distill_cosine_flim_bn2d
+method: distillation
+runner: train
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 75]
+
+runner_args: {}
+
+overrides:
+  model.class_path: methods.distillation.DistillationOneLayerModule
+  model.init_args.distillation_type: direct_cosine
+  model.init_args.proj_kernel: 1
+  model.init_args.alpha: 0.5
+  model.init_args.temperature: 4.0
+
+resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/distillation/distill_cosine_flim_bn2d}
+wandb:     {enabled: true, project: phd_thesis_distill}
+skip: state

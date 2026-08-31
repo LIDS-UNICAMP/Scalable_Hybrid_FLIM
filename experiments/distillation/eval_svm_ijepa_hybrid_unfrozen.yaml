@@ -1,0 +1,69 @@
+# E-SVM — runner eval: sonda SVM sobre os checkpoints do I-JEPA AJUSTADO
+# DIRETAMENTE POR LOSS HIBRIDA (distillation_type: kd_hybrid), professor
+# DESCONGELADO. Os pesos avaliados aqui sao os produzidos por
+# experiments/distillation/distill4_kd_unfrozen.yaml.
+#
+# `method: distillation` e o diretorio REAL destes runs: eles foram treinados
+# por methods/distillation/ e vivem em artifacts/distillation/. NAO existe
+# methods/ijepa/ — o "ijepa" do `name` e so a origem do professor, nao um
+# metodo. Trocar para `method: ijepa` e erro duro de schema (o campo tem que
+# ser um diretorio existente em methods/). Nao trocar.
+
+name:   svm_ijepa_hybrid_unfrozen
+method: distillation
+runner: eval
+
+# Grade restrita a 5% e 50% de proposito: 25/75/100 nao tem NENHUM checkpoint
+# nesta familia, e 1% so tem eggs/s1 (celula solitaria, nao da media). Pedir
+# esses eixos so encheria o plano de runs que morrem em FileNotFoundError.
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [5, 50]
+
+runner_args:
+  probe:  svm
+  source: distillation
+  artifacts_dir: artifacts/distillation
+
+  # A substring TEM que comecar com underscore. `frozen` e substring de
+  # `unfrozen`: um filtro `kd_frozen` casaria tambem os 54 runs
+  # distill4_all_kd_unfrozen_*, misturando as duas familias. Com o underscore
+  # na frente, `_kd_unfrozen_` so casa o segmento inteiro do nome.
+  #
+  # A separacao contra a familia cos e tambem ESTRUTURAL, nao so de nome: so os
+  # checkpoints kd carregam `cls_head` e `teacher_cls_head` no state_dict — e o
+  # termo de classificacao da loss hibrida, que a loss puramente cosseno nao
+  # tem. Conferido nos .ckpt: 8 chaves cls_head do lado kd, 0 do lado cos. Por
+  # isso nao ha risco de as duas familias se confundirem.
+  run_filter: _kd_unfrozen_
+
+  # Exclui as 3 celulas que TEM checkpoint mas terminaram em erro
+  # (eggs/s2/p5, larvae/s2/p50, larvae/s3/p50). Decisao do usuario: peso de run
+  # que quebrou nao entra na media.
+  require_status_ok: true
+
+  # `best` com fallback: find_best_checkpoint procura best.ckpt, depois
+  # best-*/ , e so entao last.ckpt. Nesta familia so 6 das 14 celulas validas
+  # tem best.ckpt de fato — 7 caem no last.ckpt. A 14a, eggs/s1/p5, so tem
+  # `last-v1.ckpt`, que NAO casa nenhum dos tres globs: essa celula vai levantar
+  # FileNotFoundError ate alguem renomear o arquivo para last.ckpt.
+  ckpt_selection: best
+
+  results_csv: results/svm_ijepa_hybrid_unfrozen.csv
+
+# protozoan/50/s3 nao tem checkpoint nenhum (o run terminou em erro antes de
+# salvar) — e a UNICA celula ausente dentro do recorte 5/50 desta familia.
+# Essa celula sai com n=2 splits em vez de 3; considerar isso ao reportar
+# desvio-padrao de protozoan a 50%.
+
+# max_per_gpu: 1 porque o checkpoint tem 7,1 GB — ele guarda o professor I-JEPA
+# ViT-H/14 inteiro, que aqui esta descongelado e portanto foi salvo com pesos
+# proprios. Duas sondas concorrentes na mesma GPU estouram a memoria so no
+# torch.load.
+resources: {gpu_ids: [0], max_per_gpu: 1, cpus_per_experiment: 8}
+output:    {work_dir: artifacts/eval/svm_ijepa_hybrid_unfrozen}
+
+# ExecutionState local como fonte de retomada (nao o W&B): estes runs de
+# destilacao ja terminaram, o que se retoma aqui e so a sonda.
+skip: state

@@ -1,0 +1,49 @@
+# E2 — a grade de 5 inits do SSL. Substitui scripts/run_ssl_ray.py.
+#
+# Comando antigo equivalente (flags reais do argparse em
+# scripts/run_ssl_ray.py:655-756):
+#
+#   python scripts/run_ssl_ray.py \
+#     --inits flim he xavier random trunc_normal \
+#     --datasets helminth-eggs helminth-larvae protozoan-cysts \
+#     --splits 1 2 3 --pcts 1 5 25 50 75 100 \
+#     --gpu-ids 0 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 \
+#     --resume
+
+name:   lejepa_init_ablation
+method: lejepa
+runner: train
+
+# 5 inits x 3 datasets x 3 splits x 6 percentuais = 270 pontos.
+# Os 45 configs de modelo (init x dataset x split) existem todos em
+# configs/model/lejepa/<init>/<dataset>/split_<N>.yaml.
+grid:
+  init:        [flim, he, xavier, random, trunc_normal]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+# --gpu-ids 0 1 2 3 / --max-concurrent-per-gpu 2 / --cpus-per-experiment 8.
+# max_per_gpu tambem aceita um mapeamento GPU->int para slots heterogeneos
+# (o antigo --gpu-slots '7,3' vira {0: 7, 1: 3}), e ha max_total_per_gpu para
+# cota por GPU na fila inteira (schema.py:170-173).
+resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
+
+# Cada par vira --<chave>=<valor> literal do LightningCLI
+# (experiments/ray/runners/train.py:96). Nada aninhado: o schema recusa
+# (schema.py:297-302).
+overrides: {trainer.max_epochs: 1000}
+
+output:    {work_dir: artifacts/lejepa/init_ablation}
+wandb:     {enabled: true, project: flim-ssl}
+
+# ATENCAO, duas coisas:
+#   1. run_ssl_ray.py NAO tinha checagem por W&B — o equivalente literal do
+#      --resume dele e `skip: state`. Quem tinha --check-wandb era o
+#      distillation_conv_ray.py. `wandb` aqui e escolha da spec para grade
+#      longa/compartilhada, nao traducao de flag.
+#   2. `wandb` faz grid.build chamar experiments/ray/skip.py:129 ->
+#      core.wandb.cached_history(update=True), que REESCREVE
+#      configs/wandb_update/ids_wandb.json (core/wandb.py:48) mesmo em
+#      --dry-run. Use `--set skip=state` quando so quiser ver o plano.
+skip: wandb
