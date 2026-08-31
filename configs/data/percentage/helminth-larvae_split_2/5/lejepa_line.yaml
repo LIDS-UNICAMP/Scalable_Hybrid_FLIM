@@ -6,7 +6,7 @@
 # YAML base directory:
 #   configs/data/percentage/helminth-larvae_split_2/5/
 data:
-  class_path: src.data_modules.parasite_data_module_lejepa_splited.ParasiteLejepaDataModuleSplited
+  class_path: core.data.ParasiteDataModule
   init_args:
     parasite_name: helminth-larvae_split_2
     split: 2

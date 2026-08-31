@@ -1,0 +1,2338 @@
+{
+  "entity": "ophira-ai",
+  "project": "phd_thesis_grid4",
+  "updated_at": "2026-08-30T20:07:03.413695Z",
+  "runs": {
+    "30oc0utv": {
+      "name": "spifil_growth_larvae_split1_pct5_stage1",
+      "created_at": "2026-08-22T18:02:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "5k2hggdu": {
+      "name": "spifil_growth_eggs_split2_pct50_stage1",
+      "created_at": "2026-08-22T18:02:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "5oexl7c7": {
+      "name": "spifil_growth_eggs_split3_pct5_stage1",
+      "created_at": "2026-08-22T18:02:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "mwswh217": {
+      "name": "spifil_growth_eggs_split3_pct50_stage1",
+      "created_at": "2026-08-22T18:02:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "tz87zwjt": {
+      "name": "spifil_growth_larvae_split1_pct50_stage1",
+      "created_at": "2026-08-22T18:02:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "zvlhwyfc": {
+      "name": "spifil_growth_eggs_split1_pct5_stage1",
+      "created_at": "2026-08-22T18:02:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "9ddyc1ah": {
+      "name": "spifil_growth_eggs_split1_pct50_stage1",
+      "created_at": "2026-08-22T18:02:53Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "z8dq0tfj": {
+      "name": "spifil_growth_larvae_split2_pct5_stage1",
+      "created_at": "2026-08-22T18:02:53Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "4hez7w7a": {
+      "name": "spifil_growth_eggs_split2_pct5_stage1",
+      "created_at": "2026-08-22T18:03:28Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "k7ikymhj": {
+      "name": "spifil_growth_larvae_split2_pct5_stage2",
+      "created_at": "2026-08-22T18:09:22Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "cjg75roh": {
+      "name": "spifil_growth_larvae_split1_pct5_stage2",
+      "created_at": "2026-08-22T18:10:00Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "9w795zfy": {
+      "name": "spifil_growth_larvae_split1_pct50_stage2",
+      "created_at": "2026-08-22T18:11:53Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "a3419knm": {
+      "name": "spifil_growth_eggs_split1_pct5_stage2",
+      "created_at": "2026-08-22T18:13:13Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ti5bpffs": {
+      "name": "spifil_growth_eggs_split3_pct5_stage2",
+      "created_at": "2026-08-22T18:13:31Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "z48mz8to": {
+      "name": "spifil_growth_eggs_split2_pct5_stage2",
+      "created_at": "2026-08-22T18:13:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "om9d1pgk": {
+      "name": "spifil_growth_larvae_split1_pct5_round1_stage3",
+      "created_at": "2026-08-22T18:17:43Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "t85xt8cp": {
+      "name": "spifil_growth_eggs_split2_pct50_stage2",
+      "created_at": "2026-08-22T18:22:47Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3e35vqd0": {
+      "name": "spifil_growth_eggs_split3_pct50_stage2",
+      "created_at": "2026-08-22T18:22:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "lgob2bu0": {
+      "name": "spifil_growth_larvae_split2_pct5_round1_stage3",
+      "created_at": "2026-08-22T18:23:16Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "lq2em854": {
+      "name": "spifil_growth_eggs_split1_pct50_stage2",
+      "created_at": "2026-08-22T18:24:09Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "hnlfr132": {
+      "name": "spifil_growth_eggs_split2_pct5_round1_stage3",
+      "created_at": "2026-08-22T18:24:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "s7wgp160": {
+      "name": "spifil_growth_larvae_split1_pct5_round1_stage4",
+      "created_at": "2026-08-22T18:26:50Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "l4a6bwjs": {
+      "name": "spifil_growth_larvae_split1_pct50_round1_stage3",
+      "created_at": "2026-08-22T18:31:44Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "wr68ys6b": {
+      "name": "spifil_growth_larvae_split2_pct5_round1_stage4",
+      "created_at": "2026-08-22T18:31:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "kmn9pk4f": {
+      "name": "spifil_growth_larvae_split1_pct5_round2_stage3",
+      "created_at": "2026-08-22T18:33:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "8qrl5f5r": {
+      "name": "spifil_growth_eggs_split2_pct5_round1_stage4",
+      "created_at": "2026-08-22T18:36:53Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "evw3fjcz": {
+      "name": "spifil_growth_larvae_split1_pct5_round2_stage4",
+      "created_at": "2026-08-22T18:43:00Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "2c28sggv": {
+      "name": "spifil_growth_larvae_split2_pct5_round2_stage3",
+      "created_at": "2026-08-22T18:46:10Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "yptiisf4": {
+      "name": "spifil_growth_larvae_split2_pct50_stage1",
+      "created_at": "2026-08-22T18:49:50Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "qyw99gou": {
+      "name": "spifil_growth_larvae_split2_pct5_round2_stage4",
+      "created_at": "2026-08-22T18:53:25Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "dhuwlqm0": {
+      "name": "spifil_growth_larvae_split3_pct5_stage1",
+      "created_at": "2026-08-22T18:54:30Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "9fj1imt2": {
+      "name": "spifil_growth_larvae_split2_pct50_stage2",
+      "created_at": "2026-08-22T19:00:27Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "t9c3dtxa": {
+      "name": "spifil_growth_larvae_split3_pct50_stage1",
+      "created_at": "2026-08-22T19:00:41Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "5flmd0v2": {
+      "name": "spifil_growth_eggs_split1_pct50_round1_stage3",
+      "created_at": "2026-08-22T19:01:30Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "nqffvu3t": {
+      "name": "spifil_growth_larvae_split3_pct5_stage2",
+      "created_at": "2026-08-22T19:01:32Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "zj0h2ng6": {
+      "name": "spifil_growth_larvae_split3_pct5_round1_stage3",
+      "created_at": "2026-08-22T19:08:51Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "vbyfac7y": {
+      "name": "spifil_growth_larvae_split2_pct50_round1_stage3",
+      "created_at": "2026-08-22T19:14:11Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "b2i5cm3m": {
+      "name": "spifil_growth_larvae_split1_pct50_round1_stage4",
+      "created_at": "2026-08-22T19:14:42Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "sjd7t23q": {
+      "name": "spifil_growth_eggs_split2_pct50_round1_stage3",
+      "created_at": "2026-08-22T19:15:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "03zpeis7": {
+      "name": "spifil_growth_larvae_split3_pct5_round1_stage4",
+      "created_at": "2026-08-22T19:16:37Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "0dfpwfph": {
+      "name": "spifil_growth_larvae_split3_pct50_stage2",
+      "created_at": "2026-08-22T19:17:22Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "o1zcwi84": {
+      "name": "spifil_growth_eggs_split1_pct50_round1_stage4",
+      "created_at": "2026-08-22T19:23:16Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "qmpev6uh": {
+      "name": "spifil_growth_larvae_split3_pct5_round2_stage3",
+      "created_at": "2026-08-22T19:24:58Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ses4l4wt": {
+      "name": "spifil_growth_larvae_split2_pct50_round1_stage4",
+      "created_at": "2026-08-22T19:25:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "v7lcf35p": {
+      "name": "spifil_growth_eggs_split3_pct50_round1_stage3",
+      "created_at": "2026-08-22T19:32:15Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "yyxucx7p": {
+      "name": "spifil_growth_larvae_split3_pct5_round2_stage4",
+      "created_at": "2026-08-22T19:39:30Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "qjxjaeaw": {
+      "name": "spifil_growth_protozoan_split1_pct5_stage1",
+      "created_at": "2026-08-22T19:41:45Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "m9l1klsc": {
+      "name": "spifil_growth_eggs_split3_pct5_round1_stage3",
+      "created_at": "2026-08-22T19:42:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "4ai2lmi3": {
+      "name": "spifil_growth_larvae_split3_pct50_round1_stage3",
+      "created_at": "2026-08-22T19:43:25Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "cpao58gc": {
+      "name": "spifil_growth_protozoan_split1_pct50_stage1",
+      "created_at": "2026-08-22T19:46:27Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "s0myrgcb": {
+      "name": "spifil_growth_eggs_split2_pct50_round1_stage4",
+      "created_at": "2026-08-22T19:50:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1kb79xd8": {
+      "name": "spifil_growth_eggs_split3_pct5_round1_stage4",
+      "created_at": "2026-08-22T19:53:32Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "7iho5pq2": {
+      "name": "spifil_growth_eggs_split1_pct5_round1_stage3",
+      "created_at": "2026-08-22T19:56:26Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "e5blw98l": {
+      "name": "spifil_growth_larvae_split1_pct50_round2_stage3",
+      "created_at": "2026-08-22T20:02:42Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "822whvbb": {
+      "name": "spifil_growth_protozoan_split2_pct5_stage1",
+      "created_at": "2026-08-22T20:04:02Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "dntoip2o": {
+      "name": "spifil_growth_protozoan_split1_pct5_stage2",
+      "created_at": "2026-08-22T20:10:15Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "iyvl7z4k": {
+      "name": "spifil_growth_eggs_split1_pct5_round1_stage4",
+      "created_at": "2026-08-22T20:10:24Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "6s2dwbla": {
+      "name": "spifil_growth_larvae_split1_pct50_round2_stage4",
+      "created_at": "2026-08-22T20:13:00Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "nv7r2oiv": {
+      "name": "spifil_growth_larvae_split3_pct50_round1_stage4",
+      "created_at": "2026-08-22T20:14:39Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "g1ejzihf": {
+      "name": "spifil_growth_protozoan_split2_pct50_stage1",
+      "created_at": "2026-08-22T20:20:12Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "i82egcph": {
+      "name": "spifil_growth_larvae_split2_pct50_round2_stage3",
+      "created_at": "2026-08-22T20:23:15Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "hwrb96qm": {
+      "name": "spifil_growth_protozoan_split2_pct5_stage2",
+      "created_at": "2026-08-22T20:25:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pu6huz3h": {
+      "name": "spifil_growth_protozoan_split3_pct5_stage1",
+      "created_at": "2026-08-22T20:25:49Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1qxuioux": {
+      "name": "spifil_growth_protozoan_split3_pct50_stage1",
+      "created_at": "2026-08-22T20:29:20Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jx2lwd6u": {
+      "name": "spifil_growth_protozoan_split1_pct50_stage2",
+      "created_at": "2026-08-22T20:35:24Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "a9mixv5r": {
+      "name": "spifil_growth_larvae_split2_pct50_round2_stage4",
+      "created_at": "2026-08-22T20:35:41Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ua9linqd": {
+      "name": "spifil_growth_protozoan_split3_pct5_stage2",
+      "created_at": "2026-08-22T20:46:28Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "szsxhq1u": {
+      "name": "spifil_growth_protozoan_split3_pct50_stage2",
+      "created_at": "2026-08-22T21:20:12Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "6j1c0khf": {
+      "name": "spifil_growth_protozoan_split3_pct5_round1_stage3",
+      "created_at": "2026-08-22T21:20:40Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "snb4ptny": {
+      "name": "spifil_growth_protozoan_split2_pct50_stage2",
+      "created_at": "2026-08-22T21:21:37Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "0ttt2trv": {
+      "name": "spifil_growth_eggs_split3_pct50_round1_stage4",
+      "created_at": "2026-08-22T21:23:52Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "4phsao2b": {
+      "name": "spifil_growth_protozoan_split1_pct5_round1_stage3",
+      "created_at": "2026-08-22T21:49:22Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "9ingtp4u": {
+      "name": "spifil_growth_protozoan_split1_pct50_round1_stage3",
+      "created_at": "2026-08-22T21:57:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "f9xkei9i": {
+      "name": "spifil_growth_protozoan_split2_pct5_round1_stage3",
+      "created_at": "2026-08-22T21:59:40Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "qdcbgs16": {
+      "name": "spifil_growth_protozoan_split3_pct5_round1_stage4",
+      "created_at": "2026-08-22T22:02:50Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "m7wgi3vk": {
+      "name": "spifil_growth_protozoan_split1_pct5_round1_stage4",
+      "created_at": "2026-08-22T22:09:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "in2sk90x": {
+      "name": "spifil_growth_protozoan_split2_pct5_round1_stage4",
+      "created_at": "2026-08-22T22:19:07Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pm0jpucw": {
+      "name": "spifil_growth_protozoan_split2_pct50_round1_stage3",
+      "created_at": "2026-08-22T22:27:34Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "w2yn6v8o": {
+      "name": "spifil_growth_protozoan_split3_pct50_round1_stage3",
+      "created_at": "2026-08-22T22:56:19Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3vpzcm3z": {
+      "name": "spifil_growth_protozoan_split1_pct50_round1_stage4",
+      "created_at": "2026-08-22T23:22:03Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "hgkgbvaj": {
+      "name": "spifil_growth_protozoan_split3_pct50_round1_stage4",
+      "created_at": "2026-08-22T23:55:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "otw0p50h": {
+      "name": "spifil_growth_protozoan_split2_pct50_round1_stage4",
+      "created_at": "2026-08-23T00:22:24Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3j3wvfj7": {
+      "name": "spifil_growth_g5_in_feature_eggs_split3_pct50_stage1",
+      "created_at": "2026-08-24T20:14:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "49fn1eyi": {
+      "name": "spifil_growth_g5_in_feature_eggs_split1_pct50_stage1",
+      "created_at": "2026-08-24T20:14:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "djvs1jf3": {
+      "name": "spifil_growth_g5_in_feature_eggs_split2_pct5_stage1",
+      "created_at": "2026-08-24T20:14:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "kusudoqe": {
+      "name": "spifil_growth_g5_in_feature_eggs_split1_pct5_stage1",
+      "created_at": "2026-08-24T20:14:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "nolkjp13": {
+      "name": "spifil_growth_g5_in_feature_eggs_split3_pct5_stage1",
+      "created_at": "2026-08-24T20:14:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "e1g78360": {
+      "name": "spifil_growth_g5_in_feature_eggs_split2_pct50_stage1",
+      "created_at": "2026-08-24T20:14:38Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "15dswmzh": {
+      "name": "spifil_growth_g5_in_image_eggs_split1_pct50_stage1",
+      "created_at": "2026-08-24T20:15:01Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "d9ukwbg8": {
+      "name": "spifil_growth_g5_in_image_eggs_split3_pct5_stage1",
+      "created_at": "2026-08-24T20:15:01Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "f4ai0lkt": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct5_stage1",
+      "created_at": "2026-08-24T20:15:01Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "vjhe45jn": {
+      "name": "spifil_growth_g5_in_image_eggs_split1_pct5_stage1",
+      "created_at": "2026-08-24T20:15:01Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "tabstbgf": {
+      "name": "spifil_growth_g5_in_image_eggs_split3_pct50_stage1",
+      "created_at": "2026-08-24T20:15:36Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "rj6mxx1g": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct50_stage1",
+      "created_at": "2026-08-24T20:16:19Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "04p1q21u": {
+      "name": "spifil_growth_g5_in_feature_eggs_split2_pct5_stage2",
+      "created_at": "2026-08-24T20:26:34Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "cz6h1qvu": {
+      "name": "spifil_growth_g5_in_feature_eggs_split3_pct5_stage2",
+      "created_at": "2026-08-24T20:26:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "kl1gtlwr": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct5_stage2",
+      "created_at": "2026-08-24T20:27:18Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1pmpe0py": {
+      "name": "spifil_growth_g5_in_image_eggs_split1_pct5_stage2",
+      "created_at": "2026-08-24T20:27:19Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "7nayk25p": {
+      "name": "spifil_growth_g5_in_feature_eggs_split1_pct5_stage2",
+      "created_at": "2026-08-24T20:27:50Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "9882tm0d": {
+      "name": "spifil_growth_g5_in_image_eggs_split3_pct5_stage2",
+      "created_at": "2026-08-24T20:28:52Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "vwogj6sf": {
+      "name": "spifil_growth_g5_in_feature_eggs_split3_pct50_stage2",
+      "created_at": "2026-08-24T20:38:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "6zi2iuav": {
+      "name": "spifil_growth_g5_in_image_eggs_split3_pct50_stage2",
+      "created_at": "2026-08-24T20:39:13Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "s0vlvt43": {
+      "name": "spifil_growth_g5_in_feature_eggs_split2_pct5_round1_stage3",
+      "created_at": "2026-08-24T20:39:25Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "qyxfcpf8": {
+      "name": "spifil_growth_g5_in_feature_eggs_split2_pct50_stage2",
+      "created_at": "2026-08-24T20:41:22Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "2pcbewcn": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct5_round1_stage3",
+      "created_at": "2026-08-24T20:42:04Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pdz29qd6": {
+      "name": "spifil_growth_g5_in_feature_eggs_split1_pct50_stage2",
+      "created_at": "2026-08-24T20:42:08Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "6yaua42e": {
+      "name": "spifil_growth_g5_in_image_eggs_split1_pct50_stage2",
+      "created_at": "2026-08-24T20:42:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "11ejzlwj": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct50_stage2",
+      "created_at": "2026-08-24T20:43:31Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "osjaswmg": {
+      "name": "spifil_growth_g5_in_feature_eggs_split2_pct5_round1_stage4",
+      "created_at": "2026-08-24T20:53:36Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "q00o7mdf": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct5_round1_stage4",
+      "created_at": "2026-08-24T21:09:26Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1qy98by7": {
+      "name": "spifil_growth_g5_in_feature_larvae_split1_pct5_stage1",
+      "created_at": "2026-08-24T21:16:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "k6j2eih9": {
+      "name": "spifil_growth_g5_in_feature_larvae_split1_pct5_stage2",
+      "created_at": "2026-08-24T21:24:13Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "9nicidlo": {
+      "name": "spifil_growth_g5_in_image_eggs_split1_pct50_round1_stage3",
+      "created_at": "2026-08-24T21:27:18Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "qg73gmby": {
+      "name": "spifil_growth_g5_in_feature_larvae_split1_pct50_stage1",
+      "created_at": "2026-08-24T21:33:10Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "2rl1o7y0": {
+      "name": "spifil_growth_g5_in_feature_larvae_split1_pct50_stage2",
+      "created_at": "2026-08-24T21:45:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "b07c8hc8": {
+      "name": "spifil_growth_g5_in_image_eggs_split1_pct50_round1_stage4",
+      "created_at": "2026-08-24T21:51:11Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "8pp3i51h": {
+      "name": "spifil_growth_g5_in_image_eggs_split3_pct50_round1_stage3",
+      "created_at": "2026-08-24T21:54:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "cuhk5s47": {
+      "name": "spifil_growth_g5_in_feature_eggs_split1_pct5_round1_stage3",
+      "created_at": "2026-08-24T22:06:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "q9mk9uny": {
+      "name": "spifil_growth_g5_in_image_eggs_split1_pct5_round1_stage3",
+      "created_at": "2026-08-24T22:09:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "938t2odc": {
+      "name": "spifil_growth_g5_in_image_eggs_split3_pct5_round1_stage3",
+      "created_at": "2026-08-24T22:09:34Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "zs9ywsea": {
+      "name": "spifil_growth_g5_in_feature_eggs_split3_pct5_round1_stage3",
+      "created_at": "2026-08-24T22:14:23Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pqx93dm8": {
+      "name": "spifil_growth_g5_in_feature_larvae_split2_pct5_stage1",
+      "created_at": "2026-08-24T22:16:32Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "y0kl41q1": {
+      "name": "spifil_growth_g5_in_image_eggs_split1_pct5_round1_stage4",
+      "created_at": "2026-08-24T22:18:09Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "b4ecwa3w": {
+      "name": "spifil_growth_g5_in_image_larvae_split1_pct5_stage1",
+      "created_at": "2026-08-24T22:20:12Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pt8yryqt": {
+      "name": "spifil_growth_g5_in_feature_eggs_split1_pct5_round1_stage4",
+      "created_at": "2026-08-24T22:20:13Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "z2vozkil": {
+      "name": "spifil_growth_g5_in_feature_eggs_split3_pct50_round1_stage3",
+      "created_at": "2026-08-24T22:21:19Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "dmcfl1co": {
+      "name": "spifil_growth_g5_in_feature_larvae_split2_pct5_stage2",
+      "created_at": "2026-08-24T22:24:47Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "fb58i35b": {
+      "name": "spifil_growth_g5_in_image_larvae_split1_pct50_stage1",
+      "created_at": "2026-08-24T22:27:07Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1vp0vsg8": {
+      "name": "spifil_growth_g5_in_image_larvae_split1_pct5_stage2",
+      "created_at": "2026-08-24T22:28:41Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "b67pjfsa": {
+      "name": "spifil_growth_g5_in_feature_eggs_split3_pct5_round1_stage4",
+      "created_at": "2026-08-24T22:30:26Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "u8ot924q": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct5_round2_stage3",
+      "created_at": "2026-08-24T22:30:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "u6zp1jbl": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct50_round1_stage3",
+      "created_at": "2026-08-24T22:34:53Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "el0vxal6": {
+      "name": "spifil_growth_g5_in_image_larvae_split2_pct5_stage1",
+      "created_at": "2026-08-24T22:35:19Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "j83to8kh": {
+      "name": "spifil_growth_g5_in_image_larvae_split1_pct50_stage2",
+      "created_at": "2026-08-24T22:38:10Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "khtlzbzx": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct5_round2_stage4",
+      "created_at": "2026-08-24T22:40:39Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "zcyltrzk": {
+      "name": "spifil_growth_g5_in_image_larvae_split2_pct5_stage2",
+      "created_at": "2026-08-24T22:41:47Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "q36qd64v": {
+      "name": "spifil_growth_g5_in_image_eggs_split3_pct5_round1_stage4",
+      "created_at": "2026-08-24T22:43:38Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "03u8zsgo": {
+      "name": "spifil_growth_g5_in_feature_larvae_split2_pct50_stage1",
+      "created_at": "2026-08-24T22:47:04Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ae5hhh7h": {
+      "name": "spifil_growth_g5_in_image_larvae_split2_pct50_stage1",
+      "created_at": "2026-08-24T22:50:32Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "e7z66lnm": {
+      "name": "spifil_growth_g5_in_feature_eggs_split2_pct50_round1_stage3",
+      "created_at": "2026-08-24T22:55:40Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "kmocgxcu": {
+      "name": "spifil_growth_g5_in_image_larvae_split3_pct5_stage1",
+      "created_at": "2026-08-24T22:56:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "0000jxzk": {
+      "name": "spifil_growth_g5_in_feature_larvae_split2_pct50_stage2",
+      "created_at": "2026-08-24T22:58:26Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "g1ekugym": {
+      "name": "spifil_growth_g5_in_image_larvae_split3_pct50_stage1",
+      "created_at": "2026-08-24T23:00:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ipmin4s1": {
+      "name": "spifil_growth_g5_in_image_eggs_split2_pct50_round1_stage4",
+      "created_at": "2026-08-24T23:00:27Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "vqo9fv7d": {
+      "name": "spifil_growth_g5_in_image_larvae_split2_pct50_stage2",
+      "created_at": "2026-08-24T23:00:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "5trtqj4x": {
+      "name": "spifil_growth_g5_in_image_protozoan_split1_pct5_stage1",
+      "created_at": "2026-08-24T23:03:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "tsxm8m2z": {
+      "name": "spifil_growth_g5_in_image_larvae_split3_pct5_stage2",
+      "created_at": "2026-08-24T23:04:07Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "74cojb2w": {
+      "name": "spifil_growth_g5_in_feature_eggs_split1_pct50_round1_stage3",
+      "created_at": "2026-08-24T23:07:10Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "6hmt1ahe": {
+      "name": "spifil_growth_g5_in_image_protozoan_split1_pct50_stage1",
+      "created_at": "2026-08-24T23:10:51Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3znl7lp0": {
+      "name": "spifil_growth_g5_in_feature_larvae_split3_pct5_stage1",
+      "created_at": "2026-08-24T23:12:28Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ufwakl56": {
+      "name": "spifil_growth_g5_in_feature_larvae_split3_pct50_stage1",
+      "created_at": "2026-08-24T23:15:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "tgfp7yg0": {
+      "name": "spifil_growth_g5_in_image_protozoan_split2_pct5_stage1",
+      "created_at": "2026-08-24T23:15:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "7sigd89w": {
+      "name": "spifil_growth_g5_in_image_larvae_split3_pct50_stage2",
+      "created_at": "2026-08-24T23:16:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "bt57n3cq": {
+      "name": "spifil_growth_g5_in_feature_eggs_split2_pct50_round1_stage4",
+      "created_at": "2026-08-24T23:17:38Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "g2n4pmbb": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split1_pct5_stage1",
+      "created_at": "2026-08-24T23:18:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "wbnsdjs4": {
+      "name": "spifil_growth_g5_in_feature_larvae_split3_pct5_stage2",
+      "created_at": "2026-08-24T23:18:57Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jnxewn2a": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split1_pct50_stage1",
+      "created_at": "2026-08-24T23:26:26Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "iq3fhvok": {
+      "name": "spifil_growth_g5_in_image_eggs_split3_pct50_round1_stage4",
+      "created_at": "2026-08-24T23:28:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1bf1d19z": {
+      "name": "spifil_growth_g5_in_image_protozoan_split1_pct5_stage2",
+      "created_at": "2026-08-24T23:31:50Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "imanw4sw": {
+      "name": "spifil_growth_g5_in_feature_larvae_split3_pct50_stage2",
+      "created_at": "2026-08-24T23:32:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ruemccz3": {
+      "name": "spifil_growth_g5_in_image_protozoan_split2_pct5_stage2",
+      "created_at": "2026-08-24T23:35:43Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "0mv57f32": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split1_pct5_stage2",
+      "created_at": "2026-08-24T23:45:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "2k6sggmi": {
+      "name": "spifil_growth_g5_in_feature_eggs_split3_pct50_round1_stage4",
+      "created_at": "2026-08-24T23:48:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jals8brj": {
+      "name": "spifil_growth_g5_in_image_protozoan_split2_pct50_stage1",
+      "created_at": "2026-08-24T23:52:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "j3h3t401": {
+      "name": "spifil_growth_g5_in_image_protozoan_split3_pct5_stage1",
+      "created_at": "2026-08-24T23:54:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "gm3tvewd": {
+      "name": "spifil_growth_g5_in_image_protozoan_split1_pct50_stage2",
+      "created_at": "2026-08-25T00:01:26Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "9dy2mk9t": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split2_pct5_stage1",
+      "created_at": "2026-08-25T00:02:59Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "suwmipyk": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split1_pct50_stage2",
+      "created_at": "2026-08-25T00:12:57Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "u1jvam8z": {
+      "name": "spifil_growth_g5_in_image_protozoan_split3_pct5_stage2",
+      "created_at": "2026-08-25T00:14:52Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "psazk09i": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split2_pct5_stage2",
+      "created_at": "2026-08-25T00:25:03Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "xubdczmk": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split2_pct50_stage1",
+      "created_at": "2026-08-25T00:49:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "txpjovpf": {
+      "name": "spifil_growth_g5_in_image_protozoan_split3_pct5_round1_stage3",
+      "created_at": "2026-08-25T00:51:15Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "12ckdqj3": {
+      "name": "spifil_growth_g5_in_image_protozoan_split2_pct50_stage2",
+      "created_at": "2026-08-25T00:51:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1lslxb1q": {
+      "name": "spifil_growth_g5_in_image_protozoan_split3_pct50_stage1",
+      "created_at": "2026-08-25T00:51:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "91f19tfl": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split3_pct5_stage1",
+      "created_at": "2026-08-25T00:53:03Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "k7dx5b1d": {
+      "name": "spifil_growth_g5_in_feature_eggs_split1_pct50_round1_stage4",
+      "created_at": "2026-08-25T01:05:35Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "iup4kbz5": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split3_pct5_stage2",
+      "created_at": "2026-08-25T01:14:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "h983msjx": {
+      "name": "spifil_growth_g5_in_image_protozoan_split1_pct50_round1_stage3",
+      "created_at": "2026-08-25T01:25:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "iyx0h4c8": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split1_pct5_round1_stage3",
+      "created_at": "2026-08-25T01:26:48Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ldjl0s2z": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split3_pct50_stage1",
+      "created_at": "2026-08-25T01:27:50Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jf5v4wv9": {
+      "name": "spifil_growth_g5_in_image_protozoan_split1_pct5_round1_stage3",
+      "created_at": "2026-08-25T01:34:43Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "liwzgjkl": {
+      "name": "spifil_growth_g5_in_image_protozoan_split3_pct50_stage2",
+      "created_at": "2026-08-25T01:45:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "5ir4y9zn": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split1_pct50_round1_stage3",
+      "created_at": "2026-08-25T01:48:09Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pkj60nie": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split3_pct5_round1_stage3",
+      "created_at": "2026-08-25T01:52:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "py7yd5a0": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split2_pct50_stage2",
+      "created_at": "2026-08-25T01:55:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "n8mlmc50": {
+      "name": "spifil_growth_g5_in_image_protozoan_split3_pct5_round1_stage4",
+      "created_at": "2026-08-25T02:00:38Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1jzuhfm5": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split1_pct5_round1_stage4",
+      "created_at": "2026-08-25T02:05:27Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "t9rlqdgq": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split2_pct5_round1_stage3",
+      "created_at": "2026-08-25T02:13:04Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "gj6rzcte": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split3_pct50_stage2",
+      "created_at": "2026-08-25T02:21:07Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "lzi1qj4a": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split2_pct5_round1_stage4",
+      "created_at": "2026-08-25T02:45:08Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "n06tulv2": {
+      "name": "spifil_growth_g5_in_image_protozoan_split1_pct5_round1_stage4",
+      "created_at": "2026-08-25T02:46:46Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jko47i74": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split3_pct5_round1_stage4",
+      "created_at": "2026-08-25T03:08:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "egbjd455": {
+      "name": "spifil_growth_g5_in_image_protozoan_split2_pct5_round1_stage3",
+      "created_at": "2026-08-25T03:09:41Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "8fkecjsm": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split2_pct50_round1_stage3",
+      "created_at": "2026-08-25T03:21:53Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ij1qr6qw": {
+      "name": "spifil_growth_g5_in_image_protozoan_split2_pct5_round1_stage4",
+      "created_at": "2026-08-25T03:26:23Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jptvmhoi": {
+      "name": "spifil_growth_g5_in_image_protozoan_split2_pct50_round1_stage3",
+      "created_at": "2026-08-25T03:40:24Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "lpe6nffr": {
+      "name": "spifil_growth_g5_in_image_protozoan_split1_pct50_round1_stage4",
+      "created_at": "2026-08-25T03:48:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "n3uz39pj": {
+      "name": "spifil_growth_g5_in_image_protozoan_split3_pct50_round1_stage3",
+      "created_at": "2026-08-25T03:54:00Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "owoazoe5": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split2_pct50_round1_stage4",
+      "created_at": "2026-08-25T04:38:58Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "n7oq2cf7": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split1_pct50_round1_stage4",
+      "created_at": "2026-08-25T04:40:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "m5bdesi6": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split3_pct50_round1_stage3",
+      "created_at": "2026-08-25T04:48:10Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "72c3xepe": {
+      "name": "spifil_growth_g5_in_image_protozoan_split2_pct50_round1_stage4",
+      "created_at": "2026-08-25T05:13:36Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "b1m9fzpy": {
+      "name": "spifil_growth_g5_in_image_protozoan_split3_pct50_round1_stage4",
+      "created_at": "2026-08-25T05:32:08Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "0g9nm9t5": {
+      "name": "spifil_growth_g5_in_feature_protozoan_split3_pct50_round1_stage4",
+      "created_at": "2026-08-25T06:08:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "015qz759": {
+      "name": "spifil_growth_g5_head_larvae_split1_pct50_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "21m1us7b": {
+      "name": "spifil_growth_g5_head_eggs_split3_pct50_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "56s0iy7m": {
+      "name": "spifil_growth_g5_head_eggs_split2_pct50_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "8iblrbty": {
+      "name": "spifil_growth_g5_head_protozoan_split2_pct5_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "mn236tpm": {
+      "name": "spifil_growth_g5_head_larvae_split1_pct5_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "nl49vo2n": {
+      "name": "spifil_growth_g5_head_larvae_split3_pct5_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "sm5wwpm9": {
+      "name": "spifil_growth_g5_head_larvae_split2_pct5_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "v3e6m8w6": {
+      "name": "spifil_growth_g5_head_eggs_split1_pct50_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "wxahcpp5": {
+      "name": "spifil_growth_g5_head_eggs_split2_pct5_stage1",
+      "created_at": "2026-08-25T17:34:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1p16p859": {
+      "name": "spifil_growth_g5_head_protozoan_split3_pct5_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "a1dtjpwm": {
+      "name": "spifil_growth_g5_head_eggs_split1_pct5_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ahkb3h15": {
+      "name": "spifil_growth_g5_head_larvae_split3_pct50_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ek7bkqmr": {
+      "name": "spifil_growth_g5_head_protozoan_split2_pct50_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "fbnqk1jr": {
+      "name": "spifil_growth_g5_head_protozoan_split1_pct50_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "h6ioj6k1": {
+      "name": "spifil_growth_g5_head_protozoan_split1_pct5_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "hv8nihfy": {
+      "name": "spifil_growth_g5_head_protozoan_split3_pct50_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "lqnp0ers": {
+      "name": "spifil_growth_g5_head_eggs_split3_pct5_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "zrf5wwik": {
+      "name": "spifil_growth_g5_head_larvae_split2_pct50_stage1",
+      "created_at": "2026-08-25T17:34:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ndq0b5fd": {
+      "name": "spifil_growth_g5_head_larvae_split2_pct5_stage2",
+      "created_at": "2026-08-25T17:42:44Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "rm2sfzcr": {
+      "name": "spifil_growth_g5_head_larvae_split3_pct5_stage2",
+      "created_at": "2026-08-25T17:43:11Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "7tcg1q5x": {
+      "name": "spifil_growth_g5_head_larvae_split1_pct5_stage2",
+      "created_at": "2026-08-25T17:43:34Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "gqz2t92y": {
+      "name": "spifil_growth_g5_head_eggs_split2_pct5_stage2",
+      "created_at": "2026-08-25T17:46:57Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "moosks6m": {
+      "name": "spifil_growth_g5_head_eggs_split3_pct5_stage2",
+      "created_at": "2026-08-25T17:47:10Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "8wwwwcdl": {
+      "name": "spifil_growth_g5_head_larvae_split1_pct50_stage2",
+      "created_at": "2026-08-25T17:47:11Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "j36o8eqk": {
+      "name": "spifil_growth_g5_head_larvae_split2_pct50_stage2",
+      "created_at": "2026-08-25T17:47:15Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "u7xkdypa": {
+      "name": "spifil_growth_g5_head_eggs_split1_pct5_stage2",
+      "created_at": "2026-08-25T17:47:20Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "eib6u6bs": {
+      "name": "spifil_growth_g5_head_larvae_split3_pct50_stage2",
+      "created_at": "2026-08-25T17:54:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "es0c2fad": {
+      "name": "spifil_growth_g5_head_eggs_split2_pct50_stage2",
+      "created_at": "2026-08-25T17:58:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "udj46azh": {
+      "name": "spifil_growth_g5_head_eggs_split3_pct50_stage2",
+      "created_at": "2026-08-25T17:58:57Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pd5wetxf": {
+      "name": "spifil_growth_g5_head_eggs_split1_pct50_stage2",
+      "created_at": "2026-08-25T17:59:30Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "bdc8k3mo": {
+      "name": "spifil_growth_g5_head_protozoan_split2_pct5_stage2",
+      "created_at": "2026-08-25T17:59:31Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "q89j5wdx": {
+      "name": "spifil_growth_g5_head_protozoan_split3_pct5_stage2",
+      "created_at": "2026-08-25T17:59:45Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "9wfvoejf": {
+      "name": "spifil_growth_g5_head_eggs_split1_pct5_round1_head",
+      "created_at": "2026-08-25T18:00:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "rp1xa9rf": {
+      "name": "spifil_growth_g5_head_eggs_split2_pct5_round1_head",
+      "created_at": "2026-08-25T18:00:24Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "aupmoe2l": {
+      "name": "spifil_growth_g5_head_eggs_split3_pct5_round1_head",
+      "created_at": "2026-08-25T18:01:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ynn54guc": {
+      "name": "spifil_growth_g5_head_protozoan_split1_pct5_stage2",
+      "created_at": "2026-08-25T18:10:43Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "z38xa1xk": {
+      "name": "spifil_growth_g5_head_eggs_split2_pct5_round2_head",
+      "created_at": "2026-08-25T18:11:50Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "fwqqpmfp": {
+      "name": "spifil_growth_g5_head_eggs_split3_pct5_round2_head",
+      "created_at": "2026-08-25T18:12:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "wm13xqgz": {
+      "name": "spifil_growth_g5_head_eggs_split2_pct50_round1_head",
+      "created_at": "2026-08-25T18:20:57Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pjtxjnin": {
+      "name": "spifil_growth_g5_head_eggs_split3_pct50_round1_head",
+      "created_at": "2026-08-25T18:21:12Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "35ktbow5": {
+      "name": "spifil_growth_g5_head_eggs_split1_pct50_round1_head",
+      "created_at": "2026-08-25T18:21:38Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "81the1mk": {
+      "name": "spifil_growth_g5_head_protozoan_split3_pct50_stage2",
+      "created_at": "2026-08-25T18:31:03Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "wkarlzgr": {
+      "name": "spifil_growth_g5_head_protozoan_split1_pct50_stage2",
+      "created_at": "2026-08-25T18:31:43Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "vri9mu2h": {
+      "name": "spifil_growth_g5_head_protozoan_split3_pct5_round1_head",
+      "created_at": "2026-08-25T18:36:25Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jm32dm5x": {
+      "name": "spifil_growth_g5_head_protozoan_split2_pct50_stage2",
+      "created_at": "2026-08-25T18:40:38Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "u863gu2q": {
+      "name": "spifil_growth_g5_head_eggs_split3_pct50_round2_head",
+      "created_at": "2026-08-25T18:47:00Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "0afvystm": {
+      "name": "spifil_growth_g5_head_eggs_split1_pct50_round2_head",
+      "created_at": "2026-08-25T18:48:01Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "kdp014r7": {
+      "name": "spifil_growth_g5_head_protozoan_split1_pct50_round1_head",
+      "created_at": "2026-08-25T19:35:44Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "gsd23vpz": {
+      "name": "spifil_growth_g5_head_eggs_split2_pct50_round2_head",
+      "created_at": "2026-08-25T19:37:51Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "hrb5qg4w": {
+      "name": "spifil_growth_g5_head_protozoan_split1_pct5_round1_head",
+      "created_at": "2026-08-25T20:04:20Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pxr1bfwv": {
+      "name": "spifil_growth_g5_head_protozoan_split3_pct50_round1_head",
+      "created_at": "2026-08-25T20:06:32Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "6v3j1gf9": {
+      "name": "spifil_growth_g5_head_protozoan_split2_pct5_round1_head",
+      "created_at": "2026-08-25T20:08:35Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "oqgjogl6": {
+      "name": "spifil_growth_g5_head_protozoan_split2_pct50_round1_head",
+      "created_at": "2026-08-25T20:10:05Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "nwvpfu7a": {
+      "name": "spifil_growth_g5_head_protozoan_split2_pct5_round2_head",
+      "created_at": "2026-08-25T21:05:47Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "p2ade616": {
+      "name": "spifil_growth_g5_head_protozoan_split1_pct5_round2_head",
+      "created_at": "2026-08-25T21:07:39Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "7xzg67w3": {
+      "name": "spifil_growth_g5_head_protozoan_split1_pct50_round2_head",
+      "created_at": "2026-08-25T21:40:15Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "h40tg6ck": {
+      "name": "spifil_growth_g5_head_protozoan_split3_pct50_round2_head",
+      "created_at": "2026-08-25T22:11:18Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "uoe6kr51": {
+      "name": "spifil_growth_g5_head_protozoan_split2_pct50_round2_head",
+      "created_at": "2026-08-25T22:39:42Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "bz41b3db": {
+      "name": "spifil_growth_g5_random_eggs_split2_pct50_stage1",
+      "created_at": "2026-08-27T22:43:37Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ibr4n4eq": {
+      "name": "spifil_growth_g5_random_eggs_split1_pct50_stage1",
+      "created_at": "2026-08-27T22:43:37Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "yn53wfoo": {
+      "name": "spifil_growth_g5_random_eggs_split3_pct50_stage1",
+      "created_at": "2026-08-27T22:43:39Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ezfjm9iw": {
+      "name": "spifil_growth_g5_random_eggs_split3_pct5_stage1",
+      "created_at": "2026-08-27T22:43:40Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "og0sm342": {
+      "name": "spifil_growth_g5_random_eggs_split1_pct5_stage1",
+      "created_at": "2026-08-27T22:43:40Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "zym7n596": {
+      "name": "spifil_growth_g5_random_eggs_split2_pct5_stage1",
+      "created_at": "2026-08-27T22:43:40Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ed5kiggx": {
+      "name": "spifil_growth_g5_random_eggs_split2_pct5_stage2",
+      "created_at": "2026-08-27T23:14:19Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "flq4fnnu": {
+      "name": "spifil_growth_g5_random_eggs_split1_pct5_stage2",
+      "created_at": "2026-08-27T23:14:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "keuu6mhl": {
+      "name": "spifil_growth_g5_random_eggs_split3_pct5_stage2",
+      "created_at": "2026-08-27T23:15:02Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "8cfan9k1": {
+      "name": "spifil_growth_g5_random_larvae_split1_pct5_stage1",
+      "created_at": "2026-08-27T23:38:03Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ny4z94o0": {
+      "name": "spifil_growth_g5_random_larvae_split1_pct50_stage1",
+      "created_at": "2026-08-27T23:49:31Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "cvcm9bet": {
+      "name": "spifil_growth_g5_random_larvae_split2_pct5_stage1",
+      "created_at": "2026-08-27T23:49:46Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3ww8acta": {
+      "name": "spifil_growth_g5_random_larvae_split1_pct5_stage2",
+      "created_at": "2026-08-27T23:54:12Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "hry6ko0a": {
+      "name": "spifil_growth_g5_random_larvae_split2_pct5_stage2",
+      "created_at": "2026-08-28T00:05:23Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "nbi1u0u8": {
+      "name": "spifil_growth_g5_random_larvae_split2_pct50_stage1",
+      "created_at": "2026-08-28T00:11:10Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "v7kdszpv": {
+      "name": "spifil_growth_g5_random_larvae_split1_pct50_stage2",
+      "created_at": "2026-08-28T00:26:58Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "n6dy4kps": {
+      "name": "spifil_growth_g5_random_larvae_split2_pct50_stage2",
+      "created_at": "2026-08-28T00:37:01Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "xtwp2584": {
+      "name": "spifil_growth_g5_random_larvae_split3_pct5_stage1",
+      "created_at": "2026-08-28T00:44:09Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "vcmgwnfp": {
+      "name": "spifil_growth_g5_random_eggs_split3_pct50_stage2",
+      "created_at": "2026-08-28T00:47:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "1z66cwnf": {
+      "name": "spifil_growth_g5_random_eggs_split2_pct50_stage2",
+      "created_at": "2026-08-28T00:52:56Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ngsjks29": {
+      "name": "spifil_growth_g5_random_eggs_split1_pct50_stage2",
+      "created_at": "2026-08-28T00:57:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "532mzhe2": {
+      "name": "spifil_growth_g5_random_larvae_split3_pct5_stage2",
+      "created_at": "2026-08-28T01:00:48Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "tdngzgve": {
+      "name": "spifil_growth_g5_random_larvae_split3_pct50_stage1",
+      "created_at": "2026-08-28T01:17:19Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "5a2z9kzy": {
+      "name": "spifil_growth_g5_random_protozoan_split1_pct5_stage1",
+      "created_at": "2026-08-28T01:24:24Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "cev2xq8g": {
+      "name": "spifil_growth_g5_random_protozoan_split1_pct50_stage1",
+      "created_at": "2026-08-28T01:31:44Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "pft4wy6m": {
+      "name": "spifil_growth_g5_random_larvae_split3_pct50_stage2",
+      "created_at": "2026-08-28T02:09:16Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "fve86j74": {
+      "name": "spifil_growth_g5_random_protozoan_split1_pct5_stage2",
+      "created_at": "2026-08-28T03:09:48Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "kdidvkca": {
+      "name": "spifil_growth_g5_random_protozoan_split2_pct5_stage1",
+      "created_at": "2026-08-28T03:43:43Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "kmvcy5bq": {
+      "name": "spifil_growth_g5_random_eggs_split1_pct50_round1_head",
+      "created_at": "2026-08-28T03:59:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "nhoq2luy": {
+      "name": "spifil_growth_g5_random_eggs_split2_pct50_round1_head",
+      "created_at": "2026-08-28T04:51:03Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "uqr42qoq": {
+      "name": "spifil_growth_g5_random_protozoan_split2_pct5_stage2",
+      "created_at": "2026-08-28T05:09:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "185l1rzo": {
+      "name": "spifil_growth_g5_random_eggs_split1_pct50_round2_head",
+      "created_at": "2026-08-28T05:21:19Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "i6i9mc7i": {
+      "name": "spifil_growth_g5_random_protozoan_split2_pct50_stage1",
+      "created_at": "2026-08-28T06:17:25Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "uneevsoh": {
+      "name": "spifil_growth_g5_random_eggs_split2_pct50_round2_head",
+      "created_at": "2026-08-28T07:14:57Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ohay8z5l": {
+      "name": "spifil_growth_g5_random_eggs_split3_pct50_round1_head",
+      "created_at": "2026-08-28T07:43:23Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "182e8wkl": {
+      "name": "spifil_growth_g5_random_protozoan_split3_pct5_stage1",
+      "created_at": "2026-08-28T07:51:22Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "6c1xs2de": {
+      "name": "spifil_growth_g5_random_protozoan_split1_pct50_stage2",
+      "created_at": "2026-08-28T07:58:39Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ltwgzzgc": {
+      "name": "spifil_growth_g5_random_protozoan_split3_pct5_stage2",
+      "created_at": "2026-08-28T08:55:15Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "emfmeybh": {
+      "name": "spifil_growth_g5_random_protozoan_split3_pct50_stage1",
+      "created_at": "2026-08-28T09:08:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "91snkcqk": {
+      "name": "spifil_growth_g5_random_protozoan_split1_pct5_round1_head",
+      "created_at": "2026-08-28T09:42:55Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "m7lnsz5h": {
+      "name": "spifil_growth_g5_random_protozoan_split3_pct5_round1_head",
+      "created_at": "2026-08-28T10:28:32Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jdbxh3t3": {
+      "name": "spifil_growth_g5_random_protozoan_split1_pct5_round2_head",
+      "created_at": "2026-08-28T11:53:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "0n2liagv": {
+      "name": "spifil_growth_g5_random_protozoan_split3_pct50_stage2",
+      "created_at": "2026-08-28T11:53:34Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "lcka98f3": {
+      "name": "spifil_growth_g5_random_protozoan_split2_pct50_stage2",
+      "created_at": "2026-08-28T11:58:49Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3xo8c0ns": {
+      "name": "spifil_growth_g5_random_protozoan_split2_pct5_round1_head",
+      "created_at": "2026-08-28T12:00:59Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "101g40in": {
+      "name": "spifil_growth_g5_random_protozoan_split1_pct50_round1_head",
+      "created_at": "2026-08-28T13:07:51Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "29ewi6yz": {
+      "name": "spifil_growth_g5_random_protozoan_split2_pct5_round2_head",
+      "created_at": "2026-08-28T13:22:54Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "mec04pmj": {
+      "name": "spifil_growth_g5_random_protozoan_split3_pct50_round1_head",
+      "created_at": "2026-08-28T13:24:48Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "dsgokxiz": {
+      "name": "spifil_growth_g5_random_protozoan_split1_pct50_round2_head",
+      "created_at": "2026-08-28T14:04:33Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "k0fi3sco": {
+      "name": "spifil_growth_g5_random_protozoan_split2_pct50_round1_head",
+      "created_at": "2026-08-28T14:30:58Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "drx0ppf6": {
+      "name": "spifil_growth_g5_random_protozoan_split3_pct50_round2_head",
+      "created_at": "2026-08-28T14:44:21Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "w1muhmlt": {
+      "name": "spifil_growth_g5_random_protozoan_split2_pct50_round2_head",
+      "created_at": "2026-08-28T16:02:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3gulk69b": {
+      "name": "spifil_growth_g5_head_repro_larvae_split2_pct5_stage1",
+      "created_at": "2026-08-28T22:15:37Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "5d9nizwy": {
+      "name": "spifil_growth_g5_head_repro_larvae_split1_pct50_stage1",
+      "created_at": "2026-08-28T22:15:37Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "crrcffee": {
+      "name": "spifil_growth_g5_head_repro_larvae_split2_pct50_stage1",
+      "created_at": "2026-08-28T22:15:37Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "jxxb27rp": {
+      "name": "spifil_growth_g5_head_repro_larvae_split3_pct5_stage1",
+      "created_at": "2026-08-28T22:15:37Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "cqtkx1kw": {
+      "name": "spifil_growth_g5_head_repro_larvae_split3_pct50_stage1",
+      "created_at": "2026-08-28T22:15:38Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "iods6p1l": {
+      "name": "spifil_growth_g5_head_repro_larvae_split1_pct5_stage1",
+      "created_at": "2026-08-28T22:15:39Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "gle5s9j0": {
+      "name": "spifil_growth_g5_head_repro_larvae_split2_pct5_stage2",
+      "created_at": "2026-08-28T22:21:16Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "4wljwqwg": {
+      "name": "spifil_growth_g5_head_repro_larvae_split3_pct5_stage2",
+      "created_at": "2026-08-28T22:21:30Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "87fv4po2": {
+      "name": "spifil_growth_g5_head_repro_larvae_split1_pct5_stage2",
+      "created_at": "2026-08-28T22:21:53Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "inu9b7e3": {
+      "name": "spifil_growth_g5_head_repro_larvae_split1_pct50_stage2",
+      "created_at": "2026-08-28T22:24:04Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ci9ro5ts": {
+      "name": "spifil_growth_g5_head_repro_larvae_split2_pct50_stage2",
+      "created_at": "2026-08-28T22:24:14Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "hnx8q9lr": {
+      "name": "spifil_growth_g5_head_repro_larvae_split3_pct50_stage2",
+      "created_at": "2026-08-28T22:29:39Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "nixhmuos": {
+      "name": "spifil_growth_g5_head_nsp450_larvae_split1_pct5_round1_head",
+      "created_at": "2026-08-29T23:06:13Z",
+      "state": "crashed",
+      "config": {},
+      "summary": {}
+    },
+    "35p75fkz": {
+      "name": "spifil_growth_g5_head_nsp450_larvae_split1_pct5_round1_head",
+      "created_at": "2026-08-29T23:08:25Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "7vgmavom": {
+      "name": "spifil_growth_g5_head_nsp450_larvae_split1_pct50_round1_head",
+      "created_at": "2026-08-29T23:23:57Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3auuwtny": {
+      "name": "spifil_growth_g5_head_nsp450_larvae_split2_pct5_round1_head",
+      "created_at": "2026-08-29T23:36:29Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "3maousxb": {
+      "name": "spifil_growth_g5_head_nsp450_larvae_split2_pct50_round1_head",
+      "created_at": "2026-08-30T00:06:06Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ekkddz2k": {
+      "name": "spifil_growth_g5_head_nsp450_larvae_split3_pct5_round1_head",
+      "created_at": "2026-08-30T00:18:35Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    },
+    "ckq3kzoi": {
+      "name": "spifil_growth_g5_head_nsp450_larvae_split3_pct50_round1_head",
+      "created_at": "2026-08-30T00:27:09Z",
+      "state": "finished",
+      "config": {},
+      "summary": {}
+    }
+  }
+}

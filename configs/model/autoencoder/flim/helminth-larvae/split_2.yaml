@@ -1,0 +1,78 @@
+# AutoEncoder FLIM — helminth-larvae / split 2 / init flim.
+# Celula da grade resolvida por experiments/ray/paths.py:92
+# (configs/model/{method}/{init}/{dataset}/split_{split}.yaml).
+#
+# So o que e desta celula. Todo hparam nao listado aqui ja e o default do
+# __init__ do modulo (methods/autoencoder/autoencoder_flim_module.py:232-252) e
+# tem o MESMO valor que o lancador de hoje passa:
+#   lr 5e-4 (src/modules/autoencoder_flim_module.py:910)
+#   weight_decay 5e-2 (:911)   warmup_epochs 10 (:899)   image_size 200 (:913)
+#   svm_probe_every 1 (:914)   log_recon_every 10 (:915)  seed 42 (:933)
+#   in_channels 3              freeze_encoder_flag / freeze_spifil_layer /
+#   head_finetune / init_ckpt: ficam no default; quem os liga por estagio e
+#   experiments/ray/runners/growth.py:236-244, na linha de comando.
+model:
+  class_path: methods.autoencoder.AutoEncoderFlimModule
+  init_args:
+    # Vocabulario curto do modulo; a grade fala "helminth-larvae".
+    # experiments/constants.py DATASET_LONG_TO_SHORT.
+    dataset: larvae
+    # core/constants.py:67 NUM_CLASSES["larvae"]. So a sonda SVM usa.
+    num_classes: 2
+    # core/constants.py:151 FLIM_ARCH_BASE + experiments/ray/paths.py:110-114.
+    arch_json: data/to_mateus/model/ch24_32_48_a0.5_f5/larvae/train2/architecture.json
+    # core/constants.py:156 FLIM_WEIGHTS_BASE + experiments/ray/paths.py:117-121.
+    flim_weights_path: data/to_mateus/model/ch24_32_48_a0.5_f5/larvae/train2/models
+    # 1000, nao o default 100 do __init__: e o T_max do CosineAnnealingLR, entao
+    # muda o LR de toda epoca. Origem: src/modules/autoencoder_flim_module.py:898
+    # e configs/default.yaml:9 (que e de onde o laco de hoje o le,
+    # scripts/spifil_growth_loop.py:136).
+    max_epochs: 1000
+    # Identidade deste braco, nao detalhe: os kernels FLIM ja carregam a
+    # normalizacao dos marcadores sobre LAB[0,1]; normalizar de novo custou
+    # -0.33 de kappa. src/modules/autoencoder_flim_module.py:926 (default False).
+    imagenet_norm: false
+
+# O ParasiteLejepaDataModuleSplited nasce com defaults de LeJEPA (V_train=12,
+# imagenet_norm=True, :111 e :119) e configs/dataset/helminth-larvae/split_2.yaml
+# os mantem. O autoencoder reconstroi a PROPRIA entrada: 1 view deterministica e
+# sem normalizacao ImageNet, exatamente como o lancador de hoje instancia o
+# datamodule em src/modules/autoencoder_flim_module.py:997-1004.
+data:
+  init_args:
+    V_train: 1
+    imagenet_norm: false
+
+# Esta lista SUBSTITUI a de configs/default.yaml:18-58 (o LightningCLI resolve
+# chave a chave e o ultimo --config vence). E de proposito: os tres
+# ModelCheckpoint de la monitoram val/loss e val/kappa_{with,no}_proj, do braco
+# SSL, e este modulo nunca loga nenhum deles.
+trainer:
+  callbacks:
+    # Selecao pelo kappa do gargalo, em TODO estagio — e o que torna as rodadas
+    # de crescimento comparaveis. Parametros byte a byte os de
+    # src/modules/autoencoder_flim_module.py:1088-1091, com o nome de arquivo
+    # vindo de monitor_spec (methods/autoencoder/autoencoder_flim_module.py:490)
+    # e casando com o BEST_CKPT_FILENAME de experiments/ray/runners/growth.py:131.
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: probe/svm_kappa
+        mode: max
+        filename: best_kappa
+        save_top_k: 1
+        save_last: true
+    # Mesmo monitor, mesmo mode. strict=false porque com svm_probe_every > 1 o
+    # kappa falta nas epocas em que a sonda nao roda.
+    # src/modules/autoencoder_flim_module.py:1093-1095; patience 50 vem do
+    # EarlyStopping de configs/default.yaml:56, que e de onde o laco de hoje o le
+    # (scripts/spifil_growth_loop.py:137-139).
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: probe/svm_kappa
+        mode: max
+        patience: 50
+        strict: false
+    # Escreve o run_metadata.json que experiments/ray/runners/growth.py:159-168
+    # le para decidir a parada (chave best_val_svm_kappa). NAO CONFERIDO: o
+    # arquivo ainda nao existe em disco — caminho normativo do MK-METADATA.
+    - class_path: experiments.run_metadata_callback.RunMetadataCallback

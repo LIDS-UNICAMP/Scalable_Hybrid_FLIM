@@ -1,0 +1,88 @@
+# Destilacao I-JEPA -> FLIM CNN — helminth-eggs / split 2 / init trunc_normal.
+# Celula da grade resolvida por experiments/ray/paths.py:92
+# (configs/model/{method}/{init}/{dataset}/split_{split}.yaml).
+#
+# ── O `class_path` E A ESCOLHA DO STUDENT ────────────────────────────────────
+# methods/distillation/ tem QUATRO modules e eles NAO sao celulas diferentes:
+# sao experimentos diferentes sobre ESTA celula
+# (methods/distillation/distillation_conv_module.py:23-24).
+#
+# O default desta celula e o DistillationModule (cabeca MLP): e o UNICO modulo
+# que scripts/distillation_ray.py:294 roda, e `trunc_normal` e o unico init que
+# aquele lancador conhece (`_ALL_INITS = ["trunc_normal"]`, :104).
+#
+# Os outros tres students se pedem no experiment YAML, em `overrides`.
+# VERIFICADO com `train.py fit --print_config` (CPU, sem treinar): o
+# LightningCLI aceita `--model.class_path=...` depois do `--config` desta
+# celula, em qualquer ordem, e PRESERVA os init_args comuns de baixo.
+#   model.class_path: methods.distillation.DistillationConvModule      # conv_next_layers (889k)
+#   model.class_path: methods.distillation.DistillationOneLayerModule  # 3x3 / 1x1 one-layer
+#   model.class_path: methods.distillation.DistillationTwoLayerModule  # 2l_1x1_bn2d_256_1280
+# Esses tres sao os proj_type sem init FLIM de scripts/distillation_conv_ray.py:563-568,
+# que rodam com este mesmo `encoder_init: trunc_normal` (:426).
+# CUIDADO: DistillationOneLayerModule e DistillationTwoLayerModule logam
+# `val/knn_kappa` e o historico deles guarda um `best_knn_kappa`
+# (src/modules/distillation_onelayer_module.py:554-559); trocar para eles pede
+# tambem o ModelCheckpoint correspondente, que nao esta na lista de baixo.
+#
+# ── So o que e desta celula ──────────────────────────────────────────────────
+# Todo hparam nao listado ja e o default do __init__
+# (methods/distillation/distillation_module.py:127-150) e vale o MESMO que o
+# lancador de hoje passa. alpha 0.5 (scripts/distillation_ray.py:639),
+# temperature 4.0 (:642) e distillation_type (:298, direct|hybrid) variam por
+# EXPERIMENTO, nao por celula: vao em `overrides`.
+model:
+  class_path: methods.distillation.DistillationModule
+  init_args:
+    # Vocabulario curto do modulo; a grade fala "helminth-eggs".
+    # experiments/constants.py:84 DATASET_LONG_TO_SHORT.
+    dataset: eggs
+    # core/constants.py:67 NUM_CLASSES["eggs"]. UM VALOR POR DATASET: o
+    # conserto do commit e1ddf39 vivia no `_run_one`, que nao existe mais aqui —
+    # um numero unico para as tres arvores traria o bug do `--dataset all` de
+    # volta pela porta do YAML. scripts/distillation_ray.py:304 passava
+    # `--num-classes` por celula pelo mesmo motivo.
+    num_classes: 9
+    # core/constants.py:151 FLIM_ARCH_BASE + experiments/ray/paths.py:110-114.
+    # Sem pesos FLIM o json manda de verdade: para protozoan o encoder nasce com
+    # os 30 canais de ch24_30_48, que e o que scripts/distillation_conv_ray.py:310
+    # faz no ramo `use_flim_init=False`.
+    arch_json: data/to_mateus/model/ch24_32_48_a0.5_f5/eggs/train2/architecture.json
+    # null, nao caminho: este braco nao inicializa com FLIM. Nenhum dos dois
+    # lancadores passa `--flim-weights-path` aqui
+    # (scripts/distillation_ray.py:293-304; distillation_conv_ray.py:445, que
+    # grava None quando `eff_flim_init` e falso). A checagem 16 do pre-voo aceita
+    # null de proposito (experiments/ray/preflight.py, docstring de
+    # check_16_init_args_paths).
+    flim_weights_path: null
+    # O eixo `init` da arvore. scripts/distillation_ray.py:104 e
+    # scripts/distillation_conv_ray.py:143 — os dois so tem este valor.
+    encoder_init: trunc_normal
+
+# V_train 4 e o `--num-views` do lancador
+# (src/modules/distillation_module.py:462, entregue ao datamodule em :524);
+# configs/dataset/helminth-eggs/split_2.yaml traz o 12 do LeJEPA. So o ramo `hybrid`
+# consome todas as views (distillation_module.py:316), mas o numero muda a
+# amostragem de augmentation de todos os ramos.
+data:
+  init_args:
+    V_train: 4
+
+# Esta lista SUBSTITUI a de configs/default.yaml:18-58 (o LightningCLI resolve
+# chave a chave e o ultimo --config vence). Nao e estilo, e obrigatorio: os
+# ModelCheckpoint de `val/kappa_with_proj` e `val/kappa_no_proj` de la monitoram
+# metricas que nenhum modulo de destilacao loga, e ModelCheckpoint com monitor
+# ausente derruba o fit no fim da primeira validacao.
+# O de baixo e o de src/modules/distillation_module.py:554-562, parametro a
+# parametro. `dirpath` nao vem junto: no motor novo o diretorio e o do logger
+# (<work_dir>/<run_name>/), nao um caminho escrito no YAML.
+trainer:
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/loss
+        mode: min
+        filename: best
+        save_top_k: 1
+        save_last: false
+        save_weights_only: true

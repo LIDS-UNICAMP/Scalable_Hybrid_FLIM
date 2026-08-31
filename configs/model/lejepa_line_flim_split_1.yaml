@@ -2,7 +2,7 @@
 # arch_json and flim_weights_path are overridden at runtime by run_experiments.py
 # to point to the correct parasite folder (eggs/larvae/protozoan) + train1.
 model:
-  class_path: src.modules.lejepa_line_module.LejepaLineModule
+  class_path: methods.lejepa.LejepaLineModule
   init_args:
     arch_json: data/to_mateus/model/ch24_32_48_a0.5_f5/eggs/train1/architecture.json
     encoder_init: flim

@@ -1,0 +1,63 @@
+# Cabeca de classificacao sobre encoder FLIM — helminth-eggs / split 1 / init flim.
+# Celula da grade resolvida por experiments/ray/paths.py:92
+# (configs/model/{method}/{init}/{dataset}/split_{split}.yaml).
+#
+# So existe a subarvore `flim`, como no autoencoder e pelo MESMO motivo: o
+# modulo levanta ValueError sem pesos FLIM
+# (methods/classification/classification_flim_module.py:118-122, "this module has
+# no non-FLIM init path"). Nao ha `encoder_init` na assinatura — `build` e sempre
+# chamado com init="flim" (:126). Um `configs/model/classification/{he,xavier,
+# random,trunc_normal}/...` seria um arquivo que nenhum codigo pode instanciar.
+#
+# So o que e desta celula. Todo hparam nao listado ja e o default do __init__
+# (methods/classification/classification_flim_module.py:102-116) e vale o MESMO
+# que scripts/classification_flim_ray.py:396-405 passa: lr 5e-4, weight_decay
+# 5e-2, warmup_epochs 10, seed 42, in_channels 3, hidden_dim null (= 48//2 = 24).
+# As tres variantes da cabeca — `freeze_encoder` (:410), `output_relu` (:412) e
+# `output_softplus` (:414) — sao EXPERIMENTO, nao celula: vao em `overrides` do
+# experiment YAML, do mesmo jeito que `paths.run_name` as trata como variante
+# (_name_classification, experiments/ray/paths.py).
+model:
+  class_path: methods.classification.ClassificationFlimModule
+  init_args:
+    # Vocabulario curto do modulo; a grade fala "helminth-eggs".
+    # experiments/constants.py:84 DATASET_LONG_TO_SHORT.
+    dataset: eggs
+    # core/constants.py:67 NUM_CLASSES["eggs"]. UM VALOR POR DATASET: o
+    # conserto do commit e1ddf39 vivia no `_run_one`, que nao existe mais aqui —
+    # um numero unico para as tres arvores traria o bug do `--dataset all` de
+    # volta pela porta do YAML. scripts/classification_flim_ray.py:403 passava
+    # `--num-classes` por celula pelo mesmo motivo.
+    num_classes: 9
+    # core/constants.py:151 FLIM_ARCH_BASE + experiments/ray/paths.py:110-114.
+    arch_json: data/to_mateus/model/ch24_32_48_a0.5_f5/eggs/train1/architecture.json
+    # core/constants.py:156 FLIM_WEIGHTS_BASE + experiments/ray/paths.py:117-121.
+    flim_weights_path: data/to_mateus/model/ch24_32_48_a0.5_f5/eggs/train1/models
+
+# V_train 1: o lancador de hoje instancia o datamodule com V_train=1, V_eval=1
+# (src/modules/classification_flim_module.py:327). E classificacao supervisionada
+# — uma imagem, um rotulo; `_first_view` (:training_step) descartaria as outras
+# 11 views que configs/dataset/helminth-eggs/split_1.yaml pede, pagando a
+# augmentation delas a toa.
+data:
+  init_args:
+    V_train: 1
+
+# Esta lista SUBSTITUI a de configs/default.yaml:18-58 (o LightningCLI resolve
+# chave a chave e o ultimo --config vence). Nao e estilo, e obrigatorio: os
+# ModelCheckpoint de `val/kappa_with_proj` e `val/kappa_no_proj` de la monitoram
+# metricas que este modulo nunca loga (ele loga val/loss, val/kappa, val/acc,
+# val/f1 — methods/classification/classification_flim_module.py:202-216), e
+# ModelCheckpoint com monitor ausente derruba o fit.
+# O de baixo e o de src/modules/classification_flim_module.py:347-351, parametro
+# a parametro. `dirpath` nao vem junto: no motor novo o diretorio e o do logger
+# (<work_dir>/<run_name>/), nao um caminho escrito no YAML.
+trainer:
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/kappa
+        mode: max
+        filename: best_kappa
+        save_top_k: 1
+        save_last: true

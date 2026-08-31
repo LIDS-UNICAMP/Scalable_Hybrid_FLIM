@@ -1,0 +1,68 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# QUARENTENA — ESTE CONFIG NAO INSTANCIA. NAO USE.
+#
+# `class_path: src.modules.LeJEPACNNModule` (declarado abaixo; era a linha 6 do
+# arquivo original `configs/model/lejepa_custom_cnn.yaml`) aponta para uma classe
+# que NAO EXISTE em nenhum arquivo do repositorio. Evidencia:
+#
+#   * src/modules/__init__.py:19-22 exporta exatamente quatro nomes —
+#     LeJEPAModule, ClassificationFinetuneModule, LeJEPAFLIMModule,
+#     LejepaLineModule. `LeJEPACNNModule` nao esta la e nao existe como
+#     `class LeJEPACNNModule` em lugar nenhum do repo. A unica outra ocorrencia
+#     do nome no codigo e uma docstring: src/modules/lejepa_flim_module.py:22.
+#
+#   * NAO e uma troca de nome para `LeJEPACNNModel`
+#     (src/models/custom_cnn.py:124, hoje tambem em
+#     methods/lejepa/lejepa_cnn_model.py). Aquela classe e `nn.Module`, nao
+#     `pl.LightningModule` — compare com src/modules/lejepa_module.py:37
+#     (`class LeJEPAModule(pl.LightningModule)`). O LightningCLI que consome
+#     este `class_path` exige LightningModule (training_step,
+#     configure_optimizers).
+#
+#   * 5 dos 11 `init_args` abaixo nao existem na assinatura de
+#     `LeJEPACNNModel.__init__` (src/models/custom_cnn.py:141-149): `lam`,
+#     `sigreg_type`, `lr`, `weight_decay` e `warmup_epochs` — linhas 20-24 do
+#     arquivo original `configs/model/lejepa_custom_cnn.yaml`, antes deste
+#     cabecalho. Sao parametros de treino — moram no Module, nao no Model
+#     (cf. src/modules/lejepa_flim_module.py:95-100).
+#
+#   * Nasceu quebrado: `git log -S "LeJEPACNNModule" --all` devolve apenas o
+#     commit inicial 91f2358. Nao e regressao de refatoracao.
+#
+#   * Nunca rodou: grep por `LeJEPACNNModule` / `custom_cnn` nos 59 diretorios
+#     de run em wandb/ devolve zero hits; nenhum .py/.sh/.yaml do repo
+#     referencia `lejepa_custom_cnn.yaml`.
+#
+# Consertar exigiria ESCREVER um `LeJEPACNNModule` (LightningModule) que nunca
+# existiu — adivinhacao, nao conserto. Por isso o arquivo foi movido e marcado,
+# nao corrigido e nao apagado. Ver relatorios ML-05.md e Y-VAR-Y-GEN.md.
+#
+# Consequencia pratica: este arquivo fica FORA do glob da grade
+# (`configs/model/lejepa/<init>/<dataset>/split_N.yaml`) e um eventual
+# `test_class_paths.py` deve pular `_variants/` ou marcar este caso como xfail.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# LeJEPA with custom lightweight CNN backbone (SimpleCNNModel).
+# 3 Conv blocks (BN + ReLU + Dropout2d + MaxPool) + 3 Linear blocks (BN + Dropout).
+# No TIMM dependency — suitable for quick experiments and small datasets.
+# Pair with: configs/data/lejepa_multicrop.yaml
+model:
+  class_path: src.modules.LeJEPACNNModule
+  init_args:
+    in_channels: 3
+    conv_channels:        # output channels per Conv2d block
+      - 32
+      - 64
+      - 128
+    linear_dims:          # neuron count per Linear block
+      - 1024
+      - 512
+      - 256
+    dropout: 0.2
+    proj_dim: 256
+    proj_hidden: 2048
+    lam: 0.05             # weight on SIGReg; (1 - lam) on invariance loss
+    sigreg_type: simple   # "simple" (faster) or "real" (Epps-Pulley)
+    lr: 5.0e-4
+    weight_decay: 5.0e-2
+    warmup_epochs: 10

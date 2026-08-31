@@ -1,0 +1,89 @@
+# Destilacao I-JEPA -> FLIM CNN — protozoan-cysts / split 1 / init flim.
+# Celula da grade resolvida por experiments/ray/paths.py:92
+# (configs/model/{method}/{init}/{dataset}/split_{split}.yaml).
+#
+# ── O `class_path` E A ESCOLHA DO STUDENT ────────────────────────────────────
+# methods/distillation/ tem QUATRO modules e eles NAO sao celulas diferentes:
+# sao experimentos diferentes sobre ESTA celula. Quem escolhe e o class_path —
+# methods/distillation/distillation_conv_module.py:23-24 diz isso com todas as
+# letras ("A head e escolhida pelo ``class_path`` do YAML"), e e por isso que as
+# flags --distill_1..4 somem (relatorio MD-17, secao C).
+#
+# O default desta celula e o DistillationOneLayerModule: e o que
+# scripts/distillation_conv_ray.py:563-564 roda para os dois proj_type de init
+# FLIM que caem no modulo one-layer (`3x3_init_flim_1280`, proj_kernel 3, e
+# `1x1_init_flim_frozen`, proj_kernel 1, :583-584).
+#
+# Os outros tres students se pedem no experiment YAML, em `overrides`.
+# VERIFICADO com `train.py fit --print_config` (CPU, sem treinar): o
+# LightningCLI aceita `--model.class_path=...` depois do `--config` desta
+# celula, em qualquer ordem, e PRESERVA os init_args comuns de baixo.
+#   model.class_path: methods.distillation.DistillationTwoLayerModule  # 2l_1x1_* (402k)
+#   model.class_path: methods.distillation.DistillationConvModule      # next_layers (889k)
+#   model.class_path: methods.distillation.DistillationModule          # cabeca MLP
+# CUIDADO: DistillationModule e DistillationConvModule nao tem a KnnKappaProbeMixin
+# e nunca logam `val/knn_kappa`; trocar para eles exige trocar tambem o primeiro
+# ModelCheckpoint de baixo, ou o fit morre no fim da primeira validacao.
+#
+# ── So o que e desta celula ──────────────────────────────────────────────────
+# Todo hparam nao listado ja e o default do __init__
+# (methods/distillation/distillation_one_layer_module.py:114-145) e vale o MESMO
+# que o lancador de hoje passa. O que varia por EXPERIMENTO e nao por celula —
+# alpha 0.5 (scripts/distillation_ray.py:639), temperature 4.0 (:642),
+# proj_kernel (scripts/distillation_conv_ray.py:583-584), freeze_encoder /
+# teacher_imagenet_norm / knn_probe (:596-597), distillation_type (:575) — mora
+# em `overrides`, exatamente como experiments/distillation/conv_1x1_grid.yaml faz.
+model:
+  class_path: methods.distillation.DistillationOneLayerModule
+  init_args:
+    # Vocabulario curto do modulo; a grade fala "protozoan-cysts".
+    # experiments/constants.py:84 DATASET_LONG_TO_SHORT.
+    dataset: protozoan
+    # core/constants.py:67 NUM_CLASSES["protozoan"]. UM VALOR POR DATASET: o
+    # conserto do commit e1ddf39 vivia no `_run_one`, que nao existe mais aqui —
+    # um numero unico para as tres arvores traria o bug do `--dataset all` de
+    # volta pela porta do YAML.
+    num_classes: 7
+    # core/constants.py:151 FLIM_ARCH_BASE + experiments/ray/paths.py:110-114.
+    arch_json: data/to_mateus/model/ch24_30_48_a0.5_f5/protozoan/train1/architecture.json
+    # core/constants.py:156 FLIM_WEIGHTS_BASE + experiments/ray/paths.py:117-121.
+    flim_weights_path: data/to_mateus/model/ch24_32_48_a0.5_f5/protozoan/train1/models
+    # O eixo `init` da arvore. scripts/distillation_conv_ray.py:426
+    # (`actual_init = "flim" if eff_flim_init else init`).
+    encoder_init: flim
+
+# V_train 4 e o `--num-views` do lancador
+# (src/modules/distillation_onelayer_module.py:460, entregue ao datamodule em
+# :33); configs/dataset/protozoan-cysts/split_1.yaml traz o 12 do LeJEPA. So o ramo
+# `hybrid` consome todas as views (distillation_one_layer_module.py:315), mas o
+# numero muda a amostragem de augmentation de todos os ramos.
+data:
+  init_args:
+    V_train: 4
+
+# Esta lista SUBSTITUI a de configs/default.yaml:18-58 (o LightningCLI resolve
+# chave a chave e o ultimo --config vence). Nao e estilo, e obrigatorio: os
+# ModelCheckpoint de `val/kappa_with_proj` e `val/kappa_no_proj` de la monitoram
+# metricas que nenhum modulo de destilacao loga, e ModelCheckpoint com monitor
+# ausente derruba o fit no fim da primeira validacao.
+# Os dois de baixo sao os de src/modules/distillation_onelayer_module.py:554-565,
+# parametro a parametro. `dirpath` nao vem junto: no motor novo o diretorio e o
+# do logger (<work_dir>/<run_name>/), nao um caminho escrito no YAML.
+trainer:
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/knn_kappa
+        mode: max
+        filename: best_knn_kappa
+        save_top_k: 1
+        save_last: false
+        save_weights_only: true
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: val/loss
+        mode: min
+        filename: best_loss
+        save_top_k: 1
+        save_last: false
+        save_weights_only: true

@@ -6,7 +6,7 @@
 # YAML base directory:
 #   configs/data/percentage/helminth-eggs_split_3/50/
 data:
-  class_path: src.data_modules.parasite_data_module_lejepa_splited.ParasiteLejepaDataModuleSplited
+  class_path: core.data.ParasiteDataModule
   init_args:
     parasite_name: helminth-eggs_split_3
     split: 3

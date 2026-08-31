@@ -2,7 +2,7 @@
 # Applies init_weights_vit_timm: std=0.02, clip=[-0.04, +0.04] for nn.Linear.
 # Pair with: configs/data/lejepa_line.yaml
 model:
-  class_path: src.modules.lejepa_line_module.LejepaLineModule
+  class_path: methods.lejepa.LejepaLineModule
   init_args:
     arch_json: data/to_mateus/model/ch24_32_48_a0.5_f5/eggs/train1/architecture.json
     encoder_init: trunc_normal
