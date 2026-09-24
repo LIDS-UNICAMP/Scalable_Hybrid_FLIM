@@ -1,0 +1,164 @@
+# ============================================================
+# organize_datasets.yaml — padroniza todo dataset no mesmo formato
+#
+#   python tools/organize_raw_dataset.py -c configs/organize_datasets.yaml
+#
+# Saida por dataset:  <out_root>/<name>/
+#     orig/                    000001_00000001.png   (classe presa ao nome)
+#     label/                   mesma mascara, mesmo nome (so se houver)
+#     classes.json             class_id -> nome da classe
+#     manifest.json            item, classe, grupo e covariaveis
+#     splits/split{1,2,3}.json
+#     splits_incremental/split{1,2,3}/data_descriptor_perc{1,5,10,25,50,75,100}.json
+#     splits_incremental/split{N}_distribution.png
+# ============================================================
+
+out_root: /dados/home/moliveira/datasets/organized
+
+defaults:
+  seed: 42
+
+split:
+  strategy: stratified_group   # random | stratified | group | stratified_group
+  group_by: patient_id         # nenhum grupo real -> cada imagem e o seu proprio grupo
+  stratify_by: label
+  n_splits: 3
+  ratios:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+  percentages: [1, 5, 10, 25, 50, 75, 100]
+
+# ============================================================
+# Sem `preprocessing.resize_to` a imagem mantem o tamanho original.
+# ============================================================
+datasets:
+
+  - name: helminth_eggs
+    enabled: true
+    standardizer: parasites_ref
+    subset: helminth-eggs
+    root: /dados/home/moliveira/datasets/intestinal-parasites-datasets
+    modality: microscopy
+    num_classes: 9
+    format: png
+
+  - name: helminth_larvae
+    enabled: true
+    standardizer: parasites_ref
+    subset: helminth-larvae
+    root: /dados/home/moliveira/datasets/intestinal-parasites-datasets
+    modality: microscopy
+    num_classes: 2
+    format: png
+
+  - name: protozoan_cysts
+    enabled: true
+    standardizer: parasites_ref
+    subset: protozoan-cysts
+    root: /dados/home/moliveira/datasets/intestinal-parasites-datasets
+    modality: microscopy
+    num_classes: 7
+    format: png
+
+  - name: aid
+    enabled: true
+    root: /dados/home/moliveira/datasets/aid-scene-classification-datasets
+    modality: aerial
+    num_classes: 30
+    format: jpg
+
+  - name: coconut_trees
+    enabled: true
+    root: /dados/home/moliveira/datasets/coconut-trees-dataset
+    modality: aerial
+    num_classes: 2
+    format: png
+
+  - name: fer2013
+    enabled: true
+    root: /dados/home/moliveira/datasets/fer-2013-facial-expression-dataset
+    modality: face
+    num_classes: 7
+    format: png
+
+  - name: flowers
+    enabled: true
+    root: /dados/home/moliveira/datasets/flowers-dataset
+    modality: natural
+    num_classes: 5
+    format: jpg
+
+  - name: food101
+    enabled: true
+    root: /dados/home/moliveira/datasets/food-101
+    modality: natural
+    num_classes: 101
+    format: jpg
+
+  - name: remote_sensing
+    enabled: true
+    root: /dados/home/moliveira/datasets/remote-sensing-satellite-images
+    modality: satellite
+    num_classes: 14
+    format: jpg
+
+  # --- MedMNIST: so os subsets 2D ja extraidos -----------------------------
+  # chestmnist fica de fora (so .npz, e multi-label);
+  # nodulemnist3d / organmnist3d ficam de fora (volumes .npy 28x28x28).
+  # Aviso: dermamnist e octmnist tem duplicacao por paciente na origem que
+  # nao existe no disco -> o group cai para 1 imagem por grupo.
+
+  - name: medmnist_bloodmnist
+    enabled: true
+    standardizer: medmnist
+    subset: bloodmnist
+    root: /dados/home/moliveira/datasets/standardized-biomedical-images-medmnist
+    modality: microscopy
+    num_classes: 8
+    format: png
+
+  - name: medmnist_breastmnist
+    enabled: true
+    standardizer: medmnist
+    subset: breastmnist
+    root: /dados/home/moliveira/datasets/standardized-biomedical-images-medmnist
+    modality: ultrasound
+    num_classes: 2
+    format: png
+
+  - name: medmnist_dermamnist
+    enabled: true
+    standardizer: medmnist
+    subset: dermamnist
+    root: /dados/home/moliveira/datasets/standardized-biomedical-images-medmnist
+    modality: dermatoscopy
+    num_classes: 7
+    format: png
+
+  - name: medmnist_octmnist
+    enabled: true
+    standardizer: medmnist
+    subset: octmnist
+    root: /dados/home/moliveira/datasets/standardized-biomedical-images-medmnist
+    modality: oct
+    num_classes: 4
+    format: png
+
+  - name: medmnist_organsmnist
+    enabled: true
+    standardizer: medmnist
+    subset: organsmnist
+    root: /dados/home/moliveira/datasets/standardized-biomedical-images-medmnist
+    modality: ct
+    num_classes: 11
+    format: png
+
+  - name: medmnist_retinamnist
+    enabled: true
+    standardizer: medmnist
+    subset: retinamnist_128
+    root: /dados/home/moliveira/datasets/standardized-biomedical-images-medmnist
+    modality: fundus
+    num_classes: 5
+    format: png

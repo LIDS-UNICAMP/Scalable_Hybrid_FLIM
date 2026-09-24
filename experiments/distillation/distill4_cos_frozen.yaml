@@ -16,7 +16,7 @@ grid:
   init:        [flim]
   datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
   splits:      [1, 2, 3]
-  percentages: [1, 5, 25, 50, 75, 100]
+  percentages: [5, 50]
 
 runner_args: {}
 
@@ -24,8 +24,14 @@ overrides:
   model.class_path: methods.distillation.DistillationConvModule
   model.init_args.distillation_type: direct_cosine
   model.init_args.teacher_frozen: true
+  # DistillationConvModule NAO tem a KnnKappaProbeMixin e nunca loga
+  # `val/knn_kappa`; o ModelCheckpoint do config de celula monitora essa chave
+  # e o fit morre no fim da primeira validacao. Substituimos a lista inteira
+  # pelo checkpoint do modulo original (src/modules/distillation_conv_module.py:555-562),
+  # parametro a parametro.
+  trainer.callbacks: '[{"class_path":"lightning.pytorch.callbacks.ModelCheckpoint","init_args":{"filename":"best_knn_kappa","monitor":"val/knn_kappa","mode":"max","save_last":false,"save_top_k":1,"save_weights_only":true}},{"class_path":"lightning.pytorch.callbacks.ModelCheckpoint","init_args":{"filename":"best_loss","monitor":"val/loss","mode":"min","save_last":false,"save_top_k":1,"save_weights_only":true}},{"class_path":"lightning.pytorch.callbacks.EarlyStopping","init_args":{"monitor":"val/loss","mode":"min","patience":30,"verbose":true}}]'
 
-resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
-output:    {work_dir: artifacts/distillation/distill4_all_cos_frozen}
+resources: {gpu_ids: [1, 2, 3], max_per_gpu: 8, cpus_per_experiment: 6}
+output:    {work_dir: /dados/home/moliveira/artifacts/distillation/distill4_all_cos_frozen}
 wandb:     {enabled: true, project: phd_thesis_distill}
 skip: state

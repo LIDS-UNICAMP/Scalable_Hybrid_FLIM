@@ -1,0 +1,44 @@
+# Seleção e cor das curvas de eval/eval_plotter.py (plot_method_comparison /
+# plot_merge_comparison).  Só entra no gráfico o experimento cuja chave casa com
+# algum `name` daqui; o primeiro padrão que casa define o estilo.
+#
+# `name` é padrão fnmatch, casado contra a chave da curva (_line_key: coluna
+# `method`, ou `lejepa_view_{init}` / `SVM_LeJEPA_{init}`).  Um experimento novo
+# cujo nome case com um padrão existente entra no plot sem editar este arquivo.
+#
+# Cuidado ao alargar um padrão: `name` também decide a forma da chave em
+# _line_key, então algo como "SVM_*" faria métodos que hoje caem no fallback
+# SVM_LeJEPA_{init} virarem curva própria, mudando o gráfico sem tocar em Python.
+#
+# `color` é obrigatório; `label` é o texto da legenda (default: a própria chave).
+# `ls`, `marker` e `zorder` são opcionais (default
+# "-", "o", 7) — as 10 entradas abaixo carregam os valores que estavam
+# hardcoded em METHOD_COMPARE_STYLE, byte a byte, e a ordem aqui é a ordem
+# da legenda.
+
+plots:
+  include:
+    # data/reports_felipe/svm/report_svm_*.csv
+    - {name: "SVM_FLIM",                                 color: "#0072B2", ls: "-",  marker: "o", zorder: 7, label: "SPiFiL (59.504)"}
+    # artifacts/SVM/*/*/metrics_SVM_*.csv (init=trunc_normal)
+    - {name: "lejepa_view_trunc_normal",                 color: "#9467BD", ls: "-.", marker: "P", zorder: 8, label: "LeJEPA"}
+    # results/ijepa_svm_aggregated.csv
+    - {name: "SVM_IJEPA",                                color: "#E69F00", ls: "-.", marker: "*", zorder: 9, label: "I-JEPA (632M)"}
+    # results/svm_proj1280_1x1_BN2d_results.csv (trunc_normal)
+    - {name: "SVM_Distill_1x1BN",                        color: "#17BECF", ls: "-",  marker: "s", zorder: 12, label: "Distill 1 (123K)"}
+    # results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv
+    - {name: "SVM_Distill_2l400K",                       color: "#2CA02C", ls: "--", marker: "D", zorder: 13, label: "Distill 2 (402K)"}
+    # results/svm_proj1280_3x3_BN2d_results.csv (trunc_normal)
+    - {name: "SVM_Distill_3x3BN",                        color: "#E377C2", ls: "--", marker: "^", zorder: 11, label: "Distill 3 (615K)"}
+    # results/svm_distill_proj1280_results.csv
+    - {name: "SVM_Distill_Proj1280",                     color: "#D62728", ls: "--", marker: "v", zorder: 10, label: "Distill 4 (889K)"}
+    # results/svm_distillation_conv_flim_frozen_results.csv (ckpt best-loss)
+    # - {name: "SVM_Distill_1x1BN_flim_frozen_eval_loss",  color: "#000000", ls: ":",  marker: ">", zorder: 14, label: "Distill 1 + Spifil (123K)"}
+    # results/svm_flim_residual_eggs.csv
+     #- {name: "SVM_FLIMResidual_1_3",                     color: "#008080", ls: "-",  marker: "d", zorder: 15, label: "FLIM Residual 1→3"}
+    # results/svm_flim_residual_eggs.csv
+    # - {name: "SVM_FLIMResidual_2_3",                     color: "#B22222", ls: "--", marker: "H", zorder: 16, label: "FLIM Residual 2→3"}
+
+    # Curinga: qualquer run novo `baseline_*` entra com o azul do FLIM sem editar
+    # nada.  Fica por último porque o primeiro padrão que casa vence.
+    - {name: "baseline_*", color: "#0072B2", zorder: 17}

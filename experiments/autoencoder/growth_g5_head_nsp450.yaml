@@ -37,7 +37,7 @@ runner_args:
   n_superpixels: 450
 
 output:
-  work_dir: artifacts/spifil_growth/g5_head_nsp450
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/g5_head_nsp450
 
 wandb:
   enabled: true

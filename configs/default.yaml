@@ -20,7 +20,12 @@ trainer:
       init_args:
         monitor: val/loss
         save_top_k: 1
-        save_last: true
+        # `last` NAO e salvo: o criterio e sempre o best. `last` era puro peso
+        # morto -- num run de teacher descongelado o ficheiro tem 7,1 GB
+        # (4,7 GB de momentos do AdamW + 2,35 GB do I-JEPA), e nada no repo o le
+        # a nao ser como fallback de quem nao tem best. Quem precisa retomar de
+        # queda tem de religar isto conscientemente.
+        save_last: false
         mode: min
         filename: best
     # NOTE: `best` (above) already saves the lowest-val/loss checkpoint, so it
@@ -50,7 +55,7 @@ trainer:
     - class_path: lightning.pytorch.callbacks.EarlyStopping
       init_args:
         monitor: val/loss
-        patience: 50
+        patience: 30
         mode: min
         verbose: true
     - class_path: lightning.pytorch.callbacks.LearningRateMonitor

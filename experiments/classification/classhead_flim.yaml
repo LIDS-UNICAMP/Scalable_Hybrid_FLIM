@@ -13,6 +13,6 @@ grid:
   percentages: [1, 5, 75]
 
 resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
-output:    {work_dir: artifacts/classification_flim}
+output:    {work_dir: /dados/home/moliveira/artifacts/classification_flim}
 wandb:     {enabled: true, project: flim-ssl}
 skip: state

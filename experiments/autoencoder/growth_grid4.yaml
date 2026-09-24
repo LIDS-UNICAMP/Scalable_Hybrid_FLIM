@@ -68,7 +68,7 @@ runner_args:
 
 output:
   # --work-dir; os bracos caem em <work_dir>/<short>_split<N>_pct<P>/<estagio>
-  work_dir: artifacts/spifil_growth/grid4
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/grid4
 
 wandb:
   # --wandb

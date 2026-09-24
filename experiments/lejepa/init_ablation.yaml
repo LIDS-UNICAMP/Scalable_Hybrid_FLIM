@@ -34,7 +34,7 @@ resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
 # (schema.py:297-302).
 overrides: {trainer.max_epochs: 1000}
 
-output:    {work_dir: artifacts/lejepa/init_ablation}
+output:    {work_dir: /dados/home/moliveira/artifacts/lejepa/init_ablation}
 wandb:     {enabled: true, project: flim-ssl}
 
 # ATENCAO, duas coisas:

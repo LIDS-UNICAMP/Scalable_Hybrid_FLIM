@@ -51,7 +51,7 @@ runner_args:
 # carrega o teacher I-JEPA inteiro junto com o student; dois na mesma GPU
 # estouram a memoria antes de qualquer forward.
 resources: {gpu_ids: [0], max_per_gpu: 1, cpus_per_experiment: 8}
-output:    {work_dir: artifacts/eval/svm_distill_cos_unfrozen}
+output:    {work_dir: /dados/home/moliveira/artifacts/eval/svm_distill_cos_unfrozen}
 
 # `state` e nao `wandb`: estes runs de treino ja estao encerrados no W&B (a
 # maioria como error), entao a checagem remota nao ajuda a decidir o que reavaliar.

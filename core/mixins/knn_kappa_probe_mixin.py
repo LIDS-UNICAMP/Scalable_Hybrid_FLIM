@@ -3,12 +3,12 @@
 # ║  ⠀⠀⠀⣀⣥⠠⣿⠆⠐⣻⣾⣿⣿⢷⡄⠀⠀⠀⠀⢠⡿⠋⠉⠉⠙⢿⡄⠀⠀⠀   m203656@dac.unicamp.edu.br             ║
 # ║  ⠀⠀⢘⡵⢋⠄⡙⠒⣤⣄⣉⠙⣿⣗⠑⡄⠀⠀⠀⠘⡇⠀⠀⠀⠀⠈⡇⠀⠀⠀   UNICAMP — Universidade Estadual de     ║
 # ║  ⠀⣴⢿⡜⢡⡞⢀⢼⣿⣿⣿⣿⣿⣿⠟⣂⠀⠀⢀⣀⠱⡀⠀⠀⠀⢰⠁⠀⠀⠀               Campinas                     ║
-# ║  ⠰⢫⢟⡇⢸⡇⢸⢾⣿⣿⣿⣿⣿⣿⡷⠰⠀⢰⡏⠀⠀⢡⠀⠀⢠⠃⠀⠀⠀⠀   FEEC — School of Electrical and        ║
-# ║  ⢰⠁⣿⢣⣿⠇⢀⣿⣿⡿⠿⠤⣭⣥⣶⡆⠀⠸⣷⣤⣠⡾⠀⢀⡇⠀⠀⠀⠀⠀           Computer Engineering             ║
+# ║  ⠰⢫⢟⡇⢸⡇⢸⢾⣿⣿⣿⣿⣿⣿⡷⠰⠀⢰⡏⠀⠀⢡⠀⠀⢠⠃⠀⠀⠀⠀   IC — Institute of Computing            ║
+# ║  ⢰⠁⣿⢣⣿⠇⢀⣿⣿⡿⠿⠤⣭⣥⣶⡆⠀⠸⣷⣤⣠⡾⠀⢀⡇⠀⠀⠀⠀⠀   Computer Science Department              ║
 # ║  ⡞⣰⣧⠟⡝⢸⢸⣿⣥⠖⣴⡆⣤⣬⠉⠀⠀⠀⠈⠉⠉⠀⠀⢸⣇⠀⠀⠀⠀⠀   github.com/oliveiraMats2              ║
 # ║  ⠀⡿⡟⢸⡇⠸⡄⢹⣿⢸⣿⣇⡏⠟⣰⣄⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠁⠀⠀⠀   linkedin.com/in/mateus-eng            ║
 # ║  ⠀⠇⣧⠘⡇⠦⣹⣸⣿⡇⡿⡿⣡⣼⣿⣿⣷⣦⣄⡀⠀⠀⣸⣿⣿⠄⠻⢷⣦⠀                                            ║
-# ║  ⠀⢀⠘⣇⢹⡸⣿⣿⣿⢹⢃⣠⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠑⠋⠉⠀⠀⠈⣿⣧   UNICAMP · FEEC · 2026                  ║
+# ║  ⠀⢀⠘⣇⢹⡸⣿⣿⣿⢹⢃⣠⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠑⠋⠉⠀⠀⠈⣿⣧   UNICAMP · IC · 2026                    ║
 # ║  ⠀⢸⣿⡌⠘⢷⣿⣿⡏⢀⣾⣿⣿⣿⣿⣿⣿⢻⣿⣿⣿⡆⠀⠀⠀⠀⠀⠀⣿⡿                                            ║
 # ║  ⠀⠈⣿⣿⣦⡌⢿⠏⣰⣿⣿⣿⣿⣿⣿⡿⡏⣼⣿⣿⣿⡇⣄⠀⠀⠀⢀⣼⣿⠇                                            ║
 # ║  ⠀⠀⠹⣿⣿⢻⡀⣼⣿⣿⢻⣿⣿⣿⣿⡇⡇⢻⣿⣿⣿⡇⣿⣿⣶⣿⣿⠟⠁⠀                                            ║
@@ -16,12 +16,21 @@
 # ║  ⠀⠀⠀⠈⣿⣿⣿⡆⠀⠀⠀⣿⣿⣿⡟⣼⡿⠁⢹⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀                                            ║
 # ╚══════════════════════════════════════════════════════════════════════════════════════╝
 
-"""Sonda kNN/kappa de validacao, movida de src/models/distillation.py:842-984.
+"""Sonda de validacao kNN, movida de src/models/distillation.py:842-984.
 
-A funcao publica ``knn_kappa_probe`` e a privada ``_extract_probe_features`` ficam
-aqui, junto do mixin que as usa — nao viram utilitario solto. Tamanho de batch e
-ordem das linhas sao os da origem: o ruido conhecido de kappa vem do batching e
-mexer nisso mudaria numero.
+A funcao publica ``knn_kappa_probe`` e a privada ``_extract_probe_features``
+ficam aqui, junto do mixin que as usa — nao viram utilitario solto. Tamanho de
+batch e ordem das linhas sao os da origem: o ruido conhecido de kappa vem do
+batching e mexer nisso mudaria numero.
+
+HISTORICO: existia aqui uma segunda sonda, ``svm_kappa_probe``, que fitava o
+``fit_svm`` do projeto a cada epoca de validacao para escolher o checkpoint pela
+mesma regua do fim. Ela foi REMOVIDA: rodava com ``max_iter=-1`` dentro do
+processo do treino, entao enquanto o libsvm nao voltava a epoca nao avancava e a
+GPU ficava a 0% — ha registro de 2176s numa unica epoca e de um fit de 16h que
+nunca voltou. A selecao de checkpoint e por ``val/knn_kappa``; o ``fit_svm``
+continua sendo a regua do fim, em ``eval/``, que e onde ele custa uma vez por run
+em vez de uma vez por epoca.
 """
 
 import torch
@@ -115,14 +124,24 @@ def knn_kappa_probe(embed_fn, train_loader, val_loader, device,
 
 
 class KnnKappaProbeMixin:
-    """Adds a ``val/knn_kappa`` metric to a distillation LightningModule.
+    """Adds ``val/knn_kappa`` a um modulo de destilacao.
 
     Expects the host module to expose ``self.student`` (with ``.encode`` and
     ``.encoder``) and ``self.proj_kd``, plus these hparams: ``knn_probe``
     ('encoder'|'projection'), ``knn_train_subsample``, ``knn_every_n_epochs``,
-    ``seed``. Logs ``val/knn_kappa`` once per (eligible) validation epoch; the
-    ModelCheckpoint monitors it with mode='max'. ``val/loss`` stays logged, and a
-    separate best-by-loss checkpoint acts as fallback when the probe is NaN.
+    ``seed``.
+
+    Chave logada por epoca de validacao elegivel:
+
+    * ``val/knn_kappa`` — e esta que o ModelCheckpoint monitora com mode='max'.
+
+    ``knn_every_n_epochs`` pula a sonda nas epocas que nao forem multiplas dele.
+    Ao pular, ``val/knn_kappa`` NAO e logada, e o ModelCheckpoint nao aceita
+    monitor ausente: com ``knn_every_n_epochs > 1`` o checkpoint PRECISA de
+    ``every_n_epochs`` casado (ou ``strict: false``), senao o fit morre com
+    MisconfigurationException — foi exatamente esse o bug que derrubou 41 runs.
+    ``val/loss`` continua logado, e o checkpoint best-by-loss segue como rede de
+    seguranca quando a sonda devolve NaN.
     """
 
     def _knn_embed_fn(self):
@@ -163,20 +182,38 @@ class KnnKappaProbeMixin:
         return train_loader, val_loader
 
     def on_validation_epoch_end(self) -> None:
+        import logging
+        _log = logging.getLogger(__name__)
+
         if getattr(self.trainer, "sanity_checking", False):
             return
-        every = getattr(self.hparams, "knn_every_n_epochs", 1) or 1
-        if every > 1 and (self.current_epoch % every) != 0:
+        knn_every = getattr(self.hparams, "knn_every_n_epochs", 1) or 1
+        # A sonda SVM foi REMOVIDA daqui. Ela fitava um `fit_svm` com
+        # `max_iter=-1` dentro do processo do treino, toda epoca: enquanto o
+        # libsvm nao voltava a epoca nao andava e a GPU ficava a 0% (ha registro
+        # de 2176s numa epoca e de um fit de 16h que nunca voltou). A selecao de
+        # checkpoint agora e por `val/knn_kappa`. O `fit_svm` continua sendo a
+        # regua do FIM, em `eval/` -- e la que ele pertence.
+        if not (knn_every <= 1 or (self.current_epoch % knn_every) == 0):
             return
-        kappa = float("nan")
+
+        subsample = int(getattr(self.hparams, "knn_train_subsample", 3000))
+        seed = int(getattr(self.hparams, "seed", 42))
+        # Batch, ordem das linhas, shuffle e seed sao os de _build_knn_loaders:
+        # o ruido conhecido de kappa vem dai e mexer nisso mudaria numero.
         try:
             train_loader, val_loader = self._build_knn_loaders()
-            kappa = knn_kappa_probe(
-                self._knn_embed_fn(), train_loader, val_loader, self.device,
-                subsample=int(getattr(self.hparams, "knn_train_subsample", 3000)),
-                seed=int(getattr(self.hparams, "seed", 42)),
-            )
         except Exception as exc:  # pragma: no cover - probe must never kill training
-            import logging
-            logging.getLogger(__name__).warning("kNN-kappa probe failed: %s", exc)
+            _log.warning("probe loaders failed: %s", exc)
+            train_loader = val_loader = None
+
+        kappa = float("nan")
+        if train_loader is not None:
+            try:
+                kappa = knn_kappa_probe(
+                    self._knn_embed_fn(), train_loader, val_loader, self.device,
+                    subsample=subsample, seed=seed,
+                )
+            except Exception as exc:  # pragma: no cover
+                _log.warning("kNN-kappa probe failed: %s", exc)
         self.log("val/knn_kappa", kappa, prog_bar=True)

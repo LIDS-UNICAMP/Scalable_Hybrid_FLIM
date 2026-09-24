@@ -49,7 +49,7 @@ overrides:
   model.init_args.freeze_encoder: true
 
 resources: {gpu_ids: [2, 5], max_per_gpu: 2, cpus_per_experiment: 10}
-output:    {work_dir: artifacts/distillation/conv_1x1}
+output:    {work_dir: /dados/home/moliveira/artifacts/distillation/conv_1x1}
 wandb:     {enabled: true, project: distill_conv}
 
 # BLOQUEIO CONHECIDO: este e o unico dos quatro que ainda nao passa em

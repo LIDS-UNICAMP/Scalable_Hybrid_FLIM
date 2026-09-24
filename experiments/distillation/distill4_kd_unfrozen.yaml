@@ -24,8 +24,23 @@ overrides:
   model.class_path: methods.distillation.DistillationConvModule
   model.init_args.distillation_type: kd_hybrid
   model.init_args.teacher_frozen: false
+  # Criterio de selecao: `val/knn_kappa`. NAO `val/svm_kappa`.
+  #
+  # A sonda SVM roda dentro do processo do treino e o `fit_svm` unico do projeto
+  # usa `max_iter=-1` (core/svm.py:143). Com C=100 sobre os 48-d sobrepostos do
+  # encoder o libsvm converge, mas gastando milhoes de iteracoes -- `n_iter=4.5M`
+  # num fit de 3.6s -- e um fit chegou a 16h sem voltar, com a GPU a 0% e a epoca
+  # parada em 49. `svm_probe_every: 0` desliga a sonda (KnnKappaProbeMixin).
+  #
+  # O kNN e barato e ja era logado toda epoca: ao contrario do que dizia o
+  # comentario antigo daqui, DistillationConvModule HERDA a KnnKappaProbeMixin
+  # (methods/distillation/distillation_conv_module.py:86) -- quem nao tinha era o
+  # modulo velho de src/. A lista inteira continua sendo substituida, mas por
+  # outro motivo: a de configs/default.yaml monitora `val/kappa_with_proj` e
+  # `val/kappa_no_proj`, que nenhum modulo de destilacao loga.
+  trainer.callbacks: '[{"class_path":"lightning.pytorch.callbacks.ModelCheckpoint","init_args":{"filename":"best_knn_kappa","monitor":"val/knn_kappa","mode":"max","save_last":false,"save_top_k":1,"save_weights_only":true}},{"class_path":"lightning.pytorch.callbacks.ModelCheckpoint","init_args":{"filename":"best_loss","monitor":"val/loss","mode":"min","save_last":false,"save_top_k":1,"save_weights_only":true}},{"class_path":"lightning.pytorch.callbacks.EarlyStopping","init_args":{"monitor":"val/loss","mode":"min","patience":30,"verbose":true}}]'
 
 resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 1, cpus_per_experiment: 8}
-output:    {work_dir: artifacts/distillation/distill4_all_kd_unfrozen}
+output:    {work_dir: /dados/home/moliveira/artifacts/distillation}
 wandb:     {enabled: true, project: phd_thesis_distill}
 skip: state

@@ -74,7 +74,7 @@ resources:
   cpus_per_experiment: 8
 
 output:
-  work_dir: artifacts/eval/svm_larvae_head_nsp450
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_larvae_head_nsp450
 
 # `state` e nao `wandb`: evita que grid.build consulte o servidor e reescreva
 # configs/wandb_update/ids_wandb.json.

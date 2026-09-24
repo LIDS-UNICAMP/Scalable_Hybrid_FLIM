@@ -32,14 +32,13 @@ Sugestao lista de datsets:
 2. food101
 3. face expression 2013
 4. parasito
-5. patologia Felipe??
-6. dermotologico ISIC
-7. Coqueiros
-8. remoting sensing classification
-9. medMNIST
+5. dermotologico ISIC <<< 
+6. Coqueiros
+7. remoting sensing classification
+8. medMNIST
 
 ### Outra possibilidade de datasets
-NWPU-RESISC45, AID, EuroSAT, and the SATIN metadataset (Explorar ver qual vai entrar nos experimentos.)
+NWPU-RESISC45, AID**, EuroSAT, and the SATIN metadataset (Explorar ver qual vai entrar nos experimentos.)
 
 ## Espaco de cores
 

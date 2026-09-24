@@ -1,0 +1,78 @@
+# Sonda SVM sobre os checkpoints da destilacao PURA frozen (`direct_cosine`) —
+# a familia treinada por experiments/distillation/distill4_cos_frozen.yaml na
+# corrida de 2026-09-05 02:47 (log: logs/distill4_all_cos_frozen_20260905_024639.log,
+# fecha com "Fim — 18 ok, 0 falha(s)"). Aqui nao se treina nada: le-se o encoder
+# do checkpoint, extrai-se a feature e ajusta-se um SVM sobre ela.
+#
+# Grade COMPLETA: 3 datasets x 3 splits x 2 pcts = 18 celulas, todas com peso.
+# Irmao de eval_svm_distill_unfrozen.yaml, que cobre a familia `_cos_unfrozen_`.
+#
+# POR QUE `artifacts_dir` NAO E `artifacts/distillation`
+# -----------------------------------------------------
+# O runner `train` nunca passa `--trainer.default_root_dir`, entao o
+# ModelCheckpoint do Lightning resolve o destino pelo WandbLogger de
+# configs/default.yaml:12-16 e grava em `logs/flim-ssl/<wandb_id>/checkpoints/`.
+# O `output.work_dir` do YAML de treino so e criado pelo teste de escrita do
+# preflight (experiments/ray/grid.py:113-121) e fica VAZIO — o contrato
+# `<work_dir>/<run_name>/checkpoints/` de experiments/ray/paths.py:185 nao e
+# honrado por esse runner.
+#
+# `artifacts/distillation_frozen_20260905/` e a arvore-espelho que reconecta as
+# duas pontas: um diretorio por run_name, com `checkpoints/best_loss.ckpt` em
+# SYMLINK para o peso real e um `run_metadata.json` minimo. O mapa run_name ->
+# wandb_id foi derivado do argv gravado em logs/wandb/*/files/wandb-metadata.json,
+# nao inferido de nome de diretorio.
+#
+# Ela e arvore NOVA, e nao `artifacts/distillation`, porque la ja existem 17
+# diretorios `distill4_all_cos_frozen_*` da corrida de 27/08 — com
+# `run_metadata.json` de `status: error` ("No space left on device") e
+# `best.ckpt`/`last.ckpt` velhos. Escrever por cima misturaria os pesos das duas
+# corridas no mesmo grupo `best*`, e o desempate de find_distillation_runs
+# (por epoch) escolheria pela corrida errada.
+#
+# `best_loss.ckpt` e o peso escolhido, e vem FIXADO em `best_checkpoint` no
+# metadado. O `best_knn_kappa.ckpt` que esta ao lado e vestigial:
+# DistillationConvModule nao tem a KnnKappaProbeMixin e nunca loga
+# `val/knn_kappa` (ver o comentario do callback em distill4_cos_frozen.yaml).
+# Sem o `best_checkpoint` fixado, o glob `best*` de
+# eval/svm_variants/svm_distillation.py:270 pegaria os dois.
+
+name:   svm_distill_cos_frozen
+method: distillation
+runner: eval
+
+# Nomes LONGOS de dataset (o schema so aceita esses); os diretorios de run usam
+# os curtos — eggs, larvae, protozoan.
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [5, 50]
+
+runner_args:
+  probe:  svm
+  source: distillation
+  artifacts_dir: artifacts/distillation_frozen_20260905
+  # ARMADILHA: `frozen` e substring de `unfrozen`, entao filtrar por "frozen"
+  # ou por "cos" sozinho pegaria tambem a familia unfrozen. O underscore nas
+  # DUAS pontas e o que separa `_cos_frozen_` de `_cos_unfrozen_` e, ao mesmo
+  # tempo, exclui um eventual diretorio pelado `distill4_all_cos_frozen` — que
+  # nao casa o _DISTILL_RUN_RE (experiments/ray/runners/eval.py:169-172) e
+  # abortaria o plano inteiro com ValueError.
+  run_filter: _cos_frozen_
+  # A arvore-espelho so tem celula concluida, entao nada e descartado aqui; a
+  # flag fica explicita para o dia em que uma celula parcial entrar.
+  require_status_ok: true
+  ckpt_selection: best
+  results_csv: results/svm_distill_cos_frozen.csv
+
+# max_per_gpu: 1. Nao e memoria — o checkpoint aqui tem 22 MB (`save_weights_only`,
+# sem o professor I-JEPA junto). E o CSV: eval/svm.py:552-574 faz upsert lendo o
+# arquivo inteiro, removendo a linha colidente e reescrevendo. Dois jobs
+# concorrentes perdem linha.
+resources: {gpu_ids: [0], max_per_gpu: 1, cpus_per_experiment: 8}
+output:    {work_dir: /dados/home/moliveira/artifacts/eval/svm_distill_cos_frozen}
+
+# `state` e nao `wandb`: estes runs de treino ja estao encerrados no W&B, entao
+# a checagem remota nao ajuda a decidir o que reavaliar. O que se retoma aqui e
+# so a sonda.
+skip: state

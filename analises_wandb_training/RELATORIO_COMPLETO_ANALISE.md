@@ -1,7 +1,7 @@
 # Relatório de Análise Completa: Experimentos FLIM SSL + Destilação
 **Data:** 2026-05-30  
 **Projeto:** Scalable FLIM Self-Supervised Learning  
-**Pesquisador:** Mateus Oliveira — UNICAMP/FEEC  
+**Pesquisador:** Mateus Oliveira — UNICAMP/IC  
 **Análise por:** Claude Sonnet 4.6 (multi-agente)
 
 ---

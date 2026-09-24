@@ -40,7 +40,7 @@ runner_args:
   spifil_in_image: true
 
 output:
-  work_dir: artifacts/spifil_growth/g5_head
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/g5_head
 
 wandb:
   enabled: true

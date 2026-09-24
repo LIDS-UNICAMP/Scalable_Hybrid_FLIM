@@ -1,1168 +1,443 @@
-# scalable_FLIM_self_supervised — Execution Guide
+# EXPERIMENTS.md — como reproduzir cada grupo de experimento
 
-> **Setup do ambiente**: a secao abaixo e o caminho recomendado (uv). O caminho
-> antigo com conda continua em [INSTALL.md](INSTALL.md).
+Guia de reprodução. Para navegar o repositório, veja `instructions.md`; para traduzir
+um comando antigo no novo, veja `MIGRATION.md`.
 
----
-
-## Environment Setup with uv
-
-Fast, reproducible environment setup using [uv](https://github.com/astral-sh/uv)
-(no conda required).
-
----
-
-### Requirements
-
-- Ubuntu x86_64 (22.04 or 24.04)
-- NVIDIA GPU with driver ≥ 525 (`nvidia-smi` must show CUDA 12.x)
-- Python 3.11 available on the system (`python3.11 --version`)
-- Repository cloned locally
+> **Aviso de verificação.** Este documento foi escrito a partir do estado do disco e
+> dos relatórios da refatoração. Os comandos de grade e de célula única seguem o
+> protocolo que foi testado durante a refatoração (`--dry-run` e `--print_config`),
+> mas **os comandos deste arquivo não foram re-executados um a um**. Rode sempre
+> `--dry-run` antes da primeira vez. O que é inferência está marcado como tal.
 
 ---
 
-### Step 1 — Install uv
+## 0. O eixo central: com FLIM vs sem FLIM
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
+A pergunta que atravessa o repositório é se inicializar o encoder com FLIM bate as
+inicializações clássicas. Estes são os pares prontos para lançar, reconstruídos do que
+**já foi treinado** (2.587 runs no cache do W&B mais os checkpoints em disco):
+
+| Grupo | COM FLIM | SEM FLIM | runs |
+|---|---|---|---|
+| **LeJEPA SSL** | `lejepa/init_flim.yaml` | `lejepa/init_no_flim.yaml` | 545 × 1.252 |
+| **Destilação** | `distillation/all_init_flim.yaml` | `distillation/all_init_no_flim.yaml` | 1.299 × 794 |
+| **Crescimento SPiFiL** | `autoencoder/growth_*.yaml` (9 famílias) | — ¹ | 893 |
+| **Classhead** | `classification/classhead_flim.yaml` | — ² | 204 |
+
+O braço sem FLIM do LeJEPA agrega os quatro: `he` (397), `xavier` (338), `random` (338),
+`trunc_normal` (179). Na destilação, o único não-FLIM que rodou é `trunc_normal`.
+
+¹ O crescimento não tem contrafactual de init — o autoencoder só aceita `flim`. O
+controle dele é outro: `growth_g5_random.yaml`, que usa `random_layer` (troca só os
+**valores** dos pesos no fim, preservando a norma filtro a filtro).
+
+² Idem: o módulo levanta `ValueError` sem pesos FLIM.
+
+```
+python -m experiments.ray.launch experiments/lejepa/init_flim.yaml     --dry-run
+python -m experiments.ray.launch experiments/lejepa/init_no_flim.yaml  --dry-run
 ```
 
-Verify:
-
-```bash
-uv --version
-```
+> `skip: state` em todos: relançar pula o que já tem checkpoint em disco, então dá para
+> rodar por cima do que já existe sem repetir trabalho.
 
 ---
 
-### Step 2 — Create virtual environment
+## 0.1. Os dois jeitos de rodar
 
-From the repository root:
-
-```bash
-uv venv --python 3.11 .venv
-source .venv/bin/activate
-```
-
----
-
-### Step 3 — Install PyTorch 2.2 + CUDA 12.1
-
-PyTorch must be installed **before** the rest of the requirements so that uv
-resolves all dependencies against the CUDA build (not the CPU wheel from PyPI).
-
-```bash
-uv pip install torch==2.2.0 torchvision \
-    --index-url https://download.pytorch.org/whl/cu121
-```
-
-Verify:
-
-```bash
-python -c "import torch; print(torch.__version__, '| CUDA', torch.version.cuda)"
-# expected: 2.2.0+cu121 | CUDA 12.1
-```
-
----
-
-### Step 4 — Install project dependencies
-
-```bash
-uv pip install -r requirements.txt
-```
-
-> `numpy<2` and `wandb>=0.16,<0.18` are already pinned in `requirements.txt`
-> for compatibility with PyTorch 2.2.
-
----
-
-### Step 5 — Install pyift
-
-`pyift` is a private C-extension wheel (not on PyPI). It must be downloaded
-from Google Drive, installed via the bundled `.whl`, and then the compiled
-`.so` must be copied into site-packages.
-
-```bash
-# Download
-wget -q --show-progress -O pyift_whl.zip \
-    "https://drive.usercontent.google.com/download?id=1ddlcSqwli4UIFlJvqhVLUc8kduFlsXDj&export=download&authuser=2&confirm=yes"
-
-# Extract
-unzip -q pyift_whl.zip -d pyift_whl
-
-# Install wheel
-uv pip install pyift_whl/3_11/pyift-0.1-cp311-cp311-linux_x86_64.whl
-
-# Copy compiled .so into site-packages
-SITE=$(python -c "import site; print(site.getsitepackages()[0])")
-cp pyift_whl/3_11/pyift/_pyift.cpython-311-x86_64-linux-gnu.so \
-   "$SITE/pyift/_pyift.cpython-311-x86_64-linux-gnu.so"
-
-# Cleanup
-rm -rf /tmp/pyift_whl /tmp/pyift_whl.zip
-
-
-!ln -s $abs_path/_pyift.*.so $site_packages_path/pyift/
-```
-
----
-
-### Step 6 — Validate
-
-```bash
-python -c "import torch; print('torch', torch.__version__, '| CUDA', torch.version.cuda)"
-python -c "import ray; print('ray', ray.__version__)"
-python -c "import lightning; print('lightning ok')"
-python -c "import pyift.pyift as ift; print('pyift ok')"
-python -c "import notebook; print('notebook ok')"
-```
-
-Expected output:
+### Uma célula (um experimento só)
 
 ```
-torch 2.2.0+cu121 | CUDA 12.1
-ray 2.x.x
-lightning ok
-pyift ok
-notebook ok
-```
-
----
-
-### Step 7 — Login to W&B
-
-```bash
-wandb login
-```
-
----
-
-### Activate in future sessions
-
-```bash
-source .venv/bin/activate
-```
-
----
-
-### Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `python3.11` not found | `sudo apt install python3.11 python3.11-venv` |
-| `nvidia-smi` shows CUDA < 12.1 | Update NVIDIA driver to ≥ 525: `sudo apt install nvidia-driver-525` |
-| `import pyift` fails after install | Re-run the `.so` copy step in Step 5 |
-| `torch.cuda.is_available()` returns `False` | Verify driver with `nvidia-smi`; confirm CUDA build was installed (step 3) |
-| `wandb` install fails with Go error | Already handled — `requirements.txt` pins `wandb<0.18` |
-
----
-
-## Activate environment
-
-```bash
-conda activate scalable_FLIM
-# or, if using uv:
-source .venv/bin/activate
-```
-
----
-
-## W&B Metadata Cache
-
-All evaluation scripts use a local cache (`configs/wandb_update/ids_wandb.json`) instead of querying W&B on every run.
-
-```bash
-# Build / refresh the cache from W&B (run once before first evaluation)
-python -m src.utils.wandb_cache --update
-
-# Show cache status
-python -m src.utils.wandb_cache
-```
-
-Pass `--wandb-update` to any evaluation script to refresh the cache inline before running.
-
----
-
-## SSL Pre-training
-
-Run one experiment manually:
-
-```bash
-python src/main.py fit \
+python train.py fit \
   --config configs/default.yaml \
-  --config configs/data/percentage/helminth-eggs_split_1/100/lejepa_line.yaml \
-  --config configs/model/lejepa_line_xavier.yaml \
-  --trainer.accelerator=gpu
+  --config configs/dataset/<dataset>/split_<N>.yaml \
+  --config configs/model/<metodo>/<init>/<dataset>/split_<N>.yaml \
+  --data.init_args.percentage=<pct>
 ```
 
-Swap configs for other datasets / splits / percentages / initialisers:
+São **três** `--config` e o LightningCLI empilha nessa ordem: o último vence. O global
+traz trainer e callbacks; o de dataset traz o parasita e o split; o de método traz a
+classe, os pesos FLIM e os hiperparâmetros.
 
-| Axis | Values |
+**`percentage` não está no config de dataset, e isso é de propósito.** Ele é eixo da
+grade, não propriedade do dataset — por isso vem por fora. Um config de dataset sozinho
+**não instancia**: falha alto dizendo que falta `percentage`, em vez de cair num default
+silencioso.
+
+Trocar `--print_config` por `fit` imprime a configuração resolvida sem treinar. Use isso
+para conferir antes de queimar GPU.
+
+### Uma grade inteira
+
+```
+python -m experiments.ray.launch experiments/<metodo>/<nome>.yaml --dry-run
+python -m experiments.ray.launch experiments/<metodo>/<nome>.yaml
+```
+
+`--dry-run` imprime cada comando montado e sai sem executar nada. O pré-voo roda
+**antes** do `ray.init()` e nenhum job é submetido se ele falhar — ele nomeia o arquivo
+culpado e lista os caminhos que faltam, um por linha.
+
+Flags do launcher (as únicas quatro que sobreviveram no repositório inteiro):
+
+| flag | para quê |
 |---|---|
-| dataset | `helminth-eggs`, `protozoan-cysts`, `helminth-larvae` |
-| split | `1`, `2`, `3` |
-| pct | `1`, `5`, `25`, `50`, `75`, `100` |
-| init | `lejepa_line_{xavier,random,he,flim,trunc_normal}.yaml` |
+| `--dry-run` | imprime e sai |
+| `--fail-fast` | para no primeiro erro |
+| `--gpu-ids 0 1` | sobrepõe `resources.gpu_ids` |
+| `--set chave=valor` | sobrepõe qualquer chave do YAML (`--set grid.percentages=[5,50]`) |
 
-Run the full grid automatically (sequential):
+**`skip: wandb` consulta a rede.** Se você não quer isso, rode com `--set skip=state`,
+que decide pelo estado em disco.
 
-```bash
-python run_experiments.py
-```
-
-Run the full grid in parallel across multiple GPUs (Ray):
-
-```bash
-# Preview queue without running
-python scripts/run_ssl_ray.py --dry-run
-
-# Run all missing experiments (2 GPUs × 3 slots each)
-python scripts/run_ssl_ray.py --num-gpus 2 --max-concurrent-per-gpu 3 --cpus-per-experiment 4
-
-# Run only trunc_normal experiments
-python scripts/run_ssl_ray.py --inits trunc_normal --num-gpus 1 --max-concurrent-per-gpu 3
-
-# Resume after interruption
-python scripts/run_ssl_ray.py --resume
-```
-
-#### Running with a different batch size
-
-Use `--batch-size` to override the value in the data YAML (default: 32).
-Because this is a **new experiment** (not a replacement), use `--ignore-existing`
-to bypass the local-checkpoint check, and optionally `--pcts` to limit scope.
-
-```bash
-# Preview: trunc_normal, all 3 datasets, pct=100%, batch=256
-python scripts/run_ssl_ray.py \
-  --inits trunc_normal \
-  --datasets helminth-eggs helminth-larvae protozoan-cysts \
-  --pcts 100 \
-  --batch-size 256 \
-  --ignore-existing \
-  --num-gpus 2 \
-  --max-concurrent-per-gpu 3 \
-  --dry-run
-
-# Run for real (remove --dry-run)
-python scripts/run_ssl_ray.py \
-  --inits trunc_normal \
-  --datasets helminth-eggs helminth-larvae protozoan-cysts \
-  --pcts 100 \
-  --batch-size 256 \
-  --ignore-existing \
-  --num-gpus 2 \
-  --max-concurrent-per-gpu 3
-```
-
-W&B identification: the run name gets a `_bs<N>` suffix and a `bs<N>` tag,
-so runs with different batch sizes are distinct and filterable in the W&B UI:
-
-```
-lejepa_line_helminth-eggs_split_1_pct_100_model_trunc_normal_bs256   # tag: bs256
-lejepa_line_helminth-eggs_split_1_pct_100_model_trunc_normal          # original (bs32)
-```
-
-#### `run_ssl_ray.py` flags reference
-
-| Flag | Default | Description |
-|---|---|---|
-| `--inits` | all | Initialisations to run (`xavier random he flim trunc_normal`) |
-| `--datasets` | all | Datasets to run |
-| `--pcts` | all | Percentages to run, e.g. `--pcts 100` or `--pcts 25 50 100` |
-| `--batch-size` | YAML value | Override `batch_size` in the data config |
-| `--ignore-existing` | off | Queue even if a local checkpoint already exists |
-| `--num-gpus` | 2 | Number of GPUs (uses IDs 0..N-1) |
-| `--max-concurrent-per-gpu` | 10 | Parallel experiments per GPU |
-| `--cpus-per-experiment` | 4 | CPU cores per experiment |
-| `--resume` | off | Skip experiments already recorded as OK in the state file |
-| `--fail-fast` | off | Stop dispatching after the first failure |
-| `--dry-run` | off | Print the queue plan and exit without running |
-
-Experiment naming convention:
-
-```
-lejepa_line_<dataset>_split_<1|2|3>_pct_<percentage>_model_<init>[_bs<batch>]
-
-# Examples:
-lejepa_line_helminth-eggs_split_1_pct_100_model_trunc_normal
-lejepa_line_protozoan-cysts_split_2_pct_5_model_trunc_normal
-lejepa_line_helminth-larvae_split_3_pct_100_model_flim_bs256
-```
-
-`trunc_normal` applies `init_weights_vit_timm` from timm (std=0.02, clip=[-0.04, +0.04] for `nn.Linear`).
+Autoridade do schema: `experiments/ray/schema.py`. Chave desconhecida em `runner_args`
+é **erro**, não aviso.
 
 ---
 
-## MLP Fine-tuning Queue (Ray, slot-based)
+## 1. LeJEPA SSL — a ablação de inicialização
 
-### Generate YAML configs (once, or after adding new runs)
+**Pergunta:** a inicialização FLIM do encoder bate as inicializações clássicas no
+pré-treino auto-supervisionado?
 
-```bash
-python scripts/generate_mlp_configs.py
+**Configs:** 45 células — `configs/model/lejepa/<init>/<dataset>/split_N.yaml`, com
+`init ∈ {flim, he, xavier, random, trunc_normal}`. A grade está **completa**: as 24
+células que faltavam (os inits não-flim de eggs e larvae) foram geradas a partir dos
+genéricos que o launcher antigo usava, preservando os hiperparâmetros de cada init.
+
+> Atenção: `trunc_normal` usa `lr: 5.0e-4` e `weight_decay: 1.0e-5`; os outros três
+> não-flim usam `3.0e-3` e `5.0e-2`. Não é engano — é o experimento como sempre foi.
+
+**Grade inteira:**
+```
+python -m experiments.ray.launch experiments/lejepa/init_ablation.yaml --dry-run
+```
+270 pontos (5 inits × 3 datasets × 3 splits × 6 percentuais).
+
+**Uma célula:**
+```
+python train.py fit \
+  --config configs/default.yaml \
+  --config configs/dataset/helminth-eggs/split_1.yaml \
+  --config configs/model/lejepa/flim/helminth-eggs/split_1.yaml \
+  --data.init_args.percentage=50
 ```
 
-### Run queue
+**Saída:** `artifacts/lejepa/init_ablation/`. Nome do run:
+`lejepa_line_<dataset>_split_<N>_pct_<P>_model_<init>`.
 
-```bash
-# Preview — print plan without executing
-python -m src.evaluate.ray_mlp_queue --dry-run
+**Variantes fora da grade** (`configs/model/lejepa/_variants/`): `real_sigreg.yaml` e
+`simple_sigreg.yaml` trocam o eixo `sigreg_type`; `resnet50.yaml` troca o encoder.
+**`custom_cnn.yaml` está em QUARENTENA** — aponta para uma classe que nunca existiu, e
+o cabeçalho do arquivo explica com as evidências. Não use.
 
-# Run all experiments (both freeze and unfreeze, 2 GPUs × 10 slots)
-python -m src.evaluate.ray_mlp_queue
-
-# Resume after interruption
-python -m src.evaluate.ray_mlp_queue --resume
-
-# Refresh W&B cache inline, then run
-python -m src.evaluate.ray_mlp_queue --wandb-update
-
-# Protozoan only
-python -m src.evaluate.ray_mlp_queue --dataset-group protozoan
-
-# Eggs, freeze mode only
-python -m src.evaluate.ray_mlp_queue --mode freeze --dataset-group eggs
-
-# Custom GPU profile
-python -m src.evaluate.ray_mlp_queue --num-gpus 1 --max-concurrent-per-gpu 5
-```
-
-### CLI reference
-
-| Argument | Default | Description |
-|---|---|---|
-| `--num-gpus` | `2` | Physical GPUs to use |
-| `--max-concurrent-per-gpu` | `10` | Max experiments per GPU simultaneously |
-| `--cpus-per-experiment` | `4` | CPU cores per experiment |
-| `--mode` | `all` | `freeze`, `unfreeze`, or `all` |
-| `--dataset-group` | `all` | `all`, `eggs`, `protozoan`, `larvae` |
-| `--state-file` | `results/queue_state.json` | Resume state |
-| `--resume` | off | Skip already-completed experiments |
-| `--fail-fast` | off | Stop after first failure |
-| `--wandb` | off | Enable W&B metric logging |
-| `--wandb-update` | off | Refresh W&B cache before running |
-| `--dry-run` | off | Print queue plan and exit |
-| `--experiment-filter` | — | Substring filter on run_id / name |
-| `--log-level` | `INFO` | `DEBUG`, `INFO`, or `WARN` |
-
-### Output layout
-
-```
-results/
-├── queue_state.json
-├── ray_mlp_queue_results.csv
-└── ray_finetune_queue/
-    └── ray_finetune_lejepa_line_<dataset>_split_<N>_<init>_pct<pct>_<id>/
-        ├── config/config.yaml
-        ├── logs/train.log
-        ├── metrics/test_metrics.json
-        └── weights/model_final.pth
-```
+**Avaliar:** seção 5.
 
 ---
 
-## Retry Missing / Broken Runs
+## 2. Autoencoder FLIM + crescimento SPiFiL
 
-`retry_models_again.py` audits the full experiment matrix
-(`run_manifest.csv` + local artifact search), identifies unresolved runs, and
-retries them through the same Ray GPU-slot queue used by `ray_mlp_queue.py`.
+**Pergunta:** crescer o encoder FLIM camada a camada, guiado por superpixels, melhora a
+representação em relação a parar no encoder base?
 
-### Typical cluster run
+**Configs:** 9 células — `configs/model/autoencoder/flim/<dataset>/split_N.yaml`.
+**Só existe o init `flim`**, e isso é correto: o módulo levanta `ValueError` sem pesos
+FLIM, então as outras 36 células seriam experimentos que abortam antes da primeira época.
 
-```bash
-# Step 1 — audit only (no execution, fast)
-python retry_models_again.py --report-only
+**Grade:**
+```
+python -m experiments.ray.launch experiments/autoencoder/growth_grid4.yaml --dry-run
+```
+18 pontos, 144 comandos de estágio — o runner encadeia `treina → cresce → treina`, e
+cada estágio recebe o `best_kappa.ckpt` do anterior via `init_ckpt`.
 
-# Step 2 — dry-run: confirm exactly what will be submitted
-python retry_models_again.py --dry-run
-
-# Step 3 — execute, log results to W&B (standard cluster command)
-python retry_models_again.py \
-    --num-gpus 2 \
-    --max-concurrent-per-gpu 10 \
-    --wandb
+**Uma célula (só o estágio 1, sem crescer):**
+```
+python train.py fit \
+  --config configs/default.yaml \
+  --config configs/dataset/helminth-eggs/split_1.yaml \
+  --config configs/model/autoencoder/flim/helminth-eggs/split_1.yaml \
+  --data.init_args.percentage=50
 ```
 
-> `--wandb` enables W&B metric logging for each retried MLP experiment.
-> The W&B **metadata cache** (`ids_wandb.json`) is used automatically — no live API call at startup.
-> Run-ids that have local checkpoints but no W&B SSL entry (e.g. protozoan runs trained offline) are injected automatically and will execute normally.
+**Saída:** `artifacts/spifil_growth/<name>/<parasita>_split<N>_pct<P>/<estagio>/`.
+Nome do run: `spifil_growth_<name>_<parasita>_split<N>_pct<P>_<estagio>`.
 
-### Resume after interruption
+> **O `name` do YAML vira o diretório dos pesos.** Trocá-lo quebra o link com os
+> checkpoints já gravados. Ele deve ser o basename do `work_dir` (`grid4`, não
+> `spifil_growth_grid4` — há uma guarda contra o prefixo duplicado, mas não conte com ela).
 
-```bash
-python retry_models_again.py \
-    --num-gpus 2 \
-    --max-concurrent-per-gpu 10 \
-    --wandb
-# state is saved to results/retry_again_queue_state.json after each experiment
-# re-running the same command automatically skips already-completed ones
-```
+### As famílias já rodadas — todas têm experiment YAML
 
-### Force W&B cache refresh before running
+Cada família de `artifacts/spifil_growth/` tem agora o seu YAML em
+`experiments/autoencoder/`. Os knobs foram **reconstruídos das flags nos logs de cada
+corrida** (`logs/<familia>.log`), não do `run_metadata.json` — este grava só os hparams
+do estágio de treino, e os knobs de `grow` não aparecem nele.
 
-```bash
-python retry_models_again.py \
-    --num-gpus 2 \
-    --max-concurrent-per-gpu 10 \
-    --wandb \
-    --wandb-update
-```
-
-### Save audit report to file
-
-```bash
-python retry_models_again.py \
-    --report-only \
-    --report-out results/retry_report.txt
-```
-
-### CLI reference
-
-| Argument | Default | Description |
-|---|---|---|
-| `--num-gpus` | `2` | Physical GPUs for the retry queue |
-| `--max-concurrent-per-gpu` | `10` | Max experiments running per GPU |
-| `--cpus-per-experiment` | `4` | CPU cores per experiment (DataLoader workers) |
-| `--state-file` | `results/retry_again_queue_state.json` | Resume state (auto-skips completed) |
-| `--wandb` | off | Log MLP training metrics to W&B for each retried run |
-| `--wandb-update` | off | Refresh `ids_wandb.json` from live W&B API before running |
-| `--dry-run` | off | Print queue plan without submitting any Ray tasks |
-| `--report-only` | off | Audit and classify only, skip execution entirely |
-| `--report-out` | — | Write full audit + retry report to this file |
-| `--manifest` | `artifacts/run_manifest.csv` | Manifest to audit |
-
-### How it decides what to retry
-
-```
-run_manifest.csv
-      │
-      ▼
-audit() — for each expected SSL run (3 datasets × 3 splits × 6 pcts × 4 inits = 216):
-      │
-      ├─ search results/ray_finetune*/          → resolved_local
-      ├─ search artifacts_view/MLP/             → resolved_artifacts_view
-      ├─ weights dir exists but empty           → broken_partial_artifact  ← retry
-      └─ not found anywhere                     → missing_after_full_search ← retry
-```
-
-Only `broken_partial_artifact` and `missing_after_full_search` are submitted to the queue.
-
-### Retry classification categories
-
-| Category | Action |
-|---|---|
-| `resolved_local` | Already has weights — skipped |
-| `resolved_artifacts_view` | Found in `artifacts_view/MLP/` — skipped |
-| `missing_after_full_search` | Not found anywhere — **retried** |
-| `broken_partial_artifact` | Weights dir is empty — **retried** |
-| `name_mismatch_or_parse_issue` | Parse failure, investigated manually |
-| `manifest_only_no_weights` | In manifest but no run_id resolved |
-
-### W&B behaviour for retried runs
-
-- **SSL encoder run-ids** (e.g. protozoan runs trained without W&B): injected automatically from local checkpoints. The SSL entry does not need to be in W&B.
-- **MLP fine-tuning run** (`--wandb`): a new W&B run is created for each retried experiment under the project `flim-ssl`, named:
-  ```
-  X_finetune_lejepa_line_<dataset>_split_<N>_model_<init>[_<run_id>]
-  ```
-- **Cache**: `ids_wandb.json` is read at startup. If the file does not exist, it is created automatically by fetching from W&B once.
-
----
-
-## Knowledge Distillation — I-JEPA → FLIM CNN
-
-Treina o encoder FLIM CNN (student) com um teacher I-JEPA congelado (ViT-H/14, 1280-dim).
-Ver arquitetura completa em [distillation_model_architecture.md](distillation_model_architecture.md).
-
-### Variantes de proj head
-
-Cada variante é selecionada com `--proj-type`. As de **init aleatório** podem ser rodadas
-**sem** ou **com** FLIM (basta acrescentar `--flim-init`); as marcadas como *FLIM intrínseco*
-sempre treinam com o encoder FLIM inicializado, independente da flag.
-
-| `--proj-type` | Arquitetura | Params | FLIM init | Convenção de nome |
+| Família | Datasets | pcts | Knobs que a definem | YAML |
 |---|---|---|---|---|
-| `conv_next_layers` | 4× 1×1 convs 48→128→256→512→1280 | ~889K | opcional (`--flim-init`) | `..._next_layers_<dist>` (+ `_flim_init`) |
-| `3x3_bn2d_1280` | Conv 3×3 + BN2d (48→1280) | ~615K | opcional (`--flim-init`) | `..._3x3_BN2d_1280_one_layer` (+ `_flim_init`) |
-| `1x1_bn2d_1280` | Conv 1×1 + BN2d (48→1280) | ~124K | opcional (`--flim-init`) | `..._1x1_BN2d_1280_one_layer` (+ `_flim_init`) |
-| `2l_1x1_bn2d_256_1280` | 2× 1×1 + BN2d (48→256→1280) | ~402K | opcional (`--flim-init`) | `..._2l_1x1_BN2d_256_1280` (+ `_flim_init`) |
-| `2l_1x1_init_flim_256_1280` | igual acima | ~402K | **intrínseco** | `..._2l_1x1_init_flim_256_1280` |
-| `3x3_init_flim_1280` | head 3×3 | ~615K | **intrínseco** | `..._3x3_BN2d_1280_one_layer_init_flim` |
-| `next_layers_init_flim` | head conv_next_layers | ~889K | **intrínseco** | `..._next_layers_init_flim_<dist>` |
+| `grid3` | eggs, larvae, protozoan | 5, 50 | baseline, sem controle | `growth_grid3.yaml` |
+| `grid4` | eggs, larvae, protozoan | 5, 50 | baseline | `growth_grid4.yaml` |
+| `g5_in_image` | eggs, larvae, protozoan | 5, 50 | `spifil_in_image`, `impurities`, `one_per_class` | `growth_g5_in_image.yaml` |
+| `g5_in_feature` | eggs, larvae, protozoan | 5, 50 | `spifil_in_feature`, `impurities`, `one_per_class` | `growth_g5_in_feature.yaml` |
+| `g5_head` | eggs, larvae, protozoan | 5, 50 | `head_finetune` + `spifil_in_image` + `impurities` + `one_per_class` | `growth_g5_head.yaml` |
+| `g5_random` | eggs, larvae, protozoan | 5, 50 | `random_layer` + `head_finetune` + `one_per_class` | `growth_g5_random.yaml` |
+| `g5_head_larvae` | larvae | 5, 50 | mesma do `g5_head`, restrita | `growth_g5_head_larvae.yaml` |
+| `g5_head_repro` | larvae | 5, 50 | replicação do anterior | `growth_g5_head_repro.yaml` |
+| `g5_head_nsp450` | larvae | 5, 50 | `impurities`, `one_per_class`, `n_superpixels: 450` ⚠ | `growth_g5_head_nsp450.yaml` |
+| `_debug` | — | — | descartável | — |
 
-FLIM encoder: **60K** | I-JEPA teacher: **632M**
+⚠ **O `450` do `g5_head_nsp450` vem do NOME, não do log** — o `--n-superpixels` não
+aparece nas flags registradas. Confirme antes de rodar.
 
-### Resultados SVM — kappa médio entre splits
+O par `g5_in_image` × `g5_in_feature` é a comparação central: a mesma coisa com a
+segmentação por superpixel feita na **imagem** ou na **grade de features**.
 
-| Método | Params | Eggs | Larvae | Protozoan |
+```
+python -m experiments.ray.launch experiments/autoencoder/growth_g5_in_feature.yaml --dry-run
+```
+
+Os 19 knobs aceitos estão em `RUNNER_ARGS["growth"]` (`experiments/ray/schema.py`):
+`max_rounds`, `kappa_tolerance`, `rounds_patience`, `embed_mode`, `kernel_size`,
+`out_channels`, `pool_stride`, `n_superpixels`, `n_images`, `image_size`, `seed`,
+`spifil_in_feature`, `spifil_in_image`, `impurities`, `one_per_class`, `random_layer`,
+`random_layer_classic`, `head_finetune`, `unfrozen_after_stage_two`.
+
+> Os YAMLs reconstruídos herdaram `resources` do `growth_grid4.yaml` (GPUs 1-3,
+> 3 slots cada). Ajuste ao que estiver livre na máquina antes de lançar.
+
+> **Os dois controles aleatórios são perguntas diferentes.** `random_layer` é o controle
+> **pareado**: roda o pipeline inteiro e troca só os valores dos pesos no fim,
+> preservando a norma filtro a filtro. `random_layer_classic` é o controle **clássico**:
+> `kaiming_normal_`, sem checkpoint, sem dado, sem superpixel, sem orçamento. Não são
+> intercambiáveis.
+
+> **Orçamento de covariância.** O crescimento recusa com código de saída 3 quando
+> `N <= D` (`D = in_channels × kernel²`). Isso vale também para `random_layer`, que é o
+> mesmo caminho; só `random_layer_classic` escapa, porque não ajusta nada.
+
+**Avaliar o crescimento:** `python -m eval.growth_stages` (aceita `pct=`).
+
+---
+
+## 3. Destilação
+
+**Pergunta:** um aluno pequeno consegue herdar a representação do professor I-JEPA, e
+qual cabeça de projeção preserva melhor a informação?
+
+**Configs:** 18 células — `configs/model/distillation/<init>/<dataset>/split_N.yaml`,
+com `init ∈ {flim, trunc_normal}`.
+
+**O `class_path` é quem escolhe o aluno.** As quatro variantes vivem em
+`methods/distillation/` e são selecionadas por `overrides` no experiment YAML, não por
+flag:
+
+| Módulo | Cabeça |
+|---|---|
+| `DistillationModule` | linear (base) |
+| `DistillationConvModule` | convolucional |
+| `DistillationOneLayerModule` | uma camada (1×1 ou 3×3, por `proj_kernel`) |
+| `DistillationTwoLayerModule` | duas camadas 1×1 + BatchNorm2d |
+
+As antigas flags `--distill_1..4` **não existem mais**: o `class_path` já é a escolha, e
+`proj_kernel: 1|3` desambigua as duas que dividem o mesmo módulo.
+
+### As 13 configurações já rodadas — todas têm experiment YAML
+
+Reconstruídas do **argv real** gravado em `artifacts/distillation/**/wandb-metadata.json`.
+Não é inferência de nome: é a linha de comando que rodou.
+
+**Grupo A — família `distill4_*`** (`DistillationConvModule`, ex-`--distill_4 --init_flim`),
+todas com eggs+larvae+protozoan, splits 1–3, pcts 1/5/25/50/75/100:
+
+| YAML | loss | professor | runs |
+|---|---|---|---|
+| `distill4_cos_frozen.yaml` | cosseno | congelado | 48 |
+| `distill4_cos_unfrozen.yaml` | cosseno | descongelado | 134 |
+| `distill4_mse_frozen.yaml` | MSE | congelado | 2 |
+| `distill4_mse_unfrozen.yaml` | MSE | descongelado | 14 |
+| `distill4_kd_frozen.yaml` | KD híbrido (`fine_tune=True`) | congelado | 22 |
+| `distill4_kd_unfrozen.yaml` | KD híbrido | descongelado | 135 |
+
+**Grupo B — as famílias por `--distillation-type`:**
+
+| YAML | init | cabeça | pcts | runs |
 |---|---|---|---|---|
-| FLIM | 60K | 0.686 | 0.655 | 0.674 |
-| LeJEPA | 60K | 0.319 | 0.381 | 0.184 |
-| I-JEPA | 632M | 0.881 | 0.909 | 0.796 |
-| Distil 4×1×1 | 889K | 0.738 | 0.833 | 0.706 |
-| Distil 3×3 BN | 615K | 0.704 | 0.820 | 0.664 |
-| Distil 1×1 BN | 124K | — | — | — |
+| `direct_trunc_normal.yaml` | trunc_normal | — (os **4** módulos) | todos | **619** |
+| `direct_flim.yaml` | flim | one_layer + two_layer | todos | 450 |
+| `direct_flim_1x1.yaml` | flim | 1×1 | todos | 236 |
+| `direct_flim_1x1_frozen.yaml` | flim | 1×1, **encoder congelado** | todos | 222 |
+| `direct_trunc_normal_1x1.yaml` | trunc_normal | 1×1 | todos | 139 |
+| `cosine_flim_bn2d.yaml` | flim | 1×1 BN2d 1280 | **1, 75** | 36 |
+| `cosine_trunc_normal_bn2d.yaml` | trunc_normal | 1×1 BN2d 1280 | **1, 75** | 36 |
 
-Plots: [`artifacts/plots/plots_compare_to_flim/`](artifacts/plots/plots_compare_to_flim/)
+`direct_trunc_normal` é a maior família (619 runs) e foi rodada nos **quatro** módulos —
+troque `model.class_path` no `overrides` para reproduzir cada um.
 
-### Rodar o grid — variante conv (recomendada)
-
-```bash
-# Preview
-python scripts/distillation_conv_ray.py --dry-run
-
-# Grid completo: 3 datasets × 3 splits × 6 pcts = 54 runs
-python scripts/distillation_conv_ray.py --num-gpus 1 --max-concurrent-per-gpu 1
-
-# Retry após falha parcial — pula concluídos, refaz só os que falharam no W&B
-python scripts/distillation_conv_ray.py \
-    --num-gpus 1 --max-concurrent-per-gpu 1 \
-    --retry --skip-existing --check-wandb --wandb-update
+```
+python -m experiments.ray.launch experiments/distillation/distill4_cos_frozen.yaml --dry-run
 ```
 
-> Use sempre `--max-concurrent-per-gpu 1` para evitar OOM (o teacher I-JEPA ocupa ~5 GB por processo).
-
-### Rodar todas as destilações — com e sem FLIM
-
-O script roda **um `--proj-type` por invocação**. Para cobrir todas as arquiteturas nas duas
-condições (init aleatório = *sem FLIM*, e *com FLIM*), itere sobre os proj-types. As heads de
-init aleatório ganham a versão FLIM com `--flim-init`; as `*_init_flim*` já são FLIM intrínseco.
-
-```bash
-mkdir -p logs
-
-# 1) SEM FLIM — heads de init aleatório (trunc_normal)
-for PT in conv_next_layers 3x3_bn2d_1280 1x1_bn2d_1280 2l_1x1_bn2d_256_1280; do
-  python scripts/distillation_conv_ray.py \
-      --proj-type "$PT" \
-      --num-gpus 1 --max-concurrent-per-gpu 1 \
-      --skip-existing --check-wandb --wandb-update \
-      2>&1 | tee "logs/distill_${PT}_noflim_$(date +%Y%m%d_%H%M%S).log"
-done
-
-# 2) COM FLIM — mesmas heads, agora com --flim-init (encoder FLIM pré-treinado)
-for PT in conv_next_layers 3x3_bn2d_1280 1x1_bn2d_1280 2l_1x1_bn2d_256_1280; do
-  python scripts/distillation_conv_ray.py \
-      --proj-type "$PT" --flim-init \
-      --num-gpus 1 --max-concurrent-per-gpu 1 \
-      --skip-existing --check-wandb --wandb-update \
-      2>&1 | tee "logs/distill_${PT}_flim_$(date +%Y%m%d_%H%M%S).log"
-done
-
-# 3) COM FLIM intrínseco — proj-types que já forçam o init FLIM
-for PT in 2l_1x1_init_flim_256_1280 3x3_init_flim_1280 next_layers_init_flim; do
-  python scripts/distillation_conv_ray.py \
-      --proj-type "$PT" \
-      --num-gpus 1 --max-concurrent-per-gpu 1 \
-      --skip-existing --check-wandb --wandb-update \
-      2>&1 | tee "logs/distill_${PT}_$(date +%Y%m%d_%H%M%S).log"
-done
+**Uma célula:**
+```
+python train.py fit \
+  --config configs/default.yaml \
+  --config configs/dataset/helminth-eggs/split_1.yaml \
+  --config configs/model/distillation/flim/helminth-eggs/split_1.yaml \
+  --data.init_args.percentage=100 \
+  --model.class_path=methods.distillation.DistillationOneLayerModule
 ```
 
-Cada invocação cobre o grid padrão **3 datasets × 3 splits × 6 pcts × 2 dist-types**. Restrinja
-com `--datasets`, `--splits`, `--percentages` ou `--distillation-types` quando quiser um subconjunto.
-Para sobreviver a desconexões, rode os três blocos dentro de uma sessão tmux
-(`tmux new -s distill_all`, cole os `for`-loops, depois `Ctrl+b d` para destacar).
+**A leitura dos resultados** está em `reports/distill_details.md`, que documenta seis
+grupos pelo **sufixo do run** (`2l_1x1_init_flim_256_1280_no_imagenet_norm`,
+`1x1_BN2d_1280_one_layer_flim_init_no_imagenet_norm`, `3x3_BN2d_1280_one_layer_init_flim`,
+`2l_1x1_init_flim_256_1280`, `next_layers_direct`, `pct75_modeldirect`) com módulo, cabeça
+e contagem de parâmetros. Esses sufixos são recortes dos YAMLs acima, não famílias à parte.
 
-| Flag | Efeito |
+**Saída:** `artifacts/distillation/<name>/`.
+
+> Os YAMLs reconstruídos usam `gpu_ids: [0,1,2,3]`, `max_per_gpu: 2`. Ajuste ao que
+> estiver livre. E `alpha: 0.5` / `temperature: 4.0` vieram do argv — confira se é o que
+> você quer antes de relançar.
+
+> **Cada YAML carrega o `num_classes` do seu próprio dataset** — eggs 9, larvae 2,
+> protozoan 7. Isso importa: o conserto desse bug vivia no antigo `_run_one`, não no
+> módulo. Um valor único para todos faz o bug do `--dataset all` voltar pela porta do YAML.
+
+> **Contagem de parâmetros tem armadilhas conhecidas:** há um MLP vestigial e o encoder
+> aparece duplicado no `state_dict`. São propriedades do checkpoint gravado, não sujeira
+> a limpar. `reports/distill_details.md` tem a seção sobre isso.
+
+---
+
+## 4. Classificação (classhead)
+
+**Pergunta:** ReLU ou sigmoid na cabeça de classificação sobre o encoder FLIM?
+
+**Configs:** 9 células — `configs/model/classification/flim/<dataset>/split_N.yaml`.
+
+**Uma célula:**
+```
+python train.py fit \
+  --config configs/default.yaml \
+  --config configs/dataset/helminth-eggs/split_1.yaml \
+  --config configs/model/classification/flim/helminth-eggs/split_1.yaml \
+  --data.init_args.percentage=100
+```
+
+**Saída:** `artifacts/classification_flim/`. Nome do run:
+`classhead_<parasita>_split<N>_pct<P>_<variante>`.
+
+O fine-tune supervisionado é outra classe, `methods.classification.ClassificationFinetuneModule`,
+com config em `configs/model/classifier.yaml`. **A chave dele mudou de nome**:
+`freeze_encoder` virou `freeze`, porque o nome antigo sombreava a função importada e a
+classe levantava `TypeError` na construção — ela nunca instanciou. Está consertada.
+
+---
+
+## 5. Sondas de avaliação
+
+Todas em `eval/`. Elas **não treinam**: rodam sobre checkpoints já gravados.
+
+### MLP (freeze / unfreeze)
+
+```
+python -m experiments.ray.launch experiments/lejepa/eval_mlp_freeze.yaml --dry-run
+```
+54 jobs. Os configs de entrada são gerados, ficam em
+`configs/generated/mlp/{freeze,unfreeze}/<dataset>/<run_id>.yaml` e estão no
+`.gitignore` — regere com `python -m experiments.gen_configs`.
+
+### SVM
+
+```
+python -m eval.svm
+```
+
+As **10 variantes por experimento** vivem em `eval/svm_variants/`: `svm_distillation`,
+`svm_distillation_conv`, `svm_ijepa`, `svm_distill_with_projection`,
+`svm_classification_flim`, `eval_svm_flim_flatten`, `eval_autoencoder`,
+`svm_real_flim`, `eval_avg_pooling_48d`, `svm_flim_residual`. Cada uma roda com
+`python -m eval.svm_variants.<nome>`.
+
+> **`svm_classification_flim` grava `acc` micro E balanceada, e `f1` weighted E macro,
+> de propósito** — é para comparabilidade com `data/reports_felipe/svm/`. Três outras
+> gravam `acc` balanceada e `acc_raw` micro no mesmo CSV. Não unifique nenhuma delas.
+
+### Outras
+
+| Sonda | Comando |
 |---|---|
-| `--skip-existing` | Pula runs com `run_metadata.json` local `status=ok` |
-| `--check-wandb` | Só pula se W&B também confirmar `finished`; re-fila `failed/crashed` |
-| `--retry` | Manifest salvo em `run_manifest_conv_retry.csv` |
+| Classificadores clássicos (QDA, RF, LGBM, GP, kNN) | `python -m eval.classical_classifiers` |
+| Avaliação unificada | `python -m eval.unified_eval` |
+| Estágios de crescimento | `python -m eval.growth_stages` |
+| t-SNE | `python -m eval.tsne` |
 
-### Verificar status dos experimentos
+---
 
-```bash
-python scripts/check_distill_conv_status.py
-```
+## 6. Análise e estatística
 
-Cruza 4 fontes: processo do SO, W&B, metadata local e checkpoint.
+Uso normal: `python -m <modulo>`, que roda com os defaults.
 
-### Relatório de disco + W&B (verificar possíveis divergências)
-
-Levanta, para **cada** experimento em `artifacts/distillation/`, o espaço ocupado, os
-checkpoints `best`/`last` (caminho + tamanho) e o estado do run no W&B, consolidando tudo
-numa coluna `category` (`done` / `divergent` / `failed` / `missing`). Útil para **verificar
-possíveis divergências** entre o que o W&B reporta (`finished`/`failed`/`crashed`/`not_found`)
-e o status local (`run_metadata.json`).
-
-```bash
-python scripts/report_distill_disk_wandb.py            # disco + W&B (default)
-python scripts/report_distill_disk_wandb.py --no-wandb # só disco (offline, rápido)
-```
-
-Gera **dois CSVs**, por default dentro de `artifacts/distillation/`:
-
-| Arquivo | Conteúdo |
+| Grupo | Módulos |
 |---|---|
-| `artifacts/distillation/distill_disk_wandb_report.csv` | relatório completo — uma linha por experimento |
-| `artifacts/distillation/distill_divergences.csv` | só os experimentos divergentes (coluna `divergence_reason`) |
+| `analysis.stats` | `wilcoxon_acc`, `wilcoxon_f1`, `wilcoxon_kappa`, `wilcoxon_equivalence`, `wilcoxon_flim_init`, `compute_cost` |
+| `analysis.activations` | `heatmap_stages`, `relu_vs_sigmoid`, `saturation`, `unit_activations` |
+| `analysis.distill` | `embedding_analysis`, `ruler_mismatch`, `distill_destroys_flim` |
+| `analysis.plots` | `plot_comparacao_flim_protocolo`, `plot_continuity_spifil_hybrid`, `plot_partial_train_spifil_hybrid`, `plot_sigmoid_saturation`, `plot_svm_results` |
+| `analysis.checks` | `check_ssl`, `check_ckpt_slim`, `keep_only_best_ckpt`, `check_refactor_equivalence`, `check_probe_matches_evaluator`, `check_spifil_growth`, … |
 
-> Um `category=divergent` (ex.: `wandb=failed but local=ok`) indica que o run treinou e salvou
-> checkpoint localmente, mas o W&B marcou falha/crash — vale revisar antes de re-enfileirar.
-
-Sobrescreva os caminhos com `--csv` e `--divergences-csv` se precisar.
-
-### Convenção de nome
-
+Exemplos:
 ```
-distillation_<dataset>_split<N>_pct<P>_next_layers_direct
-```
-
-### Layout de saída
-
-```
-artifacts/distillation/
-  distillation_<dataset>_split<N>_pct<P>_next_layers_direct/
-    checkpoints/
-      best-*.ckpt
-      last.ckpt
-    run_metadata.json
-  run_manifest_conv.csv
-  run_manifest_conv_retry.csv
+python -m analysis.stats.wilcoxon_kappa
+python -m analysis.activations.relu_vs_sigmoid
+python -m analysis.plots.plot_continuity_spifil_hybrid
 ```
 
-### SVM dos modelos destilados (conv)
-
-```bash
-# Roda em tmux (demora)
-tmux new-session -d -s svm_conv "python -m src.evaluate.svm_distillation_conv 2>&1 | tee logs/svm_conv_$(date +%Y%m%d_%H%M%S).log"
-
-# Filtrar por run
-python -m src.evaluate.svm_distillation_conv --run eggs_split1
-
-# → results/svm_distillation_conv_results.csv
+Para sobrepor um parâmetro:
+```
+python -c "from analysis.stats.wilcoxon_acc import wilcoxon_acc; wilcoxon_acc(alpha=0.01)"
 ```
 
-O I-JEPA **não é carregado** durante o SVM — só os pesos `student.*` são extraídos do checkpoint.
+`heatmap_stages` (14 parâmetros) e `plot_continuity_spifil_hybrid` (16) aceitam um YAML:
+passe `config='meu.yaml'`.
+
+> **`analysis/distill/` roda contra outro checkout.** Os três módulos resolvem `src.*`
+> de `/dados/home/moliveira/scalable_FLIM_self_supervised` (último commit de junho de
+> 2026) e **escrevem os `.json` lá, não aqui**. É deliberado: religá-los mudaria números
+> já publicados.
+
+> **`analysis.checks.keep_only_best_ckpt` APAGA checkpoint.** A regra é "sempre o best,
+> nunca o last"; onde só existe `last`, o `last` fica. Ele tem `--skip-recent-min` para
+> não tocar em run vivo.
 
 ---
 
-## AutoEncoder não-supervisionado — encoder FLIM + decoder ResNet
+## 7. Armadilhas que já custaram caro
 
-Nenhum rótulo entra na loss. O encoder FLIM é treinado só reconstruindo a própria entrada, e
-o decoder ResNet é descartado no fim. A pergunta que o experimento responde é se o encoder
-**sai melhor do que entrou**.
-
-### Como o veredito é medido
-
-Um probe SVM one-vs-one linear (`C=1e2`, sem scaler) sobre o embedding pooled de 48-d,
-ajustado no train rotulado e pontuado **só na validação**. O test nunca é tocado.
-
-A baseline não vem de CSV: `on_fit_start` roda o probe no encoder FLIM **intocado, antes do
-primeiro passo de gradiente**, no mesmo run, mesmo split, mesma seed, mesmo dataloader, mesmo
-probe. Isso é deliberado — os CSVs de baseline do repo pontuam o SVM no **test**
-(`src/evaluate/svm.py:123-137`), enquanto este probe pontua na **validação**, então os dois
-números não são comparáveis. Medindo dentro do run, o veredito fica sólido:
-
-```
-Δκ = stage{N}/svm_kappa (melhor época)  −  stage{N}/flim_ref_svm_kappa (época −1, FLIM puro)
-```
-
-Toda métrica dependente de estágio é prefixada `stage1/` ou `stage2/` (`stage{N}/svm_kappa`,
-`stage{N}/svm_acc`, `stage{N}/svm_f1`). A referência FLIM **não** é uma série: é o escalar de
-summary `stage{N}/flim_ref_svm_kappa`, escrito uma vez em `on_fit_start`.
-
-| Δκ | Leitura |
-|---|---|
-| > 0 | reconstrução é auto-supervisão útil para este encoder pequeno |
-| ≈ 0 | o embedding FLIM já está saturado |
-| < 0 | reconstrução puxa o embedding para informação de baixo nível (textura, cromaticidade a/b, fundo) — o risco conhecido |
-
-Os dois números ficam lado a lado em `run_metadata.json` (`best_val_svm_kappa` e
-`baseline_flim_svm`) e no W&B a referência fica no summary do run
-(`stage{N}/flim_ref_svm_kappa`), não como série plana replicada época a época.
-
-### Seleção e parada
-
-| | Valor |
-|---|---|
-| Checkpoint (estágio 2) | `best_kappa.ckpt`, monitor `stage2/svm_kappa` (max) |
-| Checkpoint (estágio 1) | `best_recon.ckpt`, monitor `stage1/val_recon_loss` (min) |
-| EarlyStopping | o mesmo monitor do estágio, `patience=50`, `strict=False` |
-| Teto de épocas | `--max-epochs 1000` |
-
-No estágio 2 os dois olham `stage2/svm_kappa`, **não** `stage2/val_recon_loss` — o melhor
-*encoder* é o entregável, não a menor reconstrução. No estágio 1 o encoder está congelado, a
-kappa é ruído do solver, e a seleção cai em `stage1/val_recon_loss` (min), a única coisa que
-de fato melhora ali. O `strict=False` existe porque com `--svm-probe-every > 1` a kappa
-não é logada nas épocas em que o probe é pulado, e um callback estrito abortaria o run em vez
-de esperar a próxima.
-
-⚠️ **`stage{N}/val_recon_loss` quase não se move, e isso é esperado.** BCE sobre alvo
-contínuo tem piso de entropia: a loss mínima alcançável não é 0, é `−p·log p − (1−p)·log(1−p)` do próprio alvo,
-≈ **0.466** para o LAB destes datasets. Os runs pousam em 0.465–0.469, ou seja, o sinal real
-de reconstrução são ~0.002 em cima de uma constante. Não leia essa curva como convergência, e
-não a use como critério de parada.
-
-### Rodar o grid
-
-```bash
-# Preview — mostra o plano, não executa nada
-python scripts/autoencoder_flim_ray.py --dry-run
-
-# Grid completo: 3 datasets × {5%, 75%} × 3 splits = 18 runs
-python scripts/autoencoder_flim_ray.py \
-    --num-gpus 4 --max-concurrent-per-gpu 5 \
-    --num-workers 8 --max-epochs 1000 --patience 50 \
-    --wandb-update
-
-# Retry após falha parcial — pula concluídos, refaz só os que falharam
-python scripts/autoencoder_flim_ray.py \
-    --retry --skip-existing --check-wandb --wandb-update
-```
-
-Em tmux, num comando só:
-
-```bash
-tmux new -s ae_flim "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python scripts/autoencoder_flim_ray.py --num-gpus 4 --max-concurrent-per-gpu 5 --num-workers 8 --max-epochs 1000 --patience 50 --wandb-update 2>&1 | tee /tmp/ae_flim_$(date +%F_%H%M).log; exec bash"
-```
-
-Use o path direto do python do env, **não** `conda activate`: o shell que o tmux abre não tem
-o hook do conda carregado e a sessão morre em silêncio.
-
-### Grade
-
-3 datasets × {5%, 75%} × 3 splits = **18 runs**.
-
-`percentage` seleciona um `data_descriptor_perc{p}.json` diferente, que reparticiona **train
-e validação as duas** — então cada percentual tem a sua própria baseline, medida numa
-validação diferente. O percentual não entra na loss de reconstrução; ele decide quantas
-imagens rotuladas o *probe* enxerga.
-
-Arquitetura por dataset: eggs/larvae `ch24_32_48`, protozoan `ch24_30_48`. Os **pesos** FLIM
-sempre vêm da árvore `ch24_32_48_a0.5_f5` (a única com subdiretório `models/`); para
-protozoan as contagens reais de kernel lá são 24/30/48, que `get_actual_channels_from_weights`
-recupera no load.
-
-### Convenção de nome
-
-```
-encoder_decoder_FLIM_<dataset>_split<N>_pct<P>
-```
-
-### Layout de saída
-
-```
-artifacts/autoencoder_resnet_init_flim/
-  encoder_decoder_FLIM_<dataset>_split<N>_pct<P>/
-    checkpoints/
-      best_kappa.ckpt      ← o encoder entregável
-      last.ckpt
-    run_metadata.json      ← best_val_svm_kappa + baseline_flim_svm lado a lado
-    wandb/
-  run_manifest.csv
-  run_manifest_retry.csv
-```
+1. **`percentage` fora do config de dataset** — é eixo da grade. Config de dataset
+   sozinho não instancia, e falha alto de propósito.
+2. **`skip: wandb` vai à rede.** Use `--set skip=state` para decidir por disco.
+3. **`configs/model/lejepa/_variants/custom_cnn.yaml` está em quarentena** — aponta para
+   uma classe que nunca existiu. Nasceu quebrado no commit inicial e nunca rodou.
+4. **O `name` do growth vira o diretório dos pesos.** Trocar quebra o link com os
+   checkpoints gravados.
+5. **`num_classes` por dataset nos YAMLs de destilação** (9 / 2 / 7).
+6. **Protozoan usa bases FLIM diferentes** para arquitetura e para pesos: arch em
+   `ch24_30_48`, pesos em `ch24_32_48`. Não unifique.
+7. **Um arquivo que calcula a raiz do repo com `parents[N]` quebra em silêncio** ao
+   mudar de profundidade — roda e escreve no lugar errado, sem erro.
+8. **`save_hyperparameters()` só funciona se o `__init__` mencionar `super`.** Trocar
+   por `pl.LightningModule.__init__(self)` esvazia o `hparams` e o módulo não treina.
 
 ---
 
-## Crescimento SPiFiL — uma camada por rodada
-
-O encoder não nasce com a profundidade final: ele começa com as 3 camadas do FLIM e **ganha uma
-camada por rodada**, cortada pelo SPiFiL do backbone que já foi treinado. A pergunta que o
-experimento responde é se cada camada nova paga o próprio custo — o laço mede o κ do probe SVM
-depois de cada rodada e para sozinho quando o κ deixa de melhorar.
-
-Protocolo em [`A_reports/2026/august/details_report/spifil_growth.md`](A_reports/2026/august/details_report/spifil_growth.md); resultados de teste consolidados em
-[`A_reports/2026/august/details_report/table_result_stages.md`](A_reports/2026/august/details_report/table_result_stages.md).
-
-### O laço
-
-```
-stage1                encoder FLIM congelado, só o decoder treina
-stage2                tudo destravado
-por rodada r = 1..max-rounds:
-  round<r>_grow       spifil_grow.py corta 1 camada do backbone JÁ TREINADO (sem gradiente)
-  round<r>_stage3     só a camada nova + o bloco novo do decoder  ← some com --unfrozen-after-stage-two
-  round<r>_stage4     tudo destravado
-  lê o κ do stage4 e decide se continua
-```
-
-`--unfrozen-after-stage-two` e `--head-finetune` reescrevem a rodada, cada uma do seu jeito, e são
-**mutuamente exclusivas**. Com `--head-finetune` a rodada troca `stage3` + `stage4` por um estágio
-só, `round<r>_head`: fine-tune **supervisionado** com a `Head` do treinador, tudo destravado.
-
-O `grow` da rodada *r* come o `best_kappa.ckpt` do `stage4` da rodada *r−1* (e o do `stage2` na
-rodada 1). Isso é o ponto do protocolo: a camada tem que sair do backbone treinado, não do
-backbone de três camadas original.
-
-### As variantes
-
-Ablação de um fator por braço, todos com `--one-per-class --impurities --pool-stride 2 --max-rounds 2`
-e percentuais 5 e 50 — o que muda é uma coisa por braço:
-
-| Sessão | `--work-dir` | O que isola |
-|---|---|---|
-| `g5_feat` | `artifacts/spifil_growth/g5_in_feature` | superpixel na **grade de features** 24×24 |
-| `g5_img` | `artifacts/spifil_growth/g5_in_image` | superpixel na **imagem LAB** 200×200 (o default) |
-| `g5_ft` | `artifacts/spifil_growth/g5_finetune` | igual ao `g5_img`, **sem** o estágio 3 congelado |
-| `g5_head` | `artifacts/spifil_growth/g5_head` | igual ao `g5_img`, com a rodada trocada por **fine-tune supervisionado do perceptron** |
-| `g5_rand` | `artifacts/spifil_growth/g5_random` | **controle**: igual ao `g5_img`, camada nova com pesos **aleatorios** de mesmo shape |
-| `g5_rand_feat` | `artifacts/spifil_growth/g5_random_in_feature` | **controle**: igual ao `g5_feat`, camada nova com pesos **aleatorios** de mesmo shape |
-
-Os dois braços `g5_rand*` são a ablação de controle das outras quatro: sem eles não dá para
-separar "a camada **SPiFiL** ajuda" de "uma camada **qualquer** deste tamanho ajuda". O
-`--random-layer` deixa todo o fluxo rodar igual — superpixel, ranking, allocator e o orçamento
-de covariância — e troca só os *valores* dos filtros no último instante, herdando a norma de
-cada filtro que substitui. Duas consequências que fazem deles um controle e não outro
-experimento: o `architecture.json` sai byte-idêntico ao da variante SPiFiL correspondente, e o
-`GROW_EXHAUSTED` é cobrado antes da troca, então os mesmos braços de larvae recusam crescer nas
-duas famílias.
-
-```bash
-tmux new -d -s g5_feat "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_in_feature --percentages 5 50 --spifil-in-feature --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_in_feature.log"
-
-tmux new -d -s g5_img "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_in_image --percentages 5 50 --spifil-in-image --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_in_image.log"
-
-tmux new -d -s g5_ft "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_finetune --percentages 5 50 --spifil-in-image --unfrozen-after-stage-two --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_finetune.log"
-
-tmux new -d -s g5_head "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_head --percentages 5 50 --spifil-in-image --head-finetune --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_head.log"
-
-tmux new -d -s g5_rand "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_random --percentages 5 50 --random-layer --spifil-in-image --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_random.log"
-
-tmux new -d -s g5_rand_feat "python3 scripts/spifil_growth_loop.py --work-dir artifacts/spifil_growth/g5_random_in_feature --percentages 5 50 --random-layer --spifil-in-feature --one-per-class --impurities --pool-stride 2 --gpus 1 2 3 --max-concurrent-per-gpu 2 --cpus-per-experiment 8 --max-rounds 2 --num-workers 2 --wandb --wandb-project phd_thesis_grid4 2>&1 | tee logs/g5_random_in_feature.log"
-```
-
-O `python3` aqui depende do PATH que o servidor tmux herdou. Se a sessão morrer em silêncio, troque
-pelo caminho direto do env — a mesma armadilha da seção do AutoEncoder acima.
-
-### As flags que mudam o método
-
-| Flag | Default do `spifil_grow.py` | O que muda |
-|---|---|---|
-| `--spifil-in-image` | **é o default** | SLIC na imagem LAB 200×200, sementes reprojetadas para a grade 24×24. Passar a flag não muda nada — só deixa o default explícito no comando e no log |
-| `--spifil-in-feature` | — | SLIC na própria grade 24×24, com teto de superpixels. **Mutuamente exclusiva** com a de cima |
-| `--one-per-class` | **já é o default** | uma imagem por classe (9 em eggs, 2 em larvae, 7 em protozoan) em vez da fatia de até 200 imagens |
-| `--impurities` | `--no-impurities` | **desliga a máscara**: o SLIC segmenta o quadro inteiro e as sementes caem também no fundo e na impureza |
-| `--pool-stride 2` | `1`, sem pooling | põe `MaxPool2d(3×3, stride=2)` na camada nova: a grade cai de 24×24 para 11×11 |
-| `--unfrozen-after-stage-two` | — | remove o `round<r>_stage3`: a camada nova entra e tudo treina junto desde o passo 0 |
-| `--head-finetune` | — | troca `stage3` + `stage4` por um `round<r>_head` supervisionado, com a `Head` do treinador. Exclusiva com a de cima |
-
-Em nenhum dos dois modos o SPiFiL "vê" a imagem: os kernels são **sempre** recortados do mapa de
-features do encoder já treinado, `(48, 24, 24)`. A flag decide só onde o SLIC roda para escolher as
-*posições* das sementes — e, portanto, quantas sementes existem.
-
-`--impurities` não é cosmético aqui: é o que torna o `--spifil-in-feature` viável. Com a máscara
-ligada a grade 24×24 rende ~12 posições por imagem, o que com `--one-per-class` dá N ≈ 185 contra
-D = 48·3² = 432, e o `spifil_grow.py` sai com código 3 (orçamento de covariância esgotado). Sem a
-máscara a área vira as 576 posições e N sobe para ~1287.
-
-`--pool-stride 2` encolhe em **4,76×** o embedding que o SVM lê (576 → 121 posições) e, de quebra,
-funde sementes: derruba o N da rodada seguinte justo quando o D está subindo.
-
-### Seleção e parada
-
-| | Valor |
-|---|---|
-| Checkpoint de cada estágio | `best_kappa.ckpt`, monitor `stage<N>/svm_kappa` (max) |
-| Sinal do veredito | `best_val_svm_kappa` do `run_metadata.json`, só do `stage4` — o `stage3` nunca entra na decisão |
-| Com `--head-finetune` | o monitor vira `probe/head_kappa`, gravado sob a **mesma** chave. Ressalva escrita no próprio código (`scripts/spifil_growth_loop.py:358-363`): o κ do `stage2` vem da sonda SVM sobre o gargalo e o do `round<r>_head` vem da Head supervisionada — o `should_stop` compara os dois como se fossem a mesma métrica, e não são. Entre rodadas, aí sim, é a mesma métrica |
-| Parada por estagnação | `--kappa-tolerance 0.01`, `--rounds-patience 1`: uma rodada sem bater o melhor κ por mais de 0.01 já encerra |
-| Parada por orçamento | `spifil_grow.py` sai com código 3 quando N ≤ D. Não é falha: é o método dizendo que não há mais camada a cortar |
-| Teto de rodadas | `--max-rounds 2` (default do script: 4) |
-
-### Grade
-
-3 datasets × 3 splits × {5%, 50%} = **18 braços**. Com `--gpus 1 2 3 --max-concurrent-per-gpu 2`
-rodam 6 ao mesmo tempo, em 3 ondas. Processos de treino por braço: **6** com o estágio 3
-(`2 + 2 × max-rounds`), **4** com `--unfrozen-after-stage-two` ou `--head-finetune`.
-
-### Layout de saída
-
-```
-artifacts/spifil_growth/<work-dir>/
-  <dataset>_split<N>_pct<P>/
-    stage1/  stage2/
-    round<r>_grow/       ← architecture.json + conv<n>-kernels.npy + spifil_bundle/
-    round<r>_stage3/     ← ausente com --unfrozen-after-stage-two e com --head-finetune
-    round<r>_stage4/     ← vira round<r>_head/ com --head-finetune
-```
-
-Cada diretório de estágio tem `checkpoints/{best_kappa.ckpt, last.ckpt}`, `run_metadata.json` e
-`wandb/`. Os `round<r>_grow/` **não** têm checkpoint — guardam os kernels da camada nova, e apagá-los
-inutiliza todos os checkpoints das rodadas seguintes, que os releem pelo caminho gravado nos hparams.
-
----
-
-
-## Classical Classifiers Evaluation (kNN / RF / LightGBM / GP / QDA)
-
-Evaluates frozen LeJEPA encoder embeddings with classical classifiers.
-Runs all classifiers for every available experiment (dataset × split × pct × init),
-saving results incrementally — safe to interrupt and resume.
-
-```bash
-# Run all (auto-resumes from results/classical_classifiers_results.csv if it exists)
-python -m src.evaluate.classical_classifiers
-
-# → results/classical_classifiers_results.csv
-```
-
-Classifiers: kNN (k=5, 10, 15), QDA, Random Forest (200 trees), LightGBM, Gaussian Process (skipped if n\_train > 2000).
-
-After running, aggregate and plot:
-
-```bash
-# Aggregate into per-init mean/std table
-python scripts/aggregate_classical_results.py
-
-# Filter to a specific init
-python scripts/aggregate_classical_results.py --init trunc_normal
-
-# Custom input/output paths
-python scripts/aggregate_classical_results.py \
-  --input results/classical_classifiers_results.csv \
-  --output results/classical_aggregated_custom.csv
-
-# Generate plots (classifiers_per_init/ and inits_per_classifier/)
-python scripts/plot_classical_classifiers.py
-
-# Only merge plots with custom font sizes
-python scripts/plot_classical_classifiers.py --mode merge \
-  --subtitle-fontsize 36 --tick-fontsize 42 --legend-fontsize 20 --legend-ncol 4
-
-# → artifacts/plots/classical_classifiers/
-```
-
-### If the CSV is already generated (skip model loading)
-
-If `results/classical_classifiers_results.csv` already exists, skip the
-evaluation step and go straight to aggregation and plotting:
-
-```bash
-# 1. Aggregate
-python scripts/aggregate_classical_results.py
-# → results/classical_classifiers_aggregated.csv
-
-# 2. Plot
-python scripts/plot_classical_classifiers.py --mode merge \
-  --metrics kappa f1 \
-  --subtitle-fontsize 36 --tick-fontsize 42 \
-  --legend-fontsize 20 --legend-ncol 4
-# → artifacts/plots/classical_classifiers/plots_compare_to_flim/merge_plots/
-```
-
----
-
-## SVM Evaluation (frozen encoder features)
-
-```bash
-# Use cached W&B metadata (default)
-python -m src.evaluate.svm
-
-# Refresh W&B cache first
-python -m src.evaluate.svm --wandb-update
-
-# → results/svm_results.csv
-```
-
----
-
-## MLP Evaluation (sequential, single process)
-
-```bash
-# All modes
-python -m src.evaluate.mlp --mode all
-
-# Freeze only
-python -m src.evaluate.mlp --mode freeze
-
-# Unfreeze only, protozoan dataset
-python -m src.evaluate.mlp --mode unfreeze --dataset protozoan
-
-# Single config
-python -m src.evaluate.mlp --config configs/evaluate/mlp/freeze/helminth-eggs/split_1/pct_100/7rkcbbnk.yaml
-
-# Refresh W&B cache first
-python -m src.evaluate.mlp --mode all --wandb-update
-
-# → results/mlp_results.csv
-```
-
----
-
-## Unified Evaluation Pipeline
-
-Runs SVM and MLP evaluations for all datasets in one command and generates publication-style plots.
-
-```bash
-# Evaluate everything
-python -m src.evaluate.unified_eval --model all --dataset all
-
-# SVM only, eggs
-python -m src.evaluate.unified_eval --model svm --dataset eggs
-
-# MLP freeze, protozoan, pct 25
-python -m src.evaluate.unified_eval --model mlp_freeze --dataset protozoan --pct 25
-
-# Preview (no GPU work)
-python -m src.evaluate.unified_eval --model all --dataset all --dry-run
-```
-
-| `--model` | What runs |
-|---|---|
-| `svm` | Linear SVM on frozen encoder features |
-| `mlp_freeze` | MLP with frozen encoder |
-| `mlp_unfreeze` | MLP with unfrozen encoder |
-| `all` | svm → mlp_unfreeze → mlp_freeze |
-
-### Artifact layout
-
-```
-artifacts/
-  SVM/{dataset}/lejepa_pct_{pct}/
-  MLP/{dataset}/lejepa_pct_{pct}/
-  plots/{dataset}/
-  run_manifest.csv
-```
-
----
-
-## Avaliações — um comando por script
-
-Todo braço de avaliação tem exatamente um entrypoint. Rode a partir da raiz do repositório,
-com o ambiente ativo.
-
-| Braço | Comando | Saída |
-|---|---|---|
-| SVM sobre encoder LeJEPA congelado | `python -m src.evaluate.svm` | `results/svm_results.csv` |
-| SVM sobre student destilado (encoder 48-d) | `python -m src.evaluate.svm_distillation` | `results/svm_distillation_results.csv` |
-| SVM sobre student destilado — variante conv | `python -m src.evaluate.svm_distillation_conv` | `results/svm_distillation_conv_results.csv` |
-| SVM sobre a proj head 1280-d (com scaler) | `python -m src.evaluate.svm_distill_with_projection` | `results/svm_distill_proj1280_results.csv` |
-| SVM sobre FLIM raw (protocolo do Distill 4) | `python -m src.evaluate.svm_real_flim` | `results/<csv-stem>.csv` |
-| SVM sobre encoder I-JEPA (teacher, 1280-d) | `python -m src.evaluate.svm_ijepa` | `results/ijepa_svm_results.csv` |
-| SVM sobre a cabeça de classificação ReLU-2L | `python -m src.evaluate.svm_classification_flim` | `results/svm_relu2l_results.csv` |
-| SVM sobre encoder FLIM residual (eggs) | `python -m src.evaluate.svm_flim_residual` | `results/svm_flim_residual_eggs.csv` |
-| MLP (sequencial) | `python -m src.evaluate.mlp --mode all` | `results/mlp_results.csv` |
-| MLP (fila Ray) | `python -m src.evaluate.ray_mlp_queue` | `results/mlp_results.csv` |
-| Classificadores clássicos (kNN/RF/LGBM/GP/QDA) | `python -m src.evaluate.classical_classifiers` | `results/classical_classifiers_results.csv` |
-| Pipeline unificado (SVM + MLP + plots) | `python -m src.evaluate.unified_eval --model all --dataset all` | `artifacts/` |
-| t-SNE do test set | `python -m src.evaluate.tsne_analysis` | `artifacts/tsne/` |
-| Diagnóstico: 48-d sem imagenet_norm | `python -m src.evaluate.eval_avg_pooling_48d` | stdout |
-
-Flags comuns: `--dry-run` (prévia sem GPU), `--wandb-update` (atualiza o cache do W&B antes),
-`--dataset` / `--splits` / `--percentages` para recortar a grade. Use `--help` em qualquer um.
-
-### Código compartilhado — não duplique
-
-Existe **um** SVM e **uma** função de métrica. Toda avaliação acima usa os mesmos:
-
-| O quê | Onde | Como usar |
-|---|---|---|
-| SVM (linear, C=1e2, gamma=auto, ovo, max_iter=-1) | `src/utils/evaluate.py` | `from src.utils.evaluate import fit_svm` |
-| Métricas (κ, F1, acurácia) | `src/metrics/classification.py` | `from src.metrics.classification import compute_metrics` |
-| Constantes compartilhadas | `src/evaluate/constants.py` | `from src.evaluate.constants import IMAGE_SIZE, ...` |
-
-`fit_svm(X, y, scaler=True)` embrulha o SVC num `Pipeline` com `StandardScaler` — a assimetria de
-scaler entre braços é deliberada e fica registrada na coluna `svm_protocol` de cada CSV. A convenção
-de rótulo (0- ou 1-indexado) é responsabilidade do chamador; as métricas são invariantes a ela.
-
-Nunca escreva um segundo SVM nem recalcule κ/F1/acurácia localmente. Para travar isso:
-
-```bash
-python tools/check_refactor_equivalence.py
-# → ALL CHECKS PASSED
-```
-
-Falha se o SVM canônico, as métricas ou a config do probe do autoencoder divergirem.
-
----
-
-## t-SNE Analysis
-
-Gera plots 2D t-SNE do test set para dois modelos:
-
-- **FLIM** — encoder do student distilado (`3x3_BN2d_1280_one_layer`), embedding 48-dim via GAP
-- **LeJEPA trunc_normal** — encoder SSL com inicialização trunc_normal, embedding 48-dim via GAP
-
-```bash
-# Gera todos os plots (3 datasets × 3 splits × 6 percentagens = 108 plots)
-python -m src.evaluate.tsne_analysis
-
-# Só o modelo FLIM
-python -m src.evaluate.tsne_analysis --model flim
-
-# Só o LeJEPA
-python -m src.evaluate.tsne_analysis --model lejepa
-
-# Dataset específico
-python -m src.evaluate.tsne_analysis --dataset eggs
-
-# Split e percentagem específicos
-python -m src.evaluate.tsne_analysis --dataset larvae --split 1 --pct 100
-
-# Limitar amostras por plot (mais rápido, para testes)
-python -m src.evaluate.tsne_analysis --max-samples 500
-
-# Regar plots já existentes
-python -m src.evaluate.tsne_analysis --force
-```
-
-### Estrutura de saída
-
-```
-artifacts/TSNE_analysis/
-  eggs/
-    FLIM/
-      split1_pct1.png
-      split1_pct5.png
-      split1_pct25.png
-      ...
-    lejepa/
-      pct1/
-        split1.png  split2.png  split3.png
-      pct5/
-      pct25/
-      pct50/
-      pct75/
-      pct100/
-  larvae/
-    FLIM/
-    lejepa/
-  protozoan/
-    FLIM/
-    lejepa/
-```
-
----
-
-## Cleanup
-
-```bash
-python scripts/clear_wandb_cache.py
-```
-
-### Encolher checkpoints inchados (teacher de ~2,5 GB)
-
-> ⚠️ **Use isto se encontrar algum `best.ckpt` perdido com ~2,5 GB.** Esse tamanho é sinal
-> de que o teacher I-JEPA congelado (ViT-H/14, 1280-dim) foi salvo dentro do `state_dict` —
-> ele é inútil para inferência/SVM e pode entupir o disco. Um checkpoint saudável (só o
-> student + proj head) fica em torno de **~20 MB**.
-
-`scripts/strip_teacher_from_ckpt.py` é **não-destrutivo por padrão**: lê `best.ckpt` e grava
-`best.student.ckpt` ao lado, mantendo só `student.*` / `proj_kd.*` + hyperparams. Os
-avaliadores (`svm_distillation_conv` / `svm_distill_with_projection`) carregam o `.student.ckpt`
-sem nenhuma mudança.
-
-```bash
-# 1) dry-run — lista o que faria, não grava nada:
-python scripts/strip_teacher_from_ckpt.py \
-    --glob 'artifacts/distillation/*/checkpoints/best*.ckpt'
-
-# 2) gravar de fato os .student.ckpt (mantém os originais):
-python scripts/strip_teacher_from_ckpt.py \
-    --glob 'artifacts/distillation/*/checkpoints/best*.ckpt' --apply
-
-# alternativa: só os best referenciados pelo run_metadata.json
-python scripts/strip_teacher_from_ckpt.py --from-metadata --apply
-```
-
-Para **sobrescrever in-place** e recuperar o disco (DESTRUTIVO — o teacher é perdido, mas é
-redownloadável para um treino novo); a escrita é atômica (`.tmp` + replace):
-
-```bash
-python scripts/strip_teacher_from_ckpt.py \
-    --glob 'artifacts/distillation/*/checkpoints/best*.ckpt' --apply --overwrite
-```
+## 8. Estado do repositório
+
+`src/`, `scripts/` e `tools/` ainda existem como **legado** e ainda não foram apagados.
+O inventário de deleção está em `MIGRATION.md`, seção final. O ponto de retorno de toda
+a refatoração é o commit `f43435d`.
+
+O grafo do `graphify` está **desatualizado** — foi construído contra o layout antigo e
+não conhece `core/`, `flim/`, `methods/`, `eval/`. Rode `graphify update .` antes de
+consultá-lo.

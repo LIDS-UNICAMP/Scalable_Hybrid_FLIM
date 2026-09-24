@@ -1,0 +1,88 @@
+# Sonda SVM sobre os checkpoints da destilacao PURA frozen (`direct`, loss MSE) —
+# a familia treinada por experiments/distillation/distill4_mse_frozen.yaml na
+# corrida de 2026-09-05 02:38 (log: logs/distill4_all_mse_frozen_20260905_023740.log).
+# Aqui nao se treina nada: le-se o encoder do checkpoint, extrai-se a feature e
+# ajusta-se um SVM sobre ela.
+#
+# Grade COMPLETA: 3 datasets x 3 splits x 2 pcts = 18 celulas, todas com peso.
+# Gemeo de eval_svm_distill_cos_frozen.yaml — a unica diferenca entre as duas
+# familias e a loss (`direct` = MSE, `direct_cosine` = cosseno); o student, o
+# professor e o estado congelado sao os mesmos.
+#
+# RESSALVA — `protozoan_s2_p5` avalia peso NAO-FINAL
+# -------------------------------------------------
+# 17 das 18 celulas terminaram. A 18a (`distill4_all_mse_frozen_protozoan_s2_p5`,
+# wandb 1xvw4pew) ainda estava treinando quando esta sonda foi montada — o
+# `best_loss.ckpt` dela existe e e valido, mas e o melhor ATE AQUI, nao o melhor
+# do run. Ela entra assim de proposito, para a grade nao sair com n=2 em
+# protozoan/5%. Quando o treino fechar, reavaliar SO essa celula: o CSV e upsert
+# por (method, run_name, dataset_short, split, percentage), entao a linha e
+# substituida, nao duplicada — basta apagar a entrada dela do
+# `execution_state.json` do work_dir e relancar.
+#
+# POR QUE `artifacts_dir` NAO E `artifacts/distillation`
+# -----------------------------------------------------
+# O runner `train` nunca passa `--trainer.default_root_dir`, entao o
+# ModelCheckpoint do Lightning resolve o destino pelo WandbLogger de
+# configs/default.yaml:12-16 e grava em `logs/flim-ssl/<wandb_id>/checkpoints/`.
+# O `output.work_dir` do YAML de treino so e criado pelo teste de escrita do
+# preflight (experiments/ray/grid.py:113-121) e fica VAZIO — o contrato
+# `<work_dir>/<run_name>/checkpoints/` de experiments/ray/paths.py:185 nao e
+# honrado por esse runner.
+#
+# `artifacts/distillation_frozen_20260905/` e a arvore-espelho que reconecta as
+# duas pontas: um diretorio por run_name, com `checkpoints/best_loss.ckpt` em
+# SYMLINK para o peso real e um `run_metadata.json` minimo. O mapa run_name ->
+# wandb_id foi derivado do argv gravado em logs/wandb/*/files/wandb-metadata.json,
+# nao inferido de nome de diretorio. Aqui o mapa importa mais do que na familia
+# cos: as celulas de `mse_frozen` foram submetidas em fila e comecaram em datas
+# diferentes (05/09 a 08/09), e cada run_name aparece DUAS vezes no
+# `logs/wandb/` — os ids de 03/09 sao de uma corrida anterior, abandonada.
+# O desempate e por `startedAt`, o mais recente.
+#
+# `best_loss.ckpt` e o peso escolhido, e vem FIXADO em `best_checkpoint` no
+# metadado. O `best_knn_kappa.ckpt` que esta ao lado e vestigial:
+# DistillationConvModule nao tem a KnnKappaProbeMixin e nunca loga
+# `val/knn_kappa` (ver o comentario do callback em distill4_mse_frozen.yaml).
+# Sem o `best_checkpoint` fixado, o glob `best*` de
+# eval/svm_variants/svm_distillation.py:270 pegaria os dois.
+
+name:   svm_distill_mse_frozen
+method: distillation
+runner: eval
+
+# Nomes LONGOS de dataset (o schema so aceita esses); os diretorios de run usam
+# os curtos — eggs, larvae, protozoan.
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [5, 50]
+
+runner_args:
+  probe:  svm
+  source: distillation
+  artifacts_dir: artifacts/distillation_frozen_20260905
+  # ARMADILHA: `frozen` e substring de `unfrozen`, entao filtrar por "frozen"
+  # ou por "mse" sozinho pegaria tambem a familia unfrozen. O underscore nas
+  # DUAS pontas e o que separa `_mse_frozen_` de `_mse_unfrozen_` e, ao mesmo
+  # tempo, exclui um eventual diretorio pelado `distill4_all_mse_frozen` — que
+  # nao casa o _DISTILL_RUN_RE (experiments/ray/runners/eval.py:169-172) e
+  # abortaria o plano inteiro com ValueError.
+  run_filter: _mse_frozen_
+  # A arvore-espelho so tem celula com peso, entao nada e descartado aqui; a
+  # flag fica explicita para o dia em que uma celula parcial entrar.
+  require_status_ok: true
+  ckpt_selection: best
+  results_csv: results/svm_distill_mse_frozen.csv
+
+# max_per_gpu: 1. Nao e memoria — o checkpoint aqui tem 22 MB (`save_weights_only`,
+# sem o professor I-JEPA junto). E o CSV: eval/svm.py:552-574 faz upsert lendo o
+# arquivo inteiro, removendo a linha colidente e reescrevendo. Dois jobs
+# concorrentes perdem linha.
+resources: {gpu_ids: [0], max_per_gpu: 1, cpus_per_experiment: 8}
+output:    {work_dir: /dados/home/moliveira/artifacts/eval/svm_distill_mse_frozen}
+
+# `state` e nao `wandb`: estes runs de treino ja estao encerrados no W&B, entao
+# a checagem remota nao ajuda a decidir o que reavaliar. O que se retoma aqui e
+# so a sonda.
+skip: state

@@ -38,7 +38,7 @@ runner_args:
 
 # --num-gpus 1 / --max-concurrent-per-gpu 4 / --cpus-per-experiment 4
 resources: {gpu_ids: [0], max_per_gpu: 4, cpus_per_experiment: 4}
-output:    {work_dir: artifacts/MLP/freeze}
+output:    {work_dir: /dados/home/moliveira/artifacts/MLP/freeze}
 
 # Era o --resume, que lia results/queue_state.json. O runner eval le este campo
 # em runners/eval.py:266-296: com `wandb` ele exige estado terminal do run e usa

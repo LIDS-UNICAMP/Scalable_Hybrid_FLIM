@@ -3,12 +3,12 @@
 # ║  ⠀⠀⠀⣀⣥⠠⣿⠆⠐⣻⣾⣿⣿⢷⡄⠀⠀⠀⠀⢠⡿⠋⠉⠉⠙⢿⡄⠀⠀⠀   m203656@dac.unicamp.edu.br             ║
 # ║  ⠀⠀⢘⡵⢋⠄⡙⠒⣤⣄⣉⠙⣿⣗⠑⡄⠀⠀⠀⠘⡇⠀⠀⠀⠀⠈⡇⠀⠀⠀   UNICAMP — Universidade Estadual de     ║
 # ║  ⠀⣴⢿⡜⢡⡞⢀⢼⣿⣿⣿⣿⣿⣿⠟⣂⠀⠀⢀⣀⠱⡀⠀⠀⠀⢰⠁⠀⠀⠀               Campinas                     ║
-# ║  ⠰⢫⢟⡇⢸⡇⢸⢾⣿⣿⣿⣿⣿⣿⡷⠰⠀⢰⡏⠀⠀⢡⠀⠀⢠⠃⠀⠀⠀⠀   FEEC — School of Electrical and        ║
-# ║  ⢰⠁⣿⢣⣿⠇⢀⣿⣿⡿⠿⠤⣭⣥⣶⡆⠀⠸⣷⣤⣠⡾⠀⢀⡇⠀⠀⠀⠀⠀           Computer Engineering             ║
+# ║  ⠰⢫⢟⡇⢸⡇⢸⢾⣿⣿⣿⣿⣿⣿⡷⠰⠀⢰⡏⠀⠀⢡⠀⠀⢠⠃⠀⠀⠀⠀   IC — Institute of Computing            ║
+# ║  ⢰⠁⣿⢣⣿⠇⢀⣿⣿⡿⠿⠤⣭⣥⣶⡆⠀⠸⣷⣤⣠⡾⠀⢀⡇⠀⠀⠀⠀⠀   Computer Science Department              ║
 # ║  ⡞⣰⣧⠟⡝⢸⢸⣿⣥⠖⣴⡆⣤⣬⠉⠀⠀⠀⠈⠉⠉⠀⠀⢸⣇⠀⠀⠀⠀⠀   github.com/oliveiraMats2              ║
 # ║  ⠀⡿⡟⢸⡇⠸⡄⢹⣿⢸⣿⣇⡏⠟⣰⣄⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠁⠀⠀⠀   linkedin.com/in/mateus-eng            ║
 # ║  ⠀⠇⣧⠘⡇⠦⣹⣸⣿⡇⡿⡿⣡⣼⣿⣿⣷⣦⣄⡀⠀⠀⣸⣿⣿⠄⠻⢷⣦⠀                                            ║
-# ║  ⠀⢀⠘⣇⢹⡸⣿⣿⣿⢹⢃⣠⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠑⠋⠉⠀⠀⠈⣿⣧   UNICAMP · FEEC · 2026                  ║
+# ║  ⠀⢀⠘⣇⢹⡸⣿⣿⣿⢹⢃⣠⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠑⠋⠉⠀⠀⠈⣿⣧   UNICAMP · IC · 2026                    ║
 # ║  ⠀⢸⣿⡌⠘⢷⣿⣿⡏⢀⣾⣿⣿⣿⣿⣿⣿⢻⣿⣿⣿⡆⠀⠀⠀⠀⠀⠀⣿⡿                                            ║
 # ║  ⠀⠈⣿⣿⣦⡌⢿⠏⣰⣿⣿⣿⣿⣿⣿⡿⡏⣼⣿⣿⣿⡇⣄⠀⠀⠀⢀⣼⣿⠇                                            ║
 # ║  ⠀⠀⠹⣿⣿⢻⡀⣼⣿⣿⢻⣿⣿⣿⣿⡇⡇⢻⣿⣿⣿⡇⣿⣿⣶⣿⣿⠟⠁⠀                                            ║
@@ -31,6 +31,7 @@ Usage (internal):
 """
 from __future__ import annotations
 
+import fnmatch
 from pathlib import Path
 from typing import Optional
 
@@ -39,10 +40,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import yaml
 
 # ── Visual config (mirroring plot_svm_results.py) ─────────────────────────────
 
-from core.constants import METRICS, PERCENTAGES
+from core.constants import METRICS, PERCENTAGES, PROJECT_ROOT
 from eval.constants import (
     INIT_ORDER,
     METHOD_COLOR,
@@ -344,38 +346,43 @@ def plot_metric_vs_pct(
 
 # ── Multi-source method comparison (FLIM vs LeJEPA vs I-JEPA) ─────────────────
 
-# Modelos oficiais do experimento — apenas estas chaves aparecem nas curvas/legenda
-# (8 originais + as 2 variantes FLIM Residual, eggs-only).
-# Ordem = ordem da legenda. Cores contrastivas.
-METHOD_COMPARE_STYLE: dict[str, dict] = {
-    "SVM_FLIM":                                {"color": "#0072B2", "ls": "-",  "marker": "o", "zorder": 7},
-    "lejepa_view_trunc_normal":                {"color": "#9467BD", "ls": "-.", "marker": "P", "zorder": 8},
-    "SVM_IJEPA":                               {"color": "#E69F00", "ls": "-.", "marker": "*", "zorder": 9},
-    "SVM_Distill_Proj1280":                    {"color": "#D62728", "ls": "--", "marker": "v", "zorder": 10},
-    "SVM_Distill_3x3BN":                       {"color": "#E377C2", "ls": "--", "marker": "^", "zorder": 11},
-    "SVM_Distill_1x1BN":                        {"color": "#17BECF", "ls": "-",  "marker": "s", "zorder": 12},
-    "SVM_Distill_2l400K":                       {"color": "#2CA02C", "ls": "--", "marker": "D", "zorder": 13},
-    "SVM_Distill_1x1BN_flim_frozen_eval_loss": {"color": "#000000", "ls": ":",  "marker": ">", "zorder": 14},
-    "SVM_FLIMResidual_1_3":                    {"color": "#008080", "ls": "-",  "marker": "d", "zorder": 15},
-    "SVM_FLIMResidual_2_3":                    {"color": "#B22222", "ls": "--", "marker": "H", "zorder": 16},
-}
+# Quais curvas entram e com que cor vem de configs/eval/plots.yaml (plots.include),
+# não mais de um dict aqui.  Ordem do YAML = ordem da legenda, primeiro padrão que casa vence.
+_INCLUDE = [{"ls": "-", "marker": "o", "zorder": 7, **e} for e in yaml.safe_load(
+    (Path(PROJECT_ROOT) / "configs/eval/plots.yaml").read_text())["plots"]["include"]]
 
-# Rótulos curtos (inglês) — uma entrada por modelo oficial, mesma ordem da legenda.
-# Procedência de cada curva (qual CSV gera cada valor) está documentada no override
-# desta dict em scripts/plot_comparison_flim.py e em
-# metrics_distillation/data_provenance.md (como cada CSV de origem é gerado).
-METHOD_COMPARE_LABEL: dict[str, str] = {
-    "SVM_FLIM":                                 "FLIM (59.504)",               # data/reports_felipe/svm/report_svm_*.csv
-    "lejepa_view_trunc_normal":                 "lejepa_view",                 # artifacts/SVM/*/*/metrics_SVM_*.csv (init=trunc_normal)
-    "SVM_IJEPA":                                "I-JEPA (632M)",               # results/ijepa_svm_aggregated.csv
-    "SVM_Distill_Proj1280":                     "Distill 4 (889K)",            # results/svm_distill_proj1280_results.csv
-    "SVM_Distill_3x3BN":                        "Distill 3 (615K)",            # results/svm_proj1280_3x3_BN2d_results.csv (trunc_normal)
-    "SVM_Distill_1x1BN":                        "Distill 1 (123K)",            # results/svm_proj1280_1x1_BN2d_results.csv (trunc_normal)
-    "SVM_Distill_2l400K":                       "Distill 2 (402K)",            # results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv
-    "SVM_Distill_1x1BN_flim_frozen_eval_loss":  "Distill 1 — FLIM init (123K)", # results/svm_distillation_conv_flim_frozen_results.csv (ckpt best-loss)
-    "SVM_FLIMResidual_1_3":                     "FLIM Residual 1→3",           # results/svm_flim_residual_eggs.csv
-    "SVM_FLIMResidual_2_3":                     "FLIM Residual 2→3",           # results/svm_flim_residual_eggs.csv
-}
+
+def _styled_keys(keys) -> list[tuple[str, dict]]:
+    """Curvas a desenhar, na ordem dos padroes; chave sem padrao fica fora e e reportada."""
+    styled: dict[str, dict] = {}
+    for entry in _INCLUDE:
+        for key in sorted(keys):
+            if fnmatch.fnmatch(key, entry["name"]):
+                styled.setdefault(key, entry)
+    for key in sorted(set(keys) - set(styled)):
+        print(f"  [PLOT] sem padrao em plots.include, fora do grafico: {key}")
+    return list(styled.items())
+
+
+def _line_key(method: str, init: str) -> str:
+    """Chave da curva: o proprio metodo quando ja e um nome de curva, senao derivada do init."""
+    if method == "SVM_lejepa_view":              # curva LeJEPA (renomeada p/ lejepa_view)
+        return f"lejepa_view_{init}"
+    if method in _LINE_KEY_AS_IS or any(fnmatch.fnmatch(method, e["name"]) for e in _INCLUDE):
+        return method
+    # Legado: MLP_FLIM de scripts/plot_svm_vs_mlp_pct.py usa init=frozen/unfrozen
+    return f"SVM_LeJEPA_{init}"
+
+
+# Metodos que ja sao nome de curva mas hoje ficam fora de plots.include (variantes
+# _flim/_nonorm/_knn); mantidos para a chave nao colidir com o fallback SVM_LeJEPA_*.
+_LINE_KEY_AS_IS = (
+    "SVM_Distillation_Conv", "SVM_Distill_3x3BN_flim", "SVM_Distill_1x1BN_flim",
+    "SVM_Distill_1x1BN_nonorm", "SVM_Distill_2l400K_flim",
+    "SVM_Distill_2l400K_flim_nonorm", "SVM_Distill_1x1BN_flim_frozen_eval_knn",
+)
+
+
 
 
 def plot_method_comparison(
@@ -423,27 +430,12 @@ def plot_method_comparison(
     std_col = f"{metric}_std"
     pct_col = "pretrained_pct"
 
-    def _line_key(method: str, init: str) -> str:
-        if method in ("SVM_IJEPA", "SVM_FLIM", "SVM_Distillation_Conv",
-                      "SVM_Distill_Proj1280", "SVM_Distill_3x3BN", "SVM_Distill_3x3BN_flim",
-                      "SVM_Distill_1x1BN", "SVM_Distill_1x1BN_flim", "SVM_Distill_1x1BN_nonorm",
-                      "SVM_Distill_2l400K", "SVM_Distill_2l400K_flim",
-                      "SVM_Distill_2l400K_flim_nonorm",
-                      "SVM_Distill_1x1BN_flim_frozen_eval_knn",
-                      "SVM_Distill_1x1BN_flim_frozen_eval_loss",
-                      "SVM_FLIMResidual_1_3", "SVM_FLIMResidual_2_3"):
-            return method
-        if method == "SVM_lejepa_view":          # curva LeJEPA (renomeada p/ lejepa_view)
-            return f"lejepa_view_{init}"
-        # Legado: MLP_FLIM de scripts/plot_svm_vs_mlp_pct.py usa init=frozen/unfrozen
-        return f"SVM_LeJEPA_{init}"
-
     line_df = df.copy()
     line_df["_line_key"] = [
         _line_key(m, i) for m, i in zip(line_df["method"], line_df["init"])
     ]
 
-    line_keys = [k for k in METHOD_COMPARE_STYLE if k in line_df["_line_key"].unique()]
+    line_keys = _styled_keys(line_df["_line_key"].unique())
     if not line_keys:
         return
 
@@ -453,7 +445,7 @@ def plot_method_comparison(
         rc={"axes.facecolor": "#FAFAFA", "grid.color": "#E0E0E0"},
     )
 
-    fig, ax = plt.subplots(figsize=(13, 10))
+    fig, ax = plt.subplots(figsize=(16, 7))
 
     if show_title:
         dataset_label = DATASET_LABEL.get(dataset, dataset)
@@ -464,7 +456,7 @@ def plot_method_comparison(
 
     legend_handles = []
 
-    for lkey in line_keys:
+    for lkey, sty in line_keys:
         sub = line_df[line_df["_line_key"] == lkey].sort_values(pct_col)
         if sub.empty:
             continue
@@ -481,14 +473,13 @@ def plot_method_comparison(
             if std_col in sub.columns else np.zeros(len(valid_pcts))
         )
 
-        sty = METHOD_COMPARE_STYLE[lkey]
         line, = ax.plot(
             x, y,
             color=sty["color"], linestyle=sty["ls"], marker=sty["marker"],
             linewidth=3.5, markersize=14,
             markeredgecolor="white", markeredgewidth=0.9,
             zorder=sty["zorder"],
-            label=METHOD_COMPARE_LABEL.get(lkey, lkey),
+            label=sty.get("label", lkey),
         )
         ax.errorbar(
             x, y, yerr=np.nan_to_num(yerr),
@@ -508,6 +499,7 @@ def plot_method_comparison(
 
     ax.set_xticks(tick_pos)
     ax.set_xticklabels([f"{p}%" for p in pcts_present], fontsize=tick_fontsize)
+    ax.set_yticks(np.arange(0.0, 1.01, 0.2))   # a figura baixa faria o auto-locator cair para 0/0.5/1
     ax.tick_params(axis="y", labelsize=24)
     ax.set_ylim(-0.05, 1.05)
     ax.axhline(0, color="#AAAAAA", linewidth=0.6, zorder=0)
@@ -532,9 +524,11 @@ def plot_method_comparison(
     )
 
     plt.tight_layout()
+    # Espaco da legenda em POLEGADAS convertido em fracao: fracao fixa nao
+    # sobrevive a mudanca de altura da figura (legenda invadia o xlabel).
     legend_rows = max(1, -(-n_handles // ncol))
-    bottom_pad  = 0.10 + legend_rows * 0.08
-    fig.subplots_adjust(bottom=min(bottom_pad, 0.42))
+    bottom_pad  = (0.9 + legend_rows * 0.62) / fig.get_figheight()
+    fig.subplots_adjust(bottom=min(bottom_pad, 0.55))
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -564,8 +558,8 @@ def plot_merge_comparison(
     legend_y:              float = 0.0,
     linewidth:             float = 3.5,
     markersize:            int   = 14,
-    fig_height:            int   = 10,
-    fig_width_per_dataset: int   = 13,
+    fig_height:            int   = 7,
+    fig_width_per_dataset: int   = 11,
     orientation:           str   = "horizontal",
 ) -> None:
     """One subplot-figure per metric, with one panel per dataset.
@@ -606,21 +600,6 @@ def plot_merge_comparison(
         return
 
     pct_col = "pretrained_pct"
-
-    def _line_key(method: str, init: str) -> str:
-        if method in ("SVM_IJEPA", "SVM_FLIM", "SVM_Distillation_Conv",
-                      "SVM_Distill_Proj1280", "SVM_Distill_3x3BN", "SVM_Distill_3x3BN_flim",
-                      "SVM_Distill_1x1BN", "SVM_Distill_1x1BN_flim", "SVM_Distill_1x1BN_nonorm",
-                      "SVM_Distill_2l400K", "SVM_Distill_2l400K_flim",
-                      "SVM_Distill_2l400K_flim_nonorm",
-                      "SVM_Distill_1x1BN_flim_frozen_eval_knn",
-                      "SVM_Distill_1x1BN_flim_frozen_eval_loss",
-                      "SVM_FLIMResidual_1_3", "SVM_FLIMResidual_2_3"):
-            return method
-        if method == "SVM_lejepa_view":          # curva LeJEPA (renomeada p/ lejepa_view)
-            return f"lejepa_view_{init}"
-        # Legado: MLP_FLIM de scripts/plot_svm_vs_mlp_pct.py usa init=frozen/unfrozen
-        return f"SVM_LeJEPA_{init}"
 
     df = df.copy()
     df["_line_key"] = [_line_key(m, i) for m, i in zip(df["method"], df["init"])]
@@ -669,10 +648,7 @@ def plot_merge_comparison(
             ax.set_title(DATASET_LABEL.get(dataset, dataset),
                          fontsize=subtitle_fontsize, fontweight="bold", pad=10)
 
-            line_keys = [k for k in METHOD_COMPARE_STYLE
-                         if k in ds_df["_line_key"].unique()]
-
-            for lkey in line_keys:
+            for lkey, sty in _styled_keys(ds_df["_line_key"].unique()):
                 sub = ds_df[ds_df["_line_key"] == lkey].sort_values(pct_col)
                 if sub.empty:
                     continue
@@ -685,8 +661,7 @@ def plot_merge_comparison(
                 yerr = (sub.set_index(pct_col).loc[valid_pcts, std_col].values
                         if std_col in sub.columns else np.zeros(len(valid_pcts)))
 
-                sty   = METHOD_COMPARE_STYLE[lkey]
-                label = METHOD_COMPARE_LABEL.get(lkey, lkey)
+                label = sty.get("label", lkey)
                 line, = ax.plot(
                     x, y,
                     color=sty["color"], linestyle=sty["ls"], marker=sty["marker"],
@@ -710,6 +685,7 @@ def plot_merge_comparison(
                 ax.set_xticklabels([f"{p}%" for p in pcts_present], fontsize=tick_fontsize)
             else:
                 ax.set_xticklabels([])
+            ax.set_yticks(np.arange(0.0, 1.01, 0.2))
             ax.tick_params(axis="y", labelsize=ytick_fontsize)
             ax.set_ylim(-0.05, 1.05)
             ax.axhline(0, color="#AAAAAA", linewidth=0.6, zorder=0)
@@ -765,3 +741,18 @@ def plot_merge_comparison(
         fig.savefig(dst, dpi=300, bbox_inches="tight")
         plt.close(fig)
         print(f"  [MERGE] {dst}")
+
+
+if __name__ == "__main__":                   # python -m eval.eval_plotter
+    # Import local: so o modo script depende de experiments/, a biblioteca nao.
+    from experiments.constants import ARTIFACTS_PLOTS_DIR, UNIFIED_SVM_COMPARISON_CSV
+
+    plt.switch_backend("Agg")
+    _df = pd.read_csv(UNIFIED_SVM_COMPARISON_CSV)
+    _out = Path(ARTIFACTS_PLOTS_DIR) / "comparison"
+    _datasets = sorted(_df["dataset_short"].unique())
+    for _ds in _datasets:
+        for _metric in METRICS:
+            plot_method_comparison(_df[_df["dataset_short"] == _ds], _ds, _metric, _out)
+
+    plot_merge_comparison(_df, _datasets, METRICS, Path(ARTIFACTS_PLOTS_DIR) / "merge_plots")

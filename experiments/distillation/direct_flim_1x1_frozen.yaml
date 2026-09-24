@@ -29,6 +29,6 @@ overrides:
   model.init_args.temperature: 4.0
 
 resources: {gpu_ids: [0, 1, 2, 3], max_per_gpu: 2, cpus_per_experiment: 8}
-output:    {work_dir: artifacts/distillation/distill_direct_flim_1x1_frozen}
+output:    {work_dir: /dados/home/moliveira/artifacts/distillation/distill_direct_flim_1x1_frozen}
 wandb:     {enabled: true, project: phd_thesis_distill}
 skip: state

@@ -39,7 +39,7 @@ runner_args:
   spifil_in_feature: true
 
 output:
-  work_dir: artifacts/spifil_growth/g5_in_feature
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/g5_in_feature
 
 wandb:
   enabled: true

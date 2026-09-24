@@ -2,7 +2,7 @@
 ## Com Curvas de Treinamento Completas do WandB
 
 **Data:** 2026-05-30  
-**Projeto:** Scalable FLIM Self-Supervised Learning — UNICAMP/FEEC  
+**Projeto:** Scalable FLIM Self-Supervised Learning — UNICAMP/IC  
 **Pesquisador:** Mateus Oliveira  
 **Fonte de dados:** 20.752 linhas de histórico por época (216 runs de destilação), WandB `ophira-ai/flim-ssl`
 

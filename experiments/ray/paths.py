@@ -3,12 +3,12 @@
 # ║  ⠀⠀⠀⣀⣥⠠⣿⠆⠐⣻⣾⣿⣿⢷⡄⠀⠀⠀⠀⢠⡿⠋⠉⠉⠙⢿⡄⠀⠀⠀   m203656@dac.unicamp.edu.br             ║
 # ║  ⠀⠀⢘⡵⢋⠄⡙⠒⣤⣄⣉⠙⣿⣗⠑⡄⠀⠀⠀⠘⡇⠀⠀⠀⠀⠈⡇⠀⠀⠀   UNICAMP — Universidade Estadual de     ║
 # ║  ⠀⣴⢿⡜⢡⡞⢀⢼⣿⣿⣿⣿⣿⣿⠟⣂⠀⠀⢀⣀⠱⡀⠀⠀⠀⢰⠁⠀⠀⠀               Campinas                     ║
-# ║  ⠰⢫⢟⡇⢸⡇⢸⢾⣿⣿⣿⣿⣿⣿⡷⠰⠀⢰⡏⠀⠀⢡⠀⠀⢠⠃⠀⠀⠀⠀   FEEC — School of Electrical and        ║
-# ║  ⢰⠁⣿⢣⣿⠇⢀⣿⣿⡿⠿⠤⣭⣥⣶⡆⠀⠸⣷⣤⣠⡾⠀⢀⡇⠀⠀⠀⠀⠀           Computer Engineering             ║
+# ║  ⠰⢫⢟⡇⢸⡇⢸⢾⣿⣿⣿⣿⣿⣿⡷⠰⠀⢰⡏⠀⠀⢡⠀⠀⢠⠃⠀⠀⠀⠀   IC — Institute of Computing            ║
+# ║  ⢰⠁⣿⢣⣿⠇⢀⣿⣿⡿⠿⠤⣭⣥⣶⡆⠀⠸⣷⣤⣠⡾⠀⢀⡇⠀⠀⠀⠀⠀   Computer Science Department              ║
 # ║  ⡞⣰⣧⠟⡝⢸⢸⣿⣥⠖⣴⡆⣤⣬⠉⠀⠀⠀⠈⠉⠉⠀⠀⢸⣇⠀⠀⠀⠀⠀   github.com/oliveiraMats2              ║
 # ║  ⠀⡿⡟⢸⡇⠸⡄⢹⣿⢸⣿⣇⡏⠟⣰⣄⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠁⠀⠀⠀   linkedin.com/in/mateus-eng            ║
 # ║  ⠀⠇⣧⠘⡇⠦⣹⣸⣿⡇⡿⡿⣡⣼⣿⣿⣷⣦⣄⡀⠀⠀⣸⣿⣿⠄⠻⢷⣦⠀                                            ║
-# ║  ⠀⢀⠘⣇⢹⡸⣿⣿⣿⢹⢃⣠⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠑⠋⠉⠀⠀⠈⣿⣧   UNICAMP · FEEC · 2026                  ║
+# ║  ⠀⢀⠘⣇⢹⡸⣿⣿⣿⢹⢃⣠⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠑⠋⠉⠀⠀⠈⣿⣧   UNICAMP · IC · 2026                    ║
 # ║  ⠀⢸⣿⡌⠘⢷⣿⣿⡏⢀⣾⣿⣿⣿⣿⣿⣿⢻⣿⣿⣿⡆⠀⠀⠀⠀⠀⠀⣿⡿                                            ║
 # ║  ⠀⠈⣿⣿⣦⡌⢿⠏⣰⣿⣿⣿⣿⣿⣿⡿⡏⣼⣿⣿⣿⡇⣄⠀⠀⠀⢀⣼⣿⠇                                            ║
 # ║  ⠀⠀⠹⣿⣿⢻⡀⣼⣿⣿⢻⣿⣿⣿⣿⡇⡇⢻⣿⣿⣿⡇⣿⣿⣶⣿⣿⠟⠁⠀                                            ║
@@ -217,6 +217,10 @@ def run_name(
 
     if runner == "growth":
         body = _name_growth(name, dataset, split, pct, variant)
+    elif method == "distillation" and name.startswith("distill4"):
+        # Ver _name_distillation: a familia distill4_* leva a etiqueta da corrida
+        # no proprio nome, entao a formula precisa do `name`.
+        body = _name_distillation(dataset, split, pct, init, variant, name=name)
     elif method in _FORMULAS:
         body = _FORMULAS[method](dataset, split, pct, init, variant)
     else:
@@ -264,12 +268,21 @@ def _name_classification(dataset: str, split: int, pct: int, init: str, variant:
     return body
 
 
-def _name_distillation(dataset: str, split: int, pct: int, init: str, variant: dict) -> str:
+def _name_distillation(dataset: str, split: int, pct: int, init: str, variant: dict,
+                       name: str = "") -> str:
     """Destilacao MLP. Fonte: scripts/distillation_ray.py:141.
 
     A cauda `model...` e o distillation_type, NAO o init — apesar da grafia
     identica a do eixo `init` das outras grades.
     """
+    # Familia `distill4_*`: NAO saiu de nenhum launcher, foi o modulo filho que
+    # montou o nome (src/modules/distillation_*_module.py). Forma plana, com a
+    # etiqueta da corrida no prefixo e `s<split>_p<pct>` no fim. Reconstruida dos
+    # 54 diretorios de artifacts/distillation/distill4_all_*_*. Sem isso o `skip`
+    # nao reconhece os runs ja feitos e a grade inteira reroda em arvore paralela.
+    if name.startswith("distill4"):
+        return f"{name}_{_short(dataset)}_s{split}_p{pct}"
+
     dist_type = variant.get("dist_type", "direct")
     return f"distillation_{_short(dataset)}_split{split}_pct{pct}_model{dist_type}"
 

@@ -60,7 +60,7 @@ trainer:
         mode: max
         filename: best_kappa
         save_top_k: 1
-        save_last: true
+        save_last: false
     # Mesmo monitor, mesmo mode. strict=false porque com svm_probe_every > 1 o
     # kappa falta nas epocas em que a sonda nao roda.
     # src/modules/autoencoder_flim_module.py:1093-1095; patience 50 vem do

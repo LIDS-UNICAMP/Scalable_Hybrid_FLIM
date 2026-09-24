@@ -40,7 +40,7 @@ runner_args:
   random_layer: true
 
 output:
-  work_dir: artifacts/spifil_growth/g5_random
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/g5_random
 
 wandb:
   enabled: true

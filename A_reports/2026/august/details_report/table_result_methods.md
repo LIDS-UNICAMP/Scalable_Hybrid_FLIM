@@ -2,7 +2,8 @@
 
 Retrato de 2026-08-25 18:10, com a linha `hybrid_FLIM (head)` acrescentada em 2026-08-26 a partir
 de CSVs de 2026-08-26 12:51 e a linha `hybrid_FLIM (random)` em 2026-08-28, de CSVs de
-2026-08-28 20:24. Uma tabela por porcentagem.
+2026-08-28 20:24. As linhas `Distill4 (FLIM, MSE, frozen)` e `Distill4 (FLIM, cos, frozen)` entraram em
+2026-09-09, de CSVs de 2026-09-09 12:20. Uma tabela por porcentagem.
 
 ## Procedência — leia antes de olhar qualquer número
 
@@ -18,6 +19,8 @@ estavam no disco:
 | F1, κ, Acc da linha hybrid_FLIM (img) | `results/eval_growth_stages_g5_in_image_pct{5,50}.csv` |
 | F1, κ, Acc da linha hybrid_FLIM (head) | `results/eval_growth_stages_g5_head_pct{5,50}.csv` |
 | F1, κ, Acc da linha hybrid_FLIM (random) | `results/eval_growth_stages_g5_random_pct{5,50}.csv` |
+| F1, κ, Acc da linha Distill4 (FLIM, MSE, frozen) | `results/svm_distill_mse_frozen.csv` |
+| F1, κ, Acc da linha Distill4 (FLIM, cos, frozen) | `results/svm_distill_cos_frozen.csv` |
 
 O CSV unificado é montado por `scripts/normalize_reports.py`, que lê os CSVs primários de cada
 método (última coluna da legenda). O custo é medido por
@@ -55,9 +58,11 @@ carrega junto o protocolo de lá (ver a ressalva na Legenda).
 | **Distill2** | `SVM_Distill_2l400K` | `trunc_normal` | 402.544 | 0.0011 | 1.54 | `results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv` |
 | **Distill3** | `SVM_Distill_3x3BN` | `trunc_normal` | 615.024 | 0.0013 | 2.35 | `results/svm_proj1280_3x3_BN2d_results.csv` |
 | **Distill4** | `SVM_Distill_Proj1280` | `trunc_normal` | 889.200 | 0.0017 | 3.39 | `results/svm_distill_proj1280_results.csv` |
-| **Distill (cos, unfrozen)** | `SVM_Distill_Cos_Unfrozen` | `flim` | - | - | - | `results/svm_distill_cos_unfrozen.csv` |
+| **Distill4 (FLIM, MSE, frozen)** | `SVM_Distill_Mse_Frozen` | `flim` | 889.200 | 0.0017 | 3.39 | `results/svm_distill_mse_frozen.csv` |
+| **Distill4 (FLIM, cos, frozen)** | `SVM_Distill_Cos_Frozen` | `flim` | 889.200 | 0.0017 | 3.39 | `results/svm_distill_cos_frozen.csv` |
+| **Distill4 (FLIM, cos, unfrozen)** | `SVM_Distill_Cos_Unfrozen` | `flim` | 889.200 | 0.0017 | 3.39 | `results/svm_distill_cos_unfrozen.csv` |
 | **I-JEPA** | `SVM_IJEPA` | `ijepa` | 630.762.240 | 0.3332 | 2406.17 | `results/ijepa_svm_aggregated.csv` |
-| **I-JEPA (híbrido, unfrozen)** | `SVM_Ijepa_Hybrid_Unfrozen` | `flim` | - | - | - | `results/svm_ijepa_hybrid_unfrozen.csv` |
+| **I-JEPA \| unfrozen \| distill 4** | `SVM_Ijepa_Hybrid_Unfrozen` | `flim` | - | - | - | `results/svm_ijepa_hybrid_unfrozen.csv` |
 
 O `init` faz parte da identidade da linha, não é detalhe: o LeJEPA existe no CSV unificado com
 **cinco** inicializações (`flim`, `he`, `random`, `trunc_normal`, `xavier`), e só a
@@ -291,7 +296,7 @@ treino do SVM. Os dois documentos usam a mesma palavra para coisas diferentes.
 |---|---|---|---|---|---|---|---|---|---|---|
 | **LeJEPA** | **59.504** | 0.3473 ± 0.0198 | 0.2366 ± 0.0215 | 0.4767 ± 0.0558 | 0.4661 ± 0.0000 | 0.0000 ± 0.0000 | 0.5000 ± 0.0000 | 0.4355 ± 0.0116 | 0.2701 ± 0.0538 | 0.4704 ± 0.0180 |
 | **FLIM** | **59.504** | 0.0952 ± 0.0170 | 0.1278 ± 0.0284 | 0.1738 ± 0.0297 | 0.3365 ± 0.4386 | 0.0284 ± 0.1004 | 0.3899 ± 0.4281 | 0.1422 ± 0.0183 | 0.1447 ± 0.0455 | 0.2083 ± 0.0455 |
-| **hybrid_FLIM** | - | - | - | - | - | - | - | - | - | - |
+| **hybrid_FLIM** | - | - | - | - | - | - | - | - | - | - |v
 | **hybrid_FLIM (feat)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (img)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (head)** | - | - | - | - | - | - | - | - | - | - |
@@ -301,9 +306,11 @@ treino do SVM. Os dois documentos usam a mesma palavra para coisas diferentes.
 | **Distill2** | 402.544 | 0.4067 ± 0.0276 | 0.3312 ± 0.0501 | 0.4722 ± 0.0208 | 0.8080 ± 0.0425 | 0.6168 ± 0.0851 | 0.8281 ± 0.0754 | 0.4264 ± 0.0363 | 0.3302 ± 0.0437 | 0.4662 ± 0.0442 |
 | **Distill3** | 615.024 | 0.3528 ± 0.0192 | 0.2683 ± 0.0332 | 0.4270 ± 0.0266 | 0.8174 ± 0.0679 | 0.6350 ± 0.1359 | 0.8135 ± 0.0765 | 0.4455 ± 0.0529 | 0.3447 ± 0.0276 | 0.4781 ± 0.0417 |
 | **Distill4** | 889.200 | 0.3666 ± 0.0286 | 0.2637 ± 0.0653 | 0.4433 ± 0.0115 | 0.8058 ± 0.0308 | 0.6129 ± 0.0620 | 0.8301 ± 0.0646 | 0.4646 ± 0.0203 | 0.3915 ± 0.0254 | 0.5124 ± 0.0474 |
-| **Distill (cos, unfrozen)** | - | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, MSE, frozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, cos, frozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, cos, unfrozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
 | **I-JEPA** | 630.762.240 | **0.6518** ± 0.0198 | **0.6608** ± 0.0273 | **0.6805** ± 0.0449 | **0.9105** ± 0.0416 | **0.8216** ± 0.0825 | **0.9241** ± 0.0413 | **0.5593** ± 0.0151 | **0.5855** ± 0.0273 | **0.5756** ± 0.0245 |
-| **I-JEPA (híbrido, unfrozen)** | - | - | - | - | - | - | - | - | - | - |
+| **I-JEPA \| unfrozen \| distill 4** | - | - | - | - | - | - | - | - | - | - |
 
 Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchidas da tabela. Na coluna Params, o negrito marca o **menor** número de parâmetros — aqui LeJEPA e FLIM empatam, pois compartilham o mesmo encoder.
 
@@ -326,9 +333,11 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **Distill2** | 402.544 | 0.5475 ± 0.0694 | 0.4891 ± 0.0983 | 0.6186 ± 0.0390 | 0.8357 ± 0.0335 | 0.6716 ± 0.0669 | 0.8339 ± 0.0381 | 0.5261 ± 0.0099 | 0.5099 ± 0.0382 | 0.5458 ± 0.0136 |
 | **Distill3** | 615.024 | 0.6208 ± 0.0162 | 0.5963 ± 0.0266 | 0.6722 ± 0.0272 | 0.8510 ± 0.0252 | 0.7024 ± 0.0504 | 0.8424 ± 0.0373 | 0.5198 ± 0.0191 | 0.5039 ± 0.0282 | 0.5407 ± 0.0122 |
 | **Distill4** | 889.200 | 0.7002 ± 0.0503 | 0.6679 ± 0.0585 | 0.7423 ± 0.0470 | 0.8829 ± 0.0120 | 0.7660 ± 0.0238 | 0.8880 ± 0.0163 | 0.5786 ± 0.0238 | 0.5578 ± 0.0127 | 0.6009 ± 0.0316 |
-| **Distill (cos, unfrozen)** | - | - | - | - | 0.8671 ± 0.0135 | 0.7343 ± 0.0269 | 0.8621 ± 0.0295 | 0.4065 ± 0.2546 | 0.3216 ± 0.2709 | 0.4198 ± 0.2393 |
+| **Distill4 (FLIM, MSE, frozen)** | 889.200 | 0.6434 ± 0.0175 | 0.6178 ± 0.0329 | 0.7034 ± 0.0242 | 0.8996 ± 0.0071 | 0.7993 ± 0.0142 | 0.8902 ± 0.0112 | 0.5842 ± 0.0517 | 0.5450 ± 0.0104 | 0.6176 ± 0.0552 |
+| **Distill4 (FLIM, cos, frozen)** | 889.200 | 0.5375 ± 0.0309 | 0.4971 ± 0.0460 | 0.5904 ± 0.0344 | 0.8665 ± 0.0145 | 0.7331 ± 0.0290 | 0.8554 ± 0.0186 | 0.4821 ± 0.0621 | 0.4183 ± 0.0858 | 0.4868 ± 0.0906 |
+| **Distill4 (FLIM, cos, unfrozen)** | 889.200 | - | - | - | 0.8671 ± 0.0135 | 0.7343 ± 0.0269 | 0.8621 ± 0.0295 | 0.4065 ± 0.2546 | 0.3216 ± 0.2709 | 0.4198 ± 0.2393 |
 | **I-JEPA** | 630.762.240 | **0.8683** ± 0.0144 | **0.8639** ± 0.0135 | **0.8696** ± 0.0278 | **0.9403** ± 0.0126 | **0.8807** ± 0.0251 | **0.9469** ± 0.0026 | 0.6644 ± 0.0267 | **0.7251** ± 0.0098 | 0.6628 ± 0.0200 |
-| **I-JEPA (híbrido, unfrozen)** | - | 0.5461 ± 0.0168 | 0.5189 ± 0.0052 | 0.5970 ± 0.0158 | 0.8640 ± 0.0347 | 0.7283 ± 0.0694 | 0.8477 ± 0.0415 | 0.5192 ± 0.0588 | 0.4540 ± 0.0346 | 0.5176 ± 0.0547 |
+| **I-JEPA \| unfrozen \| distill 4** | - | 0.5461 ± 0.0168 | 0.5189 ± 0.0052 | 0.5970 ± 0.0158 | 0.8640 ± 0.0347 | 0.7283 ± 0.0694 | 0.8477 ± 0.0415 | 0.5192 ± 0.0588 | 0.4540 ± 0.0346 | 0.5176 ± 0.0547 |
 
 Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchidas da tabela. Na coluna Params, o negrito marca o **menor** número de parâmetros — aqui LeJEPA e FLIM empatam, pois compartilham o mesmo encoder. Nas linhas **hybrid_FLIM** e **hybrid_FLIM (head)**, o rótulo traz o estágio vencedor e a profundidade do encoder naquele estágio, na ordem **eggs / larvae / protozoan** — os três não são o mesmo estágio. Na **(head)**, o `larvae` está em `-` porque nenhum estágio de Head rodou nele, e o embedding das células publicadas tem 5.445 (eggs) e 5.082 (protozoan) dimensões, não as 27.648 das linhas vizinhas. A **(random)** publica `stage2` em eggs e larvae — estágio anterior ao crescimento, 27.648 dimensões — e só o protozoan dela é pareável com a `(head)`; o eggs em 5% não tem Head executada.
 
@@ -350,9 +359,11 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **Distill2** | 402.544 | 0.6854 ± 0.0069 | 0.6544 ± 0.0137 | 0.7481 ± 0.0075 | 0.8593 ± 0.0119 | 0.7186 ± 0.0237 | 0.8590 ± 0.0198 | 0.5968 ± 0.0230 | 0.5771 ± 0.0317 | 0.6294 ± 0.0181 |
 | **Distill3** | 615.024 | 0.7813 ± 0.0194 | 0.7576 ± 0.0245 | 0.8187 ± 0.0173 | 0.9267 ± 0.0082 | 0.8535 ± 0.0164 | 0.9332 ± 0.0053 | 0.7122 ± 0.0210 | 0.7069 ± 0.0254 | 0.7304 ± 0.0181 |
 | **Distill4** | 889.200 | 0.8449 ± 0.0275 | 0.8271 ± 0.0241 | 0.8686 ± 0.0177 | 0.9349 ± 0.0101 | 0.8698 ± 0.0201 | 0.9380 ± 0.0189 | 0.7510 ± 0.0216 | 0.7459 ± 0.0033 | 0.7699 ± 0.0231 |
-| **Distill (cos, unfrozen)** | - | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, MSE, frozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, cos, frozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, cos, unfrozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
 | **I-JEPA** | 630.762.240 | **0.9278** ± 0.0089 | **0.9171** ± 0.0138 | **0.9362** ± 0.0111 | **0.9595** ± 0.0002 | **0.9190** ± 0.0005 | **0.9659** ± 0.0029 | 0.8189 ± 0.0024 | **0.8307** ± 0.0023 | 0.8266 ± 0.0091 |
-| **I-JEPA (híbrido, unfrozen)** | - | - | - | - | - | - | - | - | - | - |
+| **I-JEPA \| unfrozen \| distill 4** | - | - | - | - | - | - | - | - | - | - |
 
 Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchidas da tabela. Na coluna Params, o negrito marca o **menor** número de parâmetros — aqui LeJEPA e FLIM empatam, pois compartilham o mesmo encoder.
 
@@ -375,9 +386,11 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **Distill2** | 402.544 | 0.7341 ± 0.0075 | 0.7034 ± 0.0051 | 0.7802 ± 0.0153 | 0.9030 ± 0.0239 | 0.8061 ± 0.0479 | 0.9079 ± 0.0188 | 0.6835 ± 0.0155 | 0.6818 ± 0.0093 | 0.7223 ± 0.0165 |
 | **Distill3** | 615.024 | 0.8447 ± 0.0101 | 0.8334 ± 0.0098 | 0.8691 ± 0.0211 | 0.9398 ± 0.0075 | 0.8796 ± 0.0150 | 0.9412 ± 0.0104 | 0.7769 ± 0.0187 | 0.7871 ± 0.0054 | 0.7843 ± 0.0253 |
 | **Distill4** | 889.200 | 0.8876 ± 0.0096 | 0.8755 ± 0.0103 | 0.9011 ± 0.0177 | 0.9572 ± 0.0078 | 0.9144 ± 0.0157 | 0.9622 ± 0.0089 | 0.8141 ± 0.0127 | 0.8060 ± 0.0116 | 0.8228 ± 0.0062 |
-| **Distill (cos, unfrozen)** | - | 0.2559 (n=1) | 0.1399 (n=1) | 0.2591 (n=1) | 0.9244 ± 0.0080 | 0.8488 ± 0.0160 | 0.9246 ± 0.0017 | 0.4785 ± 0.2127 | 0.3796 ± 0.1774 | 0.4711 ± 0.1959 |
+| **Distill4 (FLIM, MSE, frozen)** | 889.200 | 0.8815 ± 0.0097 | 0.8735 ± 0.0099 | 0.9079 ± 0.0300 | 0.9602 ± 0.0071 | 0.9204 ± 0.0141 | 0.9605 ± 0.0115 | 0.7787 ± 0.0184 | 0.7644 ± 0.0224 | 0.7864 ± 0.0170 |
+| **Distill4 (FLIM, cos, frozen)** | 889.200 | 0.8382 ± 0.0035 | 0.8264 ± 0.0063 | 0.8689 ± 0.0064 | 0.9423 ± 0.0095 | 0.8846 ± 0.0189 | 0.9407 ± 0.0174 | 0.7520 ± 0.0393 | 0.7098 ± 0.0647 | 0.7489 ± 0.0547 |
+| **Distill4 (FLIM, cos, unfrozen)** | 889.200 | 0.2559 (n=1) | 0.1399 (n=1) | 0.2591 (n=1) | 0.9244 ± 0.0080 | 0.8488 ± 0.0160 | 0.9246 ± 0.0017 | 0.4785 ± 0.2127 | 0.3796 ± 0.1774 | 0.4711 ± 0.1959 |
 | **I-JEPA** | 630.762.240 | **0.9484** ± 0.0072 | **0.9397** ± 0.0081 | **0.9489** ± 0.0094 | **0.9717** ± 0.0057 | **0.9433** ± 0.0115 | 0.9698 ± 0.0031 | 0.8559 ± 0.0118 | 0.8636 ± 0.0032 | 0.8570 ± 0.0050 |
-| **I-JEPA (híbrido, unfrozen)** | - | 0.7781 ± 0.0276 | 0.7573 ± 0.0459 | 0.7968 ± 0.0286 | 0.9523 (n=1) | 0.9046 (n=1) | 0.9627 (n=1) | 0.6488 ± 0.0370 | 0.5549 ± 0.0504 | 0.6192 ± 0.0423 |
+| **I-JEPA \| unfrozen \| distill 4** | - | 0.7781 ± 0.0276 | 0.7573 ± 0.0459 | 0.7968 ± 0.0286 | 0.9523 (n=1) | 0.9046 (n=1) | 0.9627 (n=1) | 0.6488 ± 0.0370 | 0.5549 ± 0.0504 | 0.6192 ± 0.0423 |
 
 Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchidas da tabela. Na coluna Params, o negrito marca o **menor** número de parâmetros — aqui LeJEPA e FLIM empatam, pois compartilham o mesmo encoder. Nas linhas **hybrid_FLIM** e **hybrid_FLIM (head)**, o rótulo traz o estágio vencedor e a profundidade do encoder naquele estágio, na ordem **eggs / larvae / protozoan** — os três não são o mesmo estágio. Na **(head)**, o `larvae` está em `-` porque nenhum estágio de Head rodou nele, e o embedding das células publicadas tem 5.445 (eggs) e 1.050 (protozoan) dimensões, não as 27.648 das linhas vizinhas — o negrito em protozoan F1 e κ compara vetores de tamanhos muito diferentes. O negrito de protozoan Acc saiu do **FLIM** (0.8875) para a **(random)** (0.8876): é a regra mecânica de maior valor aplicada a uma diferença de 0.0001, um décimo do desvio de qualquer uma das duas — leia como empate. Nesta porcentagem a **(random)** é pareável com a **(head)** nas três células; o `larvae` das duas está em situações diferentes, porém: na **(head)** é execução faltando, na **(random)** é recusa de orçamento.
 
@@ -399,9 +412,11 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **Distill2** | 402.544 | 0.7971 ± 0.0270 | 0.7769 ± 0.0273 | 0.8368 ± 0.0091 | 0.9280 ± 0.0089 | 0.8560 ± 0.0177 | 0.9311 ± 0.0061 | 0.7522 ± 0.0132 | 0.7514 ± 0.0110 | 0.7726 ± 0.0156 |
 | **Distill3** | 615.024 | 0.8836 ± 0.0155 | 0.8696 ± 0.0151 | 0.9010 ± 0.0149 | 0.9563 ± 0.0027 | 0.9127 ± 0.0054 | 0.9563 ± 0.0061 | 0.7961 ± 0.0203 | 0.8109 ± 0.0114 | 0.8131 ± 0.0185 |
 | **Distill4** | 889.200 | 0.9146 ± 0.0160 | 0.9021 ± 0.0150 | 0.9249 ± 0.0163 | 0.9620 ± 0.0009 | 0.9240 ± 0.0018 | 0.9579 ± 0.0051 | 0.8286 ± 0.0072 | 0.8240 ± 0.0047 | 0.8423 ± 0.0091 |
-| **Distill (cos, unfrozen)** | - | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, MSE, frozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, cos, frozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, cos, unfrozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
 | **I-JEPA** | 630.762.240 | **0.9527** ± 0.0073 | **0.9455** ± 0.0087 | **0.9528** ± 0.0128 | **0.9705** ± 0.0047 | **0.9410** ± 0.0094 | **0.9708** ± 0.0059 | 0.8692 ± 0.0143 | **0.8817** ± 0.0049 | 0.8730 ± 0.0029 |
-| **I-JEPA (híbrido, unfrozen)** | - | - | - | - | - | - | - | - | - | - |
+| **I-JEPA \| unfrozen \| distill 4** | - | - | - | - | - | - | - | - | - | - |
 
 Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchidas da tabela. Na coluna Params, o negrito marca o **menor** número de parâmetros — aqui LeJEPA e FLIM empatam, pois compartilham o mesmo encoder.
 
@@ -423,15 +438,17 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **Distill2** | 402.544 | 0.8391 ± 0.0109 | 0.8189 ± 0.0117 | 0.8609 ± 0.0111 | 0.9412 ± 0.0031 | 0.8824 ± 0.0062 | 0.9497 ± 0.0047 | 0.7989 ± 0.0300 | 0.7935 ± 0.0249 | 0.8217 ± 0.0274 |
 | **Distill3** | 615.024 | 0.9118 ± 0.0098 | 0.8997 ± 0.0083 | 0.9131 ± 0.0150 | 0.9695 ± 0.0067 | 0.9391 ± 0.0135 | 0.9749 ± 0.0074 | 0.8175 ± 0.0175 | 0.8326 ± 0.0137 | 0.8273 ± 0.0165 |
 | **Distill4** | 889.200 | 0.9168 ± 0.0109 | 0.9120 ± 0.0082 | 0.9267 ± 0.0124 | 0.9634 ± 0.0037 | 0.9268 ± 0.0074 | 0.9657 ± 0.0010 | 0.8399 ± 0.0025 | 0.8377 ± 0.0062 | 0.8543 ± 0.0074 |
-| **Distill (cos, unfrozen)** | - | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, MSE, frozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, cos, frozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
+| **Distill4 (FLIM, cos, unfrozen)** | 889.200 | - | - | - | - | - | - | - | - | - |
 | **I-JEPA** | 630.762.240 | **0.9626** ± 0.0063 | **0.9574** ± 0.0067 | **0.9626** ± 0.0114 | **0.9748** ± 0.0033 | **0.9495** ± 0.0065 | **0.9751** ± 0.0054 | 0.8841 ± 0.0046 | **0.8917** ± 0.0024 | 0.8902 ± 0.0071 |
-| **I-JEPA (híbrido, unfrozen)** | - | - | - | - | - | - | - | - | - | - |
+| **I-JEPA \| unfrozen \| distill 4** | - | - | - | - | - | - | - | - | - | - |
 
 Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchidas da tabela. Na coluna Params, o negrito marca o **menor** número de parâmetros — aqui LeJEPA e FLIM empatam, pois compartilham o mesmo encoder.
 
 ---
 
-## Nota de método — quatro ressalvas que mudam a leitura
+## Nota de método — seis ressalvas que mudam a leitura
 
 **1. O desvio do LeJEPA usa fórmula diferente do resto.** Os `metrics_SVM_*.csv` do LeJEPA foram
 gerados com `ddof=0` (populacional) e o `normalize_reports.py:176-190` apenas copia. Todas as
@@ -454,88 +471,40 @@ Documentado em `A_reports/2026/july/details_report/lejepa_view_pooling_handoff_2
 (`statistics/tools/compute_cost.csv`, coluna `input_shape`). Os TFLOPs dele não são comparáveis
 aos outros na mesma base de entrada.
 
+**5. As três linhas `Distill4 (FLIM, ...)` são a MESMA arquitetura do `Distill4`.** O YAML de
+treino das três usa `model.class_path: methods.distillation.DistillationConvModule`, cuja cabeça
+é a `ConvDistillationProjectionHead` — o que a matriz dos 24 experimentos chama de `--distill_4`,
+889.200 params no encoder de eggs (885.598 no protozoan, cuja `layer2` tem 30 canais em vez de
+32). O `init` é `flim` nas três (`grid.init: [flim]`), como na linha `Distill1 (FLIM)`. Elas se
+separam do `Distill4` da tabela em três eixos, todos fora da contagem de parâmetros: a **loss**
+(MSE ou cosseno, contra `direct`), o **estado do professor** (congelado ou não) e o **init**
+(`flim`, contra `trunc_normal`). Por isso Params / TFLOPs / Pesos são os medidos para
+`SVM_Distill_Proj1280` em `statistics/tools/compute_cost.csv` — não foram remedidos, e não
+precisam ser: FLOPs e contagem dependem só da topologia, como diz o docstring de
+`analysis/stats/compute_cost.py::_distill_arch_only`.
+
+Uma ressalva dentro da ressalva: **o SVM destas três linhas lê o encoder, não a projeção.** O
+runner `eval` extrai a feature por `model.encode()` (`eval/svm.py::extract_features_encode`), e
+a coluna `dim` dos três CSVs é **48** — contra os 1280 das linhas `Distill1..4`, que ajustam o
+SVM sobre a saída da cabeça. A cabeça de projeção existe no treino e é descartada na avaliação.
+Consequência prática: os 889.200 params (e os 0.0017 TFLOPs) descrevem o modelo **treinado**;
+o caminho que de fato produz o número medido é só o encoder, 59.504 params e 0.0007 TFLOPs — os
+mesmos das linhas `FLIM` e `LeJEPA`. Para uma comparação de custo pareada com `Distill1..4`, a
+sonda teria de ler a projeção 1280-d, o que o runner `eval` hoje não faz.
+
+**6. As duas linhas `frozen` leem peso que não está em `artifacts/distillation/`.** O runner
+`train` não passa `--trainer.default_root_dir`, então o `ModelCheckpoint` resolve o destino pelo
+`WandbLogger` de `configs/default.yaml:12-16` e grava em `logs/flim-ssl/<wandb_id>/checkpoints/`;
+o `work_dir` do YAML de treino fica vazio. `artifacts/distillation_frozen_20260905/` é a
+árvore-espelho que religa as duas pontas — um diretório por `run_name`, com
+`checkpoints/best_loss.ckpt` em symlink e um `run_metadata.json` mínimo. O mapa `run_name` →
+`wandb_id` saiu do argv gravado em `logs/wandb/*/files/wandb-metadata.json`, não de nome de
+diretório: cada `run_name` aparece **duas** vezes ali, e os ids de 2026-09-03 são de uma corrida
+anterior, abandonada. Duas consequências para a leitura: o peso avaliado é o de **menor
+`val/loss`** (não o de maior κ — `DistillationConvModule` não tem a `KnnKappaProbeMixin` e nunca
+loga `val/knn_kappa`, então o `best_knn_kappa.ckpt` ao lado é vestigial); e a célula
+`protozoan/split 2` de `MSE, frozen` em 5% avalia um checkpoint **não-final**, gravado em voo —
+o treino dela ainda não havia fechado. As outras 35 células são de runs concluídos.
+
 ## Como reproduzir
-
-> **Atualizado para a árvore nova.** Os comandos abaixo substituem os antigos
-> (`src.evaluate.*`, `scripts/*.py`, `statistics/tools/*`). O mapa antigo → novo
-> completo está em `MIGRATION.md`; o guia por grupo de experimento, em `EXPERIMENTS.md`.
-
-### As três fontes deste documento
-
-```bash
-cd /dados/home/moliveira/Scalable_Hybrid_FLIM
-
-# 1. CSV unificado (era: python scripts/normalize_reports.py)
-python -c "from experiments.gen_configs import normalize_reports as f; f()"
-
-# 2. colunas de custo (era: python statistics/tools/measure_compute_cost.py)
-python -m analysis.stats.compute_cost
-
-# 3. as linhas hybrid_FLIM* — vêm daqui, não do CSV unificado
-#    (era: python -m src.evaluate.eval_growth_stages --pct N --family F --device D)
-python -c "from eval.growth_stages import main; main(pct=5,  device='cuda:0')"   # grid4 -> hybrid_FLIM
-python -c "from eval.growth_stages import main; main(pct=50, device='cuda:0')"
-```
-
-### Uma linha da tabela por vez
-
-Cada família de crescimento é um `--family` do avaliador. O par `(feat)` × `(img)` e o
-par `(head)` × `(random)` são as comparações centrais:
-
-```bash
-# (feat) e (img): mesma receita, um fator trocado
-python -c "from eval.growth_stages import main; main(pct=5,  family=['g5_in_feature'], device='cuda:0')"
-python -c "from eval.growth_stages import main; main(pct=50, family=['g5_in_feature'], device='cuda:0')"
-python -c "from eval.growth_stages import main; main(pct=5,  family=['g5_in_image'],   device='cuda:0')"
-python -c "from eval.growth_stages import main; main(pct=50, family=['g5_in_image'],   device='cuda:0')"
-
-# (head): crescimento com fine-tune supervisionado por Head
-python -c "from eval.growth_stages import main; main(pct=5,  family=['g5_head'], device='cuda:0')"
-python -c "from eval.growth_stages import main; main(pct=50, family=['g5_head'], device='cuda:0')"
-
-# (random): o controle PAREADO da (head) — mesma receita, random_layer no crescimento.
-# OMP_NUM_THREADS evita que dois jobs simultaneos se atropelem em spin-wait.
-OMP_NUM_THREADS=36 OMP_WAIT_POLICY=PASSIVE \
-  python -c "from eval.growth_stages import main; main(pct=5,  family=['g5_random'], device='cuda:0')"
-OMP_NUM_THREADS=36 OMP_WAIT_POLICY=PASSIVE \
-  python -c "from eval.growth_stages import main; main(pct=50, family=['g5_random'], device='cuda:1')"
-```
-
-### Retreinar o que gerou os pesos
-
-O avaliador acima lê checkpoints que já existem. Para **reproduzir o treino** de cada
-família, os experiment YAMLs estão prontos — rode sempre com `--dry-run` primeiro:
-
-```bash
-python -m experiments.ray.launch experiments/autoencoder/growth_grid4.yaml        --dry-run
-python -m experiments.ray.launch experiments/autoencoder/growth_g5_in_feature.yaml --dry-run
-python -m experiments.ray.launch experiments/autoencoder/growth_g5_in_image.yaml   --dry-run
-python -m experiments.ray.launch experiments/autoencoder/growth_g5_head.yaml       --dry-run
-python -m experiments.ray.launch experiments/autoencoder/growth_g5_random.yaml     --dry-run
-```
-
-E os braços do eixo FLIM que alimentam as linhas não-crescimento desta tabela:
-
-| Linha da tabela | Experiment YAML |
-|---|---|
-| `SVM_FLIM` (init flim) | `experiments/lejepa/init_flim.yaml` |
-| `SVM_lejepa_view` (trunc_normal) | `experiments/lejepa/init_no_flim.yaml` |
-| `SVM_Distill_*` com init flim | `experiments/distillation/all_init_flim.yaml` |
-| `SVM_Distill_*` com trunc_normal | `experiments/distillation/all_init_no_flim.yaml` |
-| `SVM_Distill_1x1BN_flim_frozen_eval_loss` | `experiments/distillation/direct_flim_1x1_frozen.yaml` |
-| `SVM_Distill_3x3BN` | `experiments/distillation/direct_trunc_normal.yaml` (proj_kernel=3) |
-
-### Extrair as 8 linhas do CSV unificado de uma porcentagem
-
-```bash
-python -c "
-import pandas as pd
-d = pd.read_csv('artifacts/normalized/unified_svm_comparison.csv')
-alvo = {'SVM_lejepa_view':'trunc_normal', 'SVM_FLIM':'flim',
-        'SVM_Distill_1x1BN':'trunc_normal', 'SVM_Distill_1x1BN_flim_frozen_eval_loss':'flim',
-        'SVM_Distill_2l400K':'trunc_normal', 'SVM_Distill_3x3BN':'trunc_normal',
-        'SVM_Distill_Proj1280':'trunc_normal', 'SVM_IJEPA':'ijepa'}
-print(d[(d.pretrained_pct==5) & d.apply(lambda r: alvo.get(r.method)==r.init, axis=1)].to_string())"
-```
-
-Não existe script que emita este documento pronto — ele é a junção das três fontes acima.
+--............

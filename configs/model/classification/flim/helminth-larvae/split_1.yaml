@@ -60,4 +60,4 @@ trainer:
         mode: max
         filename: best_kappa
         save_top_k: 1
-        save_last: true
+        save_last: false
