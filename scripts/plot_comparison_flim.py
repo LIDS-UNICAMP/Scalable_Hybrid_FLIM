@@ -34,6 +34,7 @@ Usage:
     python scripts/plot_comparison_flim.py                   # both modes
     python scripts/plot_comparison_flim.py --mode individual
     python scripts/plot_comparison_flim.py --mode merge
+    python scripts/plot_comparison_flim.py --mode grid    # 2 em cima, 1 embaixo, 16:9
     python scripts/plot_comparison_flim.py --metrics kappa f1
     python scripts/plot_comparison_flim.py --datasets eggs larvae
     python scripts/plot_comparison_flim.py --out /custom/path
@@ -62,8 +63,7 @@ if _ROOT_STR not in sys.path:
 
 import pandas as pd
 
-import src.evaluate.eval_plotter as eval_plotter
-from src.evaluate.eval_plotter import plot_method_comparison, plot_merge_comparison
+from eval.eval_plotter import plot_method_comparison, plot_merge_comparison
 
 # ── PROCEDÊNCIA DE CADA CURVA (de onde vem cada valor / cada CSV) ─────────────
 # Toda curva sai de  artifacts/normalized/unified_svm_comparison.csv, montado por
@@ -100,18 +100,9 @@ from src.evaluate.eval_plotter import plot_method_comparison, plot_merge_compari
 #   ver  metrics_distillation/data_provenance.md
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Modelos oficiais do experimento — rótulos curtos (inglês), mesma ordem da legenda.
-# Apenas estas 8 chaves devem aparecer nas curvas/legenda.
-eval_plotter.METHOD_COMPARE_LABEL = {
-    "SVM_FLIM":                                 "FLIM (59.504)",               # data/reports_felipe/svm/report_svm_*.csv
-    "lejepa_view_trunc_normal":                 "lejepa_view",                 # artifacts/SVM/*/*/metrics_SVM_*.csv
-    "SVM_IJEPA":                                "I-JEPA (632M)",               # results/ijepa_svm_aggregated.csv
-    "SVM_Distill_Proj1280":                     "Distill 4 (889K)",            # results/svm_distill_proj1280_results.csv
-    "SVM_Distill_3x3BN":                        "Distill 3 (615K)",            # results/svm_proj1280_3x3_BN2d_results.csv
-    "SVM_Distill_1x1BN":                        "Distill 1 (123K)",            # results/svm_proj1280_1x1_BN2d_results.csv
-    "SVM_Distill_2l400K":                       "Distill 2 (402K)",            # results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv
-    "SVM_Distill_1x1BN_flim_frozen_eval_loss":  "Distill 1 — FLIM init (123K)", # results/svm_distillation_conv_flim_frozen_results.csv
-}
+# Rotulo, cor, ordem e filtro da legenda: configs/eval/plots.yaml.
+# So entra na curva o experimento que casa com algum `name` de la.
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -121,11 +112,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "individual", "merge", "row"],
+        choices=["all", "individual", "merge", "row", "grid"],
         default="all",
         help="Plot type(s) to generate (default: all). "
              "'merge' = panels side-by-side (horizontal); "
-             "'row' = panels stacked vertically, saved to merge_plots/row/.",
+             "'row' = panels stacked vertically, saved to merge_plots/row/; "
+             "'grid' = 2 panels on top, the 3rd centered below, legend at the "
+             "bottom, figure 16:9 to fill a whole slide (same filenames as "
+             "'merge', so it is NOT part of 'all').",
     )
     parser.add_argument(
         "--metrics",
@@ -290,6 +284,14 @@ def main() -> None:
         print(f"\n[PLOTS] merge_plots/ (horizontal) — {len(metrics)} metrics x {len(datasets_present)} datasets = {n} plots")
         plot_merge_comparison(filtered, datasets_present, metrics, merge_dir,
                               orientation="horizontal", **merge_style)
+
+    # grid escreve os MESMOS {metric}.png que o merge, entao fica fora do "all":
+    # um `--mode all` que rodasse os dois deixaria no disco o que rodou por ultimo.
+    if mode == "grid":
+        grid_dir = out_base / "merge_plots"
+        print(f"\n[PLOTS] merge_plots/ (grid 2+1, 16:9) — {len(metrics)} metrics x {len(datasets_present)} datasets = {n} plots")
+        plot_merge_comparison(filtered, datasets_present, metrics, grid_dir,
+                              orientation="grid", **merge_style)
 
     if mode in ("all", "row"):
         row_dir = out_base / "merge_plots" / "row"

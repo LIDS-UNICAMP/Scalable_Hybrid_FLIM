@@ -25,9 +25,9 @@ plots:
     # results/ijepa_svm_aggregated.csv
     - {name: "SVM_IJEPA",                                color: "#E69F00", ls: "-.", marker: "*", zorder: 9, label: "I-JEPA (632M)"}
     # results/svm_proj1280_1x1_BN2d_results.csv (trunc_normal)
-    - {name: "SVM_Distill_1x1BN",                        color: "#17BECF", ls: "-",  marker: "s", zorder: 12, label: "Distill 1 (123K)"}
+    # - {name: "SVM_Distill_1x1BN",                        color: "#17BECF", ls: "-",  marker: "s", zorder: 12, label: "Distill 1 (123K)"}
     # results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv
-    - {name: "SVM_Distill_2l400K",                       color: "#2CA02C", ls: "--", marker: "D", zorder: 13, label: "Distill 2 (402K)"}
+    # - {name: "SVM_Distill_2l400K",                       color: "#2CA02C", ls: "--", marker: "D", zorder: 13, label: "Distill 2 (402K)"}
     # results/svm_proj1280_3x3_BN2d_results.csv (trunc_normal)
     - {name: "SVM_Distill_3x3BN",                        color: "#E377C2", ls: "--", marker: "^", zorder: 11, label: "Distill 3 (615K)"}
     # results/svm_distill_proj1280_results.csv

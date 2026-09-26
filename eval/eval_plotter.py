@@ -572,6 +572,9 @@ def plot_merge_comparison(
       - ``"horizontal"`` — panels side-by-side (1 row × N cols).  The X axis is
         repeated on every panel; the Y axis appears only on the leftmost panel
         (``sharey``).
+      - ``"grid"``       — 2 panels on top, the 3rd centered below, legend in
+        a reserved band at the bottom.  The figure is 16:9, so it fills a whole
+        ``aspectratio=169`` beamer slide.  Assumes exactly 3 datasets.
       - ``"vertical"``   — panels stacked (N rows × 1 col).  The Y axis is
         repeated on every panel; the X axis appears only on the bottom panel
         (``sharex``).  The legend wraps into columns so it never overflows the
@@ -616,8 +619,23 @@ def plot_merge_comparison(
         )
 
         vertical = orientation == "vertical"
+        grid     = orientation == "grid"
         n_ds     = len(datasets)
-        if vertical:
+        if grid:
+            # Dois paineis em cima, o terceiro centralizado embaixo (gridspec de
+            # 4 colunas: cada painel ocupa 2, o de baixo as duas do meio). A
+            # figura nasce 16:9 para cobrir o slide inteiro do beamer, e a
+            # legenda mora na faixa reservada no rodape.
+            fig_w = fig_width_per_dataset * 2
+            fig   = plt.figure(figsize=(fig_w, fig_w * 9 / 16))
+            gs    = fig.add_gridspec(2, 4)
+            first = fig.add_subplot(gs[0, 0:2])
+            panel_axes = [
+                first,
+                fig.add_subplot(gs[0, 2:4], sharey=first),
+                fig.add_subplot(gs[1, 1:3], sharey=first),
+            ]
+        elif vertical:
             fig, axes = plt.subplots(
                 n_ds, 1,
                 figsize=(fig_width_per_dataset, fig_height * n_ds * 0.55),
@@ -641,7 +659,7 @@ def plot_merge_comparison(
             # Vertical: Y on every row, X only on the bottom row.
             # Horizontal: X on every col, Y only on the leftmost col.
             is_last = idx == n_ds - 1
-            show_y  = True if vertical else (idx == 0)
+            show_y  = (idx in (0, 2)) if grid else (vertical or idx == 0)
             show_x  = is_last if vertical else True
 
             # Dataset name as subplot title
@@ -687,6 +705,8 @@ def plot_merge_comparison(
                 ax.set_xticklabels([])
             ax.set_yticks(np.arange(0.0, 1.01, 0.2))
             ax.tick_params(axis="y", labelsize=ytick_fontsize)
+            if grid and not show_y:
+                ax.tick_params(labelleft=False)
             ax.set_ylim(-0.05, 1.05)
             ax.axhline(0, color="#AAAAAA", linewidth=0.6, zorder=0)
 
@@ -701,7 +721,7 @@ def plot_merge_comparison(
         # figure, but it would overflow the narrow vertical one, so vertical
         # falls back to 2 cols: the long labels then have room and never overlap.
         if legend_ncol == -1:
-            ncol = 2 if vertical else n_handles
+            ncol = 2 if vertical else (4 if grid else n_handles)
         else:
             ncol = legend_ncol or n_handles
 
@@ -714,7 +734,7 @@ def plot_merge_comparison(
             borderpad=0.5, handlelength=2.5, handletextpad=0.6,
         )
 
-        if vertical:
+        if vertical or grid:
             # Reserve a band at the bottom of the (tall) figure and drop the
             # legend into it, so it sits fully BELOW the stacked panels instead
             # of leaking over the bottom one. Band height scales with the number
@@ -738,7 +758,8 @@ def plot_merge_comparison(
             plt.tight_layout()
 
         dst = out_dir / f"{metric}.png"
-        fig.savefig(dst, dpi=300, bbox_inches="tight")
+        # bbox tight recorta a margem e destruiria a proporcao 16:9 do grid.
+        fig.savefig(dst, dpi=300, **({} if grid else {"bbox_inches": "tight"}))
         plt.close(fig)
         print(f"  [MERGE] {dst}")
 
@@ -755,4 +776,5 @@ if __name__ == "__main__":                   # python -m eval.eval_plotter
         for _metric in METRICS:
             plot_method_comparison(_df[_df["dataset_short"] == _ds], _ds, _metric, _out)
 
-    plot_merge_comparison(_df, _datasets, METRICS, Path(ARTIFACTS_PLOTS_DIR) / "merge_plots")
+    plot_merge_comparison(_df, _datasets, METRICS, Path(ARTIFACTS_PLOTS_DIR) / "merge_plots",
+                          orientation="grid")
