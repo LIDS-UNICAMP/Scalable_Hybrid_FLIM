@@ -622,10 +622,11 @@ def plot_merge_comparison(
         grid     = orientation == "grid"
         n_ds     = len(datasets)
         if grid:
-            # Dois paineis em cima, o terceiro centralizado embaixo (gridspec de
-            # 4 colunas: cada painel ocupa 2, o de baixo as duas do meio). A
-            # figura nasce 16:9 para cobrir o slide inteiro do beamer, e a
-            # legenda mora na faixa reservada no rodape.
+            # Dois paineis em cima, o terceiro embaixo alinhado a direita
+            # (gridspec de 4 colunas: cada painel ocupa 2, o de baixo as duas
+            # ultimas, deixando o canto inferior esquerdo vazio). A figura
+            # nasce 16:9 para cobrir o slide inteiro do beamer, e a legenda
+            # mora na faixa reservada no rodape.
             fig_w = fig_width_per_dataset * 2
             fig   = plt.figure(figsize=(fig_w, fig_w * 9 / 16))
             gs    = fig.add_gridspec(2, 4)
@@ -633,7 +634,7 @@ def plot_merge_comparison(
             panel_axes = [
                 first,
                 fig.add_subplot(gs[0, 2:4], sharey=first),
-                fig.add_subplot(gs[1, 1:3], sharey=first),
+                fig.add_subplot(gs[1, 2:4], sharey=first),
             ]
         elif vertical:
             fig, axes = plt.subplots(
