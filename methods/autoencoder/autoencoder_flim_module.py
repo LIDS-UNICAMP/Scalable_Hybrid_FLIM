@@ -258,6 +258,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         freeze_spifil_layer: bool = False,
         head_finetune: bool = False,
         init_ckpt: str = "",
+        fresh_decoder: bool = False,
         embed_mode: Optional[str] = None,
     ) -> None:
         super().__init__()
@@ -319,7 +320,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self._flim_ref = {
             n: p.detach().cpu().clone() for n, p in self.model.encoder.named_parameters()
         }
-        if freeze_encoder_flag:
+        if fresh_decoder:
+            freeze_encoder(self.model, except_last=True)
+            delta = 0  # o log de congelamento abaixo le esta variavel
+        elif freeze_encoder_flag:
             # Stage 1 (no init_ckpt): whole encoder frozen, whole decoder learning.
             # Stage 3 (init_ckpt of a SHALLOWER model): only what is new learns — the grown
             # encoder layer and the decoder blocks that came with it. Safe to decide here:
@@ -445,6 +449,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
         # `delta`. A name-based strict=False load would hit a shape mismatch on each of them
         # and silently throw the whole trained decoder away. `to_image` keeps its name — its
         # width is channels[1], which growth does not touch.
+        if self.hparams.fresh_decoder:
+            # Decoder novo a cada camada: do checkpoint anterior so viaja o encoder.
+            state = {k: v for k, v in state.items() if k.startswith("model.encoder.")}
         pre = "model.decoder.blocks."
         delta = _decoder_block_delta(state, self.model.encoder.n_layers)
         # As chaves `head.*` sao DESCARTADAS: a Head e da camada, nao do braco. Duas razoes.

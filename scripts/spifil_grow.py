@@ -582,8 +582,10 @@ def grow_random(args) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--ckpt", required=True, type=Path,
-                        help="checkpoint do estagio anterior; a camada nova sai DESTE encoder")
+    parser.add_argument("--ckpt", type=Path,
+                        help="checkpoint do estagio anterior; a camada nova sai DESTE encoder. "
+                             "Sem ele nasce a camada 1, direto da imagem LAB (--arch-json so "
+                             "serve de molde)")
     parser.add_argument("--arch-json", required=True, type=Path)
     parser.add_argument("--flim-weights-path", required=True, type=Path)
     parser.add_argument("--dataset", required=True, choices=["eggs", "larvae", "protozoan"])
@@ -661,12 +663,17 @@ def main() -> int:
                 f"--random-layer.")
         return grow_random(args)
 
-    module = AutoEncoderFlimModule.load_from_checkpoint(
-        args.ckpt, map_location=args.device
-    )
-    trunk = Trunk(module.model.encoder, args.image_size, args.device)
-
     arch = parse_architecture(args.arch_json)
+    if args.ckpt:
+        module = AutoEncoderFlimModule.load_from_checkpoint(
+            args.ckpt, map_location=args.device
+        )
+        trunk = Trunk(module.model.encoder, args.image_size, args.device)
+    else:
+        # Camada 1: encoder vazio. As "features" sao a propria imagem LAB, como o
+        # treino a ve, e a arquitetura de molde perde todas as camadas.
+        trunk = Trunk(torch.nn.Identity(), args.image_size, args.device)
+        arch = {k: v for k, v in arch.items() if not k.startswith("layer")} | {"nlayers": 0}
 
     layer = arch["nlayers"] + 1
 

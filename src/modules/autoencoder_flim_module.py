@@ -210,6 +210,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
         init_ckpt:          Checkpoint this round resumed its backbone from, "" for round 1.
                             Recorded so ``stage`` can tell a first frozen round apart from a
                             grown-and-frozen one.
+        fresh_decoder:      Crescimento camada por camada: so a ULTIMA camada do encoder
+                            aprende, o decoder nasce novo e do ``init_ckpt`` vem so o encoder.
     """
 
     def __init__(
@@ -232,6 +234,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         freeze_spifil_layer: bool = False,
         head_finetune: bool = False,
         init_ckpt: str = "",
+        fresh_decoder: bool = False,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -267,7 +270,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self._flim_ref = {
             n: p.detach().cpu().clone() for n, p in self.model.encoder.named_parameters()
         }
-        if freeze_encoder_flag:
+        if fresh_decoder:
+            freeze_encoder(self.model, except_last=True)
+            delta = 0  # o log de congelamento abaixo le esta variavel
+        elif freeze_encoder_flag:
             # Stage 1 (no init_ckpt): whole encoder frozen, whole decoder learning.
             # Stage 3 (init_ckpt of a SHALLOWER model): only what is new learns — the grown
             # encoder layer and the decoder blocks that came with it. Safe to decide here:
@@ -889,6 +895,9 @@ def _build_parser():
                         "but once written into the layer they are ordinary conv weights just "
                         "like the FLIM kernels the unfrozen stages already fine-tune. Pass it "
                         "for the ablation that keeps the bank fixed.")
+    p.add_argument("--fresh-decoder", action="store_true", default=False,
+                   help="Crescimento camada por camada: so a ultima camada do encoder aprende, "
+                        "o decoder nasce novo e do --init-ckpt so o encoder e carregado.")
     p.add_argument("--head-finetune", action="store_true", default=False,
                    help="Troca reconstrucao por classificacao: Head (GAP -> dropout -> linear) "
                         "sobre a ultima camada do encoder, perda cross_entropy, selecao por "
@@ -1019,6 +1028,7 @@ def main() -> int:
         freeze_encoder_flag=args.freeze_encoder,
         freeze_spifil_layer=args.freeze_spifil_layer,
         head_finetune=args.head_finetune,
+        fresh_decoder=args.fresh_decoder,
         init_ckpt=args.init_ckpt,
     )
 
@@ -1038,6 +1048,9 @@ def main() -> int:
         # up by `delta`. A name-based strict=False load would hit a shape mismatch on each of
         # them and silently throw the whole trained decoder away. `to_image` keeps its name —
         # its width is channels[1], which growth does not touch.
+        if args.fresh_decoder:
+            # Decoder novo a cada camada: do checkpoint anterior so viaja o encoder.
+            state = {k: v for k, v in state.items() if k.startswith("model.encoder.")}
         pre = "model.decoder.blocks."
         delta = _decoder_block_delta(state, module.model.encoder.n_layers)
         # As chaves `head.*` sao DESCARTADAS: a Head e da camada, nao do braco. Duas razoes.
@@ -1153,6 +1166,7 @@ def main() -> int:
                 "encoder_frozen": args.freeze_encoder,
                 "encoder_trainable": not args.freeze_encoder,
                 "freeze_spifil_layer": args.freeze_spifil_layer,
+                "fresh_decoder": args.fresh_decoder,
                 "init_ckpt": args.init_ckpt,
                 "parent_run": _parent_run_from_ckpt(args.init_ckpt),
                 "ckpt_monitor": monitor,
@@ -1291,6 +1305,7 @@ def _save_metadata(args, module, output_dir, ckpt_dir, status="ok", error="",
         "embed_mode": args.embed_mode,
         "encoder_frozen": bool(args.freeze_encoder),
         "init_ckpt": args.init_ckpt,
+        "fresh_decoder": args.fresh_decoder,
         "parent_run": _parent_run_from_ckpt(args.init_ckpt),
         "baseline_flim_svm": module.baseline_metrics,
         # Solver state of the last probe. Without these three a repeat of the max_iter

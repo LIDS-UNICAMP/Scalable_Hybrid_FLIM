@@ -153,6 +153,23 @@ GROW_FWD = ["out-channels", "kernel-size", "pool-stride", "n-superpixels",
             "n-images", "image-size", "seed"]
 
 
+# `--layerwise`: (filtros, pool_stride) de cada camada, kernel 3. L1..L3 sao o
+# `conf/arch/paper.yaml` do SPiFiL (16/32/48, max-pool 3 stride 2); L4 e L5 repetem
+# a largura sem pooling, como as rodadas extras do grow sempre fizeram.
+LAYERWISE_SPECS = [(16, 2), (32, 2), (48, 2), (48, 1), (48, 1)]
+
+
+def _assert_frozen(prev: str, new: str, n_old: int) -> None:
+    """Mata o braco se alguma camada conv1..conv{n_old} mudou entre os dois checkpoints."""
+    import torch
+    a = torch.load(prev, map_location="cpu", weights_only=False)["state_dict"]
+    b = torch.load(new, map_location="cpu", weights_only=False)["state_dict"]
+    old = tuple(f"model.encoder.blocks.conv{n}." for n in range(1, n_old + 1))
+    changed = [k for k in a if k.startswith(old) and not torch.equal(a[k], b[k])]
+    if changed:
+        _die(f"camadas congeladas mudaram de peso: {changed}")
+
+
 def should_stop(kappas: list[float], tolerance: float, patience: int) -> bool:
     """True when the last `patience` rounds all failed to beat the best kappa before them by more than `tolerance`."""
     fails = 0
@@ -198,7 +215,7 @@ def _fwd(args: argparse.Namespace, names: list[str]) -> list[str]:
 
 def _trainer_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, name: str,
                  arch: str, weights: str, freeze: bool, init_ckpt: str,
-                 head: bool) -> list[str]:
+                 head: bool, fresh_decoder: bool = False) -> list[str]:
     dataset, split, pct = arm
     cmd = [sys.executable, "-m", TRAINER_MODULE,
            "--dataset", dataset,
@@ -221,6 +238,8 @@ def _trainer_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, 
     # reconstrucao e a flag nao pode vazar para eles.
     if head:
         cmd.append("--head-finetune")
+    if fresh_decoder:
+        cmd.append("--fresh-decoder")
     if init_ckpt:
         cmd += ["--init-ckpt", init_ckpt]
     if args.wandb:
@@ -236,7 +255,7 @@ def _grow_cmd(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int, ckp
               arch: str, weights: str, out: str) -> list[str]:
     dataset, split, pct = arm
     cmd = [sys.executable, GROW_SCRIPT,
-           "--ckpt", ckpt,
+           *(["--ckpt", ckpt] if ckpt else []),
            "--arch-json", arch,
            "--flim-weights-path", weights,
            "--dataset", dataset,
@@ -292,18 +311,49 @@ def run_arm(args: argparse.Namespace, arm: tuple[str, int, int], gpu: int) -> di
         return subprocess.run(cmd, cwd=PROJECT_ROOT, env=env, check=False).returncode
 
     def train(name: str, arch: str, weights: str, freeze: bool = False,
-              init_ckpt: str = "", head: bool = False) -> str:
+              init_ckpt: str = "", head: bool = False, fresh_decoder: bool = False) -> str:
         """
         @Mateus Oliveira
         monta todo o comando com os argumentos, e dai se nao for. para carregar pesos do treino anterior,
         ele nao carrega. 
         """
-        rc = run(_trainer_cmd(args, arm, gpu, name, arch, weights, freeze, init_ckpt, head))
+        rc = run(_trainer_cmd(args, arm, gpu, name, arch, weights, freeze, init_ckpt, head,
+                              fresh_decoder))
         if rc != 0:
             _die(f"{name} saiu com codigo {rc}")
         return os.path.join(_stage_dir(args, arm, name), CHECKPOINTS_SUBDIR, BEST_CKPT_FILENAME)
 
     arch, weights = _paths(args, arm)
+    if args.layerwise:
+        # Camada por camada: L1 nasce da imagem, cada Lk nasce das features de L1..L(k-1)
+        # ja treinadas; so Lk aprende, contra um decoder novo. O arch FLIM e so o molde.
+        ckpt = ""
+        try:
+            for k, (width, stride) in enumerate(LAYERWISE_SPECS[:args.layerwise], start=1):
+                grow_dir = _stage_dir(args, arm, f"L{k}_grow")
+                rc = run(_grow_cmd(args, arm, gpu, ckpt, arch, weights, grow_dir)
+                         + ["--out-channels", str(width), "--kernel-size", "3",
+                            "--pool-stride", str(stride)])
+                if rc == GROW_EXHAUSTED:
+                    result["reason"] = f"spifil_grow recusou L{k}: orcamento N <= D"
+                    break
+                if rc != 0:
+                    _die(f"L{k}_grow saiu com codigo {rc}")
+                arch, weights = os.path.join(grow_dir, ARCH_JSON_FILENAME), grow_dir
+                prev, ckpt = ckpt, train(f"L{k}", arch, weights, freeze=True,
+                                         init_ckpt=ckpt, fresh_decoder=True)
+                if args.dry_run:
+                    continue
+                if prev:
+                    _assert_frozen(prev, ckpt, k - 1)
+                rows.append((str(k), f"L{k}", _kappa(_stage_dir(args, arm, f"L{k}"))))
+            else:
+                result["reason"] = f"--layerwise {args.layerwise} atingido"
+        except RuntimeError as exc:
+            print(f"[loop][{tag}] FALHOU: {exc}", file=sys.stderr, flush=True)
+            result["failed"] = True
+            result["reason"] = f"falha: {exc}"
+        return result
     try:
         """
         @Mateus Oliveira
@@ -410,6 +460,10 @@ def main() -> None:
                             help="pula o stage3 de cada rodada: depois do stage2 a camada nova "
                                  "entra e o treino segue com tudo destravado, so stage4. Sem a "
                                  "flag o fluxo grow+stage3+stage4 continua identico.")
+    round_mode.add_argument("--layerwise", type=int, choices=[3, 5], metavar="N",
+                            help="cresce do ZERO: L1..LN, cada uma cortada pelo SPiFiL (config "
+                                 "do paper), so a camada nova aprende, decoder novo a cada "
+                                 "camada. Estagios L1..LN; ignora stage1/2 e rodadas.")
     round_mode.add_argument("--head-finetune", action="store_true", default=False,
                             help="troca stage3+stage4 por um unico `round{r}_head`: fine-tune "
                                  "SUPERVISIONADO com a Head do treinador, tudo destravado, "
@@ -492,11 +546,13 @@ def main() -> None:
     one_stage_round = args.unfrozen_after_stage_two or args.head_finetune
     round_stages = ("head" if args.head_finetune else
                     "stage4" if args.unfrozen_after_stage_two else "stage3+stage4")
-    per_arm = 2 + (1 if one_stage_round else 2) * args.max_rounds
+    per_arm = args.layerwise or 2 + (1 if one_stage_round else 2) * args.max_rounds
     print(f"[loop] {len(ready)} braco(s) prontos, {len(skipped)} pulados no preflight")
     print(f"[loop] {slots} slots = {len(gpu_ids)} gpu(s) {gpu_ids} x "
           f"{args.max_concurrent_per_gpu} braco(s) por gpu")
     print(f"[loop] configs/default.yaml amarra: --max-epochs {MAX_EPOCHS} --patience {PATIENCE}")
+    if args.layerwise:
+        round_stages = f"L1..L{args.layerwise}, do zero"
     print(f"[loop] no maximo {len(ready) * per_arm} processos de treino "
           f"({per_arm} por braco: stage1, stage2 e ate {args.max_rounds} rodada(s) "
           f"de {round_stages})")
