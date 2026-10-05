@@ -319,6 +319,17 @@ class Wandb:
 
 
 @dataclass
+class Evaluate:
+    # Sonda SVM durante o treino. false: nao roda, e o melhor checkpoint e a parada
+    # passam a olhar a perda de reconstrucao de validacao.
+    SVM: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.SVM, bool):
+            raise ValueError(f"evaluate.SVM: esperava bool, veio {self.SVM!r}")
+
+
+@dataclass
 class Experiment:
     """Um experiment YAML inteiro, ja validado."""
 
@@ -331,6 +342,7 @@ class Experiment:
     overrides: dict[str, Any] = field(default_factory=dict)
     runner_args: dict[str, Any] = field(default_factory=dict)
     wandb: Wandb = field(default_factory=Wandb)
+    evaluate: Evaluate = field(default_factory=Evaluate)
     skip: str = "state"
 
     def __post_init__(self) -> None:
@@ -382,6 +394,11 @@ class Experiment:
         # as duas reescrevem a rodada, e de formas diferentes: o argparse de
         # scripts/spifil_growth_loop.py:407-417 recusava o par, e sem ele
         # experiments/ray/runners/growth.py:329 daria a vitoria ao head_finetune
+        # Sem SVM o crescimento classico nao tem kappa para decidir a parada;
+        # so o layerwise, que tem numero fixo de camadas, dispensa.
+        if (self.runner == "growth" and not self.evaluate.SVM
+                and not self.runner_args.get("layerwise")):
+            raise ValueError("evaluate.SVM false no runner growth exige runner_args.layerwise")
         if self.runner_args.get("head_finetune") and self.runner_args.get(
             "unfrozen_after_stage_two"
         ):
@@ -414,6 +431,7 @@ class Experiment:
             overrides=data.get("overrides") or {},
             runner_args=data.get("runner_args") or {},
             wandb=_section(Wandb, data.get("wandb"), "wandb"),
+            evaluate=_section(Evaluate, data.get("evaluate"), "evaluate"),
             skip=data["skip"] if data.get("skip") is not None else "state",
         )
 

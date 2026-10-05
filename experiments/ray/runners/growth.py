@@ -353,7 +353,8 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                     continue
                 if prev:
                     _assert_frozen(prev, ckpt, k - 1)
-                rows.append((str(k), f"L{k}", _kappa(_stage_dir(exp, point, f"L{k}"))))
+                if exp.evaluate.SVM:
+                    rows.append((str(k), f"L{k}", _kappa(_stage_dir(exp, point, f"L{k}"))))
         except RuntimeError as exc:
             result["failed"] = True
             result["reason"] = f"falha: {exc}"

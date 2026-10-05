@@ -29,3 +29,7 @@ wandb:
   project: phd_thesis_layerwise
 
 skip: state
+
+evaluate:
+  # Sem sonda SVM no treino: era ela que afogava a grade. O SVM roda so no eval_svm_layerwise5.
+  SVM: false

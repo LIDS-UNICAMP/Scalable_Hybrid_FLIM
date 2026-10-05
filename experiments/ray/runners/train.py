@@ -94,6 +94,7 @@ def build_cmd(exp: Experiment, point: dict) -> list[str]:
         # do filho. Nunca "a GPU 1".
         "--trainer.devices=1",
         *[f"--{key}={value}" for key, value in exp.overrides.items()],
+        *([] if exp.evaluate.SVM else ["--model.init_args.svm_probe=false"]),
     ]
 
 

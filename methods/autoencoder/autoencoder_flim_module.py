@@ -214,6 +214,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
                             Defaults to False — see the module docstring: the FLIM kernels
                             already embed the marker normalisation over LAB[0, 1].
         svm_probe_every:    Run the SVM probe every N validation epochs (1 = every epoch).
+        svm_probe:          False desliga a sonda SVM (inclusive a baseline); o melhor
+                            checkpoint e a parada passam a olhar ``val_recon_loss``.
         freeze_encoder_flag: Freezes the FLIM encoder so only the decoder learns.
         freeze_spifil_layer: Ablation. Keeps the grafted SPiFiL filter bank (the LAST encoder
                             block) exactly as SPiFiL cut it, even in an unfrozen stage. Off by
@@ -253,6 +255,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         seed: int = 42,
         imagenet_norm: bool = False,
         svm_probe_every: int = 1,
+        svm_probe: bool = True,
         log_recon_every: int = 10,
         freeze_encoder_flag: bool = False,
         freeze_spifil_layer: bool = False,
@@ -515,7 +518,31 @@ class AutoEncoderFlimModule(pl.LightningModule):
         # arquivo continua `best_kappa` — o laco de crescimento monta o caminho por convencao.
         if self.hparams.head_finetune:
             return f"{self._stage_prefix}/head_kappa", "max", "best_kappa"
+        # Sem SVM: a perda de reconstrucao escolhe. O arquivo continua `best_kappa`
+        # porque runner growth e eval montam o caminho por esse nome.
+        if not self.hparams.svm_probe:
+            return f"{self._stage_prefix}/val_recon_loss", "min", "best_kappa"
         return f"{self._stage_prefix}/svm_kappa", "max", "best_kappa"
+
+    def configure_callbacks(self):
+        """Sem SVM, troca o monitor do ModelCheckpoint e do EarlyStopping do yaml.
+
+        O Lightning substitui os callbacks do trainer pelos de mesmo tipo devolvidos aqui;
+        a patience e o resto vem dos callbacks do yaml, so monitor e mode mudam.
+        """
+        if self.hparams.svm_probe:
+            return []
+        monitor, mode, filename = self.monitor_spec
+        out = []
+        for cb in self.trainer.callbacks:
+            if isinstance(cb, pl.callbacks.EarlyStopping):
+                out.append(pl.callbacks.EarlyStopping(
+                    monitor=monitor, mode=mode, patience=cb.patience, strict=False))
+            elif isinstance(cb, pl.callbacks.ModelCheckpoint):
+                out.append(pl.callbacks.ModelCheckpoint(
+                    monitor=monitor, mode=mode, filename=filename, save_top_k=1,
+                    save_last=False))
+        return out
 
     @property
     def epoch_metric_keys(self) -> Tuple[str, ...]:
@@ -653,6 +680,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
         protocol, splits and probe, makes improved/tied/degraded a sound verdict.
         """
         self._define_wandb_axis()
+        if not self.hparams.svm_probe:
+            return
         try:
             X_tr, y_tr = self._train_embeddings()
             X_val, y_val = self._embeddings(self.trainer.datamodule.val_dataloader())
@@ -804,6 +833,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
             self.log(f"{p}/head_kappa", head_metrics["kappa"], prog_bar=True, on_epoch=True)
             self.log(f"{p}/head_acc", head_metrics["acc"], on_epoch=True)
 
+        if not self.hparams.svm_probe:
+            return
         every = max(1, int(self.hparams.svm_probe_every))
         if (self.current_epoch % every) != 0 and self.current_epoch != self.trainer.max_epochs - 1:
             return
