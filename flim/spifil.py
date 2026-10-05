@@ -750,6 +750,8 @@ def grow(
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.manual_seed(seed)
+    # O runner passa caminhos como str; `write_weights` usa a API de Path.
+    out, flim_weights_path = Path(out), Path(flim_weights_path)
 
     # Antes de tocar no backbone de proposito: o caminho classico nao usa nada do
     # que vem abaixo, e carregar encoder e dataset para joga-los fora custa minutos
@@ -764,6 +766,12 @@ def grow(
     # Daqui para baixo o backbone e obrigatorio. Sem a guarda o `None` so
     # apareceria la dentro do `Trunk`, como AttributeError, e o erro apontaria
     # para o lugar errado: o contrato quebrado e do chamador.
+    arch = parse_architecture(arch_json)
+    if encoder is None and not ckpt:
+        # Camada 1 do zero (`layerwise`): encoder vazio, as "features" sao a propria
+        # imagem LAB e a arquitetura de molde perde todas as camadas.
+        encoder = torch.nn.Identity()
+        arch = {k: v for k, v in arch.items() if not k.startswith("layer")} | {"nlayers": 0}
     if encoder is None:
         raise ValueError(
             "grow precisa do encoder ja carregado: so random_layer_classic=True "
@@ -771,8 +779,6 @@ def grow(
             "encoder=module.model.encoder."
         )
     trunk = Trunk(encoder, image_size, device)
-
-    arch = parse_architecture(arch_json)
 
     layer = arch["nlayers"] + 1
 

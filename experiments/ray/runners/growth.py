@@ -109,6 +109,7 @@ schema antes de chegar aqui. A lista completa esta no relatorio do R8.
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 
@@ -154,6 +155,23 @@ GROW_KNOBS: tuple[str, ...] = (
     "impurities", "one_per_class", "random_layer", "random_layer_classic",
     "seed",
 )
+
+
+# `layerwise`: (out_channels, pool_stride) de cada camada, kernel 3. L1..L3 sao o
+# `conf/arch/paper.yaml` do SPiFiL (16/32/48, max-pool 3 stride 2); L4 e L5 repetem
+# a largura sem pooling, como as rodadas extras do grow sempre fizeram.
+LAYERWISE_SPECS: list[tuple[int, int]] = [(16, 2), (32, 2), (48, 2), (48, 1), (48, 1)]
+
+
+def _assert_frozen(prev: str, new: str, n_old: int) -> None:
+    """Mata o braco se alguma camada conv1..conv{n_old} mudou entre os dois checkpoints."""
+    import torch
+    a = torch.load(prev, map_location="cpu", weights_only=False)["state_dict"]
+    b = torch.load(new, map_location="cpu", weights_only=False)["state_dict"]
+    old = tuple(f"model.encoder.blocks.conv{n}." for n in range(1, n_old + 1))
+    changed = [k for k in a if k.startswith(old) and not torch.equal(a[k], b[k])]
+    if changed:
+        _die(f"camadas congeladas mudaram de peso: {changed}")
 
 
 def should_stop(kappas: list[float], tolerance: float, patience: int) -> bool:
@@ -210,7 +228,8 @@ def _kappa(out_dir: str) -> float:
 
 
 def stage_cmd(exp: Experiment, point: dict, name: str, arch: str, weights: str,
-              freeze: bool = False, init_ckpt: str = "", head: bool = False) -> list[str]:
+              freeze: bool = False, init_ckpt: str = "", head: bool = False,
+              fresh_decoder: bool = False) -> list[str]:
     """O comando do runner `train`, mais os `--<k>=<v>` que descrevem ESTE estagio.
 
     Nao ha comando proprio aqui: a base e `train.build_cmd`, a mesma de todo
@@ -238,11 +257,13 @@ def stage_cmd(exp: Experiment, point: dict, name: str, arch: str, weights: str,
         cmd.append("--model.init_args.head_finetune=true")
     if init_ckpt:
         cmd.append(f"--model.init_args.init_ckpt={init_ckpt}")
+    if fresh_decoder:
+        cmd.append("--model.init_args.fresh_decoder=true")
     return cmd
 
 
 def _grow_once(exp: Experiment, point: dict, gpu_id: int, ckpt: str, arch: str,
-               weights: str, out: str) -> int:
+               weights: str, out: str, **layer) -> int:
     """Uma rodada de `flim.spifil.grow`, com o encoder carregado AQUI.
 
     `grow` nao abre checkpoint: o contrato de `flim/spifil.py:696` pede o
@@ -251,10 +272,10 @@ def _grow_once(exp: Experiment, point: dict, gpu_id: int, ckpt: str, arch: str,
     documenta so existe se o chamador tambem NAO carregar — e por isso o `if`
     abaixo, e nao um load incondicional.
     """
-    knobs = {k: v for k, v in exp.runner_args.items() if k in GROW_KNOBS}
+    knobs = {k: v for k, v in exp.runner_args.items() if k in GROW_KNOBS} | layer
     device = f"cuda:{gpu_id}"
     encoder = None
-    if not knobs.get("random_layer_classic", False):
+    if ckpt and not knobs.get("random_layer_classic", False):
         encoder = AutoEncoderFlimModule.load_from_checkpoint(
             ckpt, map_location=device).model.encoder
     return grow(encoder=encoder, ckpt=ckpt, arch_json=arch,
@@ -279,8 +300,9 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
               "failed": False, "reason": f"max_rounds {max_rounds} atingido"}
 
     def train(name: str, arch: str, weights: str, freeze: bool = False,
-              init_ckpt: str = "", head: bool = False) -> str:
-        cmd = stage_cmd(exp, point, name, arch, weights, freeze, init_ckpt, head)
+              init_ckpt: str = "", head: bool = False, fresh_decoder: bool = False) -> str:
+        cmd = stage_cmd(exp, point, name, arch, weights, freeze, init_ckpt, head,
+                        fresh_decoder)
         if dry_run:
             plan.append(cmd)
         else:
@@ -290,10 +312,53 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
             rc = _run(cmd, env=env, name=f"{tag}_{name}", gpu_id=gpu_id)["returncode"]
             if rc != 0:
                 _die(f"{name} saiu com codigo {rc}")
+            # O WandbLogger grava em <estagio>/<projeto>/<run_id>/; atalhos devolvem
+            # o contrato <estagio>/checkpoints e <estagio>/run_metadata.json.
+            stage_dir = _stage_dir(exp, point, name)
+            runs = sorted(glob.glob(os.path.join(stage_dir, "*", "*", RUN_METADATA_FILENAME)),
+                          key=os.path.getmtime)
+            if not runs:
+                _die(f"{name}: nenhum {RUN_METADATA_FILENAME} em {stage_dir}")
+            for item in (CHECKPOINTS_SUBDIR, RUN_METADATA_FILENAME):
+                link = os.path.join(stage_dir, item)
+                if os.path.islink(link):
+                    os.remove(link)
+                os.symlink(os.path.join(os.path.dirname(runs[-1]), item), link)
         return os.path.join(_stage_dir(exp, point, name), CHECKPOINTS_SUBDIR,
                             BEST_CKPT_FILENAME)
 
     arch, weights = _paths(point)
+    layerwise = exp.runner_args.get("layerwise", 0)
+    if layerwise:
+        # Camada por camada: L1 nasce da imagem, cada Lk das features de L1..L(k-1) ja
+        # treinadas; so Lk aprende, contra um decoder novo. O arch FLIM e so o molde.
+        ckpt = ""
+        result["reason"] = f"layerwise {layerwise} atingido"
+        try:
+            for k, (width, stride) in enumerate(LAYERWISE_SPECS[:layerwise], start=1):
+                grow_dir = _stage_dir(exp, point, f"L{k}_grow")
+                if dry_run:
+                    plan.append(["<in-process>", "flim.spifil.grow", f"--out={grow_dir}",
+                                 f"--out_channels={width}", f"--pool_stride={stride}",
+                                 f"--ckpt={ckpt}"])
+                elif _grow_once(exp, point, gpu_id, ckpt, arch, weights, grow_dir,
+                                out_channels=width, kernel_size=3,
+                                pool_stride=stride) == GROW_EXHAUSTED:
+                    result["reason"] = f"spifil grow recusou L{k}: N <= D"
+                    break
+                arch, weights = os.path.join(grow_dir, ARCH_JSON_FILENAME), grow_dir
+                prev, ckpt = ckpt, train(f"L{k}", arch, weights, freeze=True,
+                                         init_ckpt=ckpt, fresh_decoder=True)
+                if dry_run:
+                    continue
+                if prev:
+                    _assert_frozen(prev, ckpt, k - 1)
+                rows.append((str(k), f"L{k}", _kappa(_stage_dir(exp, point, f"L{k}"))))
+        except RuntimeError as exc:
+            result["failed"] = True
+            result["reason"] = f"falha: {exc}"
+        result["status"] = "error" if result["failed"] else "ok"
+        return result
     try:
         ckpt = train("stage1", arch, weights, freeze=True)
         ckpt = train("stage2", arch, weights, init_ckpt=ckpt)

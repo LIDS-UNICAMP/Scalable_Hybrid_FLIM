@@ -131,8 +131,7 @@ _ARM = re.compile(r"^(eggs|larvae|protozoan)_split(\d+)_pct(\d+)$")
 # O `head` (encoder destravado + Head supervisionada) fecha a rodada no lugar do par
 # 3+4, entao ordena como estagio 5 dela: depois do 4, antes da rodada seguinte. E dai o
 # `or 5` de quem le o grupo 2, que vem vazio no head.
-# `L<k>` e o `--layerwise` do laco: a camada k, que conta como a rodada k.
-_STAGE = re.compile(r"^(?:round(\d+)_)?(?:stage(\d)|head)$|^L(\d)$")
+_STAGE = re.compile(r"^(?:round(\d+)_)?(?:stage(\d)|head)$")
 
 _FIELDS = ["method", "run_name", "stage_label", "round", "dataset", "split",
            "percentage", "n_train", "n_test", "dim", "embed_mode",
@@ -291,7 +290,7 @@ def _jobs(pct: int, families, stages, datasets, splits):
                 continue
             job = {"ckpt": ckpt, "stage_dir": stage_dir, "family": fam,
                    "stage_label": os.path.basename(stage_dir),
-                   "round": int(st[1] or st[3] or 0), "stage_num": int(st[2] or 5),
+                   "round": int(st[1] or 0), "stage_num": int(st[2] or 5),
                    "dataset": arm[1], "split": int(arm[2]),
                    "percentage": int(arm[3])}
             if (job["percentage"] == pct
@@ -436,7 +435,7 @@ def _wandb_val(args, out: str) -> None:
         arm = f"{m['dataset']}_split{m['split']}_pct{m['pct']}"
         rows.append({
             "method": _VAL_METHOD, "run_name": pick["run_name"], "stage_label": label,
-            "round": int(st[1] or st[3] or 0), "dataset": m["dataset"],
+            "round": int(st[1] or 0), "dataset": m["dataset"],
             "split": int(m["split"]), "percentage": int(m["pct"]),
             "eval_split": "val", "family": fam, "run_id": pick["run_id"],
             "run_state": pick["run_state"], "stage_epoch": int(pick["stage_epoch"]),
@@ -491,9 +490,6 @@ def main(pct: int,
     """
     if family is None:
         family = ["grid4"]
-    # `cli_kwargs` devolve UM valor como escalar: `--family L3` iteraria letra por letra.
-    family, stage, dataset, split = (
-        [v] if isinstance(v, (str, int)) else v for v in (family, stage, dataset, split))
     # `_wandb_val` continua recebendo um objeto com atributos: quem chama de fora
     # (analysis/plots/plot_continuity_spifil_hybrid.py) monta um SimpleNamespace e
     # passa direto. O shim nasce so dos parametros — e a primeira linha viva da

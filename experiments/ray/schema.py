@@ -65,6 +65,8 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         # mudam a FORMA da cadeia de estagios da rodada
         # (scripts/spifil_growth_loop.py:409-417, mutuamente exclusivas)
         "head_finetune", "unfrozen_after_stage_two",
+        # cresce do zero, L1..L<layerwise>; ver LAYERWISE_SPECS em runners/growth.py
+        "layerwise",
     ),
     # `source` escolhe a varredura; as 4 seguintes so fazem sentido nas fontes
     # que varrem artifacts/ (distillation, growth_stages)

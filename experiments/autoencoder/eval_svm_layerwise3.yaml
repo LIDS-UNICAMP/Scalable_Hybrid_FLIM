@@ -1,0 +1,26 @@
+# SVM oficial sobre o encoder congelado de cada camada (L1..L3) da growth_layerwise3.
+name:   svm_layerwise3
+method: autoencoder
+runner: eval
+
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+runner_args:
+  probe:          svm
+  source:         growth_stages
+  family:         layerwise3
+  ckpt_selection: best
+  results_csv:    results/svm_layerwise3.csv
+
+resources:
+  gpu_ids:             [0, 1]
+  max_per_gpu:         2
+  cpus_per_experiment: 8
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_layerwise3
+
+skip: state
