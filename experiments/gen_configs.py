@@ -1107,6 +1107,50 @@ def _normalize_flim_residual() -> pd.DataFrame | None:
     return result
 
 
+# ── Source: flim_transformer_results.csv ─────────────────────────────────────
+
+def _normalize_flim_transformer() -> pd.DataFrame | None:
+    """Normalize results/flim_transformer_results.csv (eval/flim_transformer.py).
+
+    method=FLIM_Transformer, init=spifil.
+    Returns None se o arquivo ainda nao existir.
+    """
+    src = _RESULTS / "flim_transformer_results.csv"
+    if not src.exists():
+        print("[SKIP] flim_transformer_results.csv nao encontrado, rode eval/flim_transformer.py primeiro")
+        return None
+
+    df = pd.read_csv(src)
+    df = df[df["status"] == "ok"].copy()
+    if df.empty:
+        print("[SKIP] flim_transformer_results.csv sem rows ok")
+        return None
+
+    df["dataset_short"]  = df["dataset"]
+    df["pretrained_pct"] = df["percentage"].astype(int)
+
+    agg_rows: list[dict] = []
+    for (dataset_short, pct), grp in df.groupby(["dataset_short", "pretrained_pct"], sort=False):
+        n = len(grp)
+        agg_rows.append({
+            "method":         "FLIM_Transformer",
+            "init":           "spifil",
+            "dataset_short":  dataset_short,
+            "pretrained_pct": int(pct),
+            "n_splits":       n,
+            "kappa":          grp["kappa"].mean(),
+            "kappa_std":      grp["kappa"].std(ddof=1) if n > 1 else 0.0,
+            "acc":            grp["acc"].mean(),
+            "acc_std":        grp["acc"].std(ddof=1) if n > 1 else 0.0,
+            "f1":             grp["f1"].mean(),
+            "f1_std":         grp["f1"].std(ddof=1) if n > 1 else 0.0,
+        })
+
+    result = pd.DataFrame(agg_rows, columns=_CANONICAL_COLS)
+    print(f"[NORM] FLIM_Transformer: {len(result)} rows from results/flim_transformer_results.csv")
+    return result
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def _safe(fn, partial: bool):
@@ -1163,6 +1207,7 @@ def normalize_reports(partial: bool = False) -> None:
     distil_2l400k_flim_df = _safe(_normalize_distill_2l_400k_flim, partial)
     distil_2l400k_flim_nonorm_df = _safe(_normalize_distill_2l_400k_flim_nonorm, partial)
     flim_residual_df  = _safe(_normalize_flim_residual, partial)
+    flim_transformer_df = _safe(_normalize_flim_transformer, partial)
 
     # ── Save normalized FLIM SVM aggregated (if available) ────────────────────
     if flim_df is not None:
@@ -1196,6 +1241,8 @@ def normalize_reports(partial: bool = False) -> None:
         dfs.append(distil_2l400k_flim_nonorm_df)
     if flim_residual_df is not None:
         dfs.append(flim_residual_df)
+    if flim_transformer_df is not None:
+        dfs.append(flim_transformer_df)
 
     if not dfs:
         print("[ERROR] No data sources available. Nothing to save.")

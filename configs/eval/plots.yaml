@@ -21,7 +21,7 @@ plots:
     # data/reports_felipe/svm/report_svm_*.csv
     - {name: "SVM_FLIM",                                 color: "#0072B2", ls: "-",  marker: "o", zorder: 7, label: "SPiFiL (59.504)"}
     # artifacts/SVM/*/*/metrics_SVM_*.csv (init=trunc_normal)
-    - {name: "lejepa_view_trunc_normal",                 color: "#9467BD", ls: "-.", marker: "P", zorder: 8, label: "LeJEPA"}
+    - {name: "lejepa_view_trunc_normal",                 color: "#9467BD", ls: "-.", marker: "P", zorder: 8, label: "LeJEPA (59.504)"}
     # results/ijepa_svm_aggregated.csv
     - {name: "SVM_IJEPA",                                color: "#E69F00", ls: "-.", marker: "*", zorder: 9, label: "I-JEPA (632M)"}
     # results/svm_proj1280_1x1_BN2d_results.csv (trunc_normal)
@@ -38,6 +38,8 @@ plots:
      #- {name: "SVM_FLIMResidual_1_3",                     color: "#008080", ls: "-",  marker: "d", zorder: 15, label: "FLIM Residual 1→3"}
     # results/svm_flim_residual_eggs.csv
     # - {name: "SVM_FLIMResidual_2_3",                     color: "#B22222", ls: "--", marker: "H", zorder: 16, label: "FLIM Residual 2→3"}
+    # results/flim_transformer_results.csv
+    - {name: "FLIM_Transformer", color: "#009E73", ls: "-", marker: "X", zorder: 18, label: "FLIM Transformer"}
 
     # Curinga: qualquer run novo `baseline_*` entra com o azul do FLIM sem editar
     # nada.  Fica por último porque o primeiro padrão que casa vence.
