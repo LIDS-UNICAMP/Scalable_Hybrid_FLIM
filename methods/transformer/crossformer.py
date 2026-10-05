@@ -70,8 +70,10 @@ class CrossTransformer:
             raise ValueError(f"readout desconhecido: {cfg.readout!r}; opcoes: {CROSS_READOUTS}")
         self.cfg = cfg
         self.heads = build_heads(cfg.heads)
-        self.mu: Tensor | None = None
-        self.sigma: Tensor | None = None
+        # mu[i], sigma[i]: estatistica de T[i] (i = 0 entrada, i = l saida da camada l).
+        # Com cfg.layer_norm=False so existe a da camada 0, como antes.
+        self.mu: list[Tensor] = []
+        self.sigma: list[Tensor] = []
         self.delta: list[float] = []
         self.gamma: list[list[float]] = []
         self.head_names: tuple[str, ...] = ()
@@ -85,31 +87,33 @@ class CrossTransformer:
     # Pieces of a layer
     # ------------------------------------------------------------------
 
-    def _z(self, t: Tensor) -> Tensor:
-        return (t - self.mu.to(t.device)) / (self.sigma.to(t.device) + self.cfg.eps)
+    def _z(self, t: Tensor, i: int) -> Tensor:
+        """z-score de T[i] com a estatistica de T[i] (layer_norm) ou sempre a de T[0]."""
+        i = i if self.cfg.layer_norm else 0
+        return (t - self.mu[i].to(t.device)) / (self.sigma[i].to(t.device) + self.cfg.eps)
 
-    def _phi(self, tb: TokenBatch, t: Tensor) -> Tensor:
+    def _phi(self, tb: TokenBatch, t: Tensor, i: int) -> Tensor:
         """phi_s = L2-normalised [z_s ; mean of z_u over adj(s)] (0 for no neighbour)."""
-        z = self._z(t).masked_fill(~tb.valid[..., None], 0.0)
+        z = self._z(t, i).masked_fill(~tb.valid[..., None], 0.0)
         a = tb.adj.to(z.dtype)
         nb = (a @ z) / a.sum(-1, keepdim=True).clamp_min(1.0)
         return tnf.normalize(torch.cat([z, nb], -1), dim=-1)
 
-    def _self(self, tb: TokenBatch, t: Tensor, delta: float) -> tuple[Tensor, Tensor, Tensor]:
+    def _self(self, tb: TokenBatch, t: Tensor, delta: float, i: int) -> tuple[Tensor, Tensor, Tensor]:
         c = self.cfg
         b, n = tb.valid.shape
         if not c.self_attention:
             return t, t.new_zeros(b, n, n), torch.zeros_like(tb.valid)
-        phi = self._phi(tb, t)
+        phi = self._phi(tb, t, i)
         a, fb = graph_attention(
             phi, phi, tb.adj, tb.valid, delta, c.global_topk, c.tau_self, c.chunk_threshold, c.chunk_size
         )
         return t + c.alpha * (a @ t), a, fb
 
-    def _subheads(self, tb: TokenBatch, t: Tensor) -> list[tuple[str, Tensor, Tensor]]:
+    def _subheads(self, tb: TokenBatch, t: Tensor, i: int) -> list[tuple[str, Tensor, Tensor]]:
         dev = t.device
         src = None if self.kernel_source is None else self.kernel_source.to(dev)
-        ctx = HeadContext(self._z(t), tb.adj, tb.valid, self.kernel_class.to(dev), src)
+        ctx = HeadContext(self._z(t, i), tb.adj, tb.valid, self.kernel_class.to(dev), src)
         return [sub for head in self.heads for sub in head(ctx)]
 
     def _cross(self, tb: TokenBatch, subs, gamma: Sequence[float]) -> tuple[list[Tensor], Tensor]:
@@ -177,7 +181,7 @@ class CrossTransformer:
             warns.append(f"{self.n_interest} tokens de interesse: mu, sigma, delta e gamma usam todos os tokens")
             sel = [tb.valid for tb in batches]
         t0 = torch.cat([tb.t[s] for tb, s in zip(batches, sel)])
-        self.mu, self.sigma = t0.mean(0), t0.std(0, unbiased=False)
+        self.mu, self.sigma = [t0.mean(0)], [t0.std(0, unbiased=False)]
         ts = [tb.t for tb in batches]
         self.delta, self.gamma = [], []
         for layer in range(c.num_layers):
@@ -187,7 +191,7 @@ class CrossTransformer:
                 # Interest tokens only, like gamma: near-identical background
                 # superpixels would otherwise pull the percentile to 1.
                 for tb, t, s in zip(batches, ts, sel):
-                    phi = self._phi(tb, t)
+                    phi = self._phi(tb, t, layer)
                     best.append(best_neighbour(phi, phi, tb.adj, c.chunk_threshold, c.chunk_size)[s])
                 best = torch.cat(best)
                 delta = _quantile(best[torch.isfinite(best)], c.delta_percentile)
@@ -195,8 +199,15 @@ class CrossTransformer:
                     delta = float("inf")
                     warns.append(f"camada {layer + 1}: nenhum token com vizinhos, todos usam o fallback global")
             self.delta.append(delta)
-            ts = [self._self(tb, t, delta)[0] for tb, t in zip(batches, ts)]
-            subs = [self._subheads(tb, t) for tb, t in zip(batches, ts)]
+            ts = [self._self(tb, t, delta, layer)[0] for tb, t in zip(batches, ts)]
+            if c.layer_norm:
+                # Normalizacao por camada sem backprop: mesma regra de mu, sigma da camada 0,
+                # nos mesmos tokens, sobre a saida desta camada. Sem ela T cresce ~1.5x por
+                # camada e a cross-attention satura com a estatistica velha.
+                tl = torch.cat([t[s] for t, s in zip(ts, sel)])
+                self.mu.append(tl.mean(0))
+                self.sigma.append(tl.std(0, unbiased=False))
+            subs = [self._subheads(tb, t, layer + 1) for tb, t in zip(batches, ts)]
             self.head_names = tuple(name for name, _, _ in subs[0])
             self.gamma.append([
                 _quantile(torch.cat([s[h][1].amax(-1)[m] for s, m in zip(subs, sel)]), c.gate_percentile)
@@ -208,13 +219,13 @@ class CrossTransformer:
     @torch.no_grad()
     def forward(self, F: Tensor, segs, masks=None) -> CrossOutput:
         """Full per-layer output for a batch F (B, K, H', W'); segs len B, or None for the grid."""
-        if self.mu is None:
+        if not self.mu:
             raise RuntimeError("CrossTransformer.fit precisa ser chamado antes")
         tb = tokenize_batch(F, segs, masks, self.cfg)
         ts, a_self, fbs, a_cross, es = [tb.t], [], [], [], []
         for layer in range(self.cfg.num_layers):
-            t, a, fb = self._self(tb, ts[-1], self.delta[layer])
-            att, e = self._cross(tb, self._subheads(tb, t), self.gamma[layer])
+            t, a, fb = self._self(tb, ts[-1], self.delta[layer], layer)
+            att, e = self._cross(tb, self._subheads(tb, t, layer + 1), self.gamma[layer])
             ts.append(t)
             a_self.append(a)
             fbs.append(fb)

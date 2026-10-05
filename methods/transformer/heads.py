@@ -99,12 +99,37 @@ class TextureHead:
         return [(self.name, ctx.part(1), ctx.all_kernels())]
 
 
+def _neighbour_mean(ctx: HeadContext, which: int) -> Tensor:
+    """Mean of part ``which`` over each token's valid neighbours (0 when it has none)."""
+    a = (ctx.adj & ctx.valid[:, None, :]).to(ctx.z.dtype)
+    deg = a.sum(-1, keepdim=True).clamp(min=1.0)  # no neighbour -> sum 0 / 1 = 0
+    return (a @ ctx.part(which)) / deg
+
+
 @register_head("context")
 class ContextHead:
     def __call__(self, ctx: HeadContext):
-        a = (ctx.adj & ctx.valid[:, None, :]).to(ctx.z.dtype)
-        deg = a.sum(-1, keepdim=True).clamp(min=1.0)  # no neighbour -> sum 0 / 1 = 0
-        return [(self.name, (a @ ctx.part(0)) / deg, ctx.all_kernels())]
+        return [(self.name, _neighbour_mean(ctx, 0), ctx.all_kernels())]
+
+
+@register_head("texture_context")
+class TextureContextHead:
+    def __call__(self, ctx: HeadContext):
+        return [(self.name, _neighbour_mean(ctx, 1), ctx.all_kernels())]
+
+
+@register_head("contrast")
+class ContrastHead:
+    """Token minus its neighbourhood: what sets this region apart from around it."""
+
+    def __call__(self, ctx: HeadContext):
+        return [(self.name, ctx.part(0) - _neighbour_mean(ctx, 0), ctx.all_kernels())]
+
+
+@register_head("texture_contrast")
+class TextureContrastHead:
+    def __call__(self, ctx: HeadContext):
+        return [(self.name, ctx.part(1) - _neighbour_mean(ctx, 1), ctx.all_kernels())]
 
 
 @register_head("per_image")

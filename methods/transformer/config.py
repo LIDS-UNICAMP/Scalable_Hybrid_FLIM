@@ -67,7 +67,9 @@ class FlimTransformerConfig:
 
 
 SUPERPIXEL_METHODS: tuple[str, ...] = ("slic", "disf")
-HEADS: tuple[str, ...] = ("appearance", "texture", "context", "per_image")
+HEADS: tuple[str, ...] = (
+    "appearance", "texture", "context", "texture_context", "contrast", "texture_contrast", "per_image",
+)
 CROSS_READOUTS: tuple[str, ...] = ("weighted", "area")
 
 
@@ -83,11 +85,17 @@ class CrossTransformerConfig:
     neighborhood: int = 3  # grid only
     num_layers: int = 2
     self_attention: bool = True
+    # z-score de cada camada com mu, sigma estimados no fit sobre a saida da propria camada
+    # (False = so a estatistica da camada 0, o comportamento do frontend)
+    layer_norm: bool = True
     delta_percentile: float = 25.0
     global_topk: int = 8
     tau_self: float = 0.1
     alpha: float = 0.5
-    heads: tuple[str, ...] = ("appearance", "texture", "context")
+    # 6 cabecas: {media, desvio} x {token, media dos vizinhos, contraste token - vizinhos}
+    heads: tuple[str, ...] = (
+        "appearance", "texture", "context", "texture_context", "contrast", "texture_contrast",
+    )
     tau_cross: float = 0.5
     gate: bool = True
     gate_percentile: float = 10.0
