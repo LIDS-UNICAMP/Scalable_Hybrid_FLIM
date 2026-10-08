@@ -756,6 +756,14 @@ def _normalize_flim_residual() -> pd.DataFrame | None:
         print("[SKIP] svm_flim_residual_eggs.csv has no usable rows")
         return None
 
+    result = _agg_splits(df)
+    print(f"[NORM] FLIM residual (1_3/2_3): {len(result)} rows "
+          f"from results/svm_flim_residual_eggs.csv")
+    return result
+
+
+def _agg_splits(df: pd.DataFrame) -> pd.DataFrame:
+    """mean ± std sobre os splits, por (method, dataset, pct), no esquema canonico."""
     df["dataset_short"]  = df["dataset_name"].map(
         lambda d: _LONG_DATASET_MAP.get(d, d)
     )
@@ -780,9 +788,21 @@ def _normalize_flim_residual() -> pd.DataFrame | None:
             "f1_std":         grp["f1"].std(ddof=1) if n > 1 else 0.0,
         })
 
-    result = pd.DataFrame(agg_rows, columns=_CANONICAL_COLS)
-    print(f"[NORM] FLIM residual (1_3/2_3): {len(result)} rows "
-          f"from results/svm_flim_residual_eggs.csv")
+    return pd.DataFrame(agg_rows, columns=_CANONICAL_COLS)
+
+
+def _normalize_layerwise() -> pd.DataFrame | None:
+    """results/svm_layerwise{3,5}.csv: uma curva por camada, SVM_Layerwise3_L1 etc."""
+    srcs = [p for p in (_RESULTS / "svm_layerwise3.csv", _RESULTS / "svm_layerwise5.csv")
+            if p.exists()]
+    if not srcs:
+        print("[SKIP] svm_layerwise{3,5}.csv nao encontrados")
+        return None
+    df = pd.concat([pd.read_csv(p) for p in srcs])
+    df = df[(df["status"] == "ok") & df["kappa"].notna()].copy()
+    df["method"] = df["method"] + "_" + df["stage_label"]
+    result = _agg_splits(df)
+    print(f"[NORM] Layerwise: {len(result)} rows from {[p.name for p in srcs]}")
     return result
 
 
@@ -838,6 +858,7 @@ def main() -> None:
     distil_2l400k_flim_df = _safe(_normalize_distill_2l_400k_flim, partial)
     distil_2l400k_flim_nonorm_df = _safe(_normalize_distill_2l_400k_flim_nonorm, partial)
     flim_residual_df  = _safe(_normalize_flim_residual, partial)
+    layerwise_df      = _safe(_normalize_layerwise, partial)
 
     # ── Save normalized FLIM SVM aggregated (if available) ────────────────────
     if flim_df is not None:
@@ -871,6 +892,8 @@ def main() -> None:
         dfs.append(distil_2l400k_flim_nonorm_df)
     if flim_residual_df is not None:
         dfs.append(flim_residual_df)
+    if layerwise_df is not None:
+        dfs.append(layerwise_df)
 
     if not dfs:
         print("[ERROR] No data sources available. Nothing to save.")

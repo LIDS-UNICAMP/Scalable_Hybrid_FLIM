@@ -41,6 +41,16 @@ plots:
     # results/flim_transformer_results.csv
     - {name: "FLIM_Transformer", color: "#009E73", ls: "-", marker: "X", zorder: 18, label: "FLIM Transformer"}
 
+    # results/svm_layerwise{3,5}.csv — cor = camada; continuo = layerwise3, tracejado = layerwise5
+    - {name: "SVM_Layerwise3_L1", color: "#8C564B", ls: "-", marker: "o", zorder: 19, label: "Layerwise3 L1"}
+    - {name: "SVM_Layerwise3_L2", color: "#7F7F7F", ls: "-", marker: "o", zorder: 19, label: "Layerwise3 L2"}
+    - {name: "SVM_Layerwise3_L3", color: "#BCBD22", ls: "-", marker: "o", zorder: 19, label: "Layerwise3 L3"}
+    - {name: "SVM_Layerwise5_L1", color: "#8C564B", ls: "--", marker: "o", zorder: 20, label: "Layerwise5 L1"}
+    - {name: "SVM_Layerwise5_L2", color: "#7F7F7F", ls: "--", marker: "o", zorder: 20, label: "Layerwise5 L2"}
+    - {name: "SVM_Layerwise5_L3", color: "#BCBD22", ls: "--", marker: "o", zorder: 20, label: "Layerwise5 L3"}
+    - {name: "SVM_Layerwise5_L4", color: "#17BECF", ls: "--", marker: "o", zorder: 20, label: "Layerwise5 L4"}
+    - {name: "SVM_Layerwise5_L5", color: "#000000", ls: "--", marker: "o", zorder: 20, label: "Layerwise5 L5"}
+
     # Curinga: qualquer run novo `baseline_*` entra com o azul do FLIM sem editar
     # nada.  Fica por último porque o primeiro padrão que casa vence.
     - {name: "baseline_*", color: "#0072B2", zorder: 17}
