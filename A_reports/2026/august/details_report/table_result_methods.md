@@ -3,7 +3,8 @@
 Retrato de 2026-08-25 18:10, com a linha `hybrid_FLIM (head)` acrescentada em 2026-08-26 a partir
 de CSVs de 2026-08-26 12:51 e a linha `hybrid_FLIM (random)` em 2026-08-28, de CSVs de
 2026-08-28 20:24. As linhas `Distill4 (FLIM, MSE, frozen)` e `Distill4 (FLIM, cos, frozen)` entraram em
-2026-09-09, de CSVs de 2026-09-09 12:20. Uma tabela por porcentagem.
+2026-09-09, de CSVs de 2026-09-09 12:20. As linhas `spifil_bckprop 3 camadas` e `spifil_bckprop 5 camadas`
+entraram em 2026-10-08, dos CSVs de 2026-10-08 (5 camadas: parcial, ver a legenda). Uma tabela por porcentagem.
 
 ## Procedência — leia antes de olhar qualquer número
 
@@ -19,6 +20,8 @@ estavam no disco:
 | F1, κ, Acc da linha hybrid_FLIM (img) | `results/eval_growth_stages_g5_in_image_pct{5,50}.csv` |
 | F1, κ, Acc da linha hybrid_FLIM (head) | `results/eval_growth_stages_g5_head_pct{5,50}.csv` |
 | F1, κ, Acc da linha hybrid_FLIM (random) | `results/eval_growth_stages_g5_random_pct{5,50}.csv` |
+| F1, κ, Acc das linhas spifil_bckprop 3 camadas | `results/svm_layerwise3.csv` (via `unified_svm_comparison.csv`) |
+| F1, κ, Acc das linhas spifil_bckprop 5 camadas | `results/svm_layerwise5.csv` (via `unified_svm_comparison.csv`) |
 | F1, κ, Acc da linha Distill4 (FLIM, MSE, frozen) | `results/svm_distill_mse_frozen.csv` |
 | F1, κ, Acc da linha Distill4 (FLIM, cos, frozen) | `results/svm_distill_cos_frozen.csv` |
 
@@ -53,6 +56,8 @@ carrega junto o protocolo de lá (ver a ressalva na Legenda).
 | **hybrid_FLIM (img)** | `SVM_SPiFiL_growth_flatten_lab_raw` | `flim` | - | - | - | `results/eval_growth_stages_g5_in_image_pct{5,50}.csv` |
 | **hybrid_FLIM (head)** | `SVM_SPiFiL_growth_flatten_lab_raw` | `flim` | - | - | - | `results/eval_growth_stages_g5_head_pct{5,50}.csv` |
 | **hybrid_FLIM (random)** | `SVM_SPiFiL_growth_flatten_lab_raw` | `flim` | - | - | - | `results/eval_growth_stages_g5_random_pct{5,50}.csv` |
+| **spifil_bckprop 3 camadas · L1–L3** | `SVM_Layerwise3_L1..L3` | `spifil` | - | - | - | `results/svm_layerwise3.csv` |
+| **spifil_bckprop 5 camadas · L1–L5** | `SVM_Layerwise5_L1..L5` | `spifil` | - | - | - | `results/svm_layerwise5.csv` |
 | **Distill1** | `SVM_Distill_1x1BN` | `trunc_normal` | 123.504 | 0.0008 | 0.47 | `results/svm_proj1280_1x1_BN2d_results.csv` |
 | **Distill1 (FLIM)** | `SVM_Distill_1x1BN_flim_frozen_eval_loss` | `flim` | 123.504 | 0.0008 | 0.47 | `results/svm_distillation_conv_flim_frozen_results.csv` |
 | **Distill2** | `SVM_Distill_2l400K` | `trunc_normal` | 402.544 | 0.0011 | 1.54 | `results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv` |
@@ -275,6 +280,52 @@ do autoencoder, conjunto de treino do SVM e conjunto rotulado do fine-tune da He
 
 **Params, TFLOPs e Pesos ficam em `-`** pelo mesmo motivo das outras quatro.
 
+### As linhas `spifil_bckprop 3 camadas` e `spifil_bckprop 5 camadas` — o encoder crescido camada por camada
+
+São **dois experimentos separados**, com a mesma receita e só o número final de camadas diferente:
+
+| experimento | YAML de treino | YAML de avaliação | camadas |
+|---|---|---|---|
+| **3 camadas** | `growth_layerwise3.yaml` | `eval_svm_layerwise3.yaml` | L1, L2, L3 |
+| **5 camadas** | `growth_layerwise5.yaml` | `eval_svm_layerwise5.yaml` | L1, L2, L3, L4, L5 |
+
+Os YAMLs ficam em `experiments/autoencoder/`. Até a L3 os dois fazem a mesma coisa, mas em runs
+independentes, por isso as linhas `L1`–`L3` dos dois diferem um pouco. No gráfico, a linha cheia
+é o experimento de 3 camadas e a tracejada, o de 5 camadas. A cor indica a camada. O encoder
+nasce **do zero**, sem o FLIM de 3 camadas, e cresce uma camada por vez:
+
+1. O SPiFiL corta a camada nova com a arquitetura do artigo (16/32/48 filtros, kernel 3, max-pool
+   3 stride 2; L4 e L5 com 48 filtros e sem pooling). A L1 é cortada da imagem LAB; cada camada seguinte, das features das
+   anteriores já treinadas.
+2. As camadas antigas ficam **congeladas**, e só a nova aprende por backprop, contra um decoder
+   novo (reconstrução, sem rótulo). O decoder é jogado fora no fim de cada camada.
+3. O SVM oficial avalia o encoder congelado depois de cada camada. O sufixo `L{k}` é o encoder
+   com `k` camadas.
+
+Média ± desvio sobre os 3 splits, nas **6 porcentagens** (a única família de crescimento com as
+seis). **Larvae não tem `L3` em diante, nos dois experimentos**: o SPiFiL recusa a terceira camada
+(N=196 ≤ D=288, 2 classes).
+
+**O experimento de 5 camadas ainda está parcial (2026-10-08).** Em eggs 5% e 75%, e em protozoan
+50% (só L1) e 75%, a média usa 2 splits em vez de 3. Duas células de eggs ainda estão sendo
+retreinadas e a avaliação está rodando.
+
+**Ressalva sobre os superpixels:** o crescimento usa SLIC com 100 superpixels por imagem. A
+configuração publicada do SPiFiL é `superpixels=disf n_superpixels=50 arch=paper`
+(README do SPiFiL). A arquitetura é a do artigo, mas o extrator de superpixels não é.
+
+**Params, em `-` porque mudam com o dataset.** O SPiFiL arredonda os filtros para baixo, para um
+múltiplo do número de classes.
+
+| linha | eggs | larvae | protozoan |
+|---|---|---|---|
+| `_L1` | 252 (9 filtros) | 448 (16) | 392 (14) |
+| `_L2` | 2.466 (9, 27) | 5.088 (16, 32) | 3.948 (14, 28) |
+| `_L3` | 13.446 (9, 27, 45) | — | 14.574 (14, 28, 42) |
+
+São de 4× a 236× menos parâmetros que o FLIM (59.504). Detalhes e leitura dos resultados em
+[`A_reports/october/details/layerwise3_parcial_2026-10-05.md`](../../../october/details/layerwise3_parcial_2026-10-05.md).
+
 ## O que a porcentagem significa — e o cuidado que ela exige
 
 **A semântica não é a mesma em todas as linhas.** No LeJEPA e no I-JEPA, `pretrained_pct` é a
@@ -301,6 +352,14 @@ treino do SVM. Os dois documentos usam a mesma palavra para coisas diferentes.
 | **hybrid_FLIM (img)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (head)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (random)** | - | - | - | - | - | - | - | - | - | - |
+| **spifil_bckprop 3 camadas · L1** | - | 0.5185 ± 0.0177 | 0.4356 ± 0.0418 | 0.5758 ± 0.0799 | 0.5855 ± 0.1000 | 0.2038 ± 0.1731 | 0.5773 ± 0.0760 | 0.5116 ± 0.0224 | 0.4707 ± 0.0061 | 0.5181 ± 0.0289 |
+| **spifil_bckprop 3 camadas · L2** | - | 0.4774 ± 0.0339 | 0.3975 ± 0.0786 | 0.5498 ± 0.0302 | 0.6584 ± 0.0994 | 0.3367 ± 0.1778 | 0.6314 ± 0.0865 | 0.5140 ± 0.0207 | 0.4751 ± 0.0098 | 0.5382 ± 0.0330 |
+| **spifil_bckprop 3 camadas · L3** | - | 0.4331 ± 0.0662 | 0.3358 ± 0.1024 | 0.5102 ± 0.0181 | - | - | - | 0.5056 ± 0.0192 | 0.4573 ± 0.0251 | 0.5384 ± 0.0203 |
+| **spifil_bckprop 5 camadas · L1** | - | 0.5185 ± 0.0177 | 0.4356 ± 0.0418 | 0.5758 ± 0.0799 | 0.5855 ± 0.1000 | 0.2038 ± 0.1731 | 0.5773 ± 0.0760 | 0.5116 ± 0.0226 | 0.4705 ± 0.0062 | 0.5180 ± 0.0289 |
+| **spifil_bckprop 5 camadas · L2** | - | 0.4772 ± 0.0337 | 0.3975 ± 0.0786 | 0.5498 ± 0.0302 | 0.6584 ± 0.0994 | 0.3367 ± 0.1778 | 0.6314 ± 0.0865 | 0.5137 ± 0.0205 | 0.4748 ± 0.0103 | 0.5381 ± 0.0329 |
+| **spifil_bckprop 5 camadas · L3** | - | 0.4319 ± 0.0686 | 0.3336 ± 0.1069 | 0.5102 ± 0.0181 | - | - | - | 0.4988 ± 0.0192 | 0.4476 ± 0.0181 | 0.5326 ± 0.0150 |
+| **spifil_bckprop 5 camadas · L4** | - | 0.3930 ± 0.0366 | 0.2767 ± 0.0396 | 0.4875 ± 0.0632 | - | - | - | 0.4822 ± 0.0028 | 0.4331 ± 0.0272 | 0.5157 ± 0.0258 |
+| **spifil_bckprop 5 camadas · L5** | - | 0.3604 ± 0.0204 | 0.2499 ± 0.0207 | 0.4337 ± 0.0681 | - | - | - | 0.4582 ± 0.0176 | 0.4046 ± 0.0395 | 0.5068 ± 0.0217 |
 | **Distill1** | 123.504 | 0.0879 ± 0.0000 | 0.0000 ± 0.0000 | 0.1111 ± 0.0000 | 0.4661 ± 0.0000 | 0.0000 ± 0.0000 | 0.5000 ± 0.0000 | 0.1449 ± 0.0324 | -0.0154 ± 0.0223 | 0.2091 ± 0.0751 |
 | **Distill1 (FLIM)** | 123.504 | 0.2233 ± 0.0298 | 0.0631 ± 0.0645 | 0.2250 ± 0.0247 | 0.7112 ± 0.1147 | 0.4286 ± 0.2238 | 0.6843 ± 0.1120 | 0.3258 ± 0.0256 | 0.2710 ± 0.0069 | 0.3257 ± 0.0374 |
 | **Distill2** | 402.544 | 0.4067 ± 0.0276 | 0.3312 ± 0.0501 | 0.4722 ± 0.0208 | 0.8080 ± 0.0425 | 0.6168 ± 0.0851 | 0.8281 ± 0.0754 | 0.4264 ± 0.0363 | 0.3302 ± 0.0437 | 0.4662 ± 0.0442 |
@@ -328,6 +387,14 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **hybrid_FLIM (head) — SVM**<br>`round1_head` 4 cam. / `round1_head` nsp450 / `round1_head` 4 cam. | - | 0.7200 ± 0.0707 | 0.6949 ± 0.0801 | 0.7271 ± 0.0615 | 0.9242 ± 0.0161 | 0.8485 ± 0.0322 | 0.9228 ± 0.0255 | 0.6532 ± 0.0286 | 0.6937 ± 0.0121 | 0.6580 ± 0.0178 |
 | **hybrid_FLIM (head) — Head**<br>a cabeça treinada, não o SVM | - | 0.6809 ± 0.0900 | 0.7017 ± 0.0688 | 0.6584 ± 0.0930 | - | - | - | 0.6548 ± 0.0157 | 0.7154 ± 0.0175 | 0.6319 ± 0.0144 |
 | **hybrid_FLIM (random)**<br>`stage2` 3 cam. / `stage2` 3 cam. / `round1_head` 4 cam. | - | 0.6771 ± 0.0333 | 0.6252 ± 0.0448 | 0.7300 ± 0.0692 | 0.7967 ± 0.0573 | 0.5959 ± 0.1125 | 0.7554 ± 0.0587 | 0.6879 ± 0.0522 | 0.7106 ± 0.0313 | 0.7072 ± 0.0541 |
+| **spifil_bckprop 3 camadas · L1** | - | 0.7703 ± 0.0306 | 0.7344 ± 0.0386 | 0.7699 ± 0.0546 | 0.7689 ± 0.0796 | 0.5428 ± 0.1547 | 0.7242 ± 0.0786 | 0.6384 ± 0.0301 | 0.6184 ± 0.0112 | 0.6417 ± 0.0182 |
+| **spifil_bckprop 3 camadas · L2** | - | 0.7234 ± 0.0531 | 0.6879 ± 0.0546 | 0.7371 ± 0.0588 | 0.8007 ± 0.0988 | 0.6049 ± 0.1933 | 0.7685 ± 0.1134 | 0.6520 ± 0.0335 | 0.6402 ± 0.0150 | 0.6642 ± 0.0197 |
+| **spifil_bckprop 3 camadas · L3** | - | 0.6994 ± 0.0289 | 0.6699 ± 0.0296 | 0.7239 ± 0.0323 | - | - | - | 0.6501 ± 0.0520 | 0.6343 ± 0.0343 | 0.6667 ± 0.0427 |
+| **spifil_bckprop 5 camadas · L1** | - | 0.7804 ± 0.0357 | 0.7497 ± 0.0397 | 0.7687 ± 0.0772 | 0.7689 ± 0.0796 | 0.5428 ± 0.1547 | 0.7242 ± 0.0786 | 0.6385 ± 0.0299 | 0.6187 ± 0.0107 | 0.6417 ± 0.0182 |
+| **spifil_bckprop 5 camadas · L2** | - | 0.7500 ± 0.0369 | 0.7156 ± 0.0368 | 0.7489 ± 0.0780 | 0.8006 ± 0.0979 | 0.6045 ± 0.1917 | 0.7689 ± 0.1124 | 0.6490 ± 0.0363 | 0.6398 ± 0.0171 | 0.6602 ± 0.0220 |
+| **spifil_bckprop 5 camadas · L3** | - | 0.7161 ± 0.0233 | 0.6767 ± 0.0319 | 0.7394 ± 0.0361 | - | - | - | 0.6467 ± 0.0561 | 0.6251 ± 0.0405 | 0.6687 ± 0.0471 |
+| **spifil_bckprop 5 camadas · L4** | - | 0.6682 ± 0.0290 | 0.6050 ± 0.0343 | 0.7021 ± 0.0477 | - | - | - | 0.6314 ± 0.0506 | 0.6026 ± 0.0350 | 0.6605 ± 0.0452 |
+| **spifil_bckprop 5 camadas · L5** | - | 0.6090 ± 0.0418 | 0.5282 ± 0.0522 | 0.6555 ± 0.0829 | - | - | - | 0.6224 ± 0.0391 | 0.5756 ± 0.0238 | 0.6563 ± 0.0454 |
 | **Distill1** | 123.504 | 0.0954 ± 0.0118 | -0.0022 ± 0.0052 | 0.1160 ± 0.0086 | 0.5042 ± 0.0188 | 0.0615 ± 0.0315 | 0.5185 ± 0.0098 | 0.1648 ± 0.1005 | 0.0399 ± 0.0691 | 0.2163 ± 0.1272 |
 | **Distill1 (FLIM)** | 123.504 | 0.3840 ± 0.0310 | 0.3793 ± 0.0374 | 0.3863 ± 0.0183 | 0.8768 ± 0.0301 | 0.7537 ± 0.0601 | 0.8736 ± 0.0199 | 0.3959 ± 0.1210 | 0.4400 ± 0.0930 | 0.3898 ± 0.0935 |
 | **Distill2** | 402.544 | 0.5475 ± 0.0694 | 0.4891 ± 0.0983 | 0.6186 ± 0.0390 | 0.8357 ± 0.0335 | 0.6716 ± 0.0669 | 0.8339 ± 0.0381 | 0.5261 ± 0.0099 | 0.5099 ± 0.0382 | 0.5458 ± 0.0136 |
@@ -354,6 +421,14 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **hybrid_FLIM (img)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (head)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (random)** | - | - | - | - | - | - | - | - | - | - |
+| **spifil_bckprop 3 camadas · L1** | - | 0.8715 ± 0.0227 | 0.8558 ± 0.0249 | 0.8878 ± 0.0033 | 0.8761 ± 0.0323 | 0.7521 ± 0.0646 | 0.8783 ± 0.0345 | 0.7666 ± 0.0040 | 0.7135 ± 0.0075 | 0.7847 ± 0.0121 |
+| **spifil_bckprop 3 camadas · L2** | - | 0.8709 ± 0.0147 | 0.8585 ± 0.0131 | 0.8930 ± 0.0070 | 0.8892 ± 0.0270 | 0.7785 ± 0.0539 | 0.8954 ± 0.0269 | 0.7965 ± 0.0074 | 0.7749 ± 0.0126 | 0.8088 ± 0.0079 |
+| **spifil_bckprop 3 camadas · L3** | - | 0.8699 ± 0.0138 | 0.8562 ± 0.0120 | 0.8939 ± 0.0107 | - | - | - | 0.8139 ± 0.0099 | 0.8099 ± 0.0129 | 0.8347 ± 0.0075 |
+| **spifil_bckprop 5 camadas · L1** | - | 0.8715 ± 0.0227 | 0.8558 ± 0.0249 | 0.8878 ± 0.0033 | 0.8761 ± 0.0323 | 0.7521 ± 0.0646 | 0.8783 ± 0.0345 | 0.7653 ± 0.0024 | 0.7143 ± 0.0061 | 0.7846 ± 0.0118 |
+| **spifil_bckprop 5 camadas · L2** | - | 0.8702 ± 0.0128 | 0.8589 ± 0.0126 | 0.8899 ± 0.0042 | 0.8901 ± 0.0258 | 0.7803 ± 0.0516 | 0.8963 ± 0.0245 | 0.7938 ± 0.0056 | 0.7739 ± 0.0119 | 0.8159 ± 0.0095 |
+| **spifil_bckprop 5 camadas · L3** | - | 0.8727 ± 0.0159 | 0.8567 ± 0.0142 | 0.8995 ± 0.0111 | - | - | - | 0.8206 ± 0.0079 | 0.8128 ± 0.0046 | 0.8480 ± 0.0117 |
+| **spifil_bckprop 5 camadas · L4** | - | 0.8576 ± 0.0153 | 0.8375 ± 0.0083 | 0.8880 ± 0.0158 | - | - | - | 0.8120 ± 0.0155 | 0.7951 ± 0.0120 | 0.8392 ± 0.0196 |
+| **spifil_bckprop 5 camadas · L5** | - | 0.8337 ± 0.0207 | 0.8152 ± 0.0138 | 0.8639 ± 0.0252 | - | - | - | 0.7934 ± 0.0067 | 0.7688 ± 0.0116 | 0.8285 ± 0.0131 |
 | **Distill1** | 123.504 | 0.0878 ± 0.0000 | -0.0004 ± 0.0004 | 0.1110 ± 0.0001 | 0.5036 ± 0.0185 | 0.0589 ± 0.0309 | 0.5179 ± 0.0096 | 0.2745 ± 0.0488 | 0.1499 ± 0.0652 | 0.3671 ± 0.1234 |
 | **Distill1 (FLIM)** | 123.504 | 0.6555 ± 0.0443 | 0.6754 ± 0.0624 | 0.6478 ± 0.0513 | 0.9425 ± 0.0037 | 0.8850 ± 0.0074 | 0.9407 ± 0.0132 | 0.6308 ± 0.0810 | 0.6606 ± 0.0253 | 0.5871 ± 0.0632 |
 | **Distill2** | 402.544 | 0.6854 ± 0.0069 | 0.6544 ± 0.0137 | 0.7481 ± 0.0075 | 0.8593 ± 0.0119 | 0.7186 ± 0.0237 | 0.8590 ± 0.0198 | 0.5968 ± 0.0230 | 0.5771 ± 0.0317 | 0.6294 ± 0.0181 |
@@ -381,6 +456,14 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **hybrid_FLIM (head) — SVM**<br>`round1_head` 4 cam. / `round1_head` nsp450 / `round2_head` 5 cam. | - | 0.9408 ± 0.0114 | 0.9309 ± 0.0093 | 0.9355 ± 0.0202 | 0.9655 ± 0.0043 | 0.9309 ± 0.0086 | **0.9719** ± 0.0075 | **0.9002** ± 0.0040 | **0.9198** ± 0.0089 | 0.8850 ± 0.0092 |
 | **hybrid_FLIM (head) — Head**<br>a cabeça treinada, não o SVM | - | 0.9361 ± 0.0117 | 0.9294 ± 0.0123 | 0.9277 ± 0.0164 | - | - | - | 0.9017 ± 0.0049 | 0.9203 ± 0.0080 | 0.8778 ± 0.0116 |
 | **hybrid_FLIM (random)**<br>`round1_head` 4 cam. / `stage2` 3 cam. / `round2_head` 5 cam. | - | 0.9357 ± 0.0105 | 0.9276 ± 0.0095 | 0.9318 ± 0.0158 | 0.9295 ± 0.0184 | 0.8590 ± 0.0369 | 0.9328 ± 0.0183 | 0.8933 ± 0.0096 | 0.9170 ± 0.0066 | **0.8876** ± 0.0082 |
+| **spifil_bckprop 3 camadas · L1** | - | 0.9051 ± 0.0110 | 0.8932 ± 0.0072 | 0.9190 ± 0.0189 | 0.8938 ± 0.0174 | 0.7875 ± 0.0349 | 0.8920 ± 0.0184 | 0.7811 ± 0.0002 | 0.7563 ± 0.0056 | 0.8006 ± 0.0093 |
+| **spifil_bckprop 3 camadas · L2** | - | 0.9142 ± 0.0100 | 0.9023 ± 0.0117 | 0.9284 ± 0.0081 | 0.9062 ± 0.0074 | 0.8124 ± 0.0149 | 0.9059 ± 0.0060 | 0.8261 ± 0.0079 | 0.8164 ± 0.0083 | 0.8431 ± 0.0044 |
+| **spifil_bckprop 3 camadas · L3** | - | 0.9136 ± 0.0155 | 0.9050 ± 0.0168 | 0.9301 ± 0.0192 | - | - | - | 0.8458 ± 0.0038 | 0.8480 ± 0.0031 | 0.8567 ± 0.0178 |
+| **spifil_bckprop 5 camadas · L1** | - | 0.9058 ± 0.0101 | 0.8942 ± 0.0062 | 0.9200 ± 0.0183 | 0.8938 ± 0.0174 | 0.7875 ± 0.0349 | 0.8920 ± 0.0184 | 0.7802 ± 0.0020 | 0.7558 ± 0.0045 | 0.7948 ± 0.0070 |
+| **spifil_bckprop 5 camadas · L2** | - | 0.9096 ± 0.0046 | 0.8986 ± 0.0066 | 0.9241 ± 0.0065 | 0.9090 ± 0.0048 | 0.8180 ± 0.0096 | 0.9098 ± 0.0061 | 0.8255 ± 0.0060 | 0.8165 ± 0.0099 | 0.8380 ± 0.0082 |
+| **spifil_bckprop 5 camadas · L3** | - | 0.9078 ± 0.0197 | 0.8974 ± 0.0153 | 0.9206 ± 0.0191 | - | - | - | 0.8456 ± 0.0086 | 0.8453 ± 0.0083 | 0.8545 ± 0.0016 |
+| **spifil_bckprop 5 camadas · L4** | - | 0.8950 ± 0.0174 | 0.8838 ± 0.0102 | 0.9159 ± 0.0198 | - | - | - | 0.8193 ± 0.0142 | 0.8199 ± 0.0112 | 0.8369 ± 0.0110 |
+| **spifil_bckprop 5 camadas · L5** | - | 0.8896 ± 0.0201 | 0.8755 ± 0.0183 | 0.9109 ± 0.0311 | - | - | - | 0.8088 ± 0.0046 | 0.8070 ± 0.0022 | 0.8289 ± 0.0129 |
 | **Distill1** | 123.504 | 0.1533 ± 0.0608 | 0.0219 ± 0.0407 | 0.2043 ± 0.0911 | 0.5225 ± 0.0078 | 0.0883 ± 0.0490 | 0.5613 ± 0.0668 | 0.3438 ± 0.1389 | 0.2407 ± 0.1491 | 0.4757 ± 0.1073 |
 | **Distill1 (FLIM)** | 123.504 | 0.7379 ± 0.0068 | 0.7579 ± 0.0336 | 0.7178 ± 0.0242 | 0.9431 ± 0.0098 | 0.8863 ± 0.0195 | 0.9390 ± 0.0012 | 0.7011 ± 0.0611 | 0.7106 ± 0.0150 | 0.6555 ± 0.0505 |
 | **Distill2** | 402.544 | 0.7341 ± 0.0075 | 0.7034 ± 0.0051 | 0.7802 ± 0.0153 | 0.9030 ± 0.0239 | 0.8061 ± 0.0479 | 0.9079 ± 0.0188 | 0.6835 ± 0.0155 | 0.6818 ± 0.0093 | 0.7223 ± 0.0165 |
@@ -407,6 +490,14 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **hybrid_FLIM (img)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (head)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (random)** | - | - | - | - | - | - | - | - | - | - |
+| **spifil_bckprop 3 camadas · L1** | - | 0.9148 ± 0.0093 | 0.9046 ± 0.0123 | 0.9297 ± 0.0180 | 0.9012 ± 0.0153 | 0.8024 ± 0.0306 | 0.9014 ± 0.0150 | 0.8057 ± 0.0170 | 0.7765 ± 0.0118 | 0.8251 ± 0.0265 |
+| **spifil_bckprop 3 camadas · L2** | - | 0.9226 ± 0.0063 | 0.9150 ± 0.0070 | 0.9333 ± 0.0102 | 0.9194 ± 0.0067 | 0.8387 ± 0.0134 | 0.9250 ± 0.0046 | 0.8410 ± 0.0225 | 0.8324 ± 0.0138 | 0.8579 ± 0.0263 |
+| **spifil_bckprop 3 camadas · L3** | - | 0.9315 ± 0.0061 | 0.9223 ± 0.0059 | 0.9383 ± 0.0089 | - | - | - | 0.8635 ± 0.0203 | 0.8627 ± 0.0147 | 0.8809 ± 0.0245 |
+| **spifil_bckprop 5 camadas · L1** | - | 0.9077 ± 0.0085 | 0.8981 ± 0.0126 | 0.9161 ± 0.0126 | 0.9017 ± 0.0154 | 0.8034 ± 0.0307 | 0.9022 ± 0.0153 | 0.7972 ± 0.0053 | 0.7679 ± 0.0105 | 0.8113 ± 0.0135 |
+| **spifil_bckprop 5 camadas · L2** | - | 0.9192 ± 0.0002 | 0.9138 ± 0.0007 | 0.9293 ± 0.0019 | 0.9122 ± 0.0108 | 0.8244 ± 0.0216 | 0.9156 ± 0.0080 | 0.8602 ± 0.0002 | 0.8462 ± 0.0044 | 0.8648 ± 0.0073 |
+| **spifil_bckprop 5 camadas · L3** | - | 0.9257 ± 0.0119 | 0.9181 ± 0.0129 | 0.9323 ± 0.0126 | - | - | - | 0.8602 ± 0.0109 | 0.8543 ± 0.0039 | 0.8769 ± 0.0287 |
+| **spifil_bckprop 5 camadas · L4** | - | 0.9188 ± 0.0087 | 0.9081 ± 0.0095 | 0.9280 ± 0.0095 | - | - | - | 0.8429 ± 0.0236 | 0.8405 ± 0.0099 | 0.8573 ± 0.0381 |
+| **spifil_bckprop 5 camadas · L5** | - | 0.9186 ± 0.0054 | 0.9046 ± 0.0026 | 0.9328 ± 0.0012 | - | - | - | 0.8414 ± 0.0203 | 0.8357 ± 0.0097 | 0.8599 ± 0.0309 |
 | **Distill1** | 123.504 | 0.2516 ± 0.1524 | 0.1713 ± 0.1501 | 0.4744 ± 0.3255 | 0.5102 ± 0.0073 | 0.0665 ± 0.0143 | 0.5205 ± 0.0044 | 0.4239 ± 0.0535 | 0.2973 ± 0.0898 | 0.5632 ± 0.0451 |
 | **Distill1 (FLIM)** | 123.504 | 0.7610 ± 0.0070 | 0.7823 ± 0.0301 | 0.7395 ± 0.0237 | 0.9482 ± 0.0071 | 0.8964 ± 0.0142 | 0.9442 ± 0.0062 | 0.7138 ± 0.0434 | 0.7290 ± 0.0199 | 0.6665 ± 0.0394 |
 | **Distill2** | 402.544 | 0.7971 ± 0.0270 | 0.7769 ± 0.0273 | 0.8368 ± 0.0091 | 0.9280 ± 0.0089 | 0.8560 ± 0.0177 | 0.9311 ± 0.0061 | 0.7522 ± 0.0132 | 0.7514 ± 0.0110 | 0.7726 ± 0.0156 |
@@ -433,6 +524,14 @@ Negrito = maior valor daquela métrica naquele dataset, entre as linhas preenchi
 | **hybrid_FLIM (img)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (head)** | - | - | - | - | - | - | - | - | - | - |
 | **hybrid_FLIM (random)** | - | - | - | - | - | - | - | - | - | - |
+| **spifil_bckprop 3 camadas · L1** | - | 0.9221 ± 0.0118 | 0.9130 ± 0.0097 | 0.9314 ± 0.0146 | 0.9148 ± 0.0103 | 0.8297 ± 0.0206 | 0.9163 ± 0.0085 | 0.8199 ± 0.0026 | 0.7905 ± 0.0116 | 0.8384 ± 0.0088 |
+| **spifil_bckprop 3 camadas · L2** | - | 0.9313 ± 0.0026 | 0.9236 ± 0.0004 | 0.9401 ± 0.0008 | 0.9351 ± 0.0060 | 0.8701 ± 0.0121 | 0.9418 ± 0.0099 | 0.8585 ± 0.0065 | 0.8534 ± 0.0100 | 0.8727 ± 0.0070 |
+| **spifil_bckprop 3 camadas · L3** | - | 0.9406 ± 0.0056 | 0.9338 ± 0.0033 | 0.9479 ± 0.0016 | - | - | - | 0.8789 ± 0.0034 | 0.8754 ± 0.0040 | 0.8985 ± 0.0033 |
+| **spifil_bckprop 5 camadas · L1** | - | 0.9217 ± 0.0136 | 0.9131 ± 0.0105 | 0.9315 ± 0.0160 | 0.9144 ± 0.0103 | 0.8289 ± 0.0205 | 0.9162 ± 0.0087 | 0.8195 ± 0.0116 | 0.7948 ± 0.0059 | 0.8390 ± 0.0179 |
+| **spifil_bckprop 5 camadas · L2** | - | 0.9316 ± 0.0085 | 0.9227 ± 0.0101 | 0.9341 ± 0.0076 | 0.9350 ± 0.0038 | 0.8700 ± 0.0076 | 0.9411 ± 0.0109 | 0.8583 ± 0.0049 | 0.8530 ± 0.0078 | 0.8734 ± 0.0126 |
+| **spifil_bckprop 5 camadas · L3** | - | 0.9409 ± 0.0012 | 0.9346 ± 0.0034 | 0.9466 ± 0.0019 | - | - | - | 0.8724 ± 0.0063 | 0.8736 ± 0.0123 | 0.8860 ± 0.0098 |
+| **spifil_bckprop 5 camadas · L4** | - | 0.9380 ± 0.0009 | 0.9284 ± 0.0046 | 0.9442 ± 0.0021 | - | - | - | 0.8647 ± 0.0121 | 0.8659 ± 0.0063 | 0.8854 ± 0.0144 |
+| **spifil_bckprop 5 camadas · L5** | - | 0.9365 ± 0.0052 | 0.9266 ± 0.0079 | 0.9450 ± 0.0028 | - | - | - | 0.8662 ± 0.0070 | 0.8644 ± 0.0059 | 0.8870 ± 0.0124 |
 | **Distill1** | 123.504 | 0.4219 ± 0.0612 | 0.2959 ± 0.0493 | 0.7394 ± 0.0050 | 0.5273 ± 0.3419 | 0.2005 ± 0.5062 | 0.5259 ± 0.3366 | 0.3145 ± 0.0580 | 0.2016 ± 0.0427 | 0.4376 ± 0.0567 |
 | **Distill1 (FLIM)** | 123.504 | 0.7877 ± 0.0197 | 0.8003 ± 0.0292 | 0.7624 ± 0.0257 | 0.9561 ± 0.0084 | 0.9121 ± 0.0169 | 0.9531 ± 0.0083 | 0.7329 ± 0.0390 | 0.7410 ± 0.0199 | 0.6826 ± 0.0375 |
 | **Distill2** | 402.544 | 0.8391 ± 0.0109 | 0.8189 ± 0.0117 | 0.8609 ± 0.0111 | 0.9412 ± 0.0031 | 0.8824 ± 0.0062 | 0.9497 ± 0.0047 | 0.7989 ± 0.0300 | 0.7935 ± 0.0249 | 0.8217 ± 0.0274 |
