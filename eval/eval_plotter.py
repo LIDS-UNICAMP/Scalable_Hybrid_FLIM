@@ -684,7 +684,7 @@ def plot_merge_comparison(
                 line, = ax.plot(
                     x, y,
                     color=sty["color"], linestyle=sty["ls"], marker=sty["marker"],
-                    linewidth=linewidth, markersize=markersize,
+                    linewidth=linewidth, markersize=sty.get("ms", markersize),
                     markeredgecolor="white", markeredgewidth=0.9,
                     zorder=sty["zorder"], label=label,
                 )

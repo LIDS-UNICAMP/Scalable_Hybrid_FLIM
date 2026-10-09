@@ -1,0 +1,38 @@
+# Crescimento camada por camada, do zero, ate L5, com sementes SO das classes do artigo:
+# sem a impureza no eggs (classe 9) e no protozoan (classe 7); o larvae mantem as 2.
+# Igual ao growth_layerwise5.yaml em todo o resto.
+# Cada Lk e cortada pelo SPiFiL (config do paper, runners/growth.py:LAYERWISE_SPECS)
+# sobre L1..L(k-1) ja treinadas; so Lk aprende, com um decoder novo por camada.
+name:   spifil_growth_layerwise5_paper
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+resources:
+  gpu_ids:             [2, 3]
+  max_per_gpu:         4
+  cpus_per_experiment: 10
+  num_workers:         2
+
+runner_args:
+  layerwise:  5
+  paper_classes: true
+  embed_mode: flatten
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/layerwise5_paper
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  # Sem sonda SVM no treino: era ela que afogava a grade. O SVM roda so no eval_svm_layerwise5_paper.
+  SVM: false

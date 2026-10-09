@@ -153,7 +153,7 @@ GROW_KNOBS: tuple[str, ...] = (
     "out_channels", "kernel_size", "pool_stride", "n_superpixels", "n_images",
     "image_size", "imagenet_norm", "spifil_in_image", "spifil_in_feature",
     "impurities", "one_per_class", "random_layer", "random_layer_classic",
-    "seed",
+    "seed", "paper_classes", "superpixels", "budget_check",
 )
 
 
@@ -335,14 +335,19 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
         ckpt = ""
         result["reason"] = f"layerwise {layerwise} atingido"
         try:
-            for k, (width, stride) in enumerate(LAYERWISE_SPECS[:layerwise], start=1):
+            # `layer_channels` e `kernel_size` do YAML trocam a config do artigo (16/32/48, k3)
+            # pela de outro encoder, ex. o FLIM de data/ (24/32/48/48/48, k5).
+            widths = exp.runner_args.get("layer_channels", [w for w, _ in LAYERWISE_SPECS])
+            kernel = exp.runner_args.get("kernel_size", 3)
+            specs = [(w, s) for w, (_, s) in zip(widths, LAYERWISE_SPECS)]
+            for k, (width, stride) in enumerate(specs[:layerwise], start=1):
                 grow_dir = _stage_dir(exp, point, f"L{k}_grow")
                 if dry_run:
                     plan.append(["<in-process>", "flim.spifil.grow", f"--out={grow_dir}",
                                  f"--out_channels={width}", f"--pool_stride={stride}",
                                  f"--ckpt={ckpt}"])
                 elif _grow_once(exp, point, gpu_id, ckpt, arch, weights, grow_dir,
-                                out_channels=width, kernel_size=3,
+                                out_channels=width, kernel_size=kernel,
                                 pool_stride=stride) == GROW_EXHAUSTED:
                     result["reason"] = f"spifil grow recusou L{k}: N <= D"
                     break

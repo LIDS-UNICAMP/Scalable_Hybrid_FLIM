@@ -67,6 +67,10 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         "head_finetune", "unfrozen_after_stage_two",
         # cresce do zero, L1..L<layerwise>; ver LAYERWISE_SPECS em runners/growth.py
         "layerwise",
+        # sementes so das classes do artigo (sem impureza no eggs e no protozoan)
+        "paper_classes",
+        # superpixel do grow (slic | disf), trava N <= D e largura de cada camada
+        "superpixels", "budget_check", "layer_channels",
     ),
     # `source` escolhe a varredura; as 4 seguintes so fazem sentido nas fontes
     # que varrem artifacts/ (distillation, growth_stages)

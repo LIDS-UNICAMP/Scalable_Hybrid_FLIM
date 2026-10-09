@@ -792,9 +792,8 @@ def _agg_splits(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalize_layerwise() -> pd.DataFrame | None:
-    """results/svm_layerwise{3,5}.csv: uma curva por camada, SVM_Layerwise3_L1 etc."""
-    srcs = [p for p in (_RESULTS / "svm_layerwise3.csv", _RESULTS / "svm_layerwise5.csv")
-            if p.exists()]
+    """results/svm_layerwise*.csv: uma curva por camada, SVM_Layerwise3_L1 etc."""
+    srcs = sorted(_RESULTS.glob("svm_layerwise*.csv"))
     if not srcs:
         print("[SKIP] svm_layerwise{3,5}.csv nao encontrados")
         return None
@@ -803,6 +802,23 @@ def _normalize_layerwise() -> pd.DataFrame | None:
     df["method"] = df["method"] + "_" + df["stage_label"]
     result = _agg_splits(df)
     print(f"[NORM] Layerwise: {len(result)} rows from {[p.name for p in srcs]}")
+    return result
+
+
+def _normalize_flim_backprop_stage2() -> pd.DataFrame | None:
+    """grid4 `stage2`: decoder ja adaptado ao FLIM congelado, depois backprop no encoder
+    de 3 camadas inteiro. So existe em 5% e 50% (results/eval_growth_stages_pct{5,50}.csv)."""
+    srcs = [p for p in (_RESULTS / "eval_growth_stages_pct5.csv",
+                        _RESULTS / "eval_growth_stages_pct50.csv") if p.exists()]
+    if not srcs:
+        print("[SKIP] eval_growth_stages_pct{5,50}.csv nao encontrados")
+        return None
+    df = pd.concat([pd.read_csv(p) for p in srcs])
+    df = df[(df["stage_label"] == "stage2") & df["kappa"].notna()].copy()
+    df["method"] = "SVM_FLIM_Backprop_Stage2"
+    df["dataset_name"] = df["dataset"]
+    result = _agg_splits(df)
+    print(f"[NORM] FLIM backprop stage2: {len(result)} rows")
     return result
 
 
@@ -859,6 +875,7 @@ def main() -> None:
     distil_2l400k_flim_nonorm_df = _safe(_normalize_distill_2l_400k_flim_nonorm, partial)
     flim_residual_df  = _safe(_normalize_flim_residual, partial)
     layerwise_df      = _safe(_normalize_layerwise, partial)
+    stage2_df         = _safe(_normalize_flim_backprop_stage2, partial)
 
     # ── Save normalized FLIM SVM aggregated (if available) ────────────────────
     if flim_df is not None:
@@ -894,6 +911,8 @@ def main() -> None:
         dfs.append(flim_residual_df)
     if layerwise_df is not None:
         dfs.append(layerwise_df)
+    if stage2_df is not None:
+        dfs.append(stage2_df)
 
     if not dfs:
         print("[ERROR] No data sources available. Nothing to save.")

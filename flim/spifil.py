@@ -238,6 +238,7 @@ from spifil.color import LabNorm
 from spifil.learner import LayerState
 from spifil.superpixels.centers import Medoids
 from spifil.superpixels.slic import SLIC
+from spifil.superpixels.disf import DISF
 from spifil.types import Seeds
 
 from config import get_single_parasite_paths
@@ -296,12 +297,16 @@ class GrowOneLayer:
     biblioteca.
     """
 
+    def __init__(self, budget_check: bool = True) -> None:
+        # False = como o SPiFiL original, que fita mesmo com N <= D (shrinkage).
+        self.budget_check = budget_check
+
     def run(self, learn: Learner) -> None:
         layer = learn.n_layers
         patches = learn.state[layer - 1].patches
         n, d = len(patches), int(patches.feats.shape[1])
         print(f"[grow] N={n} D={d}")
-        if n <= d:
+        if self.budget_check and n <= d:
             raise BudgetExhausted(
                 f"N={n} <= D={d}: a covariancia fica deficiente de posto. O "
                 f"shrinkage a mantem inversivel, nao informativa — acrescente "
@@ -421,7 +426,7 @@ def rescale(seeds: Seeds, grid: tuple[int, int]) -> Seeds:
 
 
 def train_samples(dataset: str, split: int, percentage: int, n_images: int,
-                  *, one_per_class: bool, seed: int):
+                  *, one_per_class: bool, seed: int, paper_classes: bool = False):
     """Amostras do split de TREINO: uma por classe, ou a fatia de passo uniforme.
 
     So treino em qualquer um dos dois modos: recortar filtro de imagem de
@@ -456,7 +461,12 @@ def train_samples(dataset: str, split: int, percentage: int, n_images: int,
     paper = json.loads(PAPER_SEEDS_JSON.read_text(encoding="utf-8"))[dataset]
     paper = paper.get(str(split), {})
     picked = []
-    for label in sorted({s.label for s in chosen}):
+    labels = sorted({s.label for s in chosen})
+    # `paper_classes`: so as classes que o artigo (e os pesos FLIM de data/) marcaram —
+    # sem a impureza no eggs (9) e no protozoan (7); o larvae mantem as duas.
+    if paper_classes:
+        labels = [l for l in labels if str(l) in paper]
+    for label in labels:
         same = [s for s in chosen if s.label == label]
         sample = {s.name: s for s in same}.get(paper.get(str(label)))
         origin = "artigo"
@@ -560,7 +570,7 @@ def seeds_in_features(features, data, n_superpixels, grid):
 
 
 def build_layer0(data, trunk, samples, n_superpixels, image_size, imagenet_norm,
-                 device, in_feature):
+                 device, in_feature, superpixels="slic"):
     """Superpixel no LAB, features no encoder treinado, sementes entre os dois.
 
     E a unica parte do `grow` que existe porque o metodo exige. O `prepare()`
@@ -577,7 +587,8 @@ def build_layer0(data, trunk, samples, n_superpixels, image_size, imagenet_norm,
         seeds, regions = seeds_in_features(features, data, n_superpixels, grid)
     else:
         prepared = list(preparation.prepare(
-            data, superpixels=SLIC(), seed_extractor=Medoids(),
+            data, superpixels=DISF() if superpixels == "disf" else SLIC(),
+            seed_extractor=Medoids(),
             n_superpixels=n_superpixels, color=LabNorm(),
         ))
         seeds = [rescale(image.seeds, grid) for image in prepared]
@@ -708,6 +719,9 @@ def grow(
     one_per_class: bool = True,
     random_layer: bool = False,
     random_layer_classic: bool = False,
+    paper_classes: bool = False,
+    superpixels: str = "slic",
+    budget_check: bool = True,
     device: str | None = None,
     seed: int = 42,
 ) -> int:
@@ -788,7 +802,8 @@ def grow(
           f"{trunk.grid}x{trunk.grid} | crescendo a camada {layer}")
 
     samples = train_samples(dataset, split, percentage, n_images,
-                            one_per_class=one_per_class, seed=seed)
+                            one_per_class=one_per_class, seed=seed,
+                            paper_classes=paper_classes)
 
     data = Cropped(samples, image_size, use_mask=not impurities)
 
@@ -799,11 +814,11 @@ def grow(
             pool_type="max" if pool_stride > 1 else "none",
             pool_stride=pool_stride,
         )]),
-        color=trunk, strategy=GrowOneLayer(), device=device,
+        color=trunk, strategy=GrowOneLayer(budget_check), device=device,
     )
     learn.state[0] = build_layer0(
         data, trunk, samples, n_superpixels, image_size,
-        imagenet_norm, device, spifil_in_feature,
+        imagenet_norm, device, spifil_in_feature, superpixels,
     )
     try:
         learn.fit()  # prepare() ve a state[0] pronta, so pontua; a estrategia fita
