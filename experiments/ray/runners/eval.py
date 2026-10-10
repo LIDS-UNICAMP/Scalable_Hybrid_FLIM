@@ -226,6 +226,8 @@ def _artifact_job(
     cfg["results_csv"] = (
         exp.runner_args.get("results_csv") or f"results/svm_{exp.name}.csv"
     )
+    # Embedding do SVM nas grades SPiFiL: flatten (default) ou avgpool2d.
+    cfg["embed_mode"] = exp.runner_args.get("embed_mode", "flatten")
 
     stem = f"{run_name}_{stage_label}" if stage_label else run_name
     jobs_dir = os.path.join(exp.output.work_dir, "jobs")

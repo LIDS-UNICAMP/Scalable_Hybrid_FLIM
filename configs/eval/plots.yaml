@@ -56,6 +56,20 @@ plots:
     - {name: "SVM_Layerwise5_Flim_L4", color: "#17BECF", ls: ":", marker: "s", zorder: 21, label: "5 camadas FLIM · L4"}
     - {name: "SVM_Layerwise5_Flim_L5", color: "#000000", ls: ":", marker: "s", zorder: 21, label: "5 camadas FLIM · L5"}
     # results/eval_growth_stages_pct{5,50}.csv (grid4 stage2) — so 5% e 50%: ponto, sem linha
+    # results/svm_layerwise*_avg.csv — mesmo SVM com avgpool2d
+    - {name: "SVM_Layerwise3_Avg_L1", color: "#8C564B", ls: "-", marker: "D", zorder: 22, label: "3 camadas avg · L1"}
+    - {name: "SVM_Layerwise3_Avg_L2", color: "#7F7F7F", ls: "-", marker: "D", zorder: 22, label: "3 camadas avg · L2"}
+    - {name: "SVM_Layerwise3_Avg_L3", color: "#BCBD22", ls: "-", marker: "D", zorder: 22, label: "3 camadas avg · L3"}
+    - {name: "SVM_Layerwise5_Avg_L1", color: "#8C564B", ls: "--", marker: "D", zorder: 22, label: "5 camadas avg · L1"}
+    - {name: "SVM_Layerwise5_Avg_L2", color: "#7F7F7F", ls: "--", marker: "D", zorder: 22, label: "5 camadas avg · L2"}
+    - {name: "SVM_Layerwise5_Avg_L3", color: "#BCBD22", ls: "--", marker: "D", zorder: 22, label: "5 camadas avg · L3"}
+    - {name: "SVM_Layerwise5_Avg_L4", color: "#17BECF", ls: "--", marker: "D", zorder: 22, label: "5 camadas avg · L4"}
+    - {name: "SVM_Layerwise5_Avg_L5", color: "#000000", ls: "--", marker: "D", zorder: 22, label: "5 camadas avg · L5"}
+    - {name: "SVM_Layerwise5_Flim_Avg_L1", color: "#8C564B", ls: ":", marker: "D", zorder: 22, label: "5 camadas FLIM avg · L1"}
+    - {name: "SVM_Layerwise5_Flim_Avg_L2", color: "#7F7F7F", ls: ":", marker: "D", zorder: 22, label: "5 camadas FLIM avg · L2"}
+    - {name: "SVM_Layerwise5_Flim_Avg_L3", color: "#BCBD22", ls: ":", marker: "D", zorder: 22, label: "5 camadas FLIM avg · L3"}
+    - {name: "SVM_Layerwise5_Flim_Avg_L4", color: "#17BECF", ls: ":", marker: "D", zorder: 22, label: "5 camadas FLIM avg · L4"}
+    - {name: "SVM_Layerwise5_Flim_Avg_L5", color: "#000000", ls: ":", marker: "D", zorder: 22, label: "5 camadas FLIM avg · L5"}
     - {name: "SVM_FLIM_Backprop_Stage2", color: "#FF0000", ls: "None", marker: "*", ms: 26, zorder: 30, label: "FLIM + backprop (3 camadas)"}
 
     # Curinga: qualquer run novo `baseline_*` entra com o azul do FLIM sem editar

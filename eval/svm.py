@@ -656,8 +656,9 @@ def _run_svm_job(config: str) -> str:
             # `eval/growth_stages.py` (`_EMBED_MODE` e o `_loader`): flatten e
             # LAB[0,1], que e o que os bracos viram no treino.
             imagenet_norm = False
+            mode = job.get("embed_mode", "flatten")
             def _feats(loader):
-                return extract_features(encoder, loader, "flatten")
+                return extract_features(encoder, loader, mode)
         elif source == "distillation":
             from eval.svm_variants.svm_distillation_conv import (  # noqa: PLC0415
                 _load_student_from_ckpt,
