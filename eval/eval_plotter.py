@@ -685,7 +685,8 @@ def plot_merge_comparison(
                     x, y,
                     color=sty["color"], linestyle=sty["ls"], marker=sty["marker"],
                     linewidth=linewidth, markersize=sty.get("ms", markersize),
-                    markeredgecolor="white", markeredgewidth=0.9,
+                    markerfacecolor=sty.get("mfc", sty["color"]),
+                    markeredgecolor=sty.get("mec", "white"), markeredgewidth=sty.get("mew", 0.9),
                     zorder=sty["zorder"], label=label,
                 )
                 ax.errorbar(

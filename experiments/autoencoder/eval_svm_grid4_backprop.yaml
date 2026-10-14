@@ -1,0 +1,27 @@
+# SVM oficial (flatten) sobre o stage2 da growth_grid4_backprop: o "SPiFiL + backprop (3 camadas)".
+name:   svm_grid4_backprop
+method: autoencoder
+runner: eval
+
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 25, 75, 100]
+
+runner_args:
+  probe:          svm
+  source:         growth_stages
+  family:         grid4_backprop
+  stages:         [stage2]
+  ckpt_selection: best
+  results_csv:    results/svm_grid4_backprop.csv
+
+resources:
+  gpu_ids:             [2, 3]
+  max_per_gpu:         2
+  cpus_per_experiment: 8
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_grid4_backprop
+
+skip: state

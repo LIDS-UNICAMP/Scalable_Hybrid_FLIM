@@ -197,11 +197,11 @@ segmentação por superpixel feita na **imagem** ou na **grade de features**.
 python -m experiments.ray.launch experiments/autoencoder/growth_g5_in_feature.yaml --dry-run
 ```
 
-Os 19 knobs aceitos estão em `RUNNER_ARGS["growth"]` (`experiments/ray/schema.py`):
+Os 20 knobs aceitos estão em `RUNNER_ARGS["growth"]` (`experiments/ray/schema.py`):
 `max_rounds`, `kappa_tolerance`, `rounds_patience`, `embed_mode`, `kernel_size`,
 `out_channels`, `pool_stride`, `n_superpixels`, `n_images`, `image_size`, `seed`,
 `spifil_in_feature`, `spifil_in_image`, `impurities`, `one_per_class`, `random_layer`,
-`random_layer_classic`, `head_finetune`, `unfrozen_after_stage_two`.
+`random_layer_classic`, `head_finetune`, `unfrozen_after_stage_two`, `layerwise`.
 
 > Os YAMLs reconstruídos herdaram `resources` do `growth_grid4.yaml` (GPUs 1-3,
 > 3 slots cada). Ajuste ao que estiver livre na máquina antes de lançar.
@@ -217,6 +217,32 @@ Os 19 knobs aceitos estão em `RUNNER_ARGS["growth"]` (`experiments/ray/schema.p
 > mesmo caminho; só `random_layer_classic` escapa, porque não ajusta nada.
 
 **Avaliar o crescimento:** `python -m eval.growth_stages` (aceita `pct=`).
+
+### Camada por camada (`layerwise`): 3 e 5 camadas
+
+O encoder começa **sem nenhuma camada**. O SPiFiL cria uma camada, só ela treina por
+reconstrução contra um decoder novo e, em seguida, ela é congelada e vem a próxima.
+O SVM oficial avalia o encoder congelado depois de cada camada (L1, L2, …).
+
+| | treino | avaliação (SVM) | CSV |
+|---|---|---|---|
+| 3 camadas | `growth_layerwise3.yaml` | `eval_svm_layerwise3.yaml` | `results/svm_layerwise3.csv` |
+| 5 camadas | `growth_layerwise5.yaml` | `eval_svm_layerwise5.yaml` | `results/svm_layerwise5.csv` |
+
+Os 4 YAMLs ficam em `experiments/autoencoder/`. Primeiro o treino e, quando ele terminar,
+a avaliação:
+```
+python -m experiments.ray.launch experiments/autoencoder/growth_layerwise3.yaml
+python -m experiments.ray.launch experiments/autoencoder/eval_svm_layerwise3.yaml
+```
+(para 5 camadas, troque `3` por `5`; as duas grades usam GPUs diferentes e podem rodar juntas).
+
+- Larguras: `LAYERWISE_SPECS` (`experiments/ray/runners/growth.py`). L1–L3 =
+  16/32/48 filtros com pooling (config `paper` do SPiFiL); L4–L5 = 48 sem pooling.
+- `evaluate.SVM: false` no treino: o SVM só roda no YAML de eval.
+- Se o peso de uma camada antiga mudar, o braço morre (`_assert_frozen`).
+- Antes de lançar: `export RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0` e
+  `export LD_LIBRARY_PATH=<env scalable_FLIM>/lib`.
 
 ---
 

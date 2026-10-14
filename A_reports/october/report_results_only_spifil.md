@@ -1,43 +1,5 @@
 # Outubro 2026
 
-## Crescer o encoder SPiFiL camada por camada (layerwise)
-
-O encoder nasce do zero e cresce uma camada por vez. O SPiFiL corta cada camada nova, as camadas
-antigas ficam congeladas e só a nova aprende por backprop, contra um decoder descartável
-(reconstrução, sem rótulo). No fim de cada camada, o SVM oficial avalia o encoder congelado.
-
-- **layerwise3** (L1 → L3): 54 células treinadas e avaliadas.
-- **layerwise5** (L1 → L5): avaliação em andamento; faltam 2 células para treinar
-  (`eggs s2 75%`, `eggs s3 5%`).
-- Configurado por YAML: `experiments/autoencoder/growth_layerwise{3,5}.yaml` e
-  `eval_svm_layerwise{3,5}.yaml`.
-- Na tabela geral entra como `spifil_bckprop_L1/L2/L3`, em
-  [`table_result_methods.md`](../2026/august/details_report/table_result_methods.md).
-
-### Resultado do layerwise3
-
-- **Ganha do SPiFiL quase sempre.** Com pouco dado o ganho é grande: em 1%, κ 0,44 contra 0,13
-  em eggs e 0,47 contra 0,15 em protozoan.
-- **A melhor camada depende da quantidade de dados.** Com pouco dado vence a L1; com muitos, a
-  L3 (eggs 100%: 0,934).
-- **Ganha dos Distill 3 e 4** em eggs e protozoan; perde em larvae, que para na L2.
-- **O I-JEPA continua na frente**, mas por pouco com muitos dados (0,02 em eggs 100%).
-
-Detalhes: [`details/layerwise3_parcial_2026-10-05.md`](details/layerwise3_parcial_2026-10-05.md)
-(como foi treinado, tabela completa, ressalvas).
-
-### Atenção: não é uma cópia fiel do SPiFiL original
-
-O layerwise usou **uma foto a mais** para montar os filtros: a da **impureza**. Com isso o eggs
-sai com 9/27/45 filtros em vez de 16/32/48, e o protozoan com 14/28/42 em vez de 12/30/48. Parte
-dos filtros vem de sujeira, não de parasita. O superpixel também difere: SLIC/100 em vez de
-DISF/50.
-
-A divisão dos filtros é o padrão do SPiFiL; a foto a mais vem do nosso `train_samples`. Para
-ficar fiel, basta tirar a classe de impureza da escolha de fotos e treinar de novo.
-
-Detalhes: [`details/layerwise_vs_spifil_original.md`](details/layerwise_vs_spifil_original.md).
-
 ## SPiFiL + I-JEPA: resultados por porcentagem
 
 Teste, SVM oficial sobre o encoder congelado, média ± desvio dos 3 splits. Negrito = maior κ do
@@ -46,11 +8,91 @@ dataset naquela porcentagem.
 | nome | o que é |
 |---|---|
 | SPiFiL | o encoder SPiFiL/FLIM de 3 camadas, sem treino (`SVM_FLIM`) |
-| SPiFiL + backprop (3 camadas) | o mesmo encoder: decoder adaptado com o encoder congelado, depois backprop no encoder inteiro (`grid4`, `stage2`; só 5% e 50%) |
+| SPiFiL + backprop (3 camadas) | o mesmo encoder: decoder adaptado com o encoder congelado, depois backprop no encoder inteiro (`grid4` em 5% e 50%, `grid4_backprop` em 1/25/75/100%; `stage2`. Em 100% faltam eggs s1 e os 3 splits do protozoan: o treino morreu por falta de memória) |
 | spifil_bckprop_L1…L3 | layerwise3: cresce do zero até a L3 |
 | spifil_bckprop5_L1…L5 | layerwise5: cresce do zero até a L5 |
 | spifil_flim_L1…L5 | layerwise5_flim: até a L5 como o FLIM de `data/` (classes sem impureza no eggs e protozoan, 24/32/48/64/96 filtros, kernel 5×5, DISF 50, sem a trava N ≤ D). `(n=…)` marca célula com menos de 3 splits |
 | I-JEPA | referência, 632M parâmetros |
+
+### Arquitetura de cada método
+
+Todos recebem a imagem em LAB (cada canal entre 0 e 1), 200×200. Cada camada é uma convolução seguida de ReLU, sem
+BatchNorm. A L1, a L2 e a L3 terminam num max-pool 3×3 com passo 2, que corta a imagem pela
+metade; a L4 e a L5 não têm pooling. Números lidos dos `best_kappa.ckpt`, contando o encoder
+uma vez só (o checkpoint guarda uma cópia duplicada).
+
+| método | camadas | kernel | superpixel |
+|---|---|---|---|
+| SPiFiL | 3 | 5×5 | DISF (50) |
+| SPiFiL + backprop (3 camadas) | 3 | 5×5 | DISF (50), herdado do SPiFiL |
+| spifil_bckprop_L1…L3 | 3 (larvae para na L2) | 3×3 | SLIC (100) |
+| spifil_bckprop5_L1…L5 | 5 (larvae para na L2) | 3×3 | SLIC (100) |
+| spifil_flim_L1…L5 | 5 | 5×5 | DISF (50) |
+| I-JEPA | ViT | — | — |
+
+**O que muda entre eles**
+
+- **SPiFiL + backprop tem a mesma forma do SPiFiL.** São os mesmos 59.504 parâmetros e o mesmo
+  vetor de 27.648 números. Só os pesos mudam, pelo backprop.
+- **flim × bckprop5:** o flim usa kernel 5×5 em vez de 3×3 e tem mais filtros. Na L5 ele tem
+  290 mil parâmetros, contra 50 mil do bckprop5: quase 6 vezes mais.
+- **Na L4 e na L5 não há pooling.** No bckprop5 o nº de filtros também não muda (45), então o
+  vetor do SVM fica igual ao da L3. No flim os filtros sobem (64, 96), e o vetor cresce junto.
+- **No larvae o bckprop para na L2.** A trava N ≤ D barra a L3; o flim não tem essa trava.
+
+#### Bloco a bloco
+
+Formas do eggs. No protozoan muda só o nº de filtros (SPiFiL 24-30-48; bckprop5 14-28-42-42-42;
+flim 24-30-48-60-96). No larvae o bckprop5 para no bloco 2. `N_CLASSES`: eggs 9, larvae 2,
+protozoan 7.
+
+**SPiFiL**: pesos do FLIM, sem treino.
+
+| Stage | Operation | Output Shape |
+|---|---|---|
+| Input | LAB image ([0, 1]) | 200 × 200 × 3 |
+| Block 1 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 | 99 × 99 × 24 |
+| Block 2 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 | 49 × 49 × 32 |
+| Block 3 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 | 24 × 24 × 48 |
+| Pooling | Flatten | 27.648 |
+| Classifier | Linear SVM | N_CLASSES |
+
+**SPiFiL + backprop (3 camadas)**: o mesmo encoder do SPiFiL, ajustado por backprop.
+
+| Stage | Operation | Output Shape |
+|---|---|---|
+| Input | LAB image ([0, 1]) | 200 × 200 × 3 |
+| Block 1 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 (backprop) | 99 × 99 × 24 |
+| Block 2 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 (backprop) | 49 × 49 × 32 |
+| Block 3 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 (backprop) | 24 × 24 × 48 |
+| Pooling | Flatten | 27.648 |
+| Classifier | Linear SVM | N_CLASSES |
+
+**SPiFiL + backprop (5 camadas)** (`spifil_bckprop5_L5`): cresce do zero, uma camada por vez.
+
+| Stage | Operation | Output Shape |
+|---|---|---|
+| Input | LAB image ([0, 1]) | 200 × 200 × 3 |
+| Block 1 | SPiFiL convolution 3×3 + ReLU + max-pool 3×3/2 | 99 × 99 × 9 |
+| Block 2 | SPiFiL convolution 3×3 + ReLU + max-pool 3×3/2 | 49 × 49 × 27 |
+| Block 3 | SPiFiL convolution 3×3 + ReLU + max-pool 3×3/2 | 24 × 24 × 45 |
+| Block 4 | SPiFiL convolution 3×3 + ReLU | 24 × 24 × 45 |
+| Block 5 | SPiFiL convolution 3×3 + ReLU | 24 × 24 × 45 |
+| Pooling | Flatten | 25.920 |
+| Classifier | Linear SVM | N_CLASSES |
+
+**spifil_flim_avg_L5**: cresce até a L5 como o FLIM; o SVM vê a média de cada canal.
+
+| Stage | Operation | Output Shape |
+|---|---|---|
+| Input | LAB image ([0, 1]) | 200 × 200 × 3 |
+| Block 1 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 | 99 × 99 × 24 |
+| Block 2 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 | 49 × 49 × 32 |
+| Block 3 | FLIM convolution 5×5 + ReLU + max-pool 3×3/2 | 24 × 24 × 48 |
+| Block 4 | FLIM convolution 5×5 + ReLU | 24 × 24 × 64 |
+| Block 5 | FLIM convolution 5×5 + ReLU | 24 × 24 × 96 |
+| Pooling | Global average pooling | 96 |
+| Classifier | Linear SVM | N_CLASSES |
 
 O `layerwise5_flim` está completo no eval flatten (269 camadas). Sem a trava, o larvae chega
 até a L5.
@@ -63,8 +105,9 @@ até a L5.
   na terceira casa.
 - **SPiFiL + backprop (estrela vermelha)** fica perto da melhor camada: em eggs 5%, 0,675 contra
   0,734 da L1; em protozoan 5% é o melhor dos SPiFiL (0,675).
-- **flim (parcial): no larvae, empilhar ajuda.** Sem a trava, ele chega à L5, e o κ sobe a cada
-  camada (5%: 0,51 na L1 e 0,65 na L5). No eggs acontece o contrário (0,72 na L1, 0,54 na L5).
+- **Com 25% ou mais, SPiFiL + backprop é o melhor dos SPiFiL em eggs e protozoan** (eggs 75%:
+  0,938 contra 0,930 da flim_L3; protozoan 75%: 0,881 contra 0,877). Em 1% perde feio no eggs
+  (0,275 contra 0,436 da L1), e no larvae fica atrás da flim_L3/L4 a partir de 25%.
 - **I-JEPA continua na frente** em todas as células.
 
 ### Gráficos (κ)
@@ -86,6 +129,7 @@ até a L5.
 | Método | eggs κ | eggs F1 | eggs Acc | larvae κ | larvae F1 | larvae Acc | protozoan κ | protozoan F1 | protozoan Acc |
 |---|---|---|---|---|---|---|---|---|---|
 | SPiFiL | 0.1278 ± 0.0284 | 0.0952 ± 0.0170 | 0.1738 ± 0.0297 | 0.0284 ± 0.1004 | 0.3365 ± 0.4386 | 0.3899 ± 0.4281 | 0.1447 ± 0.0455 | 0.1422 ± 0.0183 | 0.2083 ± 0.0455 |
+| SPiFiL + backprop (3 camadas) | 0.2748 ± 0.0832 | 0.3886 ± 0.0409 | 0.4532 ± 0.0139 | 0.3485 ± 0.2129 | 0.6640 ± 0.1183 | 0.6514 ± 0.1239 | 0.4734 ± 0.0404 | 0.5018 ± 0.0031 | 0.5315 ± 0.0220 |
 | spifil_bckprop_L1 | 0.4356 ± 0.0418 | 0.5185 ± 0.0177 | 0.5758 ± 0.0799 | 0.2038 ± 0.1731 | 0.5855 ± 0.1000 | 0.5773 ± 0.0760 | 0.4707 ± 0.0061 | 0.5116 ± 0.0224 | 0.5181 ± 0.0289 |
 | spifil_bckprop_L2 | 0.3975 ± 0.0786 | 0.4774 ± 0.0339 | 0.5498 ± 0.0302 | 0.3367 ± 0.1778 | 0.6584 ± 0.0994 | 0.6314 ± 0.0865 | 0.4751 ± 0.0098 | 0.5140 ± 0.0207 | 0.5382 ± 0.0330 |
 | spifil_bckprop_L3 | 0.3358 ± 0.1024 | 0.4331 ± 0.0662 | 0.5102 ± 0.0181 | - | - | - | 0.4573 ± 0.0251 | 0.5056 ± 0.0192 | 0.5384 ± 0.0203 |
@@ -127,6 +171,7 @@ até a L5.
 | Método | eggs κ | eggs F1 | eggs Acc | larvae κ | larvae F1 | larvae Acc | protozoan κ | protozoan F1 | protozoan Acc |
 |---|---|---|---|---|---|---|---|---|---|
 | SPiFiL | 0.8050 ± 0.0263 | 0.8885 ± 0.0161 | 0.8870 ± 0.0171 | 0.8049 ± 0.0142 | 0.9566 ± 0.0027 | 0.9566 ± 0.0023 | 0.7750 ± 0.0248 | 0.8628 ± 0.0152 | 0.8619 ± 0.0158 |
+| SPiFiL + backprop (3 camadas) | 0.8698 ± 0.0102 | 0.8791 ± 0.0059 | 0.9030 ± 0.0126 | 0.8318 ± 0.0216 | 0.9159 ± 0.0108 | 0.9209 ± 0.0099 | 0.8360 ± 0.0109 | 0.8341 ± 0.0141 | 0.8510 ± 0.0095 |
 | spifil_bckprop_L1 | 0.8558 ± 0.0249 | 0.8715 ± 0.0227 | 0.8878 ± 0.0033 | 0.7521 ± 0.0646 | 0.8761 ± 0.0323 | 0.8783 ± 0.0345 | 0.7135 ± 0.0075 | 0.7666 ± 0.0040 | 0.7847 ± 0.0121 |
 | spifil_bckprop_L2 | 0.8585 ± 0.0131 | 0.8709 ± 0.0147 | 0.8930 ± 0.0070 | 0.7785 ± 0.0539 | 0.8892 ± 0.0270 | 0.8954 ± 0.0269 | 0.7749 ± 0.0126 | 0.7965 ± 0.0074 | 0.8088 ± 0.0079 |
 | spifil_bckprop_L3 | 0.8562 ± 0.0120 | 0.8699 ± 0.0138 | 0.8939 ± 0.0107 | - | - | - | 0.8099 ± 0.0129 | 0.8139 ± 0.0099 | 0.8347 ± 0.0075 |
@@ -168,6 +213,7 @@ até a L5.
 | Método | eggs κ | eggs F1 | eggs Acc | larvae κ | larvae F1 | larvae Acc | protozoan κ | protozoan F1 | protozoan Acc |
 |---|---|---|---|---|---|---|---|---|---|
 | SPiFiL | 0.8696 ± 0.0182 | 0.9267 ± 0.0105 | 0.9261 ± 0.0106 | 0.8353 ± 0.0132 | 0.9634 ± 0.0028 | 0.9632 ± 0.0026 | 0.8371 ± 0.0185 | 0.9014 ± 0.0112 | 0.9005 ± 0.0118 |
+| SPiFiL + backprop (3 camadas) | 0.9378 ± 0.0056 | 0.9412 ± 0.0066 | 0.9495 ± 0.0078 | 0.8767 ± 0.0045 | 0.9384 ± 0.0022 | 0.9353 ± 0.0044 | 0.8811 ± 0.0076 | 0.8791 ± 0.0017 | 0.8897 ± 0.0086 |
 | spifil_bckprop_L1 | 0.9046 ± 0.0123 | 0.9148 ± 0.0093 | 0.9297 ± 0.0180 | 0.8024 ± 0.0306 | 0.9012 ± 0.0153 | 0.9014 ± 0.0150 | 0.7765 ± 0.0118 | 0.8057 ± 0.0170 | 0.8251 ± 0.0265 |
 | spifil_bckprop_L2 | 0.9150 ± 0.0070 | 0.9226 ± 0.0063 | 0.9333 ± 0.0102 | 0.8387 ± 0.0134 | 0.9194 ± 0.0067 | 0.9250 ± 0.0046 | 0.8324 ± 0.0138 | 0.8410 ± 0.0225 | 0.8579 ± 0.0263 |
 | spifil_bckprop_L3 | 0.9223 ± 0.0059 | 0.9315 ± 0.0061 | 0.9383 ± 0.0089 | - | - | - | 0.8627 ± 0.0147 | 0.8635 ± 0.0203 | 0.8809 ± 0.0245 |
@@ -188,6 +234,7 @@ até a L5.
 | Método | eggs κ | eggs F1 | eggs Acc | larvae κ | larvae F1 | larvae Acc | protozoan κ | protozoan F1 | protozoan Acc |
 |---|---|---|---|---|---|---|---|---|---|
 | SPiFiL | 0.8848 ± 0.0236 | 0.9355 ± 0.0134 | 0.9348 ± 0.0138 | 0.8677 ± 0.0106 | 0.9706 ± 0.0023 | 0.9706 ± 0.0023 | 0.8470 ± 0.0250 | 0.9075 ± 0.0151 | 0.9069 ± 0.0156 |
+| SPiFiL + backprop (3 camadas) | 0.9479 ± 0.0003 (n=2) | 0.9545 ± 0.0044 | 0.9563 ± 0.0020 | 0.8625 ± 0.0397 | 0.9312 ± 0.0199 | 0.9320 ± 0.0195 | - | - | - |
 | spifil_bckprop_L1 | 0.9130 ± 0.0097 | 0.9221 ± 0.0118 | 0.9314 ± 0.0146 | 0.8297 ± 0.0206 | 0.9148 ± 0.0103 | 0.9163 ± 0.0085 | 0.7905 ± 0.0116 | 0.8199 ± 0.0026 | 0.8384 ± 0.0088 |
 | spifil_bckprop_L2 | 0.9236 ± 0.0004 | 0.9313 ± 0.0026 | 0.9401 ± 0.0008 | 0.8701 ± 0.0121 | 0.9351 ± 0.0060 | 0.9418 ± 0.0099 | 0.8534 ± 0.0100 | 0.8585 ± 0.0065 | 0.8727 ± 0.0070 |
 | spifil_bckprop_L3 | 0.9338 ± 0.0033 | 0.9406 ± 0.0056 | 0.9479 ± 0.0016 | - | - | - | 0.8754 ± 0.0040 | 0.8789 ± 0.0034 | 0.8985 ± 0.0033 |
@@ -223,6 +270,7 @@ repetidas como referência.
 | Método | eggs κ | eggs F1 | eggs Acc | larvae κ | larvae F1 | larvae Acc | protozoan κ | protozoan F1 | protozoan Acc |
 |---|---|---|---|---|---|---|---|---|---|
 | SPiFiL | 0.1278 ± 0.0284 | 0.0952 ± 0.0170 | 0.1738 ± 0.0297 | 0.0284 ± 0.1004 | 0.3365 ± 0.4386 | 0.3899 ± 0.4281 | 0.1447 ± 0.0455 | 0.1422 ± 0.0183 | 0.2083 ± 0.0455 |
+| SPiFiL + backprop (3 camadas) | 0.2748 ± 0.0832 | 0.3886 ± 0.0409 | 0.4532 ± 0.0139 | 0.3485 ± 0.2129 | 0.6640 ± 0.1183 | 0.6514 ± 0.1239 | 0.4734 ± 0.0404 | 0.5018 ± 0.0031 | 0.5315 ± 0.0220 |
 | spifil_bckprop_avg_L1 | 0.0547 ± 0.0290 | 0.1719 ± 0.0053 | 0.2042 ± 0.0136 | 0.0270 ± 0.0467 | 0.4828 ± 0.0290 | 0.5082 ± 0.0142 | 0.0753 ± 0.0657 | 0.1723 ± 0.0424 | 0.1953 ± 0.0459 |
 | spifil_bckprop_avg_L2 | 0.1079 ± 0.0586 | 0.2215 ± 0.0210 | 0.2516 ± 0.0276 | 0.5368 ± 0.1727 | 0.7677 ± 0.0862 | 0.7682 ± 0.1169 | 0.1876 ± 0.0578 | 0.2911 ± 0.0203 | 0.3057 ± 0.0459 |
 | spifil_bckprop_avg_L3 | 0.1830 ± 0.0367 | 0.2892 ± 0.0196 | 0.3487 ± 0.0295 | - | - | - | 0.2970 ± 0.0374 | 0.3812 ± 0.0458 | 0.3997 ± 0.0777 |
@@ -264,6 +312,7 @@ repetidas como referência.
 | Método | eggs κ | eggs F1 | eggs Acc | larvae κ | larvae F1 | larvae Acc | protozoan κ | protozoan F1 | protozoan Acc |
 |---|---|---|---|---|---|---|---|---|---|
 | SPiFiL | 0.8050 ± 0.0263 | 0.8885 ± 0.0161 | 0.8870 ± 0.0171 | 0.8049 ± 0.0142 | 0.9566 ± 0.0027 | 0.9566 ± 0.0023 | 0.7750 ± 0.0248 | 0.8628 ± 0.0152 | 0.8619 ± 0.0158 |
+| SPiFiL + backprop (3 camadas) | 0.8698 ± 0.0102 | 0.8791 ± 0.0059 | 0.9030 ± 0.0126 | 0.8318 ± 0.0216 | 0.9159 ± 0.0108 | 0.9209 ± 0.0099 | 0.8360 ± 0.0109 | 0.8341 ± 0.0141 | 0.8510 ± 0.0095 |
 | spifil_bckprop_avg_L1 | 0.0674 ± 0.0069 | 0.1677 ± 0.0071 | 0.1844 ± 0.0058 | 0.7878 ± 0.0133 | 0.8939 ± 0.0067 | 0.8831 ± 0.0107 | 0.2008 ± 0.0026 | 0.2265 ± 0.0007 | 0.2605 ± 0.0022 |
 | spifil_bckprop_avg_L2 | 0.1044 ± 0.0291 | 0.2178 ± 0.0440 | 0.2263 ± 0.0298 | 0.8662 ± 0.0278 | 0.9330 ± 0.0140 | 0.9466 ± 0.0138 | 0.2840 ± 0.0599 | 0.2880 ± 0.0285 | 0.2990 ± 0.0142 |
 | spifil_bckprop_avg_L3 | 0.7631 ± 0.0144 | 0.7501 ± 0.0301 | 0.7394 ± 0.0262 | - | - | - | 0.6479 ± 0.0468 | 0.6311 ± 0.0471 | 0.5766 ± 0.0507 |
@@ -305,6 +354,7 @@ repetidas como referência.
 | Método | eggs κ | eggs F1 | eggs Acc | larvae κ | larvae F1 | larvae Acc | protozoan κ | protozoan F1 | protozoan Acc |
 |---|---|---|---|---|---|---|---|---|---|
 | SPiFiL | 0.8696 ± 0.0182 | 0.9267 ± 0.0105 | 0.9261 ± 0.0106 | 0.8353 ± 0.0132 | 0.9634 ± 0.0028 | 0.9632 ± 0.0026 | 0.8371 ± 0.0185 | 0.9014 ± 0.0112 | 0.9005 ± 0.0118 |
+| SPiFiL + backprop (3 camadas) | 0.9378 ± 0.0056 | 0.9412 ± 0.0066 | 0.9495 ± 0.0078 | 0.8767 ± 0.0045 | 0.9384 ± 0.0022 | 0.9353 ± 0.0044 | 0.8811 ± 0.0076 | 0.8791 ± 0.0017 | 0.8897 ± 0.0086 |
 | spifil_bckprop_avg_L1 | 0.0648 ± 0.0073 | 0.1664 ± 0.0060 | 0.1803 ± 0.0069 | 0.8265 ± 0.0358 | 0.9132 ± 0.0179 | 0.9106 ± 0.0357 | 0.1982 ± 0.0033 | 0.2250 ± 0.0017 | 0.2595 ± 0.0028 |
 | spifil_bckprop_avg_L2 | 0.0807 ± 0.0110 | 0.1834 ± 0.0193 | 0.1970 ± 0.0078 | 0.8835 ± 0.0165 | 0.9417 ± 0.0083 | 0.9473 ± 0.0084 | 0.2129 ± 0.0105 | 0.2377 ± 0.0122 | 0.2676 ± 0.0085 |
 | spifil_bckprop_avg_L3 | 0.8111 ± 0.0137 | 0.7770 ± 0.0273 | 0.7635 ± 0.0202 | - | - | - | 0.5981 ± 0.0452 | 0.5611 ± 0.0751 | 0.5179 ± 0.0627 |
@@ -325,6 +375,7 @@ repetidas como referência.
 | Método | eggs κ | eggs F1 | eggs Acc | larvae κ | larvae F1 | larvae Acc | protozoan κ | protozoan F1 | protozoan Acc |
 |---|---|---|---|---|---|---|---|---|---|
 | SPiFiL | 0.8848 ± 0.0236 | 0.9355 ± 0.0134 | 0.9348 ± 0.0138 | 0.8677 ± 0.0106 | 0.9706 ± 0.0023 | 0.9706 ± 0.0023 | 0.8470 ± 0.0250 | 0.9075 ± 0.0151 | 0.9069 ± 0.0156 |
+| SPiFiL + backprop (3 camadas) | 0.9479 ± 0.0003 (n=2) | 0.9545 ± 0.0044 | 0.9563 ± 0.0020 | 0.8625 ± 0.0397 | 0.9312 ± 0.0199 | 0.9320 ± 0.0195 | - | - | - |
 | spifil_bckprop_avg_L1 | 0.0662 ± 0.0012 | 0.1671 ± 0.0020 | 0.1826 ± 0.0009 | 0.8584 ± 0.0133 | 0.9292 ± 0.0067 | 0.9284 ± 0.0114 | 0.1950 ± 0.0051 | 0.2232 ± 0.0023 | 0.2587 ± 0.0029 |
 | spifil_bckprop_avg_L2 | 0.1263 ± 0.0958 | 0.2268 ± 0.0963 | 0.2359 ± 0.0833 | 0.8954 ± 0.0074 | 0.9477 ± 0.0037 | 0.9502 ± 0.0039 | 0.2114 ± 0.0023 | 0.2312 ± 0.0012 | 0.2657 ± 0.0008 |
 | spifil_bckprop_avg_L3 | 0.7303 ± 0.0680 | 0.6880 ± 0.0632 | 0.6691 ± 0.0618 | - | - | - | 0.3750 ± 0.1364 | 0.3486 ± 0.1069 | 0.3495 ± 0.0800 |
@@ -339,13 +390,3 @@ repetidas como referência.
 | spifil_flim_avg_L4 | 0.8660 ± 0.0146 | 0.8749 ± 0.0205 | 0.8559 ± 0.0210 | 0.9471 ± 0.0200 | 0.9736 ± 0.0100 | 0.9760 ± 0.0124 | 0.7374 ± 0.0124 | 0.7438 ± 0.0290 | 0.7074 ± 0.0316 |
 | spifil_flim_avg_L5 | 0.9014 ± 0.0070 | 0.9129 ± 0.0062 | 0.9115 ± 0.0120 | **0.9518 ± 0.0149** | 0.9759 ± 0.0074 | 0.9804 ± 0.0058 | 0.7860 ± 0.0219 (n=2) | 0.8207 ± 0.0141 | 0.8074 ± 0.0260 |
 | I-JEPA | **0.9574 ± 0.0067** | 0.9626 ± 0.0063 | 0.9626 ± 0.0114 | 0.9495 ± 0.0065 | 0.9748 ± 0.0033 | 0.9751 ± 0.0054 | **0.8917 ± 0.0024** | 0.8841 ± 0.0046 | 0.8902 ± 0.0071 |
-
-## Mudanças no repositório
-
-- **`evaluate: {SVM: false}` no YAML** desliga a sonda SVM durante o treino; ela é que travava a
-  grade. Sem ela, o melhor checkpoint e a parada passam a olhar a perda de reconstrução.
-- **Runner `growth` pelo launcher Ray** consertado: GPU visível com
-  `RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0`, caminho de saída do `grow` e atalhos para os
-  checkpoints.
-- **Plots** com uma curva por camada (`configs/eval/plots.yaml`). Gráficos só do layerwise3 em
-  `artifacts/plots/layerwise3/`.

@@ -401,8 +401,10 @@ class Experiment:
         # Sem SVM o crescimento classico nao tem kappa para decidir a parada;
         # so o layerwise, que tem numero fixo de camadas, dispensa.
         if (self.runner == "growth" and not self.evaluate.SVM
-                and not self.runner_args.get("layerwise")):
-            raise ValueError("evaluate.SVM false no runner growth exige runner_args.layerwise")
+                and not self.runner_args.get("layerwise")
+                and self.runner_args.get("max_rounds") != 0):
+            raise ValueError("evaluate.SVM false no runner growth exige runner_args.layerwise "
+                             "ou max_rounds 0")
         if self.runner_args.get("head_finetune") and self.runner_args.get(
             "unfrozen_after_stage_two"
         ):

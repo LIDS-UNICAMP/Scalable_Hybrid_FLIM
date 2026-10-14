@@ -1,0 +1,16 @@
+# Versao preto e branco de plots.yaml, para impressao: tudo em preto/cinza, as curvas se
+# separam pelo tracejado (`ls`), pela forma do marcador e por ele ser cheio ou vazado
+# (`mfc` = cor de dentro do marcador, `mec` = cor da borda, `mew` = espessura da borda).
+# Mesmo formato e mesma regra de plots.yaml: `name` e padrao fnmatch, ordem = legenda.
+# Os padroes `SVM_Layerwise*_L<n>` cobrem as 6 familias (3, 5, 5_Flim e as _Avg).
+
+plots:
+  include:
+    - {name: "SVM_FLIM",                 color: "#000000", ls: "-",  marker: "o", mfc: "#000000", mec: "#000000", zorder: 7,  label: "SPiFiL"}
+    - {name: "SVM_IJEPA",                color: "#000000", ls: "-.", marker: "D", mfc: "#FFFFFF", mec: "#000000", mew: 2.5, zorder: 9,  label: "I-JEPA (632M)"}
+    - {name: "SVM_Layerwise*_L1",        color: "#000000", ls: "--", marker: "s", mfc: "#FFFFFF", mec: "#000000", mew: 2.5, zorder: 19, label: "L1"}
+    - {name: "SVM_Layerwise*_L2",        color: "#000000", ls: ":",  marker: "^", mfc: "#000000", mec: "#000000", zorder: 19, label: "L2"}
+    - {name: "SVM_Layerwise*_L3",        color: "#000000", ls: "--", marker: "v", mfc: "#000000", mec: "#000000", zorder: 19, label: "L3"}
+    - {name: "SVM_Layerwise*_L4",        color: "#777777", ls: ":",  marker: "o", mfc: "#FFFFFF", mec: "#777777", mew: 2.5, zorder: 19, label: "L4"}
+    - {name: "SVM_Layerwise*_L5",        color: "#777777", ls: "-",  marker: "X", mfc: "#777777", mec: "#777777", zorder: 19, label: "L5"}
+    - {name: "SVM_FLIM_Backprop_Stage2", color: "#000000", ls: "None", marker: "*", ms: 28, mfc: "#000000", mec: "#FFFFFF", mew: 1.5, zorder: 30, label: "SPiFiL + backprop (3 camadas)"}

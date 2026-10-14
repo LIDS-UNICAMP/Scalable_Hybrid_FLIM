@@ -370,7 +370,7 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
         ckpt = train("stage2", arch, weights, init_ckpt=ckpt)
 
         kappas: list[float] = []
-        if not dry_run:
+        if not dry_run and exp.evaluate.SVM:
             rows += [("—", "stage1", _kappa(_stage_dir(exp, point, "stage1"))),
                      ("—", "stage2", _kappa(_stage_dir(exp, point, "stage2")))]
             kappas = [rows[-1][2]]

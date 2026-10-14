@@ -807,16 +807,19 @@ def _normalize_layerwise() -> pd.DataFrame | None:
 
 def _normalize_flim_backprop_stage2() -> pd.DataFrame | None:
     """grid4 `stage2`: decoder ja adaptado ao FLIM congelado, depois backprop no encoder
-    de 3 camadas inteiro. So existe em 5% e 50% (results/eval_growth_stages_pct{5,50}.csv)."""
+    de 3 camadas inteiro. 5% e 50% em results/eval_growth_stages_pct{5,50}.csv; 1/25/75/100%
+    em results/svm_grid4_backprop.csv (growth_grid4_backprop)."""
     srcs = [p for p in (_RESULTS / "eval_growth_stages_pct5.csv",
-                        _RESULTS / "eval_growth_stages_pct50.csv") if p.exists()]
+                        _RESULTS / "eval_growth_stages_pct50.csv",
+                        _RESULTS / "svm_grid4_backprop.csv") if p.exists()]
     if not srcs:
-        print("[SKIP] eval_growth_stages_pct{5,50}.csv nao encontrados")
+        print("[SKIP] eval_growth_stages_pct{5,50}.csv / svm_grid4_backprop.csv nao encontrados")
         return None
     df = pd.concat([pd.read_csv(p) for p in srcs])
     df = df[(df["stage_label"] == "stage2") & df["kappa"].notna()].copy()
     df["method"] = "SVM_FLIM_Backprop_Stage2"
-    df["dataset_name"] = df["dataset"]
+    # os pct{5,50} trazem `dataset`; o svm_grid4_backprop ja traz `dataset_name`
+    df["dataset_name"] = df["dataset"].fillna(df["dataset_name"]) if "dataset_name" in df else df["dataset"]
     result = _agg_splits(df)
     print(f"[NORM] FLIM backprop stage2: {len(result)} rows")
     return result

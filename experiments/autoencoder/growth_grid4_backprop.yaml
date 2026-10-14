@@ -1,0 +1,36 @@
+# "SPiFiL + backprop (3 camadas)": o stage2 do growth_grid4.yaml nas porcentagens que faltavam.
+#   stage1  encoder FLIM de 3 camadas congelado, so o decoder aprende
+#   stage2  tudo destravado, backprop no encoder inteiro, partindo do best do stage1
+# max_rounds 0: nenhuma camada SPiFiL e enxertada. Sonda SVM DESLIGADA no treino (era ela que
+# travava a grade): o melhor checkpoint e a parada olham a perda de reconstrucao.
+name:   spifil_growth_grid4_backprop
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 25, 75, 100]
+
+resources:
+  gpu_ids:             [1, 2, 3]
+  max_per_gpu:         6
+  cpus_per_experiment: 10
+  num_workers:         2
+
+runner_args:
+  max_rounds: 0
+  embed_mode: flatten
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/grid4_backprop
+
+wandb:
+  enabled: true
+  project: phd_thesis_grid4
+
+skip: state
+
+evaluate:
+  SVM: false
