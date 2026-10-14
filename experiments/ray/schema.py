@@ -71,6 +71,8 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         "paper_classes",
         # superpixel do grow (slic | disf), trava N <= D e largura de cada camada
         "superpixels", "budget_check", "layer_channels",
+        # kernel de cada camada do layerwise; L1..L<n> do FLIM de partida, sem grow
+        "layer_kernels", "layerwise_from_flim",
     ),
     # `source` escolhe a varredura; as 4 seguintes so fazem sentido nas fontes
     # que varrem artifacts/ (distillation, growth_stages)
@@ -405,6 +407,19 @@ class Experiment:
                 and self.runner_args.get("max_rounds") != 0):
             raise ValueError("evaluate.SVM false no runner growth exige runner_args.layerwise "
                              "ou max_rounds 0")
+        layerwise = self.runner_args.get("layerwise", 0)
+        for key in ("layer_channels", "layer_kernels"):
+            value = self.runner_args.get(key)
+            if value is not None and (
+                not isinstance(value, list) or len(value) != layerwise
+                or not all(isinstance(v, int) and v > 0 for v in value)
+            ):
+                raise ValueError(f"runner_args.{key}: esperava lista de {layerwise} "
+                                 f"inteiros > 0 (layerwise), veio {value!r}")
+        start = self.runner_args.get("layerwise_from_flim")
+        if start is not None and not (isinstance(start, int) and 0 < start < layerwise):
+            raise ValueError(f"runner_args.layerwise_from_flim: esperava inteiro em "
+                             f"1..{layerwise - 1} (layerwise), veio {start!r}")
         if self.runner_args.get("head_finetune") and self.runner_args.get(
             "unfrozen_after_stage_two"
         ):

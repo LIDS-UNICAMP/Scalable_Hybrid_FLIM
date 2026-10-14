@@ -1,0 +1,26 @@
+# SVM oficial sobre o encoder congelado de cada estagio da growth_ijepa_exp2_conv (predictor conv, CNN-JEPA) (alvo I-JEPA congelado).
+name:   svm_layerwise_ijepa_grow_exp2_conv
+method: ijepa_grow
+runner: eval
+
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [50]
+
+runner_args:
+  probe:          svm
+  source:         growth_stages
+  family:         ijepa_grow_exp2_conv
+  ckpt_selection: best
+  results_csv:    results/svm_layerwise_ijepa_grow_exp2_conv.csv
+
+resources:
+  gpu_ids:             [3]
+  max_per_gpu:         1
+  cpus_per_experiment: 8
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_layerwise_ijepa_grow_exp2_conv
+
+skip: state

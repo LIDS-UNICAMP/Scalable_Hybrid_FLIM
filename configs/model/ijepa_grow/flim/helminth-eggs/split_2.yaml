@@ -1,0 +1,63 @@
+# I-JEPA grow — helminth-eggs / split 2 / init flim.
+# Celula da grade resolvida por experiments/ray/paths.py (configs/model/{method}/{init}/{dataset}/split_{split}.yaml).
+# Copiado de configs/model/autoencoder/flim/helminth-eggs/split_2.yaml: mesmo encoder FLIM, sem decoder;
+# o alvo e o ViT-H/14 I-JEPA congelado (methods/ijepa_grow/ijepa_grow_module.py).
+# Hparams de otimizacao (lr, final_lr, warmup, weight_decay, ...) sobrescreviveis por `overrides:`.
+model:
+  class_path: methods.ijepa_grow.IJepaGrowModule
+  init_args:
+    dataset: eggs
+    num_classes: 9
+    arch_json: data/to_mateus/model/ch24_32_48_a0.5_f5/eggs/train2/architecture.json
+    flim_weights_path: data/to_mateus/model/ch24_32_48_a0.5_f5/eggs/train2/models
+    # 1e-3 * 32/2048: escala linear do lr da tabela do I-JEPA para batch 32.
+    lr: 1.5625e-05
+    final_lr: 1.0e-06
+    warmup_epochs: 5
+    weight_decay: 0.05
+    old_layer_lr_scale: 0.1
+    ctx_dim: 384
+    predictor: transformer  # ou conv (CNN-JEPA, ~0,95M params; ignora pred_*)
+    pred_depth: 6
+    pred_emb_dim: 384
+    pred_heads: 6
+    pred_mlp_ratio: 4.0
+    loss: smooth_l1
+
+# Troca o datamodule do configs/dataset/helminth-eggs/split_2.yaml pelo crop do bbox + mascaras I-JEPA;
+# os init_args de la (parasite_name, split, batch_size, ...) continuam valendo.
+data:
+  class_path: methods.ijepa_grow.data.IJepaCropDataModule
+  init_args:
+    batch_size: 32
+    crop_size: 224
+    crop_scale: [0.3, 1.0]
+    patch_size: 14
+    num_pred_masks: 4
+    pred_mask_scale: [0.15, 0.2]
+    aspect_ratio: [0.75, 1.5]
+    num_enc_masks: 1
+    enc_mask_scale: [0.85, 1.0]
+    allow_overlap: false
+    min_keep: 10
+    max_background_leak: 0.1
+
+# Substitui a lista de configs/default.yaml: o modulo so loga probe/val_loss.
+trainer:
+  max_epochs: 100
+  precision: bf16-mixed
+  callbacks:
+    # Nome `best_kappa` por convencao do runner growth e do eval, mesmo monitorando a perda.
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: probe/val_loss
+        mode: min
+        filename: best_kappa
+        save_top_k: 1
+        save_last: false
+    - class_path: lightning.pytorch.callbacks.EarlyStopping
+      init_args:
+        monitor: probe/val_loss
+        mode: min
+        patience: 15
+    - class_path: experiments.run_metadata_callback.RunMetadataCallback

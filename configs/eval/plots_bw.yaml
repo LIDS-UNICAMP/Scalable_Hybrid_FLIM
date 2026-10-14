@@ -8,6 +8,24 @@ plots:
   include:
     - {name: "SVM_FLIM",                 color: "#000000", ls: "-",  marker: "o", mfc: "#000000", mec: "#000000", zorder: 7,  label: "SPiFiL"}
     - {name: "SVM_IJEPA",                color: "#000000", ls: "-.", marker: "D", mfc: "#FFFFFF", mec: "#000000", mew: 2.5, zorder: 9,  label: "I-JEPA (632M)"}
+    # I-JEPA grow ANTES dos curingas `SVM_Layerwise*_L<n>`: o nome casa com eles e o
+    # primeiro padrao que casa vence. Traco-ponto/P = exp1, continuo/h,d = exp2.
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_L3", color: "#000000", ls: "-.", marker: "P", mfc: "#000000", mec: "#000000", zorder: 23, label: "I-JEPA grow exp1 · L3"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_L4", color: "#000000", ls: "-.", marker: "P", mfc: "#FFFFFF", mec: "#000000", mew: 2.5, zorder: 23, label: "I-JEPA grow exp1 · L4"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_L5", color: "#777777", ls: "-.", marker: "P", mfc: "#777777", mec: "#777777", zorder: 23, label: "I-JEPA grow exp1 · L5"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L1", color: "#000000", ls: "-",  marker: "h", mfc: "#FFFFFF", mec: "#000000", mew: 2.5, zorder: 23, label: "I-JEPA grow exp2 · L1"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L2", color: "#000000", ls: "-",  marker: "h", mfc: "#000000", mec: "#000000", zorder: 23, label: "I-JEPA grow exp2 · L2"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L3", color: "#000000", ls: "-",  marker: "d", mfc: "#000000", mec: "#000000", zorder: 23, label: "I-JEPA grow exp2 · L3"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L4", color: "#777777", ls: "-",  marker: "h", mfc: "#FFFFFF", mec: "#777777", mew: 2.5, zorder: 23, label: "I-JEPA grow exp2 · L4"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L5", color: "#777777", ls: "-",  marker: "d", mfc: "#777777", mec: "#777777", zorder: 23, label: "I-JEPA grow exp2 · L5"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_Conv_L3", color: "#000000", ls: "-.", marker: "X", mfc: "#000000", mec: "#000000", zorder: 23, label: "I-JEPA grow exp1 conv · L3"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_Conv_L4", color: "#000000", ls: "-.", marker: "X", mfc: "#FFFFFF", mec: "#000000", mew: 2.5, zorder: 23, label: "I-JEPA grow exp1 conv · L4"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_Conv_L5", color: "#777777", ls: "-.", marker: "X", mfc: "#777777", mec: "#777777", zorder: 23, label: "I-JEPA grow exp1 conv · L5"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L1", color: "#000000", ls: "-",  marker: "X", mfc: "#FFFFFF", mec: "#000000", mew: 2.5, zorder: 23, label: "I-JEPA grow exp2 conv · L1"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L2", color: "#000000", ls: "-",  marker: "X", mfc: "#000000", mec: "#000000", zorder: 23, label: "I-JEPA grow exp2 conv · L2"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L3", color: "#000000", ls: "-",  marker: "X", mfc: "#000000", mec: "#000000", zorder: 23, label: "I-JEPA grow exp2 conv · L3"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L4", color: "#777777", ls: "-",  marker: "X", mfc: "#FFFFFF", mec: "#777777", mew: 2.5, zorder: 23, label: "I-JEPA grow exp2 conv · L4"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L5", color: "#777777", ls: "-",  marker: "X", mfc: "#777777", mec: "#777777", zorder: 23, label: "I-JEPA grow exp2 conv · L5"}
     - {name: "SVM_Layerwise*_L1",        color: "#000000", ls: "--", marker: "s", mfc: "#FFFFFF", mec: "#000000", mew: 2.5, zorder: 19, label: "L1"}
     - {name: "SVM_Layerwise*_L2",        color: "#000000", ls: ":",  marker: "^", mfc: "#000000", mec: "#000000", zorder: 19, label: "L2"}
     - {name: "SVM_Layerwise*_L3",        color: "#000000", ls: "--", marker: "v", mfc: "#000000", mec: "#000000", zorder: 19, label: "L3"}

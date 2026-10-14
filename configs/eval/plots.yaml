@@ -72,6 +72,25 @@ plots:
     - {name: "SVM_Layerwise5_Flim_Avg_L5", color: "#000000", ls: ":", marker: "D", zorder: 22, label: "5 camadas FLIM avg · L5"}
     - {name: "SVM_FLIM_Backprop_Stage2", color: "#FF0000", ls: "None", marker: "*", ms: 26, zorder: 30, label: "FLIM + backprop (3 camadas)"}
 
+    # results/svm_layerwise_ijepa_grow_exp{1,2}.csv — crescimento SPiFiL com alvo I-JEPA congelado;
+    # cor = camada (paleta propria), traco-ponto/P = exp1 (L1-L3 FLIM), continuo/h = exp2 (do zero)
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_L3", color: "#2CA02C", ls: "-.", marker: "P", zorder: 23, label: "I-JEPA grow exp1 · L3"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_L4", color: "#FF7F0E", ls: "-.", marker: "P", zorder: 23, label: "I-JEPA grow exp1 · L4"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_L5", color: "#D62728", ls: "-.", marker: "P", zorder: 23, label: "I-JEPA grow exp1 · L5"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L1", color: "#FF9DA7", ls: "-", marker: "h", zorder: 23, label: "I-JEPA grow exp2 · L1"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L2", color: "#E377C2", ls: "-", marker: "h", zorder: 23, label: "I-JEPA grow exp2 · L2"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L3", color: "#2CA02C", ls: "-", marker: "h", zorder: 23, label: "I-JEPA grow exp2 · L3"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L4", color: "#FF7F0E", ls: "-", marker: "h", zorder: 23, label: "I-JEPA grow exp2 · L4"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_L5", color: "#D62728", ls: "-", marker: "h", zorder: 23, label: "I-JEPA grow exp2 · L5"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_Conv_L3", color: "#2CA02C", ls: "-.", marker: "X", zorder: 23, label: "I-JEPA grow exp1 conv · L3"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_Conv_L4", color: "#FF7F0E", ls: "-.", marker: "X", zorder: 23, label: "I-JEPA grow exp1 conv · L4"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp1_Conv_L5", color: "#D62728", ls: "-.", marker: "X", zorder: 23, label: "I-JEPA grow exp1 conv · L5"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L1", color: "#FF9DA7", ls: "-", marker: "X", zorder: 23, label: "I-JEPA grow exp2 conv · L1"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L2", color: "#E377C2", ls: "-", marker: "X", zorder: 23, label: "I-JEPA grow exp2 conv · L2"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L3", color: "#2CA02C", ls: "-", marker: "X", zorder: 23, label: "I-JEPA grow exp2 conv · L3"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L4", color: "#FF7F0E", ls: "-", marker: "X", zorder: 23, label: "I-JEPA grow exp2 conv · L4"}
+    - {name: "SVM_Layerwise_Ijepa_Grow_Exp2_Conv_L5", color: "#D62728", ls: "-", marker: "X", zorder: 23, label: "I-JEPA grow exp2 conv · L5"}
+
     # Curinga: qualquer run novo `baseline_*` entra com o azul do FLIM sem editar
     # nada.  Fica por último porque o primeiro padrão que casa vence.
     - {name: "baseline_*", color: "#0072B2", zorder: 17}

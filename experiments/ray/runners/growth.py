@@ -124,7 +124,6 @@ from experiments.ray.runners.train import _run, build_cmd
 from experiments.ray.schema import Experiment
 from flim.constants import GROW_EXHAUSTED
 from flim.spifil import grow
-from methods.autoencoder import AutoEncoderFlimModule
 
 # Nome do checkpoint que o `ModelCheckpoint` do braco de crescimento escreve, e
 # que o estagio seguinte come. Origem: scripts/constants.py:178. Vive aqui
@@ -161,6 +160,10 @@ GROW_KNOBS: tuple[str, ...] = (
 # `conf/arch/paper.yaml` do SPiFiL (16/32/48, max-pool 3 stride 2); L4 e L5 repetem
 # a largura sem pooling, como as rodadas extras do grow sempre fizeram.
 LAYERWISE_SPECS: list[tuple[int, int]] = [(16, 2), (32, 2), (48, 2), (48, 1), (48, 1)]
+
+# Metodo cujo alvo e o I-JEPA congelado: as camadas antigas treinam com lr baixo
+# (`old_layers`) em vez de congelar, entao nao ha `_assert_frozen`.
+IJEPA_GROW_METHOD: str = "ijepa_grow"
 
 
 def _assert_frozen(prev: str, new: str, n_old: int) -> None:
@@ -229,7 +232,7 @@ def _kappa(out_dir: str) -> float:
 
 def stage_cmd(exp: Experiment, point: dict, name: str, arch: str, weights: str,
               freeze: bool = False, init_ckpt: str = "", head: bool = False,
-              fresh_decoder: bool = False) -> list[str]:
+              fresh_decoder: bool = False, old_layers: int = 0) -> list[str]:
     """O comando do runner `train`, mais os `--<k>=<v>` que descrevem ESTE estagio.
 
     Nao ha comando proprio aqui: a base e `train.build_cmd`, a mesma de todo
@@ -249,7 +252,11 @@ def stage_cmd(exp: Experiment, point: dict, name: str, arch: str, weights: str,
         f"--trainer.logger.init_args.save_dir={stage_dir}",
         f"--trainer.default_root_dir={stage_dir}",
     ]
-    if freeze:
+    if exp.method == IJEPA_GROW_METHOD:
+        # conv1..conv{old_layers} treinam com lr * old_layer_lr_scale; nada congela
+        cmd += ["--model.init_args.freeze_encoder_flag=false",
+                f"--model.init_args.old_layers={old_layers}"]
+    elif freeze:
         cmd.append("--model.init_args.freeze_encoder_flag=true")
     # So o estagio `round{r}_head` pede a Head: os estagios 1 e 2 sao de
     # reconstrucao e a chave nao pode vazar para eles.
@@ -276,8 +283,9 @@ def _grow_once(exp: Experiment, point: dict, gpu_id: int, ckpt: str, arch: str,
     device = f"cuda:{gpu_id}"
     encoder = None
     if ckpt and not knobs.get("random_layer_classic", False):
-        encoder = AutoEncoderFlimModule.load_from_checkpoint(
-            ckpt, map_location=device).model.encoder
+        # import tardio: eval.growth_stages puxa dataset/SVM, que o launcher nao precisa
+        from eval.growth_stages import load_stage_module
+        encoder = load_stage_module(ckpt, device).model.encoder
     return grow(encoder=encoder, ckpt=ckpt, arch_json=arch,
                 flim_weights_path=weights, dataset=_short(point),
                 split=point["split"], percentage=point["percentage"], out=out,
@@ -300,9 +308,10 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
               "failed": False, "reason": f"max_rounds {max_rounds} atingido"}
 
     def train(name: str, arch: str, weights: str, freeze: bool = False,
-              init_ckpt: str = "", head: bool = False, fresh_decoder: bool = False) -> str:
+              init_ckpt: str = "", head: bool = False, fresh_decoder: bool = False,
+              old_layers: int = 0) -> str:
         cmd = stage_cmd(exp, point, name, arch, weights, freeze, init_ckpt, head,
-                        fresh_decoder)
+                        fresh_decoder, old_layers)
         if dry_run:
             plan.append(cmd)
         else:
@@ -338,25 +347,41 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
             # `layer_channels` e `kernel_size` do YAML trocam a config do artigo (16/32/48, k3)
             # pela de outro encoder, ex. o FLIM de data/ (24/32/48/48/48, k5).
             widths = exp.runner_args.get("layer_channels", [w for w, _ in LAYERWISE_SPECS])
-            kernel = exp.runner_args.get("kernel_size", 3)
+            # `layer_kernels` da o kernel de cada camada (ex. 5,5,5,1,1); sem ela, `kernel_size` em todas
+            kernels = exp.runner_args.get(
+                "layer_kernels", [exp.runner_args.get("kernel_size", 3)] * len(LAYERWISE_SPECS))
             specs = [(w, s) for w, (_, s) in zip(widths, LAYERWISE_SPECS)]
+            # `layerwise_from_flim: n`: L1..Ln sao o FLIM de partida (_paths), sem grow;
+            # o primeiro estagio `L{n}` treina essas n e o grow recomeca em L{n+1}
+            start = exp.runner_args.get("layerwise_from_flim", 0)
+            ijepa = exp.method == IJEPA_GROW_METHOD
+            if start:
+                ckpt = train(f"L{start}", arch, weights)
+                if not dry_run and exp.evaluate.SVM:
+                    rows.append((str(start), f"L{start}",
+                                 _kappa(_stage_dir(exp, point, f"L{start}"))))
             for k, (width, stride) in enumerate(specs[:layerwise], start=1):
+                if k <= start:
+                    continue
                 grow_dir = _stage_dir(exp, point, f"L{k}_grow")
                 if dry_run:
                     plan.append(["<in-process>", "flim.spifil.grow", f"--out={grow_dir}",
                                  f"--out_channels={width}", f"--pool_stride={stride}",
-                                 f"--ckpt={ckpt}"])
+                                 f"--ckpt={ckpt}"]
+                                + ([f"--kernel_size={kernels[k - 1]}"]
+                                   if "layer_kernels" in exp.runner_args else []))
                 elif _grow_once(exp, point, gpu_id, ckpt, arch, weights, grow_dir,
-                                out_channels=width, kernel_size=kernel,
+                                out_channels=width, kernel_size=kernels[k - 1],
                                 pool_stride=stride) == GROW_EXHAUSTED:
                     result["reason"] = f"spifil grow recusou L{k}: N <= D"
                     break
                 arch, weights = os.path.join(grow_dir, ARCH_JSON_FILENAME), grow_dir
                 prev, ckpt = ckpt, train(f"L{k}", arch, weights, freeze=True,
-                                         init_ckpt=ckpt, fresh_decoder=True)
+                                         init_ckpt=ckpt, fresh_decoder=True,
+                                         old_layers=k - 1)
                 if dry_run:
                     continue
-                if prev:
+                if prev and not ijepa:
                     _assert_frozen(prev, ckpt, k - 1)
                 if exp.evaluate.SVM:
                     rows.append((str(k), f"L{k}", _kappa(_stage_dir(exp, point, f"L{k}"))))

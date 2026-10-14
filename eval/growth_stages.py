@@ -302,32 +302,41 @@ def _jobs(pct: int, families, stages, datasets, splits):
                                       j["dataset"], j["split"]))
 
 
-def _encoder(job: dict, device):
-    """Encoder e Head do estagio, congelados — e a epoca do checkpoint.
+def load_stage_module(ckpt: str, device):
+    """Modulo Lightning do estagio, com os caminhos dos hparams reancorados.
 
     `load_from_checkpoint` re-roda `__init__` (relendo os kernels FLIM do disco)
     e so entao aplica o state_dict, entao os caminhos guardados nos hparams
     precisam existir. Nos estagios 3 e 4 eles apontam para
     `<braco>/round{r}_grow/` de forma RELATIVA: sao reancorados em `_ROOT` aqui,
-    para o script rodar de qualquer cwd.
+    para o script rodar de qualquer cwd. `pred_depth` nos hparams so existe no
+    IJepaGrowModule, e e por ela que a classe e escolhida.
     """
-    blob = torch.load(job["ckpt"], map_location="cpu", weights_only=False)
-    hp = blob["hyper_parameters"]
-
+    hp = torch.load(ckpt, map_location="cpu", weights_only=False)["hyper_parameters"]
     override = {k: os.path.join(_ROOT, hp[k])
                 for k in ("arch_json", "flim_weights_path")
                 if hp.get(k) and not os.path.isabs(hp[k])}
+    cls = AutoEncoderFlimModule
+    if "pred_depth" in hp:
+        # Import tardio: so quem avalia ijepa_grow paga o import (timm etc.).
+        from methods.ijepa_grow import IJepaGrowModule as cls  # noqa: PLC0415
+    return cls.load_from_checkpoint(ckpt, map_location=device, **override)
 
-    module = AutoEncoderFlimModule.load_from_checkpoint(
-        job["ckpt"], map_location=device, **override)
+
+def _encoder(job: dict, device):
+    """Encoder e Head do estagio, congelados — e a epoca do checkpoint."""
+    module = load_stage_module(job["ckpt"], device)
     enc = module.model.encoder.to(device).eval()
     for p in enc.parameters():
         p.requires_grad_(False)
     # `self.head = Head(...) if head_finetune else None` (autoencoder_flim_module.py:311),
     # entao `is None` ja E o teste de `head_finetune`. Fica na CPU: e um Linear
     # de 48 entradas, e assim consome `feats_te` sem copiar nada para a GPU.
-    head = module.head.cpu().eval() if module.head is not None else None
-    return enc, head, int(blob.get("epoch", -1))
+    # O IJepaGrowModule pode nao ter `head`: dai o getattr.
+    head = getattr(module, "head", None)
+    head = head.cpu().eval() if head is not None else None
+    epoch = torch.load(job["ckpt"], map_location="cpu", weights_only=False).get("epoch", -1)
+    return enc, head, int(epoch)
 
 
 def _done(out: str):

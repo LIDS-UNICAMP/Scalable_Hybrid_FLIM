@@ -187,11 +187,12 @@ class _IJepaViT(nn.Module):
         self.encoder    = _Encoder(hidden_size, num_layers, num_heads, mlp_ratio, eps)
         self.layernorm  = nn.LayerNorm(hidden_size, eps=eps)
 
+    def tokens(self, pixel_values: Tensor) -> Tensor:
+        """(B, N, hidden_size) com o LayerNorm final, sem pooling."""
+        return self.layernorm(self.encoder(self.embeddings(pixel_values)))
+
     def forward(self, pixel_values: Tensor) -> Tensor:
-        x = self.embeddings(pixel_values)
-        x = self.encoder(x)
-        x = self.layernorm(x)
-        return x.mean(dim=1)  # (B, hidden_size) — no CLS token in I-JEPA
+        return self.tokens(pixel_values).mean(dim=1)  # (B, hidden_size) — no CLS token in I-JEPA
 
 
 # ── Weight loading ─────────────────────────────────────────────────────────────
@@ -277,3 +278,9 @@ class IJEPAEncoder(nn.Module):
     def forward(self, batch: Tensor) -> Tensor:
         """Alias for ``extract_features`` — enables use as nn.Module."""
         return self.extract_features(batch)
+
+    @torch.no_grad()
+    def patch_tokens(self, x: Tensor) -> Tensor:
+        """Tokens por patch (B, 256, 1280) com LayerNorm final, no device/dtype dos pesos (ex.: bf16)."""
+        w = self._model.layernorm.weight
+        return self._model.tokens(x.to(device=w.device, dtype=w.dtype))

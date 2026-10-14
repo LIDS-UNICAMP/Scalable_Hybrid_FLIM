@@ -1,0 +1,49 @@
+# Igual ao growth_ijepa_exp1.yaml, so troca o predictor: CNN-JEPA (Kalapos & Gyires-Toth, 2024),
+# 3 blocos depthwise 3x3 -> pointwise 1x1 -> BN -> ReLU, ~0,95M params em vez dos 11,3M do transformer.
+# Crescimento SPiFiL com alvo I-JEPA congelado (ViT-H/14), Exp1.
+# L1-L3 sao os pesos FLIM 24/32/48 ja treinados: o estagio L3 treina as 3 a lr cheio contra o
+# alvo I-JEPA. Depois o SPiFiL gera L4 (1x1x60) e L5 (1x1x120); em cada estagio a camada nova
+# treina a lr cheio e as antigas a lr * old_layer_lr_scale (0.1).
+# Aluno: crop do bbox em LAB so com as celulas de contexto; prediz os tokens do I-JEPA nas
+# celulas-alvo (methods/ijepa_grow/). Sem sonda SVM no treino: o SVM roda so no eval.
+name:   spifil_growth_ijepa_exp1_conv
+method: ijepa_grow
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [50]
+
+resources:
+  gpu_ids:             [2]
+  max_per_gpu:         1
+  cpus_per_experiment: 10
+  num_workers:         2
+
+runner_args:
+  layerwise:  5
+  layerwise_from_flim: 3
+  paper_classes: true
+  layer_channels: [24, 32, 48, 60, 120]
+  layer_kernels: [5, 5, 5, 1, 1]
+  superpixels: disf
+  n_superpixels: 50
+  budget_check: false
+  embed_mode: flatten
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/ijepa_grow_exp1_conv
+
+wandb:
+  enabled: true
+  project: phd_thesis_ijepa_grow_conv
+
+skip: state
+
+evaluate:
+  SVM: false
+
+overrides:
+  model.init_args.predictor: conv

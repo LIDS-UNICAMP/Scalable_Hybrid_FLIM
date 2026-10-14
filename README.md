@@ -241,6 +241,10 @@ python -m experiments.ray.launch experiments/autoencoder/eval_svm_layerwise3.yam
   16/32/48 filtros com pooling (config `paper` do SPiFiL); L4–L5 = 48 sem pooling.
 - `evaluate.SVM: false` no treino: o SVM só roda no YAML de eval.
 - Se o peso de uma camada antiga mudar, o braço morre (`_assert_frozen`).
+- `layer_kernels: [5,5,5,1,1]` dá o kernel de cada camada (sem ela, `kernel_size` em todas).
+  `layerwise_from_flim: 3` pula o grow de L1–L3: o 1º estágio `L3` treina o FLIM de partida.
+- `method: ijepa_grow`: nada congela; cada `Lk` passa `old_layers=k-1` (camadas antigas com lr
+  baixo) e não há `_assert_frozen`.
 - Antes de lançar: `export RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0` e
   `export LD_LIBRARY_PATH=<env scalable_FLIM>/lib`.
 
