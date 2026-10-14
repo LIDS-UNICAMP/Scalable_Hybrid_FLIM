@@ -1,0 +1,5 @@
+# Espaco do run opcional --residual (§7.7): o principal com o gene residual preso em true.
+extends: search_space.yaml
+override:
+  residual: {type: choice, values: [true], default: true}
+  d: {type: integer, low: 1, high: 5, default: 3}   # = residual_d_max: sem d invalido de graca

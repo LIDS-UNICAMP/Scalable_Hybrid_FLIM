@@ -1,0 +1,20 @@
+name: helminth_eggs
+layout: organized
+root: /dados/home/moliveira/datasets/organized/helminth_eggs
+images_dir: "{root}/orig"
+masks_dir: "{root}/label"
+split_json: "{root}/splits_incremental/split{split}/data_descriptor_perc{pct}.json"
+train_key: train
+eval:
+  source: validation         # 'validation' é fixa em todas as pcts
+pcts: [1, 5, 25, 50, 75, 100]
+splits: [1, 2, 3]
+# numeração NOVA (alfabética); a impureza era 9 na old_version
+classes: {1: Ancylostoma, 2: Ascaris lumbricoides, 3: Enterobius vermicularis, 4: Hymenolepis diminuta, 5: Hymenolepis nana, 6: Impurities, 7: Schistosoma mansoni, 8: Taenia spp, 9: Trichuris trichiura}
+n_classes: 9
+impurity_class: Impurities
+paper_classes: [Ancylostoma, Ascaris lumbricoides, Enterobius vermicularis, Hymenolepis diminuta, Hymenolepis nana, Schistosoma mansoni, Taenia spp, Trichuris trichiura]
+has_mask: true
+native_size: 200
+image_ext: png
+search_space_overrides: {}

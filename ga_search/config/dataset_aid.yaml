@@ -1,0 +1,49 @@
+name: aid
+layout: organized
+root: /dados/home/moliveira/datasets/organized/aid
+images_dir: "{root}/orig"
+masks_dir: null              # sem máscara
+split_json: "{root}/splits_incremental/split{split}/data_descriptor_perc{pct}.json"
+train_key: train
+eval:
+  source: validation         # 'validation' é fixa em todas as pcts
+pcts: [1, 5, 25, 50, 75, 100]
+splits: [1, 2, 3]
+classes:
+  1: Airport
+  2: BareLand
+  3: BaseballField
+  4: Beach
+  5: Bridge
+  6: Center
+  7: Church
+  8: Commercial
+  9: DenseResidential
+  10: Desert
+  11: Farmland
+  12: Forest
+  13: Industrial
+  14: Meadow
+  15: MediumResidential
+  16: Mountain
+  17: Park
+  18: Parking
+  19: Playground
+  20: Pond
+  21: Port
+  22: RailwayStation
+  23: Resort
+  24: River
+  25: School
+  26: SparseResidential
+  27: Square
+  28: Stadium
+  29: StorageTanks
+  30: Viaduct
+n_classes: 30
+impurity_class: null
+paper_classes: [Airport, BareLand, BaseballField, Beach, Bridge, Center, Church, Commercial, DenseResidential, Desert, Farmland, Forest, Industrial, Meadow, MediumResidential, Mountain, Park, Parking, Playground, Pond, Port, RailwayStation, Resort, River, School, SparseResidential, Square, Stadium, StorageTanks, Viaduct]
+has_mask: false
+native_size: 600
+image_ext: jpg               # única em jpg
+search_space_overrides: {w: {low: 30}}   # 30 classes: w < 30 dá N // n_classes = 0

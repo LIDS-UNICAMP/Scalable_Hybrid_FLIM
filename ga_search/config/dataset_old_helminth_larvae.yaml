@@ -1,0 +1,23 @@
+name: old_helminth_larvae
+layout: old
+root: /dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae
+images_dir: "{root}/images"
+masks_dir: "{root}/masks"
+split_json: "{root}/splits_incremental/split{split}/data_descriptor_perc{pct}.json"
+train_key: train
+# Avaliacao so com treino e validacao: o teste nunca entra na busca. Na old_version
+# 'validation' = pool - treino, entao muda com a pct, e em perc100 e igual ao treino; o
+# evaluate.py tira da avaliacao as imagens de onde os filtros foram recortados.
+eval:
+  source: validation
+pcts: [1, 5, 25, 50, 75, 100]
+splits: [1, 2, 3]
+# numeração ANTIGA (eval/constants.py; confere com organized/helminth_larvae/manifest.json)
+classes: {1: Strongyloides stercoralis, 2: Impurities}
+n_classes: 2
+impurity_class: Impurities
+paper_classes: [Strongyloides stercoralis, Impurities]   # larvae mantém as 2
+has_mask: true
+native_size: 200
+image_ext: png
+search_space_overrides: {}

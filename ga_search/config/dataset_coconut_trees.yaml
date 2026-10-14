@@ -1,0 +1,21 @@
+name: coconut_trees
+layout: organized
+root: /dados/home/moliveira/datasets/organized/coconut_trees
+images_dir: "{root}/orig"
+masks_dir: null              # sem máscara
+split_json: "{root}/splits_incremental/split{split}/data_descriptor_perc{pct}.json"
+train_key: train
+eval:
+  source: validation         # 'validation' é fixa em todas as pcts
+pcts: [1, 5, 25, 50, 75, 100]
+splits: [1, 2, 3]
+classes: {1: coco, 2: non_coco}
+n_classes: 2
+impurity_class: null
+paper_classes: [coco, non_coco]
+has_mask: false
+native_size: 90
+image_ext: png
+# Imagem de 90 px: com pool stride 2 o grid cai 90→45→23→12→6→3 em 5 camadas;
+# d > 5 só deixa o grid de 1-2 px, menor que o campo receptivo. O is_valid ainda corta o resto.
+search_space_overrides: {d: {high: 5}}

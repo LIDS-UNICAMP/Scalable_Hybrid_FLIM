@@ -1,0 +1,105 @@
+# Espaco de busca do GA (contrato §2). Lido por ga_search/space.py; nada disto fica no codigo.
+#
+# Cada gene: type (real | integer | choice | binary), dominio (low/high ou values), default e,
+# opcionalmente, `when` (condicao de atividade). Gene com condicao falsa fica DORMENTE: continua
+# no genoma (coluna g_<gene>), mas nao entra na config ativa.
+#   when: {gene: valor}          igualdade
+#   when: {gene: [v1, v2]}       pertence
+#   when: {gene: {not: valor}}   diferente
+#   when: {gene: {min: valor}}   >=
+# `impurities` sai do genoma quando o dataset nao tem mascara (has_mask: false).
+# `search_space_overrides` do dataset sobrescreve campos dos genes (ex.: {w: {low: 30}}).
+# O low efetivo de `w` e de `N_l<l>` e max(low, n_classes do dataset).
+
+d_max: 7
+residual_d_max: 5          # residual=true com d maior -> invalido (§7.7)
+round_decimals: 4          # reais do genoma arredondados antes da config ativa e do hash
+
+fixed:                     # 4.3: entram na config ativa sem ser gene
+  estimator: shrinkage
+  allocator: uniform
+  color: labnorm
+  budget_check: true
+
+
+# flatten (todo o mapa vira o vetor de features) e o que mais custa: dezenas de milhares de
+# dimensoes no KMeans. false = o gene head so escolhe entre global_avg e global_max.
+use_flatten: false
+
+genes:
+  # --- comuns, todos os modos
+  r_factor: {type: choice, values: [0.5, 0.75, 1.0], default: 1.0}
+  d: {type: integer, low: 1, high: 7, default: 3}
+  head: {type: choice, values: [flatten, global_avg, global_max], default: global_avg}
+  layer_mode: {type: choice, values: [comum, crescimento, atomico], default: comum}
+  stdev_factor_log10: {type: real, low: -3, high: -1, default: -2}
+
+  # --- arquitetura compartilhada (dormente no modo atomico)
+  k: {type: choice, values: [1, 3, 5, 7], default: 3, when: {layer_mode: [comum, crescimento]}}
+  w: {type: integer, low: 8, high: 128, default: 16,
+      when: {layer_mode: [comum, crescimento], residual: false}}
+  activation: {type: choice, values: [relu, leaky_relu, tanh, none], default: relu,
+               when: {layer_mode: [comum, crescimento]}}
+  dilation: {type: integer, low: 1, high: 3, default: 1, when: {layer_mode: [comum, crescimento]}}
+  pool_type: {type: choice, values: [max, avg, none], default: max,
+              when: {layer_mode: [comum, crescimento]}}
+  pool_size: {type: choice, values: [3, 5, 7], default: 3,
+              when: {layer_mode: [comum, crescimento], pool_type: {not: none}}}
+  pool_stride: {type: integer, low: 1, high: 3, default: 2,
+                when: {layer_mode: [comum, crescimento], pool_type: {not: none}}}
+
+  # --- superpixels e sementes
+  superpixels: {type: choice, values: [slic, disf], default: slic}
+  compactness: {type: real, low: 1, high: 40, default: 10.0, when: {superpixels: slic}}
+  sigma: {type: real, low: 0, high: 2, default: 0.0, when: {superpixels: slic}}
+  adjacency_radius: {type: real, low: 1, high: 3, default: 1.0, when: {superpixels: disf}}
+  n_init_seeds: {type: choice, values: [auto, 500, 1000, 2000], default: auto,
+                 map: {auto: null}, when: {superpixels: disf}}
+  n_superpixels: {type: integer, low: 25, high: 200, default: 100}
+  seed_extractor: {type: choice, values: [medoid, centroid, geodesic], default: medoid}
+  metric: {type: choice, values: [mahalanobis, euclidean], default: mahalanobis}
+  scorer: {type: choice, values: [fisher, distance_sum], default: fisher}
+  selector: {type: choice, values: [diversity, topn], default: diversity}
+  alpha: {type: real, low: 0, high: 1, default: 0.5, when: {selector: diversity}}
+  pool_factor: {type: integer, low: 2, high: 5, default: 3, when: {selector: diversity}}
+
+  # --- dados de treino
+  one_per_class: {type: binary, default: true}
+  n_images: {type: integer, low: 50, high: 200, default: 200, when: {one_per_class: false}}
+  paper_classes: {type: binary, default: false}
+  impurities: {type: binary, default: false}
+  spifil_in: {type: choice, values: [image, features], default: image}
+
+  # --- crescimento (4.2.2)
+  width_growth: {type: real, low: 0.5, high: 2.0, default: 1.0,
+                 when: {layer_mode: crescimento, residual: false}}
+  kernel_growth: {type: integer, low: -1, high: 1, default: 0, when: {layer_mode: crescimento}}
+  dilation_growth: {type: choice, values: [1, 2], default: 1, when: {layer_mode: crescimento}}
+  superpixel_growth: {type: real, low: 0.25, high: 1.0, default: 1.0,
+                      when: {layer_mode: crescimento, spifil_in: features}}
+  pool_schedule: {type: choice, values: [todas, primeira, alternadas, ultima], default: todas,
+                  when: {layer_mode: crescimento}}
+
+  # --- residuo (§7.7): concatena entrada + filtros novos; N_1 e a razao growth_l = C_l/C_(l-1)
+  residual: {type: binary, default: false}
+  N_1: {type: choice, values: [8, 16, 32], default: 16, when: {residual: true}}
+  growth_l2: {type: real, low: 2, high: 4, default: 2.0, when: {residual: true, d: {min: 2}}}
+  growth_l3: {type: real, low: 2, high: 4, default: 2.0, when: {residual: true, d: {min: 3}}}
+  growth_l4: {type: real, low: 2, high: 4, default: 2.0, when: {residual: true, d: {min: 4}}}
+  growth_l5: {type: real, low: 2, high: 4, default: 2.0, when: {residual: true, d: {min: 5}}}
+
+# Atomicos (4.2.3): expandidos para l = from_layer..d_max como <nome>_l<l>, com a condicao
+# extra {d: {min: l}}. `{l}` dentro de `when` vira o indice. same_as copia o dominio de outro gene.
+per_layer:
+  k: {type: choice, values: [3, 5, 7], default: 3, when: {layer_mode: atomico}}
+  N: {same_as: w, default: 32, when: {layer_mode: atomico, residual: false}}
+  dilation: {type: integer, low: 1, high: 3, default: 1, when: {layer_mode: atomico}}
+  activation: {same_as: activation, default: relu, when: {layer_mode: atomico}}
+  pool_type: {type: choice, values: [max, avg, none], default: max, when: {layer_mode: atomico}}
+  pool_size: {type: choice, values: [3, 5, 7], default: 3,
+              when: {layer_mode: atomico, "pool_type_l{l}": {not: none}}}
+  pool_stride: {type: integer, low: 1, high: 3, default: 2,
+                when: {layer_mode: atomico, "pool_type_l{l}": {not: none}}}
+  n_superpixels: {type: integer, low: 25, high: 200, default: 100, from_layer: 2,
+                  when: {layer_mode: atomico, spifil_in: features}}
+

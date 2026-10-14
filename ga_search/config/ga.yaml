@@ -1,0 +1,34 @@
+# Configuracao global do GA (Etapas 1 e 2). Toda chave aqui e lida por run_ga.py / run_scaling.py / evaluate.py.
+# Semente de cada run: seeds.base + crc32("<dataset>|<pct>|<split>") % 2**31.
+results_dir: ga_search/results
+cache: {path: ga_search/results/cache.sqlite, timeout_s: 60}
+seeds: {base: 0}                 # semente do run = base + hash estável(dataset,pct,split) — documentar
+ga: {pop_size: 50, n_gen_max: 100, top_k: 20, warm_start_k: 10, eliminate_duplicates: true}
+stop: {tol: 0.005, patience: 15, pop_tol: 0.01}
+objective: dbi                   # metrica que guia o GA: ch | dbi | silhouette
+# sentido de cada metrica: max = maior e melhor, min = menor e melhor
+metrics: {ch: max, dbi: min, silhouette: max}
+penalty: 1.0e12                  # objetivo (minimizado) de inválidos/degenerados
+clustering: {algorithm: kmeans, n_init: 10, max_iter: 300, standardize: true, random_state: 0,
+             min_clusters_frac: 1.0,   # KMeans tem que achar >= frac*n_classes grupos; menos = degenerate (DBI~0 falso)
+             min_unique_frac: 0.5,     # features (padronizadas, arredondadas) com menos vetores distintos que isso*n = degenerate
+             unique_decimals: 3}
+silhouette: {sample_size: 2000, random_state: 0}
+spifil: {leaky_slope: 0.01, encode_batch: 32, max_seeds: 40000}
+parallel: {n_jobs: 50, start_method: spawn, threads_per_worker: 1, gpus: [],   # gpus vazio = cpu
+           max_mem_gb_per_worker: 14,   # teto de RAM por worker (50 x 14 = 700 GB < 1 TB); passou = MemoryError
+           task_timeout_s: 1800}        # avaliacao sem resposta em 30 min (worker morto/travado) vira erro
+smoke: {pop_size: 6, n_gen_max: 3, dataset: helminth_larvae, pct: 5, split: 1}
+estimate: {n_evals_per_dataset: 3, assumed_n_gen: 40}
+scaling: {pct: 100, phi: [-1, 0, 1, 2], flops_target: 2.0, flops_tol: 0.1,
+          coef_bounds: {alpha_d: [1.0, 2.0], beta_w: [1.0, 2.0], gamma_r: [1.0, 1.5],
+                        kappa_k: [1.0, 1.5], delta_gw: [0.8, 1.25]},
+          ga: {pop_size: 20, n_gen_max: 15}}
+tqdm: {colours: {runs: blue, generations: green, evals: yellow}}
+# Etapa 3 (analyze_laws.py / plot_laws.py): limiares para chamar algo de LEI.
+laws: {r2_min: 0.5, cv_max: 0.25, rho_min: 0.5, consistency: 1.0, min_points: 4,
+       n_boot: 1000, ci: 0.95, seed: 0, sat_frac: 0.95, shape_tol: 0.05,
+       transfer_frac: 0.9, match_log10: 0.25}
+# run_ga.py: datasets padrao da Etapa 1 e pasta separada do --smoke (resultados e cache proprios)
+default_datasets: [helminth_eggs, helminth_larvae, protozoan_cysts]
+smoke_results_dir: ga_search/results_smoke

@@ -1,0 +1,20 @@
+name: helminth_larvae
+layout: organized
+root: /dados/home/moliveira/datasets/organized/helminth_larvae
+images_dir: "{root}/orig"
+masks_dir: "{root}/label"
+split_json: "{root}/splits_incremental/split{split}/data_descriptor_perc{pct}.json"
+train_key: train
+eval:
+  source: validation         # 'validation' é fixa em todas as pcts
+pcts: [1, 5, 25, 50, 75, 100]
+splits: [1, 2, 3]
+# numeração NOVA: 1 e 2 trocados em relação à old_version
+classes: {1: Impurities, 2: Strongyloides stercoralis}
+n_classes: 2
+impurity_class: Impurities
+paper_classes: [Impurities, Strongyloides stercoralis]   # larvae mantém as 2
+has_mask: true
+native_size: 200
+image_ext: png
+search_space_overrides: {}

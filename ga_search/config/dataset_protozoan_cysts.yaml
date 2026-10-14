@@ -1,0 +1,20 @@
+name: protozoan_cysts
+layout: organized
+root: /dados/home/moliveira/datasets/organized/protozoan_cysts
+images_dir: "{root}/orig"
+masks_dir: "{root}/label"
+split_json: "{root}/splits_incremental/split{split}/data_descriptor_perc{pct}.json"
+train_key: train
+eval:
+  source: validation         # 'validation' é fixa em todas as pcts
+pcts: [1, 5, 25, 50, 75, 100]
+splits: [1, 2, 3]
+# numeração NOVA (alfabética); a impureza era 7 na old_version
+classes: {1: Blastocystis hominis, 2: Endolimax nana, 3: Entamoeba coli, 4: Entamoeba histolytica, 5: Giardia intestinalis, 6: Impurities, 7: Iodamoeba butschlii}
+n_classes: 7
+impurity_class: Impurities
+paper_classes: [Blastocystis hominis, Endolimax nana, Entamoeba coli, Entamoeba histolytica, Giardia intestinalis, Iodamoeba butschlii]
+has_mask: true
+native_size: 200
+image_ext: png
+search_space_overrides: {}
