@@ -70,6 +70,7 @@ from src.data_modules.datasets.lejepa_dataset import _build_test        # noqa: 
 from src.evaluate.constants import IMAGE_SIZE                           # noqa: E402
 from src.metrics.classification import compute_metrics                  # noqa: E402
 from src.models.dense_growth import load_stage                          # noqa: E402
+from src.modules.spifil_dense_growth_module import cell_name         # noqa: E402
 from src.utils.evaluate import DEVICE, fit_svm                          # noqa: E402
 
 _PARASITE = {"eggs": "helminth-eggs", "larvae": "helminth-larvae",
@@ -125,7 +126,7 @@ def _stage_features(net, loader) -> tuple:
 
 def _evaluate_cell(cfg: dict, dataset: str, split: int, done: set) -> list:
     ev, pct = cfg["evaluate"], cfg["grid"]["percentage"]
-    run_name = f"spifil_dense_{dataset}_split{split}_pct{pct}"
+    run_name = cell_name(cfg, dataset, split)
     run_dir = os.path.join(_ROOT, cfg["output_root"], run_name)
     meta_path = os.path.join(run_dir, "run_metadata.json")
     if not (os.path.isfile(meta_path) and json.load(open(meta_path)).get("status") == "ok"):

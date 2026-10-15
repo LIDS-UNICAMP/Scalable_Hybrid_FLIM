@@ -64,6 +64,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -439,15 +440,47 @@ def run_grid(config_path: str, cfg: dict) -> int:
     return 1 if failed else 0
 
 
+def cell_name(cfg: dict, dataset: str, split: int, suffix: str | None = None) -> str:
+    """``spifil_dense<name_suffix>_<ds>_split<s>_pct<p>`` — shared with the evaluator."""
+    suffix = cfg.get("name_suffix", "") if suffix is None else suffix
+    return f"spifil_dense{suffix}_{dataset}_split{split}_pct{cfg['grid']['percentage']}"
+
+
+def seed_from(cfg: dict, dataset: str, split: int, run_dir: str) -> None:
+    """``init_from``: copy a finished run's stages up to ``upto`` into this run.
+
+    The growth loop then resumes them (frozen, never refitted) and grows only what comes
+    after. Each copied stage must describe exactly the blocks this config asks for there.
+    """
+    src_cfg = cfg["init_from"]
+    src = os.path.join(_ROOT, src_cfg["output_root"],
+                       cell_name(cfg, dataset, split, src_cfg.get("name_suffix", "")))
+    names = [s["name"] for s in cfg["architecture"]]
+    for i, name in enumerate(names[: names.index(src_cfg["upto"]) + 1]):
+        stage = f"stage{i:02d}_{name}"
+        dst = os.path.join(run_dir, stage)
+        if os.path.isdir(dst):
+            continue
+        with open(os.path.join(src, stage, "architecture.json")) as f:
+            got = json.load(f)["layers"][i]
+        want = cfg["architecture"][i]
+        if any(got.get(k) != v for k, v in want.items()):
+            raise ValueError(f"init_from {src}/{stage} is {got}, config asks for {want}")
+        shutil.copytree(os.path.join(src, stage), dst)
+        _log.info("[%s] copied from %s", name, src)
+
+
 def run_cell(cfg: dict, dataset: str, split: int) -> int:
     pct = cfg["grid"]["percentage"]
-    run_name = f"spifil_dense_{dataset}_split{split}_pct{pct}"
+    run_name = cell_name(cfg, dataset, split)
     run_dir = os.path.join(_ROOT, cfg["output_root"], run_name)
     meta_path = os.path.join(run_dir, "run_metadata.json")
     if os.path.isfile(meta_path) and json.load(open(meta_path)).get("status") == "ok":
         _log.info("%s already finished — skipped", run_name)
         return 0
     os.makedirs(run_dir, exist_ok=True)
+    if cfg.get("init_from"):
+        seed_from(cfg, dataset, split, run_dir)
 
     pl.seed_everything(cfg["train"]["seed"], workers=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
