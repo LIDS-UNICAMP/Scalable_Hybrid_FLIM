@@ -57,8 +57,8 @@ spifil:
 train:
   batch_size: 32               # M1 (RTX 5080 16 GB): pico 7.9 GB no H com expandable_segments; 64 deixa 6% livre; 128 estoura
   num_workers: 16
-  max_epochs: 40
-  patience: 8
+  max_epochs: 1000
+  patience: 50
   lr: 5.0e-4
   weight_decay: 5.0e-2
   image_size: 200
@@ -66,7 +66,7 @@ train:
 
 output_root: artifacts/spifil_dense_growth
 
-# Um run W&B por celula (id = nome da celula: relancar continua o mesmo run).
+# Um run W&B por celula (id = nome + hash da config: mesma config continua o run, config nova abre outro).
 # Metricas por estagio: <ESTAGIO>/{train,val}_recon_loss contra <ESTAGIO>/epoch.
 wandb:
   enabled: true

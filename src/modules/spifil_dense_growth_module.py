@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -454,8 +455,13 @@ def run_cell(cfg: dict, dataset: str, split: int) -> int:
             "split": split, "percentage": pct, "config": cfg, "git_sha": _git_sha()}
     wb = cfg["wandb"]
     if wb["enabled"]:
-        # id = run name: a relaunch resumes the same run instead of opening a twin.
-        wandb.init(project=wb["project"], entity=wb["entity"], name=run_name, id=run_name,
+        # id = run name + config hash: relaunching the same config resumes its run, while a
+        # changed config (epochs, patience, SPiFiL, ...) opens a new one instead of appending.
+        cfg_hash = hashlib.sha1(json.dumps(
+            {k: cfg[k] for k in ("architecture", "spifil", "train", "grid")},
+            sort_keys=True).encode()).hexdigest()[:8]
+        wandb.init(project=wb["project"], entity=wb["entity"], name=run_name,
+                   id=f"{run_name}-{cfg_hash}",
                    resume="allow", dir=run_dir, tags=wb["tags"],
                    config={"dataset": dataset, "split": split, "percentage": pct, **cfg})
     t0 = time.time()
