@@ -65,3 +65,10 @@ train:
   seed: 42
 
 output_root: artifacts/spifil_dense_growth
+
+# Execucao da grade (python -m src.modules.spifil_dense_growth_module --config <este arquivo>):
+# uma celula por subprocesso, log em <log_dir>/<dataset>_split<s>.log.
+run:
+  log_dir: logs/spifil_dense
+  concurrency: 1               # M1: 2 celulas = cada epoca 2x mais lenta, sem ganho
+  cuda_alloc_conf: expandable_segments:True   # M1: pico do H 10.6 -> 7.9 GB, mesma velocidade

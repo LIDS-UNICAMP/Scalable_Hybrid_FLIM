@@ -51,8 +51,9 @@ it can supply, and moves any shortfall to the classes that have spare candidates
 A finished stage is never refitted: re-running the same command resumes after the last
 saved stage (crash resume), and a cell with ``run_metadata.json`` status ``ok`` is skipped.
 
-    python -m src.modules.spifil_dense_growth_module \\
-        --config configs/model/spifil_dense_growth.yaml --dataset eggs --split 1
+    python -m src.modules.spifil_dense_growth_module --config configs/model/spifil_dense_growth.yaml
+
+runs the whole ``grid`` of the YAML (``run`` sets log dir, concurrency and CUDA allocator).
 """
 
 from __future__ import annotations
@@ -265,8 +266,7 @@ def _stage_done(stage_dir: str) -> bool:
     return os.path.isfile(os.path.join(stage_dir, "encoder.pt"))
 
 
-def grow(cfg: dict, dataset: str, split: int, run_dir: str, device: torch.device,
-         max_steps: int | None = None) -> List[dict]:
+def grow(cfg: dict, dataset: str, split: int, run_dir: str, device: torch.device) -> List[dict]:
     from config import get_single_parasite_paths
     from src.data_modules.parasite_data_module_lejepa_splited import (
         ParasiteLejepaDataModuleSplited,
@@ -288,7 +288,7 @@ def grow(cfg: dict, dataset: str, split: int, run_dir: str, device: torch.device
 
     net = DenseGrowthNet(in_channels=3).to(device)
     summary: List[dict] = []
-    for i, spec in enumerate(cfg["architecture"][:max_steps]):
+    for i, spec in enumerate(cfg["architecture"]):
         name = spec["name"]
         stage_dir = os.path.join(run_dir, f"stage{i:02d}_{name}")
         freeze_encoder(net)                     # everything grown so far
@@ -366,24 +366,51 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[1],
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p.add_argument("--config", default=os.path.join(_ROOT, "configs/model/spifil_dense_growth.yaml"))
-    p.add_argument("--dataset", required=True, choices=["eggs", "larvae", "protozoan"])
-    p.add_argument("--split", required=True, type=int)
-    p.add_argument("--batch-size", type=int, help="overrides train.batch_size")
-    p.add_argument("--max-epochs", type=int, help="overrides train.max_epochs")
-    p.add_argument("--max-steps", type=int, help="grow only the first N blocks (smoke)")
-    p.add_argument("--run-prefix", default="")
-    p.add_argument("--output-root", help="overrides output_root")
+    # Set by the grid runner for each child; everything else comes from the YAML.
+    p.add_argument("--dataset", choices=["eggs", "larvae", "protozoan"], help=argparse.SUPPRESS)
+    p.add_argument("--split", type=int, help=argparse.SUPPRESS)
     args = p.parse_args()
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
-    if args.batch_size:
-        cfg["train"]["batch_size"] = args.batch_size
-    if args.max_epochs:
-        cfg["train"]["max_epochs"] = args.max_epochs
+    if args.dataset is None:
+        return run_grid(args.config, cfg)
+    return run_cell(cfg, args.dataset, args.split)
+
+
+def run_grid(config_path: str, cfg: dict) -> int:
+    """Every ``grid`` cell as a child process, ``run.concurrency`` at a time, one log per cell."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    run = cfg["run"]
+    log_dir = os.path.join(_ROOT, run["log_dir"])
+    os.makedirs(log_dir, exist_ok=True)
+    env = {**os.environ, "PYTORCH_CUDA_ALLOC_CONF": run["cuda_alloc_conf"]}
+    cells = [(d, s) for d in cfg["grid"]["datasets"] for s in cfg["grid"]["splits"]]
+
+    def child(cell) -> int:
+        d, s = cell
+        log = os.path.join(log_dir, f"{d}_split{s}.log")
+        _log.info("start %s split%d -> %s", d, s, log)
+        with open(log, "a") as fh:
+            rc = subprocess.run([sys.executable, "-m", "src.modules.spifil_dense_growth_module",
+                                 "--config", config_path, "--dataset", d, "--split", str(s)],
+                                cwd=_ROOT, env=env, stdout=fh, stderr=subprocess.STDOUT).returncode
+        _log.info("done  %s split%d rc=%d", d, s, rc)
+        return rc
+
+    with ThreadPoolExecutor(max_workers=run["concurrency"]) as pool:
+        codes = list(pool.map(child, cells))
+    failed = [c for c, rc in zip(cells, codes) if rc]
+    _log.info("grid finished: %d/%d ok%s", len(cells) - len(failed), len(cells),
+              f", failed {failed}" if failed else "")
+    return 1 if failed else 0
+
+
+def run_cell(cfg: dict, dataset: str, split: int) -> int:
     pct = cfg["grid"]["percentage"]
-    run_name = f"{args.run_prefix}spifil_dense_{args.dataset}_split{args.split}_pct{pct}"
-    run_dir = os.path.join(_ROOT, args.output_root or cfg["output_root"], run_name)
+    run_name = f"spifil_dense_{dataset}_split{split}_pct{pct}"
+    run_dir = os.path.join(_ROOT, cfg["output_root"], run_name)
     meta_path = os.path.join(run_dir, "run_metadata.json")
     if os.path.isfile(meta_path) and json.load(open(meta_path)).get("status") == "ok":
         _log.info("%s already finished — skipped", run_name)
@@ -392,12 +419,12 @@ def main() -> int:
 
     pl.seed_everything(cfg["train"]["seed"], workers=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    meta = {"run_name": run_name, "method": "spifil_dense_growth", "dataset": args.dataset,
-            "split": args.split, "percentage": pct, "config": cfg, "git_sha": _git_sha()}
+    meta = {"run_name": run_name, "method": "spifil_dense_growth", "dataset": dataset,
+            "split": split, "percentage": pct, "config": cfg, "git_sha": _git_sha()}
     t0 = time.time()
     try:
-        meta["stages"] = grow(cfg, args.dataset, args.split, run_dir, device, args.max_steps)
-        meta["status"] = "ok" if not args.max_steps else "partial"
+        meta["stages"] = grow(cfg, dataset, split, run_dir, device)
+        meta["status"] = "ok"
     except Exception as exc:
         _log.error("growth failed: %s", exc, exc_info=True)
         meta.update(status="error", error=str(exc))
