@@ -39,6 +39,10 @@ bloco e checa que nada mudou, entao o estagio k e prefixo exato do H. Isto e
 re-conferido aqui (state_dict de cada estagio == prefixo do H, bit a bit) e,
 passando, uma unica forward do H entrega o GAP de todos os estagios.
 
+**Celula em andamento** tambem e avaliada: um estagio salvo nunca muda depois (o que
+vem antes dele fica congelado), entao entra no CSV assim que existe e os seguintes
+sao acrescentados quando sairem.
+
 Tudo vem de configs/model/spifil_dense_growth.yaml (blocos grid, output_root,
 evaluate):
 
@@ -95,8 +99,10 @@ def _loader(dataset: str, split: int, percentage: int, set_name: str, ev: dict):
 
 
 def _stage_dirs(run_dir: str) -> list:
+    """Estagios completos: stage_metadata.json e o ultimo arquivo que save_stage escreve."""
     return sorted(os.path.join(run_dir, d) for d in os.listdir(run_dir)
-                  if d.startswith("stage") and os.path.isdir(os.path.join(run_dir, d)))
+                  if d.startswith("stage")
+                  and os.path.isfile(os.path.join(run_dir, d, "stage_metadata.json")))
 
 
 def _check_prefix(stage_dirs: list, final_state: dict) -> None:
@@ -128,11 +134,14 @@ def _evaluate_cell(cfg: dict, dataset: str, split: int, done: set) -> list:
     ev, pct = cfg["evaluate"], cfg["grid"]["percentage"]
     run_name = cell_name(cfg, dataset, split)
     run_dir = os.path.join(_ROOT, cfg["output_root"], run_name)
+    stage_dirs = _stage_dirs(run_dir) if os.path.isdir(run_dir) else []
+    if not stage_dirs:
+        print(f"[SKIP] {run_name}: nenhum estagio salvo")
+        return []
     meta_path = os.path.join(run_dir, "run_metadata.json")
     if not (os.path.isfile(meta_path) and json.load(open(meta_path)).get("status") == "ok"):
-        print(f"[SKIP] {run_name}: crescimento nao terminou")
-        return []
-    stage_dirs = _stage_dirs(run_dir)
+        print(f"[INFO] {run_name}: crescimento em andamento — avalia os "
+              f"{len(stage_dirs)} estagios ja salvos")
     names = [os.path.basename(d).split("_", 1)[1] for d in stage_dirs]
     if all((dataset, split, n) in done for n in names):
         print(f"[SKIP] {run_name}: ja no CSV")
