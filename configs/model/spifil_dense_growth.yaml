@@ -56,7 +56,7 @@ spifil:
 
 train:
   batch_size: 32               # M1 (RTX 5080 16 GB): pico 7.9 GB no H com expandable_segments; 64 deixa 6% livre; 128 estoura
-  num_workers: 4
+  num_workers: 16
   max_epochs: 40
   patience: 8
   lr: 5.0e-4
@@ -65,6 +65,14 @@ train:
   seed: 42
 
 output_root: artifacts/spifil_dense_growth
+
+# Um run W&B por celula (id = nome da celula: relancar continua o mesmo run).
+# Metricas por estagio: <ESTAGIO>/{train,val}_recon_loss contra <ESTAGIO>/epoch.
+wandb:
+  enabled: true
+  project: journal_02_2026_hybrid_FLIM
+  entity: ophira-ai
+  tags: [journal_02_2026_hybrid_FLIM, spifil_dense_growth, unsupervised]
 
 # Execucao da grade (python -m src.modules.spifil_dense_growth_module --config <este arquivo>):
 # uma celula por subprocesso, log em <log_dir>/<dataset>_split<s>.log.

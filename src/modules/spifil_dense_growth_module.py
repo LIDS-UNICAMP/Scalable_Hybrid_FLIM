@@ -73,6 +73,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import wandb
 import yaml
 from lightning.pytorch.callbacks import EarlyStopping
 from skimage.io import imread
@@ -204,8 +205,9 @@ class DenseStepModule(pl.LightningModule):
     """Frozen prefix + one trainable block + a fresh decoder, trained by reconstruction."""
 
     def __init__(self, net: DenseGrowthNet, decoder: nn.Module, lr: float,
-                 weight_decay: float, max_epochs: int) -> None:
+                 weight_decay: float, max_epochs: int, stage: str = "") -> None:
         super().__init__()
+        self.stage = stage
         self.net, self.decoder = net, decoder
         self.lr, self.weight_decay, self.max_epochs = lr, weight_decay, max_epochs
         self.block = net.blocks[-1]
@@ -213,6 +215,7 @@ class DenseStepModule(pl.LightningModule):
         self.best_loss, self.best_epoch, self.history = float("inf"), -1, []
         self.best_block = copy.deepcopy(self.block.state_dict())
         self._val: List[Tensor] = []
+        self._train: List[Tensor] = []
 
     @staticmethod
     def _x(batch) -> Tensor:
@@ -225,6 +228,7 @@ class DenseStepModule(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss = self._recon(self._x(batch))
+        self._train.append(loss.detach())
         self.log("train_recon_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
         return loss
 
@@ -238,11 +242,20 @@ class DenseStepModule(pl.LightningModule):
             self._val.clear()
             return
         loss = float(torch.stack(self._val).mean())
+        train = float(torch.stack(self._train).mean()) if self._train else float("nan")
         self._val.clear()
+        self._train.clear()
         self.history.append(loss)
         if loss < self.best_loss:
             self.best_loss, self.best_epoch = loss, self.current_epoch
             self.best_block = copy.deepcopy(self.block.state_dict())
+        if wandb.run is not None:
+            # Own x axis per stage: every stage's curve starts at epoch 0.
+            wandb.log({f"{self.stage}/epoch": self.current_epoch,
+                       f"{self.stage}/val_recon_loss": loss,
+                       f"{self.stage}/train_recon_loss": train,
+                       f"{self.stage}/best_val_recon_loss": self.best_loss,
+                       f"{self.stage}/lr": self.trainer.optimizers[0].param_groups[0]["lr"]})
 
     def configure_optimizers(self):
         params = [p for p in self.parameters() if p.requires_grad]
@@ -319,7 +332,11 @@ def grow(cfg: dict, dataset: str, split: int, run_dir: str, device: torch.device
             size = (tr["image_size"] - 1) // net.stride + 1
             decoder = ResNetDecoder.from_resolution(
                 block.out_channels, size, out_size=(tr["image_size"], tr["image_size"]))
-            module = DenseStepModule(net, decoder, tr["lr"], tr["weight_decay"], tr["max_epochs"])
+            module = DenseStepModule(net, decoder, tr["lr"], tr["weight_decay"], tr["max_epochs"],
+                                     stage=name)
+            if wandb.run is not None:
+                wandb.define_metric(f"{name}/epoch")
+                wandb.define_metric(f"{name}/*", step_metric=f"{name}/epoch")
             trainer = pl.Trainer(
                 max_epochs=tr["max_epochs"], accelerator="gpu" if device.type == "cuda" else "cpu",
                 devices=1, precision=tr.get("precision", "32-true"),
@@ -354,6 +371,16 @@ def grow(cfg: dict, dataset: str, split: int, run_dir: str, device: torch.device
                 "percentage": pct, "spec": spec, "spifil": info, **train_info,
                 "elapsed_s": time.time() - t0, "git_sha": _git_sha()}
         save_stage(net, stage_dir, tr["image_size"], meta)
+        if wandb.run is not None:
+            wandb.run.summary.update({
+                f"{name}/best_val_recon_loss": train_info.get("best_val_recon_loss"),
+                f"{name}/best_epoch": train_info.get("best_epoch"),
+                f"{name}/epochs_run": train_info.get("epochs_run"),
+                f"{name}/out_channels": block.out_channels,
+                f"{name}/spifil_candidates": info["candidates"],
+                f"{name}/filters_per_class": {str(c): n for c, n in info["filters_per_class"].items()},
+                f"{name}/elapsed_s": meta["elapsed_s"],
+                "stages_saved": i + 1})
         summary.append({k: meta[k] for k in ("stage", "elapsed_s")} |
                        {"best_val_recon_loss": train_info.get("best_val_recon_loss")})
         _log.info("[%s] saved -> %s (%.0fs)", name, stage_dir, meta["elapsed_s"])
@@ -387,6 +414,10 @@ def run_grid(config_path: str, cfg: dict) -> int:
     os.makedirs(log_dir, exist_ok=True)
     env = {**os.environ, "PYTORCH_CUDA_ALLOC_CONF": run["cuda_alloc_conf"]}
     cells = [(d, s) for d in cfg["grid"]["datasets"] for s in cfg["grid"]["splits"]]
+    if cfg["wandb"]["enabled"]:
+        if not wandb.api.api_key:
+            _log.error("wandb.enabled is true but this machine is not logged in: run `wandb login`")
+            return 1
 
     def child(cell) -> int:
         d, s = cell
@@ -421,6 +452,12 @@ def run_cell(cfg: dict, dataset: str, split: int) -> int:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     meta = {"run_name": run_name, "method": "spifil_dense_growth", "dataset": dataset,
             "split": split, "percentage": pct, "config": cfg, "git_sha": _git_sha()}
+    wb = cfg["wandb"]
+    if wb["enabled"]:
+        # id = run name: a relaunch resumes the same run instead of opening a twin.
+        wandb.init(project=wb["project"], entity=wb["entity"], name=run_name, id=run_name,
+                   resume="allow", dir=run_dir, tags=wb["tags"],
+                   config={"dataset": dataset, "split": split, "percentage": pct, **cfg})
     t0 = time.time()
     try:
         meta["stages"] = grow(cfg, dataset, split, run_dir, device)
@@ -433,6 +470,8 @@ def run_cell(cfg: dict, dataset: str, split: int) -> int:
         meta["peak_gpu_mem_mib"] = torch.cuda.max_memory_allocated() / 2**20
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
+    if wb["enabled"]:
+        wandb.finish(exit_code=0 if meta["status"] == "ok" else 1)
     return 0 if meta["status"] != "error" else 1
 
 
