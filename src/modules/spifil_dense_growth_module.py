@@ -95,6 +95,7 @@ from spifil.types import PatchSet
 from src.models.autoencoder_resnet import ResNetDecoder
 from src.models.dense_growth import DenseGrowthNet, check_table, save_stage
 from src.models.encoders import freeze_encoder
+from src.transforms.lab_augment import LabAugment
 
 _log = logging.getLogger(__name__)
 
@@ -207,9 +208,11 @@ class DenseStepModule(pl.LightningModule):
     """Frozen prefix + one trainable block + a fresh decoder, trained by reconstruction."""
 
     def __init__(self, net: DenseGrowthNet, decoder: nn.Module, lr: float,
-                 weight_decay: float, max_epochs: int, stage: str = "") -> None:
+                 weight_decay: float, max_epochs: int, stage: str = "",
+                 augment=None) -> None:
         super().__init__()
         self.stage = stage
+        self.augment = augment  # LabAugment or None; training_step only
         self.net, self.decoder = net, decoder
         self.lr, self.weight_decay, self.max_epochs = lr, weight_decay, max_epochs
         self.block = net.blocks[-1]
@@ -229,7 +232,13 @@ class DenseStepModule(pl.LightningModule):
         return self.loss(self.decoder(self.net(x)), x.clamp(0.0, 1.0))
 
     def training_step(self, batch, batch_idx):
-        loss = self._recon(self._x(batch))
+        # Augmentation only where there is backprop: SPiFiL built this block's filters from
+        # the original images, and validation/SVM see originals too. The augmented image is
+        # input and target at once, so geometry and L changes stay consistent.
+        x = self._x(batch)
+        if self.augment is not None:
+            x = self.augment(x)
+        loss = self._recon(x)
         self._train.append(loss.detach())
         self.log("train_recon_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
         return loss
@@ -300,6 +309,8 @@ def grow(cfg: dict, dataset: str, split: int, run_dir: str, device: torch.device
     dm.setup()
     masks_dir = get_single_parasite_paths(parasite, split, pct)[0]["masks_dir"]
     fit = None  # built lazily: a fully resumed run never needs it
+    aug_cfg = cfg.get("augment") or {}
+    augment = LabAugment(aug_cfg) if aug_cfg.get("enabled") else None
 
     net = DenseGrowthNet(in_channels=3).to(device)
     summary: List[dict] = []
@@ -335,7 +346,7 @@ def grow(cfg: dict, dataset: str, split: int, run_dir: str, device: torch.device
             decoder = ResNetDecoder.from_resolution(
                 block.out_channels, size, out_size=(tr["image_size"], tr["image_size"]))
             module = DenseStepModule(net, decoder, tr["lr"], tr["weight_decay"], tr["max_epochs"],
-                                     stage=name)
+                                     stage=name, augment=augment)
             if wandb.run is not None:
                 wandb.define_metric(f"{name}/epoch")
                 wandb.define_metric(f"{name}/*", step_metric=f"{name}/epoch")
@@ -491,7 +502,7 @@ def run_cell(cfg: dict, dataset: str, split: int) -> int:
         # id = run name + config hash: relaunching the same config resumes its run, while a
         # changed config (epochs, patience, SPiFiL, ...) opens a new one instead of appending.
         cfg_hash = hashlib.sha1(json.dumps(
-            {k: cfg[k] for k in ("architecture", "spifil", "train", "grid")},
+            {k: cfg[k] for k in ("architecture", "spifil", "train", "grid", "augment") if k in cfg},
             sort_keys=True).encode()).hexdigest()[:8]
         wandb.init(project=wb["project"], entity=wb["entity"], name=run_name,
                    id=f"{run_name}-{cfg_hash}",
