@@ -74,6 +74,16 @@ wandb:
   entity: ophira-ai
   tags: [journal_02_2026_hybrid_FLIM, spifil_dense_growth, unsupervised]
 
+# Avaliacao: python -m src.evaluate.svm_spifil_dense --config <este arquivo>
+# SVM linear (fit_svm do repo) no GAP de cada estagio salvo; fit no treino (grid.percentage),
+# score no teste. So celulas com run_metadata status ok; linhas ja no CSV sao puladas.
+evaluate:
+  datasets: [eggs]
+  out_csv: results/svm_spifil_dense_results.csv
+  max_iter: -1                 # -1 = solver convergido, como eval_avg_pooling_48d
+  batch_size: 64
+  num_workers: 8
+
 # Execucao da grade (python -m src.modules.spifil_dense_growth_module --config <este arquivo>):
 # uma celula por subprocesso, log em <log_dir>/<dataset>_split<s>.log.
 run:

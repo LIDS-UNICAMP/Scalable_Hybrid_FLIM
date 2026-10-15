@@ -30,6 +30,7 @@ Quem não é executável (`constants.py`, `eval_plotter.py`, `wandb_resolver.py`
 | [`svm_distillation_conv.py`](svm_distillation_conv.py) | idem, só runs `next_layers_direct`, proj head cortada → [B, 48] | `results/svm_distillation_conv_results.csv` |
 | [`svm_distill_with_projection.py`](svm_distill_with_projection.py) | idem, proj head **mantida** → [B, 1280] | `results/svm_proj1280_*.csv` |
 | [`svm_flim_residual.py`](svm_flim_residual.py) | encoders FLIM residuais montados à mão (só eggs) | `results/svm_flim_residual_eggs.csv` |
+| [`svm_spifil_dense.py`](svm_spifil_dense.py) | rede densa crescida pelo SPiFiL: SVM no GAP de **cada estágio** (S … H); tudo do YAML: `--config configs/model/spifil_dense_growth.yaml` | `results/svm_spifil_dense_results.csv` |
 | [`svm_ijepa.py`](svm_ijepa.py) | embeddings I-JEPA (ViT-H/14) | `results/ijepa_svm_results.{csv,json}` |
 | [`classical_classifiers.py`](classical_classifiers.py) | kNN / QDA / RF / LightGBM / GP sobre embeddings congelados | `results/classical_classifiers_results.csv` |
 | [`tsne_analysis.py`](tsne_analysis.py) | t-SNE 2D do test set (FLIM destilado vs LeJEPA) | PNGs |
