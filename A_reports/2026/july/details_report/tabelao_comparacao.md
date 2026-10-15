@@ -15,6 +15,7 @@ entre os CSVs "ours" (macro) e os do Felipe (global). Ver C3 em `check_sanity.md
 | Head Sigmoid | nossa cabeça 1.401 params, sem ativação de saída | `results/sigmoid2l_test_results.csv` |
 | Head ReLU | idem + ReLU antes do Softmax | `results/relu2l_test_results.csv` |
 | Head Softplus | idem + Softplus antes do Softmax | `results/softplus2l_test_results.csv` |
+| SPiFiL denso (H) | rede densa skip+concat crescida bloco a bloco pelo SPiFiL, 960.552 params; SVM linear no GAP 1280-d do último estágio | `results/svm_spifil_dense_results.csv` |
 
 ---
 
@@ -125,6 +126,8 @@ dos CSVs dele — 0,85 s por imagem em eggs, incompatível com 48-d. Que a MLP d
 | protozoan | 75 | 0.837 ± 0.018 | 0.592 ± 0.019 | **0.910 ± 0.011** | 0.843 ± 0.023 | 0.380 ± 0.364 | _0.206 ± 0.004_ |
 
 **negrito** = melhor da linha · _itálico_ = pior da linha · — = não existe esse braço nesse percentual
+
+**SPiFiL denso (H), 2026-10-15:** eggs @**50%** → κ **0.824 ± 0.014** (splits 0.84 / 0.82 / 0.81). Só eggs a 50% até agora; nenhum outro braço desta tabela tem 50%, então fica fora das linhas acima.
 
 
 ## Tabelão 2 — Cohen κ por split (75% dos dados)
