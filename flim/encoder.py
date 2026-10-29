@@ -189,6 +189,14 @@ class Encoder(nn.Module):
             return x
         return self.blocks(x)
 
+    def train(self, mode: bool = True) -> "Encoder":
+        """BN de camada FLIM congelada fica em eval: running stats nao andam."""
+        super().train(mode)
+        for m in (self.blocks.modules() if mode and self.n_layers else ()):
+            if isinstance(m, nn.BatchNorm2d) and not m.weight.requires_grad:
+                m.eval()
+        return self
+
     def freeze(self, except_last: bool = False) -> "Encoder":
         """
         Congela tudo. ``except_last`` deixa treinavel so o bloco de maior indice

@@ -1,0 +1,41 @@
+# growth_layerwise5 + BatchNorm2d apos cada conv do encoder; o resto e identico (sem augmentation).
+# Cada Lk e cortada pelo SPiFiL (config do paper, runners/growth.py:LAYERWISE_SPECS)
+# sobre L1..L(k-1) ja treinadas; so Lk aprende, com um decoder novo por camada.
+# BN das camadas congeladas fica em eval (flim/encoder.py:Encoder.train): running stats nao andam.
+name:   spifil_growth_layerwise5_bn
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]
+
+resources:
+  gpu_ids:             [0, 1, 2, 3]
+  max_per_gpu:         1
+  cpus_per_experiment: 10
+  num_workers:         2
+
+runner_args:
+  layerwise:  5
+  embed_mode: flatten
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/layerwise5_bn
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  # Sem sonda SVM no treino: era ela que afogava a grade. O SVM roda so no eval_svm_layerwise5_bn.
+  SVM: false
+
+overrides:
+  model.init_args.batch_norm: true
+  # resources.num_workers nao chega no treino; os workers vem de configs/dataset/*/split_*.yaml.
+  data.init_args.num_workers: 4

@@ -238,6 +238,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
                             ``"flatten"`` SEMPRE explicito (growth.py:228, spifil_growth_loop.py:426);
                             e escolha DAQUELE experimento, nao default de biblioteca. So
                             avaliacao: nao entra na loss nem no gradiente.
+        batch_norm:         BatchNorm2d logo apos cada conv do encoder. Off por default.
     """
 
     def __init__(
@@ -263,6 +264,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         init_ckpt: str = "",
         fresh_decoder: bool = False,
         embed_mode: Optional[str] = None,
+        batch_norm: bool = False,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -315,6 +317,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
         ]
         self.encoder_out_channels: int = self.channels[-1]
         channels = self.channels
+        if batch_norm:
+            # conv -> BN -> ReLU -> pool; o loader FLIM ja leu o conv em `[0]`
+            for n in range(1, _arch["nlayers"] + 1):
+                self.model.encoder.blocks[f"conv{n}"].insert(1, nn.BatchNorm2d(channels[n]))
 
         # Reference copy of the FLIM kernels, taken before any gradient touches them, so
         # stage 2 can measure how far it drifted from the prior the markers produced.
@@ -669,6 +675,11 @@ class AutoEncoderFlimModule(pl.LightningModule):
         if self._train_loader_cache is None:
             self._train_loader_cache = self.trainer.datamodule.train_dataloader()
         return self._embeddings(self._train_loader_cache)
+
+    def on_train_epoch_start(self) -> None:
+        # Lightning 2.6 nao chama .train(); e o Encoder.train que poe BN congelado em eval
+        if self.hparams.batch_norm:
+            self.model.encoder.train()
 
     def on_fit_start(self) -> None:
         """Probe the untouched FLIM encoder before a single gradient step.
