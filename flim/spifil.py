@@ -621,7 +621,8 @@ def write_weights(out: Path, source: Path, arch: dict, layer: int, block) -> Non
     (out / "architecture.json").write_text(json.dumps(arch, indent=4) + "\n")
 
 
-def grown_arch(arch: dict, kernel_size: int, out_channels: int, pool_stride: int) -> dict:
+def grown_arch(arch: dict, kernel_size: int, out_channels: int, pool_stride: int,
+               dilation: int = 1) -> dict:
     """`arch` + uma camada. O decoder espelha este dicionario, entao ele basta.
 
     `ResNetDecoder` le `pooling.stride` de cada camada para escolher o fator de
@@ -637,7 +638,7 @@ def grown_arch(arch: dict, kernel_size: int, out_channels: int, pool_stride: int
         "conv": {
             "kernel_size": [kernel_size, kernel_size, 0],
             "nkernels_per_marker": out_channels,
-            "dilation_rate": [1, 1, 0],
+            "dilation_rate": [dilation, dilation, 0],
             "nkernels_per_image": out_channels,
             "noutput_channels": out_channels,
         },
@@ -652,7 +653,8 @@ def grown_arch(arch: dict, kernel_size: int, out_channels: int, pool_stride: int
 
 
 def _grow_random(arch_json: Path, flim_weights_path: Path, out: Path,
-                 out_channels: int, kernel_size: int, pool_stride: int, seed: int) -> int:
+                 out_channels: int, kernel_size: int, pool_stride: int, seed: int,
+                 dilation: int = 1) -> int:
     """`random_layer_classic`: acrescenta a camada como se o SPiFiL nao existisse.
 
     O caminho CLASSICO. Nao carrega checkpoint, nao le imagem, nao roda superpixel
@@ -677,7 +679,7 @@ def _grow_random(arch_json: Path, flim_weights_path: Path, out: Path,
 
     # kaiming_normal_ fan_out/relu: a inicializacao padrao de conv+ReLU. Bias zero
     # porque o do SPiFiL e -(K . media do patch) e aqui nao ha patch nenhum.
-    conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size)
+    conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size, dilation=dilation)
     torch.nn.init.kaiming_normal_(conv.weight, mode="fan_out", nonlinearity="relu")
     torch.nn.init.zeros_(conv.bias)
 
@@ -687,7 +689,7 @@ def _grow_random(arch_json: Path, flim_weights_path: Path, out: Path,
 
     # `write_weights` so quer `.conv`; sem `Learner` nao ha bloco de onde tira-lo.
     write_weights(out, flim_weights_path,
-                  grown_arch(arch, kernel_size, out_channels, pool_stride),
+                  grown_arch(arch, kernel_size, out_channels, pool_stride, dilation),
                   layer, SimpleNamespace(conv=conv))
 
     print(f"[grow] camada {layer} com {out_channels} filtros em {out}\n"
@@ -709,6 +711,7 @@ def grow(
     out_channels: int = 0,
     kernel_size: int = 3,
     pool_stride: int = 1,
+    dilation: int = 1,
     n_superpixels: int = 100,
     n_images: int = 200,
     image_size: int = 200,
@@ -775,7 +778,7 @@ def grow(
     # segue o fluxo normal e so troca os valores dos pesos la embaixo.
     if random_layer_classic:
         return _grow_random(arch_json, flim_weights_path, out,
-                            out_channels, kernel_size, pool_stride, seed)
+                            out_channels, kernel_size, pool_stride, seed, dilation)
 
     # Daqui para baixo o backbone e obrigatorio. Sem a guarda o `None` so
     # apareceria la dentro do `Trunk`, como AttributeError, e o erro apontaria
@@ -810,7 +813,7 @@ def grow(
     learn = Learner(
         data,
         ArchSpec(layers=[LayerSpec(
-            kernel_size=kernel_size, out_channels=out_channels,
+            kernel_size=kernel_size, out_channels=out_channels, dilation=dilation,
             pool_type="max" if pool_stride > 1 else "none",
             pool_stride=pool_stride,
         )]),
@@ -857,7 +860,7 @@ def grow(
               f"norma por filtro preservada, bias=0)")
 
     write_weights(out, flim_weights_path,
-                  grown_arch(arch, kernel_size, got, pool_stride), layer, block)
+                  grown_arch(arch, kernel_size, got, pool_stride, dilation), layer, block)
 
     learn.export(out / "spifil_bundle")  # labels{L}.txt: de que classe veio cada filtro
 

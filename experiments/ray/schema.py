@@ -74,13 +74,15 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         "superpixels", "budget_check", "layer_channels",
         # kernel de cada camada do layerwise; L1..L<n> do FLIM de partida, sem grow
         "layer_kernels", "layerwise_from_flim",
+        # dilation da conv e stride do max-pool (1 = sem pooling) de cada camada
+        "layer_dilations", "layer_pools",
     ),
     # `source` escolhe a varredura; as 4 seguintes so fazem sentido nas fontes
     # que varrem artifacts/ (distillation, growth_stages)
     "eval": (
         "probe", "freeze", "ckpt_selection",
         "source", "artifacts_dir", "run_filter", "family", "stages",
-        "require_status_ok", "results_csv", "embed_mode",
+        "require_status_ok", "results_csv", "embed_mode", "eval_set",
     ),
 }
 
@@ -416,7 +418,7 @@ class Experiment:
             raise ValueError("evaluate.SVM false no runner growth exige runner_args.layerwise "
                              "ou max_rounds 0")
         layerwise = self.runner_args.get("layerwise", 0)
-        for key in ("layer_channels", "layer_kernels"):
+        for key in ("layer_channels", "layer_kernels", "layer_dilations", "layer_pools"):
             value = self.runner_args.get(key)
             if value is not None and (
                 not isinstance(value, list) or len(value) != layerwise

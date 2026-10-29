@@ -623,6 +623,10 @@ def _run_svm_job(config: str) -> str:
     csv_path     = job["results_csv"]
     csv_path     = csv_path if os.path.isabs(csv_path) else os.path.join(_ROOT, csv_path)
     num_classes  = DATASET_NUM_CLASSES[dataset_name]
+    # Conjunto avaliado: "test" (default) ou "val" (= "validation" no descritor).
+    eval_set     = job.get("eval_set", "test")
+    if eval_set not in ("test", "val"):
+        raise ValueError(f"{cfg_path}: eval_set={eval_set!r} — use 'test' ou 'val'")
 
     row: dict = {
         "method":       job["method"],
@@ -635,6 +639,7 @@ def _run_svm_job(config: str) -> str:
         "dataset_name": dataset_name,
         "split":        split,
         "percentage":   percentage,
+        "eval_set":     eval_set,
         "dim":          "", "kappa": "", "acc": "", "f1": "",
         "ckpt_epoch":   "",
         "ckpt":         ckpt,
@@ -691,7 +696,7 @@ def _run_svm_job(config: str) -> str:
         X_train, y_train = _feats(_loader("train"))
         clf = fit_svm(X_train, y_train, tag=row["method"])
 
-        feats, y_true = _feats(_loader("test"))
+        feats, y_true = _feats(_loader("validation" if eval_set == "val" else "test"))
         y_pred = clf.predict(feats)
 
         metrics = compute_metrics(y_true=y_true, y_pred=y_pred,

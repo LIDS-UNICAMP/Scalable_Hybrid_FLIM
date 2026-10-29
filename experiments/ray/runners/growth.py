@@ -353,7 +353,11 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
             # `layer_kernels` da o kernel de cada camada (ex. 5,5,5,1,1); sem ela, `kernel_size` em todas
             kernels = exp.runner_args.get(
                 "layer_kernels", [exp.runner_args.get("kernel_size", 3)] * len(LAYERWISE_SPECS))
-            specs = [(w, s) for w, (_, s) in zip(widths, LAYERWISE_SPECS)]
+            # `layer_pools` da o stride do max-pool de cada camada (1 = sem pooling);
+            # `layer_dilations` a dilation da conv. Sem elas, LAYERWISE_SPECS e dilation 1
+            pools = exp.runner_args.get("layer_pools", [s for _, s in LAYERWISE_SPECS])
+            dilations = exp.runner_args.get("layer_dilations", [1] * len(LAYERWISE_SPECS))
+            specs = list(zip(widths, pools))
             # `layerwise_from_flim: n`: L1..Ln sao o FLIM de partida (_paths), sem grow;
             # o primeiro estagio `L{n}` treina essas n e o grow recomeca em L{n+1}
             start = exp.runner_args.get("layerwise_from_flim", 0)
@@ -372,10 +376,12 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                                  f"--out_channels={width}", f"--pool_stride={stride}",
                                  f"--ckpt={ckpt}"]
                                 + ([f"--kernel_size={kernels[k - 1]}"]
-                                   if "layer_kernels" in exp.runner_args else []))
+                                   if "layer_kernels" in exp.runner_args else [])
+                                + ([f"--dilation={dilations[k - 1]}"]
+                                   if "layer_dilations" in exp.runner_args else []))
                 elif _grow_once(exp, point, gpu_id, ckpt, arch, weights, grow_dir,
                                 out_channels=width, kernel_size=kernels[k - 1],
-                                pool_stride=stride) == GROW_EXHAUSTED:
+                                pool_stride=stride, dilation=dilations[k - 1]) == GROW_EXHAUSTED:
                     result["reason"] = f"spifil grow recusou L{k}: N <= D"
                     break
                 arch, weights = os.path.join(grow_dir, ARCH_JSON_FILENAME), grow_dir
