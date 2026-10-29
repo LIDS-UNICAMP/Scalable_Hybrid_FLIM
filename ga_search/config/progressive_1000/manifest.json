@@ -1,0 +1,83 @@
+{
+  "searches": 216,
+  "epochs_per_phase": 1000,
+  "training_patience": 50,
+  "monitor": "validation J",
+  "ga_patience": 3,
+  "one_per_class": true,
+  "test_used": false,
+  "configurations": [
+    {
+      "dataset": "helminth-eggs",
+      "resolution": 128,
+      "config": "ga_search/config/progressive_1000/eggs_r128.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "helminth-eggs",
+      "resolution": 160,
+      "config": "ga_search/config/progressive_1000/eggs_r160.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "helminth-eggs",
+      "resolution": 200,
+      "config": "ga_search/config/progressive_1000/eggs_r200.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "helminth-eggs",
+      "resolution": 256,
+      "config": "ga_search/config/progressive_1000/eggs_r256.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "helminth-larvae",
+      "resolution": 128,
+      "config": "ga_search/config/progressive_1000/larvae_r128.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "helminth-larvae",
+      "resolution": 160,
+      "config": "ga_search/config/progressive_1000/larvae_r160.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "helminth-larvae",
+      "resolution": 200,
+      "config": "ga_search/config/progressive_1000/larvae_r200.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "helminth-larvae",
+      "resolution": 256,
+      "config": "ga_search/config/progressive_1000/larvae_r256.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "protozoan-cysts",
+      "resolution": 128,
+      "config": "ga_search/config/progressive_1000/protozoan_r128.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "protozoan-cysts",
+      "resolution": 160,
+      "config": "ga_search/config/progressive_1000/protozoan_r160.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "protozoan-cysts",
+      "resolution": 200,
+      "config": "ga_search/config/progressive_1000/protozoan_r200.yaml",
+      "searches": 18
+    },
+    {
+      "dataset": "protozoan-cysts",
+      "resolution": 256,
+      "config": "ga_search/config/progressive_1000/protozoan_r256.yaml",
+      "searches": 18
+    }
+  ]
+}

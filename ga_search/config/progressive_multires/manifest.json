@@ -1,0 +1,857 @@
+{
+  "configurations": [
+    {
+      "dataset": "helminth-eggs",
+      "image_size": 128,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/eggs_r128.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_eggs_r128.yaml",
+      "ray_sha256": "8f33988aaef2153d201119972c0684d9c7fbbaf304a37f2dce9be423c6d3c391",
+      "searches": 18,
+      "sha256": "ca5adecb2f1c45fc9d3cf71664068b1c5f1dcd5578994d6378e4c37f77cc8c30"
+    },
+    {
+      "dataset": "helminth-eggs",
+      "image_size": 160,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/eggs_r160.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_eggs_r160.yaml",
+      "ray_sha256": "6d30c6b64c66eae57bb769d1e2f958345c2f9747f06127c6065211d6f82257e1",
+      "searches": 18,
+      "sha256": "5bf32f3354cdb80bc34acf6339571a95d80fdd4a9848272184b742991f3d2a23"
+    },
+    {
+      "dataset": "helminth-eggs",
+      "image_size": 200,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/eggs_r200.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_eggs_r200.yaml",
+      "ray_sha256": "b1c6fe8a971dab2c35158dc02bb665270ee61a0d2a894eb51f1616ac1dad2ed5",
+      "searches": 18,
+      "sha256": "10d0500c27a8d4cde451cef582058655836210d7fc7c312ed9f8ff8e21e3170c"
+    },
+    {
+      "dataset": "helminth-eggs",
+      "image_size": 256,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/eggs_r256.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_eggs_r256.yaml",
+      "ray_sha256": "ec715ccdf9c8cf10c1c97f7902c696ab8a80a1d2a226c2658649e98a0fb1876d",
+      "searches": 18,
+      "sha256": "727eaac91fa2551f47de2acb6ec6b574a216041d34603f2cf951cc71934302e7"
+    },
+    {
+      "dataset": "helminth-larvae",
+      "image_size": 128,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/larvae_r128.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_larvae_r128.yaml",
+      "ray_sha256": "f5fff477a41923bc707efcced88d6ac352170cba75fa7383562a26247d5b6d06",
+      "searches": 18,
+      "sha256": "f535ef100258145537ab56be87d28a5c55b1f4c71fe7b0b2ef87d92a50bc3b12"
+    },
+    {
+      "dataset": "helminth-larvae",
+      "image_size": 160,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/larvae_r160.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_larvae_r160.yaml",
+      "ray_sha256": "413ef30ab88fcbd8d0e05d3f4a8587fce6ae57713de9998221f4cea69bdb05bc",
+      "searches": 18,
+      "sha256": "b8394c059db8094e5e9b4364584269c07dd66f6f8857b58c4e18d71a22ad8e71"
+    },
+    {
+      "dataset": "helminth-larvae",
+      "image_size": 200,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/larvae_r200.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_larvae_r200.yaml",
+      "ray_sha256": "5f7eff70cceb9b71d9a89618c9815a635571649afa41bc859b7a873ad1d39cd5",
+      "searches": 18,
+      "sha256": "44f95d9cbf070db9814c88406df3b73dd2f6ac1ed19bb307ee55023e8aae8396"
+    },
+    {
+      "dataset": "helminth-larvae",
+      "image_size": 256,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/larvae_r256.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_larvae_r256.yaml",
+      "ray_sha256": "5be9c03e6ae95be11bd28d98df8e6aaafa04dcb4f5a7966fcfbc5330b71c1893",
+      "searches": 18,
+      "sha256": "4255d0b3ade70e536de944b4672ea0cbd89fb85a4dd1297233cd9879ccb8b177"
+    }
+  ],
+  "datasets": [
+    "helminth-eggs",
+    "helminth-larvae"
+  ],
+  "descriptor_records": [
+    {
+      "class_train_counts": {
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1,
+        "9": 13
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split1/data_descriptor_perc1.json",
+      "native_train_pool_count": 2555,
+      "percentage": 1,
+      "remaining_training_pool_count": 2048,
+      "sha256": "9894873bf16d0df5f1bf41286801d6d22bb450c502636495b5873d38d8aad4a4",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "5a1a4dd1b4d110cc77eaa2b8ae8e231025e0ebf9e207541b0fe6d57ff3b93b36",
+      "split": 1,
+      "train_count": 21,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 7,
+        "2": 1,
+        "3": 3,
+        "4": 2,
+        "5": 6,
+        "6": 7,
+        "7": 2,
+        "8": 4,
+        "9": 66
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split1/data_descriptor_perc5.json",
+      "native_train_pool_count": 2555,
+      "percentage": 5,
+      "remaining_training_pool_count": 2048,
+      "sha256": "7dec9e503ee721b33f4c6bea5ba97c84268d3a8126c88447d4e48f807aa719a4",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "5a1a4dd1b4d110cc77eaa2b8ae8e231025e0ebf9e207541b0fe6d57ff3b93b36",
+      "split": 1,
+      "train_count": 98,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 35,
+        "2": 8,
+        "3": 15,
+        "4": 12,
+        "5": 33,
+        "6": 37,
+        "7": 12,
+        "8": 23,
+        "9": 334
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split1/data_descriptor_perc25.json",
+      "native_train_pool_count": 2555,
+      "percentage": 25,
+      "remaining_training_pool_count": 2048,
+      "sha256": "0230410affeb6efb0faf5a1fe2e6c456a7ac8e46f4f84aac0c0990813ee0e3eb",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "5a1a4dd1b4d110cc77eaa2b8ae8e231025e0ebf9e207541b0fe6d57ff3b93b36",
+      "split": 1,
+      "train_count": 509,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 70,
+        "2": 16,
+        "3": 30,
+        "4": 24,
+        "5": 67,
+        "6": 75,
+        "7": 24,
+        "8": 47,
+        "9": 669
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split1/data_descriptor_perc50.json",
+      "native_train_pool_count": 2555,
+      "percentage": 50,
+      "remaining_training_pool_count": 2048,
+      "sha256": "95610ec8eb9dcc25df8c4fecc7c31ee2919d679ef84815967547436bfa2cab7a",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "5a1a4dd1b4d110cc77eaa2b8ae8e231025e0ebf9e207541b0fe6d57ff3b93b36",
+      "split": 1,
+      "train_count": 1022,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 105,
+        "2": 24,
+        "3": 45,
+        "4": 36,
+        "5": 101,
+        "6": 112,
+        "7": 36,
+        "8": 71,
+        "9": 1003
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split1/data_descriptor_perc75.json",
+      "native_train_pool_count": 2555,
+      "percentage": 75,
+      "remaining_training_pool_count": 2048,
+      "sha256": "7091341c8ac25e9d29fde4d4cdc6da1f28f6c99c8f188905e918628f76299d11",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "5a1a4dd1b4d110cc77eaa2b8ae8e231025e0ebf9e207541b0fe6d57ff3b93b36",
+      "split": 1,
+      "train_count": 1533,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 140,
+        "2": 32,
+        "3": 60,
+        "4": 49,
+        "5": 135,
+        "6": 150,
+        "7": 49,
+        "8": 95,
+        "9": 1338
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split1/data_descriptor_perc100.json",
+      "native_train_pool_count": 2555,
+      "percentage": 100,
+      "remaining_training_pool_count": 2048,
+      "sha256": "87647dfe49a61ec2c70c7408582e6b098ec768767e053ab748b044090cb90845",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "5a1a4dd1b4d110cc77eaa2b8ae8e231025e0ebf9e207541b0fe6d57ff3b93b36",
+      "split": 1,
+      "train_count": 2048,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1,
+        "9": 13
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split2/data_descriptor_perc1.json",
+      "native_train_pool_count": 2555,
+      "percentage": 1,
+      "remaining_training_pool_count": 2048,
+      "sha256": "4718000a02b114b492209236948f6e2cece7ee3aee028ddcc8e5ab55cefe2cdb",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "4d9218cddce5ff10ca38604be019eca6dc310d01e3e953e9e3a5283596df250b",
+      "split": 2,
+      "train_count": 21,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 7,
+        "2": 1,
+        "3": 3,
+        "4": 2,
+        "5": 6,
+        "6": 7,
+        "7": 2,
+        "8": 4,
+        "9": 66
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split2/data_descriptor_perc5.json",
+      "native_train_pool_count": 2555,
+      "percentage": 5,
+      "remaining_training_pool_count": 2048,
+      "sha256": "0e2e2ff7224bb89c7c558210df669f3a7e089ad86998b80c91124c463af96448",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "4d9218cddce5ff10ca38604be019eca6dc310d01e3e953e9e3a5283596df250b",
+      "split": 2,
+      "train_count": 98,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 35,
+        "2": 8,
+        "3": 15,
+        "4": 12,
+        "5": 33,
+        "6": 37,
+        "7": 12,
+        "8": 23,
+        "9": 334
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split2/data_descriptor_perc25.json",
+      "native_train_pool_count": 2555,
+      "percentage": 25,
+      "remaining_training_pool_count": 2048,
+      "sha256": "2b06b9144dbe9ada58fc74d086a25f77b3c6e4dcaa33362c7417ef95266c25e3",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "4d9218cddce5ff10ca38604be019eca6dc310d01e3e953e9e3a5283596df250b",
+      "split": 2,
+      "train_count": 509,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 70,
+        "2": 16,
+        "3": 30,
+        "4": 24,
+        "5": 67,
+        "6": 75,
+        "7": 24,
+        "8": 47,
+        "9": 669
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split2/data_descriptor_perc50.json",
+      "native_train_pool_count": 2555,
+      "percentage": 50,
+      "remaining_training_pool_count": 2048,
+      "sha256": "c7b54b95cbbbfd98eb8833b82433df4bea9632986dcb38a12b1cc1632e7729e6",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "4d9218cddce5ff10ca38604be019eca6dc310d01e3e953e9e3a5283596df250b",
+      "split": 2,
+      "train_count": 1022,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 105,
+        "2": 24,
+        "3": 45,
+        "4": 36,
+        "5": 101,
+        "6": 112,
+        "7": 36,
+        "8": 71,
+        "9": 1003
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split2/data_descriptor_perc75.json",
+      "native_train_pool_count": 2555,
+      "percentage": 75,
+      "remaining_training_pool_count": 2048,
+      "sha256": "5441e63e20126482904c6cbd724eafc58d593617762edcfd47cabdbfbed4b30b",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "4d9218cddce5ff10ca38604be019eca6dc310d01e3e953e9e3a5283596df250b",
+      "split": 2,
+      "train_count": 1533,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 140,
+        "2": 32,
+        "3": 60,
+        "4": 49,
+        "5": 135,
+        "6": 150,
+        "7": 49,
+        "8": 95,
+        "9": 1338
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split2/data_descriptor_perc100.json",
+      "native_train_pool_count": 2555,
+      "percentage": 100,
+      "remaining_training_pool_count": 2048,
+      "sha256": "592ece9c128ad35d43898733d6bf1e34cd8162e2dbe92076f7ef650fae7c8f6c",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "4d9218cddce5ff10ca38604be019eca6dc310d01e3e953e9e3a5283596df250b",
+      "split": 2,
+      "train_count": 2048,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 1,
+        "2": 1,
+        "3": 1,
+        "4": 1,
+        "5": 1,
+        "6": 1,
+        "7": 1,
+        "8": 1,
+        "9": 13
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split3/data_descriptor_perc1.json",
+      "native_train_pool_count": 2555,
+      "percentage": 1,
+      "remaining_training_pool_count": 2048,
+      "sha256": "6affcb61699280c7882daefc6737c200fbae76702150dea7904c1019da0fe718",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "e2d06173eced76489ded4f4deb7db4ab70699faf5b7caac3a95aa397aedb6530",
+      "split": 3,
+      "train_count": 21,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 7,
+        "2": 1,
+        "3": 3,
+        "4": 2,
+        "5": 6,
+        "6": 7,
+        "7": 2,
+        "8": 4,
+        "9": 66
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split3/data_descriptor_perc5.json",
+      "native_train_pool_count": 2555,
+      "percentage": 5,
+      "remaining_training_pool_count": 2048,
+      "sha256": "15b49f1bf92ebd0e18fab72180971ef7c01cd101a13067f06dd0cee3891dced3",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "e2d06173eced76489ded4f4deb7db4ab70699faf5b7caac3a95aa397aedb6530",
+      "split": 3,
+      "train_count": 98,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 35,
+        "2": 8,
+        "3": 15,
+        "4": 12,
+        "5": 33,
+        "6": 37,
+        "7": 12,
+        "8": 23,
+        "9": 334
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split3/data_descriptor_perc25.json",
+      "native_train_pool_count": 2555,
+      "percentage": 25,
+      "remaining_training_pool_count": 2048,
+      "sha256": "d476a03c7033f605d5444162f65c94f05d0bf1478e723c67f6f88c12a30635da",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "e2d06173eced76489ded4f4deb7db4ab70699faf5b7caac3a95aa397aedb6530",
+      "split": 3,
+      "train_count": 509,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 70,
+        "2": 16,
+        "3": 30,
+        "4": 24,
+        "5": 67,
+        "6": 75,
+        "7": 24,
+        "8": 47,
+        "9": 669
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split3/data_descriptor_perc50.json",
+      "native_train_pool_count": 2555,
+      "percentage": 50,
+      "remaining_training_pool_count": 2048,
+      "sha256": "687e13443cab7b378d7f234669d0cb4ea6df1cb40f41e5eb887040247ec64a0e",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "e2d06173eced76489ded4f4deb7db4ab70699faf5b7caac3a95aa397aedb6530",
+      "split": 3,
+      "train_count": 1022,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 105,
+        "2": 24,
+        "3": 45,
+        "4": 36,
+        "5": 101,
+        "6": 112,
+        "7": 36,
+        "8": 71,
+        "9": 1003
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split3/data_descriptor_perc75.json",
+      "native_train_pool_count": 2555,
+      "percentage": 75,
+      "remaining_training_pool_count": 2048,
+      "sha256": "5751afe773dcad0f9ef39438af7bd5c6fe5f65ff514f670e6013c6b6952d7010",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "e2d06173eced76489ded4f4deb7db4ab70699faf5b7caac3a95aa397aedb6530",
+      "split": 3,
+      "train_count": 1533,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 140,
+        "2": 32,
+        "3": 60,
+        "4": 49,
+        "5": 135,
+        "6": 150,
+        "7": 49,
+        "8": 95,
+        "9": 1338
+      },
+      "dataset": "helminth-eggs",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-eggs/split3/data_descriptor_perc100.json",
+      "native_train_pool_count": 2555,
+      "percentage": 100,
+      "remaining_training_pool_count": 2048,
+      "sha256": "668dfbba118f4b59b1c03c8c9e1c5c92122ba524dfa84958e83600f96b1e0361",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-eggs/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "e2d06173eced76489ded4f4deb7db4ab70699faf5b7caac3a95aa397aedb6530",
+      "split": 3,
+      "train_count": 2048,
+      "validation_count": 507
+    },
+    {
+      "class_train_counts": {
+        "1": 1,
+        "2": 12
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split1/data_descriptor_perc1.json",
+      "native_train_pool_count": 1757,
+      "percentage": 1,
+      "remaining_training_pool_count": 1407,
+      "sha256": "06718468b4ab3d87f5304f976ab3d71d159e6fb64dc3367927b4f31480fce25c",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "b3d2e35df225aa770b8741368544df16d5f0d5975bf0e0e15e4ef469b7450ed3",
+      "split": 1,
+      "train_count": 13,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 8,
+        "2": 61
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split1/data_descriptor_perc5.json",
+      "native_train_pool_count": 1757,
+      "percentage": 5,
+      "remaining_training_pool_count": 1407,
+      "sha256": "b94142ac96f062fa3edbfa9bfe0c7d76839416ac6e24e053821cabddc9120570",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "b3d2e35df225aa770b8741368544df16d5f0d5975bf0e0e15e4ef469b7450ed3",
+      "split": 1,
+      "train_count": 69,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 44,
+        "2": 307
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split1/data_descriptor_perc25.json",
+      "native_train_pool_count": 1757,
+      "percentage": 25,
+      "remaining_training_pool_count": 1407,
+      "sha256": "b788ca9bb0932d44c9f0c2fa9d2c3f4781db9f47a02038f4765feb3e4f9e3412",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "b3d2e35df225aa770b8741368544df16d5f0d5975bf0e0e15e4ef469b7450ed3",
+      "split": 1,
+      "train_count": 351,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 89,
+        "2": 614
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split1/data_descriptor_perc50.json",
+      "native_train_pool_count": 1757,
+      "percentage": 50,
+      "remaining_training_pool_count": 1407,
+      "sha256": "cf54700d8f978010f35dc564a892fe336b81c33503476bb2e9fa8ac0bdce05a6",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "b3d2e35df225aa770b8741368544df16d5f0d5975bf0e0e15e4ef469b7450ed3",
+      "split": 1,
+      "train_count": 703,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 134,
+        "2": 921
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split1/data_descriptor_perc75.json",
+      "native_train_pool_count": 1757,
+      "percentage": 75,
+      "remaining_training_pool_count": 1407,
+      "sha256": "9e4eff15896d5559731e941bdde6e5da1143455ec25635cbb57bdf5f1d84b44e",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "b3d2e35df225aa770b8741368544df16d5f0d5975bf0e0e15e4ef469b7450ed3",
+      "split": 1,
+      "train_count": 1055,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 179,
+        "2": 1228
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split1/data_descriptor_perc100.json",
+      "native_train_pool_count": 1757,
+      "percentage": 100,
+      "remaining_training_pool_count": 1407,
+      "sha256": "720400ccf22e2032d0b292c3c90360c81f88171561f56057448215a44ef89ec8",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "b3d2e35df225aa770b8741368544df16d5f0d5975bf0e0e15e4ef469b7450ed3",
+      "split": 1,
+      "train_count": 1407,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 1,
+        "2": 12
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split2/data_descriptor_perc1.json",
+      "native_train_pool_count": 1757,
+      "percentage": 1,
+      "remaining_training_pool_count": 1407,
+      "sha256": "f2ecd88d68d209a89aba3f4ee6f1d5d546df53738622dd14afbd6a9ae8cce765",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "7eac59a998f2e6d5424cefe24a704c03977f300b130f91f31bce9becd0ca34f2",
+      "split": 2,
+      "train_count": 13,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 8,
+        "2": 61
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split2/data_descriptor_perc5.json",
+      "native_train_pool_count": 1757,
+      "percentage": 5,
+      "remaining_training_pool_count": 1407,
+      "sha256": "630763ab63067f2ee5278a639b35e2fdd0171ab39b9d2cff92edaf82d03d0b67",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "7eac59a998f2e6d5424cefe24a704c03977f300b130f91f31bce9becd0ca34f2",
+      "split": 2,
+      "train_count": 69,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 44,
+        "2": 307
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split2/data_descriptor_perc25.json",
+      "native_train_pool_count": 1757,
+      "percentage": 25,
+      "remaining_training_pool_count": 1407,
+      "sha256": "32e4ddfe88c62277bf6a7135de9b88aed91f762cc21d35633bb363a1d2f20bc7",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "7eac59a998f2e6d5424cefe24a704c03977f300b130f91f31bce9becd0ca34f2",
+      "split": 2,
+      "train_count": 351,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 89,
+        "2": 614
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split2/data_descriptor_perc50.json",
+      "native_train_pool_count": 1757,
+      "percentage": 50,
+      "remaining_training_pool_count": 1407,
+      "sha256": "59b303be3a93228ed9ed901bef9a61c4a4d51a6ba133bb9629888a962c0491bd",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "7eac59a998f2e6d5424cefe24a704c03977f300b130f91f31bce9becd0ca34f2",
+      "split": 2,
+      "train_count": 703,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 134,
+        "2": 921
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split2/data_descriptor_perc75.json",
+      "native_train_pool_count": 1757,
+      "percentage": 75,
+      "remaining_training_pool_count": 1407,
+      "sha256": "7a720b42548cff1a8f71bac2208c22a43c83628a32b548cca9e78e8f58b53bff",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "7eac59a998f2e6d5424cefe24a704c03977f300b130f91f31bce9becd0ca34f2",
+      "split": 2,
+      "train_count": 1055,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 179,
+        "2": 1228
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split2/data_descriptor_perc100.json",
+      "native_train_pool_count": 1757,
+      "percentage": 100,
+      "remaining_training_pool_count": 1407,
+      "sha256": "c5de19108698806c62b61d72802448758fbfa9f32b8eff0626ee1e8310c04a86",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "7eac59a998f2e6d5424cefe24a704c03977f300b130f91f31bce9becd0ca34f2",
+      "split": 2,
+      "train_count": 1407,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 1,
+        "2": 12
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split3/data_descriptor_perc1.json",
+      "native_train_pool_count": 1757,
+      "percentage": 1,
+      "remaining_training_pool_count": 1407,
+      "sha256": "309a6e59cca3f7fec335d8959026449bf73e307507a9dea6642df1a297afb405",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "5ab1f0ed679cf3d4cfcd8041d32d6ade5a5bf90cbdd3243551b977c0394fa45e",
+      "split": 3,
+      "train_count": 13,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 8,
+        "2": 61
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split3/data_descriptor_perc5.json",
+      "native_train_pool_count": 1757,
+      "percentage": 5,
+      "remaining_training_pool_count": 1407,
+      "sha256": "baf94301e700042c0702a44110293a6dead109eec0667f6f3699c12943d5f5ff",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "5ab1f0ed679cf3d4cfcd8041d32d6ade5a5bf90cbdd3243551b977c0394fa45e",
+      "split": 3,
+      "train_count": 69,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 44,
+        "2": 307
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split3/data_descriptor_perc25.json",
+      "native_train_pool_count": 1757,
+      "percentage": 25,
+      "remaining_training_pool_count": 1407,
+      "sha256": "8402b81d017b448dd58345988b8f71ca23bbd202489c5db98d8b86d5de0951bd",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "5ab1f0ed679cf3d4cfcd8041d32d6ade5a5bf90cbdd3243551b977c0394fa45e",
+      "split": 3,
+      "train_count": 351,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 89,
+        "2": 614
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split3/data_descriptor_perc50.json",
+      "native_train_pool_count": 1757,
+      "percentage": 50,
+      "remaining_training_pool_count": 1407,
+      "sha256": "56a46626684908ce58b2b766c3050aabe0e811d923f3f1848bca53903b05bc6a",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "5ab1f0ed679cf3d4cfcd8041d32d6ade5a5bf90cbdd3243551b977c0394fa45e",
+      "split": 3,
+      "train_count": 703,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 134,
+        "2": 921
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split3/data_descriptor_perc75.json",
+      "native_train_pool_count": 1757,
+      "percentage": 75,
+      "remaining_training_pool_count": 1407,
+      "sha256": "f6ffc118fcfe1ecb8407285ef5b9ac3542b80be7f0d8f9ed772cf1e3ea35b4e3",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "5ab1f0ed679cf3d4cfcd8041d32d6ade5a5bf90cbdd3243551b977c0394fa45e",
+      "split": 3,
+      "train_count": 1055,
+      "validation_count": 350
+    },
+    {
+      "class_train_counts": {
+        "1": 179,
+        "2": 1228
+      },
+      "dataset": "helminth-larvae",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/helminth-larvae/split3/data_descriptor_perc100.json",
+      "native_train_pool_count": 1757,
+      "percentage": 100,
+      "remaining_training_pool_count": 1407,
+      "sha256": "82fdd27acd6b06ddd0ec55b66845ee3d571428472e71b9b4ab6b5644a610dc94",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/helminth-larvae/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "5ab1f0ed679cf3d4cfcd8041d32d6ade5a5bf90cbdd3243551b977c0394fa45e",
+      "split": 3,
+      "train_count": 1407,
+      "validation_count": 350
+    }
+  ],
+  "image_sizes": [
+    128,
+    160,
+    200,
+    256
+  ],
+  "percentage_definition": "Per-class percentage of remaining80% training pool, floor, at least1 perclass",
+  "percentages": [
+    1,
+    5,
+    25,
+    50,
+    75,
+    100
+  ],
+  "protocol": "train_pool_stratified_fixed_validation_v1",
+  "seed": "42 + split",
+  "source": "Only native percentage100 train lists; no native validation/test samples consumed",
+  "spifil_donor_protocol": {
+    "helminth-eggs": {
+      "n_images": 20,
+      "one_per_class": true
+    },
+    "helminth-larvae": {
+      "n_images": 100,
+      "one_per_class": false,
+      "selection": "existing deterministic uniform slice of training IDs, capped by available samples"
+    }
+  },
+  "splits": [
+    1,
+    2,
+    3
+  ],
+  "total_searches": 144,
+  "validation_fixed_across_percentages_and_resolutions": true,
+  "validation_fraction": 0.2
+}

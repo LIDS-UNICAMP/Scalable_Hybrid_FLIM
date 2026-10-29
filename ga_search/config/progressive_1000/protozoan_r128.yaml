@@ -1,0 +1,144 @@
+mode: search
+synthetic: false
+dataset: protozoan-cysts
+split: 1
+percentage: 50
+output_dir: results/nas_multires_1000/protozoan-cysts/r128
+seed: 42
+device: auto
+image_size: 128
+in_channels: 3
+embedding_dim: 1280
+max_depth: 10
+batch_size: 16
+num_workers: 0
+epochs_a: 1000
+epochs_b: 1000
+lr: 0.001
+refine_lr: 0.0001
+auxiliary_init: he
+ssim_weight: 0.0
+complementary_svm: true
+spifil_in_image: true
+spifil_in_feature: false
+superpixels: slic
+n_superpixels: 450
+budget_check: true
+imagenet_norm: false
+impurities: false
+one_per_class: true
+paper_classes: false
+n_images: 20
+max_parameters: 2000000
+max_macs: 500000000
+max_latency_ms: null
+latency_warmup: 5
+latency_repeats: 20
+clustering:
+  sparsity_lambda: 0.004
+  min_coverage: 0.8
+  penalty: 1.0e12
+  min_cluster_size: 15
+  min_samples: 5
+  standardize: false
+genetic:
+  seed: 42
+  min_depth: 1
+  max_depth: 10
+  population_size: 6
+  generations: 5
+  elitism: 1
+  mutation_rate: 0.8
+  patience: 3
+  space:
+    kernel:
+    - 3
+    - 5
+    channels:
+    - 7
+    - 14
+    - 21
+    - 28
+    pool_stride:
+    - 1
+    - 2
+    bn:
+    - false
+    - true
+    dropout:
+    - 0.0
+    - 0.05
+    - 0.1
+    - 0.2
+    - 0.3
+    activation:
+    - relu
+    - relu6
+    - silu
+genome:
+  blocks:
+  - op: conv
+    kernel: 3
+    channels: 14
+    pool_stride: 2
+    bn: true
+    dropout: 0.0
+    activation: relu
+    connection: sequential
+  - op: conv
+    kernel: 3
+    channels: 14
+    pool_stride: 2
+    bn: true
+    dropout: 0.0
+    activation: relu
+    connection: sequential
+svm_scaler: true
+svm_max_iter: 10000
+wandb:
+  enabled: true
+  entity: ophira-ai
+  project: progressive_nas_ga
+  name: ga_protozoan_1000_r128
+  group: gpt_sol_G_A_1000_pat50_protozoan_r128
+  tags:
+  - gpt_sol_G_A
+  - multires
+  - train-only-fixed-holdout
+  - spifil
+  - genetic-search
+  - r128
+  - epochs1000
+  - training-patience50
+  - one-per-class
+  mode: online
+  upload_artifacts: true
+  init_timeout: 90
+dataset_config:
+  name: protozoan_trainonly_fixed_holdout
+  root: /dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts
+  images_dir: /dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/images
+  masks_dir: /dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/masks
+  split_json: /dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split{split}/data_descriptor_perc{pct}.json
+  has_mask: true
+  train_key: train
+  eval:
+    source: validation
+  classes:
+    1: Entamoeba coli
+    2: Entamoeba histolytica
+    3: Endolimax nana
+    4: Giardia intestinalis
+    5: Iodamoeba butschlii
+    6: Blastocystis hominis
+    7: Impurities
+  n_classes: 7
+  paper_classes:
+  - Entamoeba coli
+  - Entamoeba histolytica
+  - Endolimax nana
+  - Giardia intestinalis
+  - Iodamoeba butschlii
+  - Blastocystis hominis
+training_patience: 50
+training_min_delta: 0.0

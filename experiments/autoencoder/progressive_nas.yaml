@@ -1,0 +1,22 @@
+name: progressive_nas
+method: autoencoder
+runner: growth
+grid:
+  init: [flim]
+  datasets: [protozoan-cysts]
+  splits: [1]
+  percentages: [5]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+  num_workers: 0
+runner_args:
+  progressive_nas: ga_search/config/progressive_nas.yaml
+output:
+  work_dir: artifacts/progressive_nas_ray
+wandb:
+  enabled: false
+evaluate:
+  SVM: false
+skip: none

@@ -1,0 +1,34 @@
+name: progressive_nas_protozoan_r160
+method: autoencoder
+runner: growth
+grid:
+  init:
+  - flim
+  datasets:
+  - protozoan-cysts
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 1
+  - 5
+  - 25
+  - 50
+  - 75
+  - 100
+resources:
+  gpu_ids:
+  - 2
+  max_per_gpu: 1
+  cpus_per_experiment: 16
+  num_workers: 0
+runner_args:
+  progressive_nas: /dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/protozoan_r160.yaml
+output:
+  work_dir: results/nas_multires/protozoan-cysts/r160
+wandb:
+  enabled: false
+evaluate:
+  SVM: false
+skip: state

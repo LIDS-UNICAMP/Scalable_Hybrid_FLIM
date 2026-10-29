@@ -1,0 +1,64 @@
+# Production starting point; ten-block search is expensive. No external weights.
+mode: search
+synthetic: false
+dataset: protozoan-cysts
+split: 1
+percentage: 5
+output_dir: artifacts/progressive_nas
+seed: 42
+device: auto
+image_size: 200
+in_channels: 3
+embedding_dim: 1280
+max_depth: 10
+batch_size: 2
+num_workers: 0
+epochs_a: 5
+epochs_b: 5
+lr: 0.001
+refine_lr: 0.0001
+auxiliary_init: he
+ssim_weight: 0.0
+complementary_svm: true
+spifil_in_image: true
+spifil_in_feature: false
+superpixels: slic
+n_superpixels: 450
+budget_check: true
+imagenet_norm: false
+impurities: false
+one_per_class: true
+paper_classes: false
+n_images: 20
+max_parameters: 2000000
+max_macs: 500000000
+max_latency_ms: null
+latency_warmup: 5
+latency_repeats: 20
+clustering:
+  sparsity_lambda: 0.004  # alternate experiment: 0.04, with another output_dir
+  min_coverage: 0.8
+  penalty: 1.0e12
+  min_cluster_size: 15
+  min_samples: 5
+  standardize: false
+genetic:
+  seed: 42
+  min_depth: 1
+  max_depth: 10
+  population_size: 6
+  generations: 5
+  elitism: 1
+  mutation_rate: 0.8
+  patience: 3
+  space:
+    kernel: [3, 5]
+    channels: [14, 28, 42]
+    pool_stride: [1, 2]
+    bn: [false, true]
+    dropout: [0.0, 0.1]
+    activation: [relu, relu6, silu]
+genome:
+  blocks:
+    - {op: conv, kernel: 3, channels: 14, pool_stride: 2, bn: true, dropout: 0.0, activation: relu, connection: sequential}
+    - {op: conv, kernel: 3, channels: 14, pool_stride: 2, bn: true, dropout: 0.0, activation: relu, connection: sequential}

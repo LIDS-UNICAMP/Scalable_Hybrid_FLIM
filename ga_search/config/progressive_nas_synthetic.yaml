@@ -1,0 +1,60 @@
+# Small end-to-end demonstration; real SPiFiL fitting on annotated synthetic data.
+mode: search
+synthetic: true
+output_dir: artifacts/progressive_nas_synthetic
+seed: 23
+device: auto
+image_size: 200
+in_channels: 3
+embedding_dim: 1280
+max_depth: 10
+batch_size: 2
+num_workers: 0
+epochs_a: 1
+epochs_b: 1
+lr: 0.001
+refine_lr: 0.0001
+auxiliary_init: he
+ssim_weight: 0.0
+spifil_in_image: true
+spifil_in_feature: false
+superpixels: slic
+n_superpixels: 100
+budget_check: true
+imagenet_norm: false
+impurities: false
+one_per_class: true
+n_images: 20
+max_parameters: 2000000
+max_macs: 500000000
+max_latency_ms: null
+latency_warmup: 1
+latency_repeats: 3
+clustering:
+  sparsity_lambda: 0.004
+  min_coverage: 0.8
+  penalty: 1.0e12
+  min_cluster_size: 3
+  min_samples: 2
+  standardize: false
+genetic:
+  seed: 23
+  min_depth: 2
+  max_depth: 2
+  population_size: 2
+  generations: 2
+  elitism: 1
+  mutation_rate: 1.0
+  patience: 2
+  space:
+    kernel: [3, 5]
+    channels: [4, 6]
+    pool_stride: [2]
+    bn: [false, true]
+    dropout: [0.0]
+    activation: [relu, relu6, silu]
+# Used by --nas-mode train; search samples its own population.
+genome:
+  blocks:
+    - {op: conv, kernel: 3, channels: 4, pool_stride: 2, bn: true, dropout: 0.0, activation: relu, connection: sequential}
+    - {op: conv, kernel: 3, channels: 4, pool_stride: 2, bn: true, dropout: 0.0, activation: relu, connection: sequential}

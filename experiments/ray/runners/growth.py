@@ -295,6 +295,9 @@ def _grow_once(exp: Experiment, point: dict, gpu_id: int, ckpt: str, arch: str,
 def run_arm(exp: Experiment, point: dict, gpu_id: int,
             cpus: int = DEFAULT_CPUS_PER_EXPERIMENT, dry_run: bool = False) -> dict:
     """A cadeia sequencial inteira de UM braco, presa a `gpu_id` do inicio ao fim."""
+    if exp.runner_args.get("progressive_nas"):
+        from ga_search.progressive import run_ray_arm
+        return run_ray_arm(exp, point, gpu_id, cpus, dry_run=dry_run)
     tag = _tag(point)
     max_rounds = exp.runner_args.get("max_rounds", DEFAULT_MAX_ROUNDS)
     tolerance = exp.runner_args.get("kappa_tolerance", KAPPA_TOLERANCE)

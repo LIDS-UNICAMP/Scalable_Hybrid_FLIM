@@ -344,6 +344,10 @@ def _estimate(pool, args, ga_cfg, datasets):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--config-dir", default=str(Path(__file__).parent / "config"))
+    ap.add_argument("--progressive-nas", metavar="YAML", help="opt-in progressive SPiFiL NAS configuration")
+    ap.add_argument("--nas-mode", choices=("train", "search"))
+    ap.add_argument("--nas-output")
+    ap.add_argument("--nas-device")
     ap.add_argument("--datasets", nargs="+")
     ap.add_argument("--pcts", nargs="+", type=int)
     ap.add_argument("--splits", nargs="+", type=int)
@@ -354,6 +358,21 @@ def main():
     ap.add_argument("--n-jobs", type=int)
     ap.add_argument("--gpus", nargs="*", type=int)
     args = ap.parse_args()
+    if args.progressive_nas:
+        from ga_search.progressive import run_config
+        overrides = {}
+        for key, value in (("mode", args.nas_mode), ("output_dir", args.nas_output),
+                           ("device", args.nas_device)):
+            if value is not None:
+                overrides[key] = value
+        for key, values in (("dataset", args.datasets), ("split", args.splits), ("percentage", args.pcts)):
+            if values is not None:
+                if len(values) != 1:
+                    ap.error("progressive NAS runs one dataset/split/percentage per reserved growth arm")
+                overrides[key] = values[0]
+        result = run_config(args.progressive_nas, resume=args.resume, overrides=overrides)
+        print(json.dumps(result, indent=2))
+        return
     ga_cfg = yaml.safe_load((Path(args.config_dir) / "ga.yaml").read_text())
     par, sm = ga_cfg["parallel"], ga_cfg["smoke"]
     args.n_jobs = args.n_jobs or par["n_jobs"]

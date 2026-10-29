@@ -55,6 +55,7 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
     # :272-273). Sem elas um YAML pedindo `kernel_size: 5` ou a ablacao
     # `random_layer: true` e recusado com "chave desconhecida".
     "growth": (
+        "progressive_nas",
         "max_rounds", "kappa_tolerance", "rounds_patience", "embed_mode",
         # repassadas a `flim.spifil.grow` com o mesmo nome, defaults em
         # scripts/spifil_grow.py:594-634; o laco as encaminha em
@@ -397,12 +398,19 @@ class Experiment:
         )
         if self.runner == "eval":
             _check_eval_args(self.runner_args)
+        if self.runner == "growth" and "progressive_nas" in self.runner_args:
+            value = self.runner_args["progressive_nas"]
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("runner_args.progressive_nas must be a YAML path")
+            if len(self.runner_args) != 1:
+                raise ValueError("progressive_nas owns growth settings through its YAML; remove other runner_args")
         # as duas reescrevem a rodada, e de formas diferentes: o argparse de
         # scripts/spifil_growth_loop.py:407-417 recusava o par, e sem ele
         # experiments/ray/runners/growth.py:329 daria a vitoria ao head_finetune
         # Sem SVM o crescimento classico nao tem kappa para decidir a parada;
         # so o layerwise, que tem numero fixo de camadas, dispensa.
         if (self.runner == "growth" and not self.evaluate.SVM
+                and not self.runner_args.get("progressive_nas")
                 and not self.runner_args.get("layerwise")
                 and self.runner_args.get("max_rounds") != 0):
             raise ValueError("evaluate.SVM false no runner growth exige runner_args.layerwise "

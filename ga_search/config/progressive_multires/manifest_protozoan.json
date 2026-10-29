@@ -1,0 +1,482 @@
+{
+  "configurations": [
+    {
+      "dataset": "protozoan-cysts",
+      "image_size": 128,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/protozoan_r128.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_protozoan_r128.yaml",
+      "ray_sha256": "028bc061640f54c46d20ff636b658c1f594dc5ffbd02350440ae43909cbbec43",
+      "searches": 18,
+      "sha256": "c239a64571107141d837b1c13fde61d3d281230e9a5e8d8a2fbc964c83b43225"
+    },
+    {
+      "dataset": "protozoan-cysts",
+      "image_size": 160,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/protozoan_r160.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_protozoan_r160.yaml",
+      "ray_sha256": "307b5c217cc0aea2034f0e4e1fb5d082294b3480708231e61412b09bef188073",
+      "searches": 18,
+      "sha256": "274b1090d16e709151275c2774ecc0eefac8eea711d6ce3033bc7d2155f62a83"
+    },
+    {
+      "dataset": "protozoan-cysts",
+      "image_size": 200,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/protozoan_r200.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_protozoan_r200.yaml",
+      "ray_sha256": "9e63746c35e87a3e2ee3fe9fe81529d8ed240ebd705b413a3ccf20f49177e21e",
+      "searches": 18,
+      "sha256": "cd57205d617b0bee040488287528513631e42997ce4be5ab147cfabc57ee5d18"
+    },
+    {
+      "dataset": "protozoan-cysts",
+      "image_size": 256,
+      "progressive_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/protozoan_r256.yaml",
+      "ray_config": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/ray_protozoan_r256.yaml",
+      "ray_sha256": "ab91978c4a9f727100303c4fe5177753dccdfb52f16b765888528c4e78764986",
+      "searches": 18,
+      "sha256": "64dee9bf23be62fcadd6f8556473ea8f3cd104723c386589740ac619ce6ea4c6"
+    }
+  ],
+  "datasets": [
+    "protozoan-cysts"
+  ],
+  "descriptor_records": [
+    {
+      "class_train_counts": {
+        "1": 2,
+        "2": 1,
+        "3": 2,
+        "4": 2,
+        "5": 6,
+        "6": 1,
+        "7": 22
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split1/data_descriptor_perc1.json",
+      "native_train_pool_count": 4782,
+      "percentage": 1,
+      "remaining_training_pool_count": 3829,
+      "sha256": "88ad16d34a253b73ec6863b284be05c6204c64829e6730ba07b9c5249d15767d",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "49d0dda1e71104a0e7bb5cb6e9d6b5c2e62309e0d545c4455ea300cc2e573d73",
+      "split": 1,
+      "train_count": 36,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 14,
+        "2": 1,
+        "3": 14,
+        "4": 12,
+        "5": 30,
+        "6": 3,
+        "7": 114
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split1/data_descriptor_perc5.json",
+      "native_train_pool_count": 4782,
+      "percentage": 5,
+      "remaining_training_pool_count": 3829,
+      "sha256": "c3ba1786be6886e4cac02b62fd0c259f0852a4f0a1d1e10429829fb499982fb7",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "49d0dda1e71104a0e7bb5cb6e9d6b5c2e62309e0d545c4455ea300cc2e573d73",
+      "split": 1,
+      "train_count": 188,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 72,
+        "2": 8,
+        "3": 72,
+        "4": 64,
+        "5": 150,
+        "6": 19,
+        "7": 571
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split1/data_descriptor_perc25.json",
+      "native_train_pool_count": 4782,
+      "percentage": 25,
+      "remaining_training_pool_count": 3829,
+      "sha256": "a7d1df92975ae154fc4b4d365f8ed9f721f884e49b5bed06fc4eb223525f3450",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "49d0dda1e71104a0e7bb5cb6e9d6b5c2e62309e0d545c4455ea300cc2e573d73",
+      "split": 1,
+      "train_count": 956,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 144,
+        "2": 16,
+        "3": 145,
+        "4": 128,
+        "5": 300,
+        "6": 38,
+        "7": 1143
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split1/data_descriptor_perc50.json",
+      "native_train_pool_count": 4782,
+      "percentage": 50,
+      "remaining_training_pool_count": 3829,
+      "sha256": "b678d59baf5b785d3c40600f260bc855a69dcbe3c6a6b3703173a538089fd68f",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "49d0dda1e71104a0e7bb5cb6e9d6b5c2e62309e0d545c4455ea300cc2e573d73",
+      "split": 1,
+      "train_count": 1914,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 216,
+        "2": 24,
+        "3": 217,
+        "4": 192,
+        "5": 450,
+        "6": 57,
+        "7": 1715
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split1/data_descriptor_perc75.json",
+      "native_train_pool_count": 4782,
+      "percentage": 75,
+      "remaining_training_pool_count": 3829,
+      "sha256": "4b0d72aff2d3980af95f67bd3919268166e6b55a089ec42b30c2180ef737c4a1",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "49d0dda1e71104a0e7bb5cb6e9d6b5c2e62309e0d545c4455ea300cc2e573d73",
+      "split": 1,
+      "train_count": 2871,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 288,
+        "2": 32,
+        "3": 290,
+        "4": 256,
+        "5": 600,
+        "6": 76,
+        "7": 2287
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split1/data_descriptor_perc100.json",
+      "native_train_pool_count": 4782,
+      "percentage": 100,
+      "remaining_training_pool_count": 3829,
+      "sha256": "8ff53d0b405ab90d6d5322fa60162752464bd09e10a6a44276d416c986966d23",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split1/data_descriptor_perc100.json",
+      "source_train_sha256": "49d0dda1e71104a0e7bb5cb6e9d6b5c2e62309e0d545c4455ea300cc2e573d73",
+      "split": 1,
+      "train_count": 3829,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 2,
+        "2": 1,
+        "3": 2,
+        "4": 2,
+        "5": 6,
+        "6": 1,
+        "7": 22
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split2/data_descriptor_perc1.json",
+      "native_train_pool_count": 4782,
+      "percentage": 1,
+      "remaining_training_pool_count": 3829,
+      "sha256": "af868a81b5c5b12c8c795457705b39e5aceb337c8880abd77043476623d63d3a",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "b26b8ba541da9873e5dbc9596f340e0ca6cf43d12cdd20c448104c5dc5fe6125",
+      "split": 2,
+      "train_count": 36,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 14,
+        "2": 1,
+        "3": 14,
+        "4": 12,
+        "5": 30,
+        "6": 3,
+        "7": 114
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split2/data_descriptor_perc5.json",
+      "native_train_pool_count": 4782,
+      "percentage": 5,
+      "remaining_training_pool_count": 3829,
+      "sha256": "97ec1030598487ed8782ee4176f673b963017b4d21267cc518977938554a32e5",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "b26b8ba541da9873e5dbc9596f340e0ca6cf43d12cdd20c448104c5dc5fe6125",
+      "split": 2,
+      "train_count": 188,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 72,
+        "2": 8,
+        "3": 72,
+        "4": 64,
+        "5": 150,
+        "6": 19,
+        "7": 571
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split2/data_descriptor_perc25.json",
+      "native_train_pool_count": 4782,
+      "percentage": 25,
+      "remaining_training_pool_count": 3829,
+      "sha256": "5f8fef8e73b44929909df30f98587d4878022a05538a288e92912013f3bbceb9",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "b26b8ba541da9873e5dbc9596f340e0ca6cf43d12cdd20c448104c5dc5fe6125",
+      "split": 2,
+      "train_count": 956,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 144,
+        "2": 16,
+        "3": 145,
+        "4": 128,
+        "5": 300,
+        "6": 38,
+        "7": 1143
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split2/data_descriptor_perc50.json",
+      "native_train_pool_count": 4782,
+      "percentage": 50,
+      "remaining_training_pool_count": 3829,
+      "sha256": "417bb92c24ac1418f7859a7174183f0e04a4607f251f5e845cf1e180256c4400",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "b26b8ba541da9873e5dbc9596f340e0ca6cf43d12cdd20c448104c5dc5fe6125",
+      "split": 2,
+      "train_count": 1914,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 216,
+        "2": 24,
+        "3": 217,
+        "4": 192,
+        "5": 450,
+        "6": 57,
+        "7": 1715
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split2/data_descriptor_perc75.json",
+      "native_train_pool_count": 4782,
+      "percentage": 75,
+      "remaining_training_pool_count": 3829,
+      "sha256": "53bec8d84e3246d38ef2ae4d9f07296c21fc405016387494b1279678bf61b1fc",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "b26b8ba541da9873e5dbc9596f340e0ca6cf43d12cdd20c448104c5dc5fe6125",
+      "split": 2,
+      "train_count": 2871,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 288,
+        "2": 32,
+        "3": 290,
+        "4": 256,
+        "5": 600,
+        "6": 76,
+        "7": 2287
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split2/data_descriptor_perc100.json",
+      "native_train_pool_count": 4782,
+      "percentage": 100,
+      "remaining_training_pool_count": 3829,
+      "sha256": "6db049cce6af69d2fb922d8c5321b1c7b5784bf4bbc0eb9ec006efb2783cfa1c",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split2/data_descriptor_perc100.json",
+      "source_train_sha256": "b26b8ba541da9873e5dbc9596f340e0ca6cf43d12cdd20c448104c5dc5fe6125",
+      "split": 2,
+      "train_count": 3829,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 2,
+        "2": 1,
+        "3": 2,
+        "4": 2,
+        "5": 6,
+        "6": 1,
+        "7": 22
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split3/data_descriptor_perc1.json",
+      "native_train_pool_count": 4782,
+      "percentage": 1,
+      "remaining_training_pool_count": 3829,
+      "sha256": "03b8024d30cf54df8007bbbc290040e3992d6a97facdc5d21167084de2aaaaa7",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "86aa395082ffbf2d65de88103ca07ee32303d909bc426fe202d9e5a0d3b17da5",
+      "split": 3,
+      "train_count": 36,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 14,
+        "2": 1,
+        "3": 14,
+        "4": 12,
+        "5": 30,
+        "6": 3,
+        "7": 114
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split3/data_descriptor_perc5.json",
+      "native_train_pool_count": 4782,
+      "percentage": 5,
+      "remaining_training_pool_count": 3829,
+      "sha256": "d5fffaca4c77963df39960d516164894ab6a51527ad57732eccfe5803f4022e1",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "86aa395082ffbf2d65de88103ca07ee32303d909bc426fe202d9e5a0d3b17da5",
+      "split": 3,
+      "train_count": 188,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 72,
+        "2": 8,
+        "3": 72,
+        "4": 64,
+        "5": 150,
+        "6": 19,
+        "7": 571
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split3/data_descriptor_perc25.json",
+      "native_train_pool_count": 4782,
+      "percentage": 25,
+      "remaining_training_pool_count": 3829,
+      "sha256": "72eb24295efc17d0077703661948514001b185b7584d9178d3f9c1c4fede0850",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "86aa395082ffbf2d65de88103ca07ee32303d909bc426fe202d9e5a0d3b17da5",
+      "split": 3,
+      "train_count": 956,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 144,
+        "2": 16,
+        "3": 145,
+        "4": 128,
+        "5": 300,
+        "6": 38,
+        "7": 1143
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split3/data_descriptor_perc50.json",
+      "native_train_pool_count": 4782,
+      "percentage": 50,
+      "remaining_training_pool_count": 3829,
+      "sha256": "eb560855e881be1dccb3a860feb2cd5f0b055507c0d9dc73dc4ced1fd3a04ebc",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "86aa395082ffbf2d65de88103ca07ee32303d909bc426fe202d9e5a0d3b17da5",
+      "split": 3,
+      "train_count": 1914,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 216,
+        "2": 24,
+        "3": 217,
+        "4": 192,
+        "5": 450,
+        "6": 57,
+        "7": 1715
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split3/data_descriptor_perc75.json",
+      "native_train_pool_count": 4782,
+      "percentage": 75,
+      "remaining_training_pool_count": 3829,
+      "sha256": "b4aafe4250ebb956015f12ccb886b28a5cc8064dfb0929a1fab3497e080f491a",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "86aa395082ffbf2d65de88103ca07ee32303d909bc426fe202d9e5a0d3b17da5",
+      "split": 3,
+      "train_count": 2871,
+      "validation_count": 953
+    },
+    {
+      "class_train_counts": {
+        "1": 288,
+        "2": 32,
+        "3": 290,
+        "4": 256,
+        "5": 600,
+        "6": 76,
+        "7": 2287
+      },
+      "dataset": "protozoan-cysts",
+      "descriptor": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/progressive_multires/descriptors/protozoan-cysts/split3/data_descriptor_perc100.json",
+      "native_train_pool_count": 4782,
+      "percentage": 100,
+      "remaining_training_pool_count": 3829,
+      "sha256": "0c07f6b3d89d0d9fa889b0580f3492681cbf27b990efc22502ffefd3fc51ca5d",
+      "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/data/to_modules/new_split_parasito/protozoan-cysts/splits_incremental/split3/data_descriptor_perc100.json",
+      "source_train_sha256": "86aa395082ffbf2d65de88103ca07ee32303d909bc426fe202d9e5a0d3b17da5",
+      "split": 3,
+      "train_count": 3829,
+      "validation_count": 953
+    }
+  ],
+  "image_sizes": [
+    128,
+    160,
+    200,
+    256
+  ],
+  "percentage_definition": "Per-class percentage of remaining80% training pool, floor, at least1 perclass",
+  "percentages": [
+    1,
+    5,
+    25,
+    50,
+    75,
+    100
+  ],
+  "protocol": "train_pool_stratified_fixed_validation_v1",
+  "seed": "42 + split",
+  "source": "Only native percentage100 train lists; no native validation/test samples consumed",
+  "spifil_donor_protocol": {
+    "helminth-eggs": {
+      "n_images": 20,
+      "one_per_class": true
+    },
+    "helminth-larvae": {
+      "n_images": 100,
+      "one_per_class": false,
+      "selection": "existing deterministic uniform slice of training IDs, capped by available samples"
+    },
+    "protozoan-cysts": {
+      "n_images": 20,
+      "one_per_class": true
+    }
+  },
+  "splits": [
+    1,
+    2,
+    3
+  ],
+  "total_searches": 72,
+  "validation_fixed_across_percentages_and_resolutions": true,
+  "validation_fraction": 0.2
+}
