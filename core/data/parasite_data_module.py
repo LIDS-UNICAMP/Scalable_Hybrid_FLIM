@@ -84,6 +84,8 @@ class ParasiteDataModule(pl.LightningDataModule):
         use_mask: Reservado para suporte a mascara (ainda inativo).
         imagenet_norm: Aplica a normalizacao ImageNet nas transforms. Deve ficar
             desligado para entrada FLIM (LAB em [0,1]).
+        geo_aug: Flip H/V + rotacao de 90 graus so no treino com ``V_train=1``
+            (autoencoder); validacao e teste seguem sem augmentation.
         multicrop: Liga o multi-crop global/local no treino. Com
             ``multi_view=True`` usa :class:`MultiCropTransform` dentro do
             wrapper; com ``multi_view=False`` envolve o treino em
@@ -123,6 +125,7 @@ class ParasiteDataModule(pl.LightningDataModule):
         local_size: int = 96,
         global_scale: tuple[float, float] = (0.3, 1.0),
         local_scale: tuple[float, float] = (0.05, 0.3),
+        geo_aug: bool = False,
     ) -> None:
         super().__init__()
         self.split = split
@@ -141,6 +144,7 @@ class ParasiteDataModule(pl.LightningDataModule):
         self.loader = loader
         self.use_mask = use_mask
         self.imagenet_norm = imagenet_norm
+        self.geo_aug = geo_aug
 
         # Multi-crop (global/local). Com multicrop=True o treino usa
         # n_global + n_local views (escalas distintas, mesmo tamanho de saida)
@@ -228,7 +232,8 @@ class ParasiteDataModule(pl.LightningDataModule):
                 V=v,
                 image_size=self.image_size,
                 aug_transform=aug,
-                test_transform=test,
+                test_transform=build_test(self.image_size, self.imagenet_norm, geo_aug=True)
+                if self.geo_aug and set_name == "train" else test,
                 multicrop_transform=multicrop_tf if set_name == "train" else None,
             )
             for set_name, v in views.items()
