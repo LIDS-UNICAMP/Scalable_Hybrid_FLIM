@@ -53,7 +53,6 @@ verificacao e morre no primeiro assert que falhar. Mesmo estilo de
 from __future__ import annotations
 
 import copy
-import importlib.util
 import json
 import os
 import shutil
@@ -68,8 +67,10 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, _ROOT)
 
-from src.models.autoencoder_resnet import AutoEncoderFLIM  # noqa: E402
+from methods.autoencoder import AutoEncoderFLIM  # noqa: E402
 from flim.weights import shift_weights  # noqa: E402
+from flim.spifil import flim_kernels  # noqa: E402
+from experiments.ray.runners.growth import should_stop  # noqa: E402
 
 _EGGS_ARCH = os.path.join(_ROOT, "data", "to_mateus", "model",
                           "ch24_32_48_a0.5_f5", "eggs", "train1", "architecture.json")
@@ -77,14 +78,6 @@ _EGGS_ARCH = os.path.join(_ROOT, "data", "to_mateus", "model",
 # As duas unicas variantes de pooling que `spifil_grow.py` sabe escrever.
 _POOL_NONE = {"type": "none", "size": [3, 3, 0], "stride": 1}
 _POOL_MAX2 = {"type": "max_pool", "size": [3, 3, 0], "stride": 2}
-
-
-def _load(filename: str, module_name: str):
-    """Importa um irmao de scripts/ por caminho — nao existe scripts/__init__.py."""
-    spec = importlib.util.spec_from_file_location(module_name, os.path.join(_HERE, filename))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 # ── (a) forma do autoencoder crescido ─────────────────────────────────────────
@@ -105,7 +98,13 @@ def _grown(arch: dict, pooling: dict) -> dict:
 
 
 def _recon_shape(arch: dict) -> tuple:
-    model = AutoEncoderFLIM(arch=arch, in_channels=3, out_size=(200, 200))
+    # The current builder reads architecture JSON through flim.build.
+    with tempfile.TemporaryDirectory() as tmp:
+        arch_json = os.path.join(tmp, "architecture.json")
+        with open(arch_json, "w", encoding="utf-8") as stream:
+            json.dump(arch, stream)
+        model = AutoEncoderFLIM(arch_json=arch_json, init="random",
+                                in_channels=3, out_size=(200, 200))
     with torch.no_grad():
         return tuple(model(torch.zeros(2, 3, 200, 200)).shape)
 
@@ -142,7 +141,6 @@ _STOP_CASES = [
 
 
 def check_should_stop() -> None:
-    should_stop = _load("spifil_growth_loop.py", "spifil_growth_loop").should_stop
     for kappas, tol, patience, expected, why in _STOP_CASES:
         got = should_stop(kappas, tol, patience)
         assert got is expected, \
@@ -153,12 +151,6 @@ def check_should_stop() -> None:
 # ── (c) ida-e-volta do layout FLIM ────────────────────────────────────────────
 
 def check_flim_kernels_roundtrip() -> None:
-    path = os.path.join(_HERE, "spifil_grow.py")
-    if not os.path.isfile(path):
-        print("  (c) flim layout  SKIP  scripts/spifil_grow.py ainda nao existe")
-        return
-
-    flim_kernels = _load("spifil_grow.py", "spifil_grow").flim_kernels
     k, c, kh, kw = 7, 5, 3, 3
     weight = torch.from_numpy(np.random.RandomState(0).randn(k, c, kh, kw).astype(np.float32))
 
@@ -177,7 +169,8 @@ def check_stage3_freeze() -> None:
     from methods.autoencoder import AutoEncoderFlimModule  # noqa: E402
 
     with open(_EGGS_ARCH, encoding="utf-8") as f:
-        grown = _grown(json.load(f), _POOL_MAX2)
+        base = json.load(f)
+    grown = _grown(base, _POOL_MAX2)
     n = grown["nlayers"]
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -195,9 +188,14 @@ def check_stage3_freeze() -> None:
                 np.zeros((48 * 3 * 3, 48), dtype=np.float32))
 
         # ckpt da rodada anterior: 3 camadas => 3 blocos de decoder => delta = 1.
+        # Use real tensors: strict=False tolerates missing keys, not wrong shapes.
+        prev_arch_json = os.path.join(tmp, "previous_architecture.json")
+        with open(prev_arch_json, "w", encoding="utf-8") as stream:
+            json.dump(base, stream)
+        previous = AutoEncoderFLIM(arch_json=prev_arch_json, init="random")
         ckpt = os.path.join(tmp, "prev.ckpt")
-        torch.save({"state_dict": {f"model.decoder.blocks.{i}.conv1.weight": torch.zeros(1)
-                                   for i in range(3)}}, ckpt)
+        torch.save({"state_dict": {f"model.decoder.{key}": value
+                                   for key, value in previous.decoder.state_dict().items()}}, ckpt)
 
         module = AutoEncoderFlimModule(arch_json=arch_json, flim_weights_path=weights,
                                        freeze_encoder_flag=True, init_ckpt=ckpt)
