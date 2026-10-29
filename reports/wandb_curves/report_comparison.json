@@ -1,0 +1,79 @@
+[
+  {
+    "dataset": "helminth-eggs",
+    "percentage": 1,
+    "split": 1,
+    "resolution": 128,
+    "report_test_SPIFIL": 0.1278,
+    "report_test_SPIFIL_backprop": 0.2748,
+    "GA_validation_kappa": 0.22375226020812988,
+    "descriptive_delta_vs_backprop": -0.051047739791870106,
+    "svm_converged": false
+  },
+  {
+    "dataset": "helminth-eggs",
+    "percentage": 5,
+    "split": 1,
+    "resolution": 128,
+    "report_test_SPIFIL": 0.5852,
+    "report_test_SPIFIL_backprop": 0.6749,
+    "GA_validation_kappa": 0.12753605842590332,
+    "descriptive_delta_vs_backprop": -0.5473639415740967,
+    "svm_converged": false
+  },
+  {
+    "dataset": "helminth-eggs",
+    "percentage": 25,
+    "split": 1,
+    "resolution": 128,
+    "report_test_SPIFIL": 0.805,
+    "report_test_SPIFIL_backprop": 0.8698,
+    "GA_validation_kappa": 0.17754453420639038,
+    "descriptive_delta_vs_backprop": -0.6922554657936096,
+    "svm_converged": false
+  },
+  {
+    "dataset": "helminth-larvae",
+    "percentage": 1,
+    "split": 1,
+    "resolution": 128,
+    "report_test_SPIFIL": 0.0284,
+    "report_test_SPIFIL_backprop": 0.3485,
+    "GA_validation_kappa": 0.3265029788017273,
+    "descriptive_delta_vs_backprop": -0.02199702119827268,
+    "svm_converged": true
+  },
+  {
+    "dataset": "helminth-larvae",
+    "percentage": 5,
+    "split": 1,
+    "resolution": 128,
+    "report_test_SPIFIL": 0.5712,
+    "report_test_SPIFIL_backprop": 0.5971,
+    "GA_validation_kappa": 0.3625236749649048,
+    "descriptive_delta_vs_backprop": -0.23457632503509518,
+    "svm_converged": false
+  },
+  {
+    "dataset": "helminth-larvae",
+    "percentage": 25,
+    "split": 1,
+    "resolution": 128,
+    "report_test_SPIFIL": 0.8049,
+    "report_test_SPIFIL_backprop": 0.8318,
+    "GA_validation_kappa": 0.1996421217918396,
+    "descriptive_delta_vs_backprop": -0.6321578782081604,
+    "svm_converged": false
+  },
+  {
+    "dataset": "protozoan-cysts",
+    "percentage": 1,
+    "split": 1,
+    "resolution": 128,
+    "report_test_SPIFIL": 0.1447,
+    "report_test_SPIFIL_backprop": 0.4734,
+    "GA_validation_kappa": 0.2680974006652832,
+    "descriptive_delta_vs_backprop": -0.20530259933471678,
+    "svm_converged": false
+  }
+]

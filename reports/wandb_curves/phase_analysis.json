@@ -1,0 +1,101 @@
+[
+  {
+    "run": "Eggs5%",
+    "transitions": 65,
+    "valid_both": 3,
+    "J_worsened_first_B": 1,
+    "median_J_change_pct": -2.9566443427986866,
+    "valid_to_invalid": 3,
+    "L1_worsened_first_B": 35,
+    "bestB_better_than_bestA": 9,
+    "bestA_B_comparable": 12,
+    "winner": {
+      "individual_id": "4004ea08766a96997a9df221535cf614b53e32c7e199e192c8b9aa4d2c57c461",
+      "depth": 7,
+      "A_epochs": 80,
+      "B_epochs": 63,
+      "A_last": {
+        "J": 1000000000000.0,
+        "status": "invalid",
+        "validation_reconstruction_loss": 0.04315439017978175,
+        "coverage": 0.7495069033530573
+      },
+      "B_first": {
+        "J": 1000000000000.0,
+        "status": "invalid",
+        "validation_reconstruction_loss": 0.039576121034648054,
+        "coverage": 0.7218934911242604
+      },
+      "best_A": 0.2211925666224314,
+      "best_B": 0.2289177138929787,
+      "selected_phase": "A",
+      "selected_epoch": 30
+    }
+  },
+  {
+    "run": "Larvae25%",
+    "transitions": 95,
+    "valid_both": 24,
+    "J_worsened_first_B": 9,
+    "median_J_change_pct": -0.951668718129306,
+    "valid_to_invalid": 11,
+    "L1_worsened_first_B": 41,
+    "bestB_better_than_bestA": 31,
+    "bestA_B_comparable": 52,
+    "winner": {
+      "individual_id": "66c5ca97e34a3d4a7155f38586c2e39adebd6f2954e0f6867ef349e5b4dedc32",
+      "depth": 4,
+      "A_epochs": 51,
+      "B_epochs": 270,
+      "A_last": {
+        "J": 1000000000000.0,
+        "status": "invalid",
+        "validation_reconstruction_loss": 0.01350688132324389,
+        "coverage": 0.5628571428571428
+      },
+      "B_first": {
+        "J": 1000000000000.0,
+        "status": "invalid",
+        "validation_reconstruction_loss": 0.01393673496586936,
+        "coverage": 0.7571428571428571
+      },
+      "best_A": 0.31929965591140136,
+      "best_B": 0.11588081285502089,
+      "selected_phase": "B",
+      "selected_epoch": 220
+    }
+  },
+  {
+    "run": "Protozoan1%",
+    "transitions": 42,
+    "valid_both": 32,
+    "J_worsened_first_B": 18,
+    "median_J_change_pct": 0.049553132789159626,
+    "valid_to_invalid": 6,
+    "L1_worsened_first_B": 21,
+    "bestB_better_than_bestA": 17,
+    "bestA_B_comparable": 40,
+    "winner": {
+      "individual_id": "0178bd10785d2ecd1a53b772cb039d3b4715f3b86eb6335a8785eec99342e26d",
+      "depth": 4,
+      "A_epochs": 104,
+      "B_epochs": 78,
+      "A_last": {
+        "J": 0.2082669150201001,
+        "status": "ok",
+        "validation_reconstruction_loss": 0.024559680130117712,
+        "coverage": 0.9013641133263379
+      },
+      "B_first": {
+        "J": 0.2313062910218239,
+        "status": "ok",
+        "validation_reconstruction_loss": 0.036500994014433526,
+        "coverage": 0.8950682056663168
+      },
+      "best_A": 0.2062787323339629,
+      "best_B": 0.2052437355917435,
+      "selected_phase": "B",
+      "selected_epoch": 28
+    }
+  }
+]

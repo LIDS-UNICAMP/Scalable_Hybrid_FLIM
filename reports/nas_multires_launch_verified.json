@@ -1,0 +1,18 @@
+[
+  {
+    "dataset": "helminth-eggs",
+    "url": "https://wandb.ai/ophira-ai/progressive_nas_ga/runs/74b4e2341684",
+    "state": "running",
+    "step": 36,
+    "batch_size": 16,
+    "image_size": 128
+  },
+  {
+    "dataset": "helminth-larvae",
+    "url": "https://wandb.ai/ophira-ai/progressive_nas_ga/runs/2c7e59ba85c5",
+    "state": "running",
+    "step": 64,
+    "batch_size": 16,
+    "image_size": 128
+  }
+]

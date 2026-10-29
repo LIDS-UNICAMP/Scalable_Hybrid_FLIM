@@ -1,0 +1,250 @@
+{
+  "branch": "gpt_sol_G_A",
+  "search": {
+    "J": 0.004269879426892636,
+    "checkpoint": "/dados/home/moliveira/Scalable_Hybrid_FLIM/results/progressive_nas_validation/final_search/individuals/0229ac076462977f6885080ec3bfa7689104be4d0398031d00a28131d6716135/depth_2/selected.ckpt",
+    "checkpoint_id": "3aaa742638ec7ad4aac642d6c1316d8f93eb367adda7362e5f91a9c4f12f53fb",
+    "cost": {
+      "checkpoint_bytes": 453510,
+      "cpu_threads": 1,
+      "cuda_memory_allocated_baseline_bytes": null,
+      "cuda_peak_memory_bytes": null,
+      "device": "cpu",
+      "embedding_dim": 1280,
+      "hardware": "x86_64",
+      "inference_macs": 33360000,
+      "inference_macs_per_batch": 33360000,
+      "inference_parameters": 9486,
+      "latency_batch_size": 1,
+      "latency_ms_mean": 5.141695340474446,
+      "latency_ms_samples": [
+        5.299640819430351,
+        5.106091499328613,
+        5.019353702664375
+      ],
+      "latency_ms_std": 0.1171635383683828,
+      "latency_repeats": 3,
+      "latency_warmup": 1,
+      "mac_methodology": "Conv2d/Linear kernel terms; 1 multiply-accumulate = 1 MAC; biases and other operations excluded",
+      "parameters_total": 29926,
+      "parameters_trainable": 17461,
+      "precision": "float32"
+    },
+    "coverage": 1.0,
+    "dbcv": 0.9995818346339687,
+    "dbcv_status": "ok",
+    "dbi": 0.001085149579542399,
+    "dbi_norm": 0.0010839733063647621,
+    "depth": 2,
+    "effective_genome": {
+      "blocks": [
+        {
+          "activation": "relu6",
+          "bn": false,
+          "channels": 4,
+          "connection": "sequential",
+          "dropout": 0.0,
+          "kernel": 5,
+          "op": "conv",
+          "pool_stride": 2
+        },
+        {
+          "activation": "relu",
+          "bn": false,
+          "channels": 6,
+          "connection": "sequential",
+          "dropout": 0.0,
+          "kernel": 3,
+          "op": "conv",
+          "pool_stride": 2
+        }
+      ]
+    },
+    "embedding_path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/results/progressive_nas_validation/final_search/individuals/0229ac076462977f6885080ec3bfa7689104be4d0398031d00a28131d6716135/depth_2/embeddings.npz",
+    "embedding_shape": [
+      16,
+      1280
+    ],
+    "generations": 2,
+    "hoyer_mean": 0.202439496561667,
+    "hoyer_std": 0.004197049108132345,
+    "inference_path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/results/progressive_nas_validation/final_search/individuals/0229ac076462977f6885080ec3bfa7689104be4d0398031d00a28131d6716135/encoder_embedding.pt",
+    "lambda_recalculation": {
+      "0.004": 0.004269879426892636,
+      "0.04": 0.032943034511643494
+    },
+    "n_clusters": 2,
+    "population_size": 2,
+    "reason": "",
+    "resume": "passed; result and checkpoint unchanged",
+    "selected_epoch": 1,
+    "selected_phase": "B",
+    "spifil": [
+      {
+        "actual_channels": 4,
+        "fit_peak_cuda_bytes": null,
+        "fit_seconds": 0.4813134726136923,
+        "origin": "spifil",
+        "patch_count": 400,
+        "patch_dimension": 75,
+        "prefix_id": "empty_prefix",
+        "process_peak_rss_kib": 1040884,
+        "requested_channels": 4,
+        "sample_ids": [
+          "0_train_0000",
+          "1_train_0001",
+          "0_train_0002",
+          "1_train_0003"
+        ],
+        "seed": 23
+      },
+      {
+        "actual_channels": 6,
+        "fit_peak_cuda_bytes": null,
+        "fit_seconds": 0.42606971226632595,
+        "origin": "spifil",
+        "patch_count": 400,
+        "patch_dimension": 36,
+        "prefix_id": "85e18c7a5fb9caf7fb244b087eb06942b342d89cb8af0061a2ab503aed9ad6c6",
+        "process_peak_rss_kib": 1066088,
+        "requested_channels": 6,
+        "sample_ids": [
+          "0_train_0000",
+          "1_train_0001",
+          "0_train_0002",
+          "1_train_0003"
+        ],
+        "seed": 23
+      }
+    ],
+    "status": "ok",
+    "unique_candidates": 2,
+    "validation_reconstruction_loss": 0.7079077437520027
+  },
+  "tests": {
+    "duration_seconds": 27.777,
+    "legacy_equivalence": "passed",
+    "legacy_growth": "passed",
+    "ray_dry_run": "passed",
+    "status": "passed",
+    "unittest_count": 29
+  },
+  "train": {
+    "J": 0.17878231802718642,
+    "checkpoint": "/dados/home/moliveira/Scalable_Hybrid_FLIM/results/progressive_nas_validation/final_train/individuals/b20c2a97545ebc659224fa24afec4f66be0b7bacecb6969e072ff18f0e4503a3/depth_2/selected.ckpt",
+    "checkpoint_id": "4524f68df7a590eabed0f15c226ec188fd6a23ee8d7c0a282d14163a90a03432",
+    "cost": {
+      "checkpoint_bytes": 393102,
+      "cpu_threads": 1,
+      "cuda_memory_allocated_baseline_bytes": null,
+      "cuda_peak_memory_bytes": null,
+      "device": "cpu",
+      "embedding_dim": 1280,
+      "hardware": "x86_64",
+      "inference_macs": 18560000,
+      "inference_macs_per_batch": 18560000,
+      "inference_parameters": 6676,
+      "latency_batch_size": 1,
+      "latency_ms_mean": 4.3410807847976685,
+      "latency_ms_samples": [
+        4.577308893203735,
+        4.180995747447014,
+        4.264937713742256
+      ],
+      "latency_ms_std": 0.17051755105601157,
+      "latency_repeats": 3,
+      "latency_warmup": 1,
+      "mac_methodology": "Conv2d/Linear kernel terms; 1 multiply-accumulate = 1 MAC; biases and other operations excluded",
+      "parameters_total": 24458,
+      "parameters_trainable": 12243,
+      "precision": "float32"
+    },
+    "coverage": 0.9375,
+    "dbcv": 0.8539127876171829,
+    "dbcv_status": "ok",
+    "dbi": 0.21404049089565957,
+    "dbi_norm": 0.17630424396945032,
+    "depth": 2,
+    "effective_genome": {
+      "blocks": [
+        {
+          "activation": "relu",
+          "bn": true,
+          "channels": 4,
+          "connection": "sequential",
+          "dropout": 0.0,
+          "kernel": 3,
+          "op": "conv",
+          "pool_stride": 2
+        },
+        {
+          "activation": "relu",
+          "bn": true,
+          "channels": 4,
+          "connection": "sequential",
+          "dropout": 0.0,
+          "kernel": 3,
+          "op": "conv",
+          "pool_stride": 2
+        }
+      ]
+    },
+    "embedding_path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/results/progressive_nas_validation/final_train/individuals/b20c2a97545ebc659224fa24afec4f66be0b7bacecb6969e072ff18f0e4503a3/depth_2/embeddings.npz",
+    "embedding_shape": [
+      16,
+      1280
+    ],
+    "hoyer_mean": 0.20417724159652573,
+    "hoyer_std": 0.0019430103651320275,
+    "inference_path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/results/progressive_nas_validation/final_train/individuals/b20c2a97545ebc659224fa24afec4f66be0b7bacecb6969e072ff18f0e4503a3/encoder_embedding.pt",
+    "lambda_recalculation": {
+      "0.004": 0.17878231802718642,
+      "0.04": 0.20108498454681129
+    },
+    "n_clusters": 3,
+    "reason": "",
+    "resume": "passed; result and checkpoint unchanged",
+    "selected_epoch": 1,
+    "selected_phase": "B",
+    "spifil": [
+      {
+        "actual_channels": 4,
+        "fit_peak_cuda_bytes": null,
+        "fit_seconds": 0.46802410297095776,
+        "origin": "spifil",
+        "patch_count": 400,
+        "patch_dimension": 27,
+        "prefix_id": "empty_prefix",
+        "process_peak_rss_kib": 729880,
+        "requested_channels": 4,
+        "sample_ids": [
+          "0_train_0000",
+          "1_train_0001",
+          "0_train_0002",
+          "1_train_0003"
+        ],
+        "seed": 23
+      },
+      {
+        "actual_channels": 4,
+        "fit_peak_cuda_bytes": null,
+        "fit_seconds": 0.41708140820264816,
+        "origin": "spifil",
+        "patch_count": 400,
+        "patch_dimension": 36,
+        "prefix_id": "e856cadb61883932d56130b062cc7ffb122682fe0e45cf5951ec1311245e4b2e",
+        "process_peak_rss_kib": 1024668,
+        "requested_channels": 4,
+        "sample_ids": [
+          "0_train_0000",
+          "1_train_0001",
+          "0_train_0002",
+          "1_train_0003"
+        ],
+        "seed": 23
+      }
+    ],
+    "status": "ok",
+    "validation_reconstruction_loss": 2.133340746164322
+  }
+}

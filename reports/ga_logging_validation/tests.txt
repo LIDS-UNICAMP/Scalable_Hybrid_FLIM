@@ -1,0 +1,272 @@
+test_budget_exhaustion_is_explicit_no_random_fallback (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_budget_exhaustion_is_explicit_no_random_fallback) ... ok
+test_first_cuda_fit_initializes_memory_counters (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_first_cuda_fit_initializes_memory_counters) ... ok
+test_kernel5_real_filter_and_shape_contract (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_kernel5_real_filter_and_shape_contract) ... ok
+test_prefix_weights_bn_statistics_and_eval_are_preserved (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_prefix_weights_bn_statistics_and_eval_are_preserved) ... ok
+test_real_fit_actual_width_provenance_and_auxiliary_bn (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_real_fit_actual_width_provenance_and_auxiliary_bn) ... ok
+test_same_samples_seed_and_config_reproduce_real_filters (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_same_samples_seed_and_config_reproduce_real_filters) ... ok
+test_unsupported_ops_and_exclusive_modes_are_rejected (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_unsupported_ops_and_exclusive_modes_are_rejected) ... ok
+test_freeze_unfreeze_optimizer_and_checkpoint (analysis.checks.test_progressive_model.ProgressiveModelTests.test_freeze_unfreeze_optimizer_and_checkpoint) ... ok
+test_shapes_auxiliary_and_prefix (analysis.checks.test_progressive_model.ProgressiveModelTests.test_shapes_auxiliary_and_prefix) ... ok
+test_ten_depths (analysis.checks.test_progressive_model.ProgressiveModelTests.test_ten_depths) ... ok
+test_extract_artifact_and_modes (analysis.checks.test_progressive_metrics.MetricsTests.test_extract_artifact_and_modes) ... ok
+test_hoyer_extremes_and_scale (analysis.checks.test_progressive_metrics.MetricsTests.test_hoyer_extremes_and_scale) ... ok
+test_invalid_penalty (analysis.checks.test_progressive_metrics.MetricsTests.test_invalid_penalty) ... ok
+test_noise_excluded_from_dbi_and_coverage (analysis.checks.test_progressive_metrics.MetricsTests.test_noise_excluded_from_dbi_and_coverage) ... ok
+test_real_dbcv_and_backend_parameter_equivalence (analysis.checks.test_progressive_metrics.MetricsTests.test_real_dbcv_and_backend_parameter_equivalence) ... ok
+test_real_hdbscan_and_fitness (analysis.checks.test_progressive_metrics.MetricsTests.test_real_hdbscan_and_fitness) ... ok
+test_cache_all_identity_fields (analysis.checks.test_progressive_genetics.GeneticsTests.test_cache_all_identity_fields) ... ok
+test_generations_elitism_determinism_and_resume (analysis.checks.test_progressive_genetics.GeneticsTests.test_generations_elitism_determinism_and_resume) ... ok
+test_genome_rejection_and_prefix (analysis.checks.test_progressive_genetics.GeneticsTests.test_genome_rejection_and_prefix) ... ok
+test_invalid_result_is_not_silent (analysis.checks.test_progressive_genetics.GeneticsTests.test_invalid_result_is_not_silent) ... ok
+test_logger_events_do_not_change_search_or_rng (analysis.checks.test_progressive_genetics.GeneticsTests.test_logger_events_do_not_change_search_or_rng) ... ok
+test_logger_snapshot_isolation_and_all_invalid_summary (analysis.checks.test_progressive_genetics.GeneticsTests.test_logger_snapshot_isolation_and_all_invalid_summary) ... ok
+test_operators_valid_and_independent (analysis.checks.test_progressive_genetics.GeneticsTests.test_operators_valid_and_independent) ... ok
+test_complete_genetic_generation_and_resume (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_complete_genetic_generation_and_resume) ... [grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (0 sementes em 4 imagens, 0..0 por imagem | mascara ON)
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=75
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=18
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+GA generation=1 population=2
+GA evaluate generation=1 individual=1 genome=55236453bc0f cache=False
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS 276318cf depth=1 phase=A epoch=1 L1=1.18207 J=1e+12 status=invalid
+NAS 276318cf depth=1 phase=B epoch=1 L1=0.708986 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=100
+NAS 276318cf depth=2 phase=A epoch=1 L1=0.888207 J=1e+12 status=invalid
+NAS 276318cf depth=2 phase=B epoch=1 L1=0.661057 J=1e+12 status=invalid
+GA result generation=1 individual=1 status=invalid J=1000000000000.0 reason=fewer than two valid clusters or insufficient clustered samples
+GA evaluate generation=1 individual=2 genome=6666f953db54 cache=False
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=75
+NAS f12e037b depth=1 phase=A epoch=1 L1=0.764102 J=1e+12 status=invalid
+NAS f12e037b depth=1 phase=B epoch=1 L1=0.587994 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=36
+NAS f12e037b depth=2 phase=A epoch=1 L1=4.22333 J=1e+12 status=invalid
+NAS f12e037b depth=2 phase=B epoch=1 L1=0.923482 J=1e+12 status=invalid
+GA result generation=1 individual=2 status=invalid J=1000000000000.0 reason=fewer than two valid clusters or insufficient clustered samples
+GA generation_end=1 {'ga/valid_count': 0, 'ga/invalid_count': 2, 'ga/J_min': None, 'ga/J_mean': None, 'ga/J_max': None, 'ga/best_valid_J': None}
+GA generation=2 population=2
+GA evaluate generation=2 individual=1 genome=55236453bc0f cache=True
+GA result generation=2 individual=1 status=invalid J=1000000000000.0 reason=fewer than two valid clusters or insufficient clustered samples
+GA evaluate generation=2 individual=2 genome=6666f953db54 cache=False
+GA result generation=2 individual=2 status=invalid J=1000000000000.0 reason=fewer than two valid clusters or insufficient clustered samples
+GA generation_end=2 {'ga/valid_count': 0, 'ga/invalid_count': 2, 'ga/J_min': None, 'ga/J_mean': None, 'ga/J_max': None, 'ga/best_valid_J': None}
+ok
+test_constraints_and_training_only_donors (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_constraints_and_training_only_donors) ... [grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS e530024a infeasible: inference parameter/MAC constraint exceeded
+ok
+test_effective_width_cache_and_missing_checkpoint (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_effective_width_cache_and_missing_checkpoint) ... [grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS b10612a4 depth=1 phase=A epoch=1 L1=1.26362 J=1e+12 status=invalid
+NAS b10612a4 depth=1 phase=B epoch=1 L1=0.715119 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS 5cb19867 depth=1 phase=A epoch=1 L1=1.26362 J=1e+12 status=invalid
+NAS 5cb19867 depth=1 phase=B epoch=1 L1=0.715119 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS d9f9895f depth=1 phase=A epoch=1 L1=0.813523 J=1e+12 status=invalid
+NAS d9f9895f depth=1 phase=B epoch=1 L1=0.594042 J=1e+12 status=invalid
+ok
+test_mismatched_resume_does_not_overwrite_data_or_identity (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_mismatched_resume_does_not_overwrite_data_or_identity) ... ok
+test_two_depth_real_fit_interrupt_resume_and_inference (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_two_depth_real_fit_interrupt_resume_and_inference) ... [grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS b92607cb depth=1 phase=A epoch=1 L1=1.26362 J=1e+12 status=invalid
+NAS b92607cb depth=1 phase=B epoch=1 L1=0.715119 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=36
+NAS b92607cb depth=2 phase=A epoch=1 L1=0.790742 J=1e+12 status=invalid
+NAS b92607cb depth=2 phase=B epoch=1 L1=0.682439 J=1e+12 status=invalid
+ok
+test_auxiliary_policy_is_explicit (analysis.checks.test_progressive_config.ProgressiveConfigurationTests.test_auxiliary_policy_is_explicit) ... ok
+test_complementary_probe_reuses_canonical_svm (analysis.checks.test_progressive_config.ProgressiveConfigurationTests.test_complementary_probe_reuses_canonical_svm) ... SVM fit: 00:00 []SVM fit: 00:00 [, done]SVM fit: 00:00 [, done]
+ok
+test_configuration_rejections (analysis.checks.test_progressive_config.ProgressiveConfigurationTests.test_configuration_rejections) ... ok
+test_launcher_opt_in_does_not_change_legacy_selection (analysis.checks.test_progressive_config.ProgressiveConfigurationTests.test_launcher_opt_in_does_not_change_legacy_selection) ... ok
+test_invalid_workers (analysis.checks.test_progressive_cpu.CacheLoaderTests.test_invalid_workers) ... ok
+test_parallel_values_metadata_batches_and_rng (analysis.checks.test_progressive_cpu.CacheLoaderTests.test_parallel_values_metadata_batches_and_rng) ...   [NAS_COMPLEMENTARY] scaler=none;kernel=linear;C=100;ovo;max_iter=-1  fit_status=0  n_iter(max/sum)=1/1  n_sv=2  fit=0.0s
+ok
+test_single_process_restores_thread_limit_and_drop_last (analysis.checks.test_progressive_cpu.CacheLoaderTests.test_single_process_restores_thread_limit_and_drop_last) ... ok
+test_default_dbcv_scalar_identical_multiple_dimensions_and_noise (analysis.checks.test_progressive_dbcv.ParallelDBCVTests.test_default_dbcv_scalar_identical_multiple_dimensions_and_noise) ... ok
+test_mst_nodes_and_edges_identical_with_ties (analysis.checks.test_progressive_dbcv.ParallelDBCVTests.test_mst_nodes_and_edges_identical_with_ties) ... ok
+test_precomputed_gapped_labels_and_fallback (analysis.checks.test_progressive_dbcv.ParallelDBCVTests.test_precomputed_gapped_labels_and_fallback) ... ok
+test_disabled_sanitization_resume_and_threads_without_sdk (analysis.checks.test_progressive_logging.LoggerTests.test_disabled_sanitization_resume_and_threads_without_sdk) ... ok
+test_online_init_error_is_not_silently_downgraded (analysis.checks.test_progressive_logging.LoggerTests.test_online_init_error_is_not_silently_downgraded) ... ok
+test_real_offline_sdk_artifact_redaction_and_identity_resume (analysis.checks.test_progressive_logging.LoggerTests.test_real_offline_sdk_artifact_redaction_and_identity_resume) ... wandb: WARNING `resume` will be ignored since W&B syncing is set to `offline`. Starting a new run with run id abec68d78d65.
+wandb: Tracking run with wandb version 0.27.0
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /tmp/tmpokhv8apl/wandb/offline-run-20261026_085757-abec68d78d65
+GA result generation=1 individual=1 status=ok J=0.3 reason=
+GA generation_end=1 {'ga/valid_count': 1, 'ga/invalid_count': 0, 'ga/J_min': 0.3, 'ga/J_mean': 0.3, 'ga/J_max': 0.3, 'ga/best_valid_J': 0.3}
+wandb: 
+wandb: Run history:
+wandb:      clustering/DBI ▁
+wandb:      event_sequence ▁▅█
+wandb:            ga/J_max ▁
+wandb:           ga/J_mean ▁
+wandb:            ga/J_min ▁
+wandb:     ga/best_valid_J ▁
+wandb:       ga/generation ▁▁
+wandb: ga/individual_index ▁
+wandb:    ga/invalid_count ▁
+wandb:      ga/valid_count ▁
+wandb:                  +9 ...
+wandb: 
+wandb: Run summary:
+wandb:      clustering/DBI 0.4
+wandb:               event logger_finish
+wandb:      event_sequence 2
+wandb:  experiment/dataset synthetic
+wandb:            ga/J_max 0.3
+wandb:           ga/J_mean 0.3
+wandb:            ga/J_min 0.3
+wandb:     ga/best_valid_J 0.3
+wandb:       ga/generation 1
+wandb: ga/individual_index 1
+wandb:                 +13 ...
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /tmp/tmpokhv8apl/wandb/offline-run-20261026_085757-abec68d78d65
+wandb: Find logs at: /tmp/tmpokhv8apl/wandb/offline-run-20261026_085757-abec68d78d65/logs
+wandb: WARNING `resume` will be ignored since W&B syncing is set to `offline`. Starting a new run with run id abec68d78d65.
+wandb: Tracking run with wandb version 0.27.0
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /tmp/tmpokhv8apl/wandb/offline-run-20261026_085758-abec68d78d65
+wandb: 
+wandb: Run history:
+wandb: event_sequence ▁█
+wandb: 
+wandb: Run summary:
+wandb:              event logger_finish
+wandb:     event_sequence 4
+wandb: experiment/dataset synthetic
+wandb:    ga/best_valid_J 0.3
+wandb:             status finished
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /tmp/tmpokhv8apl/wandb/offline-run-20261026_085758-abec68d78d65
+wandb: Find logs at: /tmp/tmpokhv8apl/wandb/offline-run-20261026_085758-abec68d78d65/logs
+ok
+test_valid_only_generation_summary (analysis.checks.test_progressive_logging.LoggerTests.test_valid_only_generation_summary) ... GA generation_end=1 {'ga/valid_count': 2, 'ga/invalid_count': 1, 'ga/J_min': 0.4, 'ga/J_mean': 0.5, 'ga/J_max': 0.6, 'ga/best_valid_J': 0.4}
+GA generation_end=2 {'ga/valid_count': 0, 'ga/invalid_count': 1, 'ga/J_min': None, 'ga/J_mean': None, 'ga/J_max': None, 'ga/best_valid_J': 0.4}
+ok
+test_logging_infrastructure_failure_is_not_an_infeasible_candidate (analysis.checks.test_progressive_wandb_pipeline.WandbPipelineTests.test_logging_infrastructure_failure_is_not_an_infeasible_candidate) ... ok
+test_two_generations_real_offline_sdk_and_finished_resume (analysis.checks.test_progressive_wandb_pipeline.WandbPipelineTests.test_two_generations_real_offline_sdk_and_finished_resume) ... wandb: WARNING Changes to your `wandb` environment variables will be ignored because your `wandb` session has already started. For more information on how to modify your settings with `wandb.init()` arguments, please refer to https://wandb.me/wandb-init.
+wandb: WARNING `resume` will be ignored since W&B syncing is set to `offline`. Starting a new run with run id 102525cbc2ae.
+wandb: Tracking run with wandb version 0.27.0
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /tmp/nas-wandb-pipeline-z_9h3umq/experiment/wandb/offline-run-20261026_085759-102525cbc2ae
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+GA generation=1 population=2
+GA evaluate generation=1 individual=1 genome=55236453bc0f cache=False
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS da557e4e depth=1 phase=A epoch=1 L1=1.18207 J=1e+12 status=invalid
+NAS da557e4e depth=1 phase=B epoch=1 L1=0.708986 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=100
+NAS da557e4e depth=2 phase=A epoch=1 L1=0.888207 J=1e+12 status=invalid
+NAS da557e4e depth=2 phase=B epoch=1 L1=0.661057 J=1e+12 status=invalid
+GA result generation=1 individual=1 status=invalid J=1000000000000.0 reason=fewer than two valid clusters or insufficient clustered samples
+GA evaluate generation=1 individual=2 genome=6666f953db54 cache=False
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=75
+NAS 344ccf32 depth=1 phase=A epoch=1 L1=0.764102 J=1e+12 status=invalid
+NAS 344ccf32 depth=1 phase=B epoch=1 L1=0.587994 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=36
+NAS 344ccf32 depth=2 phase=A epoch=1 L1=4.22333 J=1e+12 status=invalid
+NAS 344ccf32 depth=2 phase=B epoch=1 L1=0.923482 J=1e+12 status=invalid
+GA result generation=1 individual=2 status=invalid J=1000000000000.0 reason=fewer than two valid clusters or insufficient clustered samples
+GA generation_end=1 {'ga/valid_count': 0, 'ga/invalid_count': 2, 'ga/J_min': None, 'ga/J_mean': None, 'ga/J_max': None, 'ga/best_valid_J': None}
+GA generation=2 population=2
+GA evaluate generation=2 individual=1 genome=55236453bc0f cache=True
+GA result generation=2 individual=1 status=invalid J=1000000000000.0 reason=fewer than two valid clusters or insufficient clustered samples
+GA evaluate generation=2 individual=2 genome=6666f953db54 cache=False
+GA result generation=2 individual=2 status=invalid J=1000000000000.0 reason=fewer than two valid clusters or insufficient clustered samples
+GA generation_end=2 {'ga/valid_count': 0, 'ga/invalid_count': 2, 'ga/J_min': None, 'ga/J_mean': None, 'ga/J_max': None, 'ga/best_valid_J': None}
+wandb: 
+wandb: Run history:
+wandb:                                         J ▁▁▁▁
+wandb:                             best/result/J ▁
+wandb:         best/result/cost/checkpoint_bytes ▁
+wandb:              best/result/cost/cpu_threads ▁
+wandb:            best/result/cost/embedding_dim ▁
+wandb:           best/result/cost/inference_macs ▁
+wandb: best/result/cost/inference_macs_per_batch ▁
+wandb:     best/result/cost/inference_parameters ▁
+wandb:       best/result/cost/latency_batch_size ▁
+wandb:          best/result/cost/latency_ms_mean ▁
+wandb:                                      +262 ...
+wandb: 
+wandb: Run summary:
+wandb:                                         J 1000000000000.0
+wandb:                             best/result/J 1000000000000.0
+wandb:         best/result/cost/checkpoint_bytes 396754
+wandb:              best/result/cost/cpu_threads 1
+wandb:            best/result/cost/embedding_dim 1280
+wandb:           best/result/cost/inference_macs 21120000
+wandb: best/result/cost/inference_macs_per_batch 21120000
+wandb:     best/result/cost/inference_parameters 6932
+wandb:       best/result/cost/latency_batch_size 1
+wandb:          best/result/cost/latency_ms_mean 8.41676
+wandb:                                      +318 ...
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /tmp/nas-wandb-pipeline-z_9h3umq/experiment/wandb/offline-run-20261026_085759-102525cbc2ae
+wandb: Find logs at: /tmp/nas-wandb-pipeline-z_9h3umq/experiment/wandb/offline-run-20261026_085759-102525cbc2ae/logs
+wandb: WARNING Changes to your `wandb` environment variables will be ignored because your `wandb` session has already started. For more information on how to modify your settings with `wandb.init()` arguments, please refer to https://wandb.me/wandb-init.
+wandb: WARNING `resume` will be ignored since W&B syncing is set to `offline`. Starting a new run with run id 102525cbc2ae.
+wandb: Tracking run with wandb version 0.27.0
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /tmp/nas-wandb-pipeline-z_9h3umq/experiment/wandb/offline-run-20261026_085808-102525cbc2ae
+wandb: 
+wandb: Run history:
+wandb:                             best/result/J ▁
+wandb:         best/result/cost/checkpoint_bytes ▁
+wandb:              best/result/cost/cpu_threads ▁
+wandb:            best/result/cost/embedding_dim ▁
+wandb:           best/result/cost/inference_macs ▁
+wandb: best/result/cost/inference_macs_per_batch ▁
+wandb:     best/result/cost/inference_parameters ▁
+wandb:       best/result/cost/latency_batch_size ▁
+wandb:          best/result/cost/latency_ms_mean ▁
+wandb:           best/result/cost/latency_ms_std ▁
+wandb:                                       +95 ...
+wandb: 
+wandb: Run summary:
+wandb:                             best/result/J 1000000000000.0
+wandb:         best/result/cost/checkpoint_bytes 396754
+wandb:              best/result/cost/cpu_threads 1
+wandb:            best/result/cost/embedding_dim 1280
+wandb:           best/result/cost/inference_macs 21120000
+wandb: best/result/cost/inference_macs_per_batch 21120000
+wandb:     best/result/cost/inference_parameters 6932
+wandb:       best/result/cost/latency_batch_size 1
+wandb:          best/result/cost/latency_ms_mean 8.41676
+wandb:           best/result/cost/latency_ms_std 0
+wandb:                                      +114 ...
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /tmp/nas-wandb-pipeline-z_9h3umq/experiment/wandb/offline-run-20261026_085808-102525cbc2ae
+wandb: Find logs at: /tmp/nas-wandb-pipeline-z_9h3umq/experiment/wandb/offline-run-20261026_085808-102525cbc2ae/logs
+ok
+test_missing_roots_partial_json_and_finished_job (analysis.checks.test_progressive_monitor.MonitorTests.test_missing_roots_partial_json_and_finished_job) ... ok
+test_remote_verified_sequence_lag_artifacts_and_safe_error (analysis.checks.test_progressive_monitor.MonitorTests.test_remote_verified_sequence_lag_artifacts_and_safe_error) ... ok
+test_unique_architectures_penalty_not_best_and_l1_not_fitness (analysis.checks.test_progressive_monitor.MonitorTests.test_unique_architectures_penalty_not_best_and_l1_not_fitness) ... ok
+
+----------------------------------------------------------------------
+Ran 47 tests in 46.816s
+
+OK

@@ -1,0 +1,14 @@
+/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib/python3.11/site-packages/torch/cuda/__init__.py:628: UserWarning: Can't initialize NVML
+  warnings.warn("Can't initialize NVML")
+check_spifil_growth
+  (a) grown decoder OK  (2, 3, 200, 200) para 3 camadas e para 4 nas duas variantes de pooling
+  (b) should_stop   OK  8 casos, tolerancia 0.01
+  (c) flim layout   OK  W(7, 5, 3, 3) -> .npy(45, 7) -> W, elemento a elemento
+[INFO] Loading FLIM Encoder
+[INFO] Loading Layer 1 weights
+[INFO] Loading Layer 2 weights
+[INFO] Loading Layer 3 weights
+[INFO] Loading Layer 4 weights
+[INFO] FLIM Encoder loaded successfully
+  (d) stage3 freeze OK  delta=1, treinam so encoder.blocks.conv4.* e decoder.blocks.0.* (8 tensores)
+ALL CHECKS PASSED

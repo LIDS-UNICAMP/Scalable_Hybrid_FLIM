@@ -1,0 +1,112 @@
+/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib/python3.11/site-packages/torch/cuda/__init__.py:628: UserWarning: Can't initialize NVML
+  warnings.warn("Can't initialize NVML")
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS b20c2a97 depth=1 phase=A epoch=1 L1=2.05925 J=0.00519393 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+NAS b20c2a97 depth=1 phase=B epoch=1 L1=0.764731 J=0.00524466 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=36
+NAS b20c2a97 depth=2 phase=A epoch=1 L1=0.723038 J=0.198227 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+NAS b20c2a97 depth=2 phase=B epoch=1 L1=0.709203 J=0.178782 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+train 0.17878231802718642
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS c1087034 depth=1 phase=A epoch=1 L1=1.88971 J=0.00531528 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+NAS c1087034 depth=1 phase=B epoch=1 L1=0.763965 J=0.00536797 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=100
+NAS c1087034 depth=2 phase=A epoch=1 L1=1.05375 J=0.196665 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+NAS c1087034 depth=2 phase=B epoch=1 L1=0.92191 J=0.208783 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=75
+NAS 0229ac07 depth=1 phase=A epoch=1 L1=0.784744 J=0.00426879 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+NAS 0229ac07 depth=1 phase=B epoch=1 L1=0.591407 J=0.00426819 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=36
+NAS 0229ac07 depth=2 phase=A epoch=1 L1=1.96714 J=0.00426996 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+NAS 0229ac07 depth=2 phase=B epoch=1 L1=0.744598 J=0.00426988 status=ok
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+/tmp/flim_nas_deps/hdbscan/validity.py:30: RuntimeWarning: overflow encountered in power
+  distance_matrix[distance_matrix != 0] = (1.0 / distance_matrix[
+search 0.004269879426892636

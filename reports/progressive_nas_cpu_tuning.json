@@ -1,0 +1,39 @@
+{
+  "before": {
+    "process_cpu_percent": 100.02,
+    "host_cpu_percent": 2.78,
+    "rss_gib": 1.8911731719970704,
+    "threads": 6.0,
+    "gpu_memory_mib": 1036.0,
+    "gpu_util_percent": 11.0
+  },
+  "after": {
+    "total_cpu_percent": 100.57,
+    "parent_rss_gib": 4.632892608642578,
+    "gpu_memory_mib": 844.0,
+    "gpu_util_percent": 0.0,
+    "cpu_peak_percent": 101.2,
+    "gpu_peak_percent": 0.0
+  },
+  "epoch_cycle_seconds": [
+    36.92777991294861,
+    34.52732038497925,
+    34.261539697647095,
+    35.934983253479004,
+    35.773329973220825
+  ],
+  "epoch_cycle_median_seconds": 35.773329973220825,
+  "runtime": {
+    "cpu_threads": 16,
+    "preload_workers": 32,
+    "dbcv_workers": 32,
+    "cpu_count": 96,
+    "pid": 1334308
+  },
+  "search_generation": 0,
+  "estimated_remaining_hours": [
+    4,
+    10
+  ],
+  "estimate_assumptions": "up to 20 new offspring, roughly 3-5 depths for feasible individuals; invalid candidates and cache reduce cost; deeper candidates may exceed the range"
+}

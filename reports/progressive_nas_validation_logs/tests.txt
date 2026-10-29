@@ -1,0 +1,88 @@
+/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib/python3.11/site-packages/torch/cuda/__init__.py:628: UserWarning: Can't initialize NVML
+  warnings.warn("Can't initialize NVML")
+test_budget_exhaustion_is_explicit_no_random_fallback (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_budget_exhaustion_is_explicit_no_random_fallback) ... ok
+test_kernel5_real_filter_and_shape_contract (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_kernel5_real_filter_and_shape_contract) ... ok
+test_prefix_weights_bn_statistics_and_eval_are_preserved (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_prefix_weights_bn_statistics_and_eval_are_preserved) ... ok
+test_real_fit_actual_width_provenance_and_auxiliary_bn (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_real_fit_actual_width_provenance_and_auxiliary_bn) ... ok
+test_same_samples_seed_and_config_reproduce_real_filters (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_same_samples_seed_and_config_reproduce_real_filters) ... ok
+test_unsupported_ops_and_exclusive_modes_are_rejected (analysis.checks.test_progressive_spifil.ProgressiveSPiFiLTests.test_unsupported_ops_and_exclusive_modes_are_rejected) ... ok
+test_freeze_unfreeze_optimizer_and_checkpoint (analysis.checks.test_progressive_model.ProgressiveModelTests.test_freeze_unfreeze_optimizer_and_checkpoint) ... ok
+test_shapes_auxiliary_and_prefix (analysis.checks.test_progressive_model.ProgressiveModelTests.test_shapes_auxiliary_and_prefix) ... ok
+test_ten_depths (analysis.checks.test_progressive_model.ProgressiveModelTests.test_ten_depths) ... ok
+test_extract_artifact_and_modes (analysis.checks.test_progressive_metrics.MetricsTests.test_extract_artifact_and_modes) ... ok
+test_hoyer_extremes_and_scale (analysis.checks.test_progressive_metrics.MetricsTests.test_hoyer_extremes_and_scale) ... ok
+test_invalid_penalty (analysis.checks.test_progressive_metrics.MetricsTests.test_invalid_penalty) ... ok
+test_noise_excluded_from_dbi_and_coverage (analysis.checks.test_progressive_metrics.MetricsTests.test_noise_excluded_from_dbi_and_coverage) ... ok
+test_real_dbcv_and_backend_parameter_equivalence (analysis.checks.test_progressive_metrics.MetricsTests.test_real_dbcv_and_backend_parameter_equivalence) ... ok
+test_real_hdbscan_and_fitness (analysis.checks.test_progressive_metrics.MetricsTests.test_real_hdbscan_and_fitness) ... ok
+test_cache_all_identity_fields (analysis.checks.test_progressive_genetics.GeneticsTests.test_cache_all_identity_fields) ... ok
+test_generations_elitism_determinism_and_resume (analysis.checks.test_progressive_genetics.GeneticsTests.test_generations_elitism_determinism_and_resume) ... ok
+test_genome_rejection_and_prefix (analysis.checks.test_progressive_genetics.GeneticsTests.test_genome_rejection_and_prefix) ... ok
+test_invalid_result_is_not_silent (analysis.checks.test_progressive_genetics.GeneticsTests.test_invalid_result_is_not_silent) ... ok
+test_operators_valid_and_independent (analysis.checks.test_progressive_genetics.GeneticsTests.test_operators_valid_and_independent) ... ok
+test_complete_genetic_generation_and_resume (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_complete_genetic_generation_and_resume) ... [grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (0 sementes em 4 imagens, 0..0 por imagem | mascara ON)
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=75
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=18
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS dec973d6 depth=1 phase=A epoch=1 L1=1.18207 J=1e+12 status=invalid
+NAS dec973d6 depth=1 phase=B epoch=1 L1=0.708986 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=100
+NAS dec973d6 depth=2 phase=A epoch=1 L1=0.888207 J=1e+12 status=invalid
+NAS dec973d6 depth=2 phase=B epoch=1 L1=0.661057 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=75
+NAS a93243e0 depth=1 phase=A epoch=1 L1=0.764102 J=1e+12 status=invalid
+NAS a93243e0 depth=1 phase=B epoch=1 L1=0.587994 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=36
+NAS a93243e0 depth=2 phase=A epoch=1 L1=4.22333 J=1e+12 status=invalid
+NAS a93243e0 depth=2 phase=B epoch=1 L1=0.923482 J=1e+12 status=invalid
+ok
+test_constraints_and_training_only_donors (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_constraints_and_training_only_donors) ... [grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS badd1aa6 infeasible: inference parameter/MAC constraint exceeded
+ok
+test_effective_width_cache_and_missing_checkpoint (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_effective_width_cache_and_missing_checkpoint) ... [grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS 47556fe7 depth=1 phase=A epoch=1 L1=1.26362 J=1e+12 status=invalid
+NAS 47556fe7 depth=1 phase=B epoch=1 L1=0.715119 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS b89be2be depth=1 phase=A epoch=1 L1=1.26362 J=1e+12 status=invalid
+NAS b89be2be depth=1 phase=B epoch=1 L1=0.715119 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS ff1a284a depth=1 phase=A epoch=1 L1=0.813523 J=1e+12 status=invalid
+NAS ff1a284a depth=1 phase=B epoch=1 L1=0.594042 J=1e+12 status=invalid
+ok
+test_mismatched_resume_does_not_overwrite_data_or_identity (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_mismatched_resume_does_not_overwrite_data_or_identity) ... ok
+test_two_depth_real_fit_interrupt_resume_and_inference (analysis.checks.test_progressive_pipeline.ProgressivePipelineTests.test_two_depth_real_fit_interrupt_resume_and_inference) ... [grow] superpixel no LAB (200, 200) -> sementes em (200, 200) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=27
+NAS 13ce4e84 depth=1 phase=A epoch=1 L1=1.26362 J=1e+12 status=invalid
+NAS 13ce4e84 depth=1 phase=B epoch=1 L1=0.715119 J=1e+12 status=invalid
+[grow] superpixel no LAB (200, 200) -> sementes em (100, 100) (400 sementes em 4 imagens, 100..100 por imagem | mascara ON)
+[grow] N=400 D=36
+NAS 13ce4e84 depth=2 phase=A epoch=1 L1=0.790742 J=1e+12 status=invalid
+NAS 13ce4e84 depth=2 phase=B epoch=1 L1=0.682439 J=1e+12 status=invalid
+ok
+test_auxiliary_policy_is_explicit (analysis.checks.test_progressive_config.ProgressiveConfigurationTests.test_auxiliary_policy_is_explicit) ... ok
+test_complementary_probe_reuses_canonical_svm (analysis.checks.test_progressive_config.ProgressiveConfigurationTests.test_complementary_probe_reuses_canonical_svm) ... SVM fit: 00:00 []SVM fit: 00:00 [, done]SVM fit: 00:00 [, done]
+ok
+test_configuration_rejections (analysis.checks.test_progressive_config.ProgressiveConfigurationTests.test_configuration_rejections) ... ok
+test_launcher_opt_in_does_not_change_legacy_selection (analysis.checks.test_progressive_config.ProgressiveConfigurationTests.test_launcher_opt_in_does_not_change_legacy_selection) ... ok
+
+----------------------------------------------------------------------
+Ran 29 tests in 27.777s
+
+OK
+  [NAS_COMPLEMENTARY] scaler=none;kernel=linear;C=100;ovo;max_iter=-1  fit_status=0  n_iter(max/sum)=1/1  n_sv=2  fit=0.0s

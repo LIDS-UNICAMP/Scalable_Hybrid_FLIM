@@ -1,0 +1,25 @@
+{"device": "cpu", "metric": "Euclidean", "n": 1, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Euclidean", "n": 17, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Euclidean", "n": 26, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Euclidean", "n": 97, "chunk": 32, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Euclidean", "n": 4103, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Euclidean", "n": 41, "chunk": 16, "zero": true, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Mahalanobis", "n": 1, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Mahalanobis", "n": 17, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Mahalanobis", "n": 26, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Mahalanobis", "n": 97, "chunk": 32, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Mahalanobis", "n": 4103, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cpu", "metric": "Mahalanobis", "n": 41, "chunk": 16, "zero": true, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Euclidean", "n": 1, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Euclidean", "n": 17, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Euclidean", "n": 26, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Euclidean", "n": 97, "chunk": 32, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Euclidean", "n": 4103, "chunk": 4096, "zero": false, "exact": false, "ranks_exact": true, "max_abs": 1.7881393432617188e-07}
+{"device": "cuda", "metric": "Euclidean", "n": 41, "chunk": 16, "zero": true, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Mahalanobis", "n": 1, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Mahalanobis", "n": 17, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Mahalanobis", "n": 26, "chunk": 4096, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Mahalanobis", "n": 97, "chunk": 32, "zero": false, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"device": "cuda", "metric": "Mahalanobis", "n": 4103, "chunk": 4096, "zero": false, "exact": false, "ranks_exact": true, "max_abs": 1.1920928955078125e-07}
+{"device": "cuda", "metric": "Mahalanobis", "n": 41, "chunk": 16, "zero": true, "exact": true, "ranks_exact": true, "max_abs": 0.0}
+{"status": "passed", "cases": 24, "cuda_available": true}

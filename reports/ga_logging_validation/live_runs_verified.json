@@ -1,0 +1,22 @@
+[
+  {
+    "dataset": "nas_protozoan_50_wandb",
+    "url": "https://wandb.ai/ophira-ai/progressive_nas_ga/runs/bb6b6236d6cc",
+    "state": "running",
+    "local_sequence": 65,
+    "remote_sequence": 59,
+    "last_event": "runtime_stage",
+    "last_J": 0.3691734588409122,
+    "last_coverage": 0.8327759197324415
+  },
+  {
+    "dataset": "nas_eggs_50_wandb",
+    "url": "https://wandb.ai/ophira-ai/progressive_nas_ga/runs/76e29b73043e",
+    "state": "running",
+    "local_sequence": 113,
+    "remote_sequence": 103,
+    "last_event": "runtime_stage",
+    "last_J": 1000000000000.0,
+    "last_coverage": 0.5770132916340891
+  }
+]

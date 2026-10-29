@@ -1,0 +1,17 @@
+/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib/python3.11/site-packages/torch/cuda/__init__.py:628: UserWarning: Can't initialize NVML
+  warnings.warn("Can't initialize NVML")
+preflight: experiments/autoencoder/progressive_nas.yaml
+  method=autoencoder  runner=growth  grade=1 ponto
+
+ESTRUTURA ............................................................ ok (5/5)
+GRADE ................................................................ ok (6/6)
+DISCO ................................................................ ok (5/5)
+
+preflight: 1 ponto, 0 erros em 0 checagens
+======================================================================
+DRY RUN — progressive_nas (runner growth) — 1 ponto(s), 0 pulado(s)
+======================================================================
+  spifil_growth_progressive_nas_protozoan_split1_pct5_stage1
+    /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m ga_search.run_ga --progressive-nas ga_search/config/progressive_nas.yaml --resume --datasets protozoan-cysts --splits 1 --pcts 5 --nas-output artifacts/progressive_nas_ray/protozoan_split1_pct5 --nas-device cuda:0
+======================================================================
+1 ponto(s), 1 comando(s). Nada foi executado.

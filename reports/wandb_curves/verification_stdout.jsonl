@@ -1,0 +1,4 @@
+wandb: [wandb.Api()] Loaded credentials for https://api.wandb.ai from /dados/home/moliveira/.netrc.
+{"dataset": "helminth-eggs", "url": "https://wandb.ai/ophira-ai/progressive_nas_ga/runs/8b52a44ca3a9", "state": "finished", "winner_depth": 7, "epoch_points": 143, "remote_matched": 143, "remote_rows": 143, "mismatches": []}
+{"dataset": "helminth-larvae", "url": "https://wandb.ai/ophira-ai/progressive_nas_ga/runs/5d23dcfb1257", "state": "finished", "winner_depth": 4, "epoch_points": 321, "remote_matched": 321, "remote_rows": 322, "mismatches": []}
+{"dataset": "protozoan-cysts", "url": "https://wandb.ai/ophira-ai/progressive_nas_ga/runs/86ab1e8ffae1", "state": "finished", "winner_depth": 4, "epoch_points": 182, "remote_matched": 182, "remote_rows": 182, "mismatches": []}
