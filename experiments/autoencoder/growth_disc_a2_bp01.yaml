@@ -41,3 +41,4 @@ evaluate:
 overrides:
   model.init_args.max_epochs: 200
   trainer.max_epochs: 200
+  model.init_args.recon_bg_weight: 0.1   # base nova: fundo pesa 0.1 (achado L2 fundo)

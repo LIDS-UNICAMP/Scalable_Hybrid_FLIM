@@ -99,3 +99,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Mudança única: `recon_bg_weight: 0.1` (o peso do fundo na BCE cai de 1 para 0.1). YAML `growth_disc_a1_fg01.yaml`.
 - O mask50 estava no ponto 1/9 e testa máscara aleatória, que não é direcionada. Foi interrompido para liberar a GPU 3, e os parciais foram mantidos.
 - Critério: κ do SVM na val ≥ R1 e razão dentro/fora maior que no R1.
+
+## 2026-10-30: `recon_bg_weight: 0.1` vira a base dos runs ainda não lançados
+- Pedido do usuário: começar os treinos já levando o achado do fundo em conta.
+- Aplicado em R2 (8 camadas), nos controles rand / rand_s1 / rand_s2 e no bp01 (A2).
+- Pareamento: a base de comparação passa a ser o fg01. O R2 difere do fg01 só na profundidade, o controle rand difere do fg01 só na init, e o bp01 difere do fg01 só no backprop das camadas antigas. Continua uma mudança por candidato.
+- O R1 (BCE uniforme) fica como referência antiga. Se o fg01 perder κ na val para o R1, a base volta para 1.0 e esses runs são refeitos.
