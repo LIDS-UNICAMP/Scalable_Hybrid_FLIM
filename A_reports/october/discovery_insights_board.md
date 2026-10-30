@@ -271,3 +271,6 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
 
 ## [A0] R1 protozoan split1, κ val (2026-10-30)
 - L1 0.765, L2 0.833, L3 0.855. I-JEPA (teste) 0.864. É o dataset mais perto da meta (-0.009), e cada camada ainda soma κ (+0.07, +0.02), então a profundidade deve ajudar aqui.
+
+## [A0] R1 protozoan, κ val nos 3 splits (2026-10-30)
+- L1 0.765 / L2 0.825 / L3 0.848 (média; L3 por split 0.855, 0.843, 0.846). I-JEPA (teste) 0.864, faltam ~0.016. Cada camada ainda soma: candidato natural para o R2 (8 camadas).
