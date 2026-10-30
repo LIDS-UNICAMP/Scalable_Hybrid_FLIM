@@ -204,3 +204,33 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
 - SPiFiL cru: a L2 ativa só no ovo; o fundo fica ~0. Após o backprop, o fundo sobe na média dos canais e o canal 2 vira um detector de fundo (acende fora, apaga o ovo). Cos médio dos mapas cru vs treinado: 0,78.
 - Hipótese (SPiFiL): os seeds do SPiFiL vêm do objeto. A BCE de recon pesa cada pixel por igual e a maior parte da imagem é fundo, então o gradiente gasta filtros para redesenhar o fundo. Não é overfitting clássico (memorizar o treino); é um desvio do objetivo. Os filtros vão para onde está a loss, não para onde está a classe.
 - Teste com uma mudança: loss ponderada pelo objeto (máscara de foreground, sem rótulo de classe), ou recon só dentro do objeto. Métrica: κ do SVM na val e a fração de ativação fora do objeto.
+
+## 2026-10-30 [A3] máscara de objeto sem anotação vinda do SPiFiL cru (para o A1 ponderar a loss)
+- Teste com a L1 do grow (R1, split 1, 20 imagens de treino), filtro a filtro contra as máscaras de data/:
+  - Alguns filtros marcam o fundo quase perfeitamente (AUC ≈ 0) e outros o objeto (AUC até 0,82).
+  - A média de todos os filtros dá AUC 0,20 (invertida): por isso o "SPiFiL olha o objeto" só vale filtro a filtro.
+- Critério sem anotação: o objeto cobre 2–4% da imagem, então os filtros que disparam em mais pixels são os de fundo. Objeto = 1 − média dos 25% mais densos.
+  - AUC: eggs 0.936, larvae 0.998, protozoan 1.000.
+  - Pela "esparsidade" direta (média dos mais esparsos) fica pior: 0.78, 0.89, 0.89.
+- Pronto em `flim.spifil_a3.object_map(feats_L1) -> (B,1,H,W)`. Avisei o A1.
+- Ligação com o achado do A0 (o backprop puxa a L2 para o fundo): ponderar a reconstrução por esta máscara faz o decoder cobrar o objeto. Isso deve segurar a L2/L3 no objeto, como o SPiFiL cru faz.
+
+## 2026-10-30 03:55 [A1] base: ativação dentro vs fora do objeto; candidato A1-2 fg01 pronto (não lançado)
+- **Definição** (para o A2 usar a mesma). Para 200 imagens de val, split 1:
+  - ReLU(Lk), média nos canais; máscara de masks/ por nearest até o tamanho do mapa.
+  - `fora` = soma da ativação fora do objeto / soma total.
+  - `razão` = (densidade dentro) / (densidade fora).
+  - Script: scratchpad/bg_frac.py `<família> <dataset> <k>`.
+- **As imagens já vêm com o fundo de cor constante.** A máscara sem rótulo |LAB − mediana da borda| > 0.04 tem IoU 1.000 com masks/ (eggs; o objeto ocupa 3,2% da área). Dá para usar o foreground sem anotação e sem o object_map do A3.
+- **R1 eggs:**
+
+  | camada | fora (cru → treinado) | razão (cru → treinado) |
+  |---|---|---|
+  | L2 | 0.961 → 0.968 | 1.27× → 1.03× |
+  | L3 | 0.963 → 0.973 | 1.17× → 0.84× |
+
+  - O treino com BCE plena apaga o contraste objeto/fundo que o SPiFiL trazia. Na L3 a ativação passa a ser MAIOR no fundo. Isso confirma o achado do A0 em número.
+- **Candidato A1-2 `growth_disc_a1_fg01.yaml`:** R1 com `model.init_args.recon_bg_weight: 0.1` (BCE com peso 0.1 no fundo e 1 no objeto). Default 1.0 = comportamento de hoje.
+  - Hipótese SPiFiL: os seeds vêm do objeto. Tirar o fundo da loss deve manter a razão > 1 e o cosseno com o grow mais alto, e o κ val deve subir. Mesmo encoder do R1: 59.504 parâmetros.
+  - Dry-run com 9 pontos, 0 erros. Ainda não lançado: espera o A1-1 mask50 terminar (um experimento por agente) ou o A0 decidir trocar a ordem.
+- **A1-1 mask50, às 03:54:** só eggs s1 L1 e s2 L1–L2. A GPU 3 está com ~43 GB usados por 4 experimentos e está lenta. A val_recon_loss mascarada é ruidosa, então o early stop não corta e cada estágio vai até 200 épocas.

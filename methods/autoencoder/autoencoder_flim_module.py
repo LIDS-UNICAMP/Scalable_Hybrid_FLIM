@@ -242,6 +242,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
         mask_ratio:         fracao de patches ``mask_patch``x``mask_patch`` escondidos (media da
                             imagem) na entrada; a BCE so conta nos pixels escondidos. 0 = recon
                             plena (default, comportamento de hoje).
+        recon_bg_weight:    peso da BCE nos pixels de fundo (1 = todos iguais, default). O
+                            objeto sai da propria entrada, sem rotulo: distancia LAB > 0.04 da
+                            mediana da borda (as imagens ja vem com fundo constante).
     """
 
     def __init__(
@@ -270,6 +273,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         batch_norm: bool = False,
         mask_ratio: float = 0.0,
         mask_patch: int = 20,
+        recon_bg_weight: float = 1.0,
         old_layers: int = 0,
         old_layer_lr_scale: float = 0.1,
         new_layer_lr_scale: float = 1.0,
@@ -607,15 +611,25 @@ class AutoEncoderFlimModule(pl.LightningModule):
     def _recon_loss(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         target = self._target_from_input(x)
         r, k = self.hparams.mask_ratio, self.hparams.mask_patch
-        if r <= 0:
+        bg = self.hparams.recon_bg_weight
+        if r <= 0 and bg >= 1:
             logits = self(x)
             return self.criterion(logits, target), logits, target
         b, _, h, w = x.shape
-        m = (torch.rand(b, 1, -(-h // k), -(-w // k), device=x.device) < r).to(x.dtype)
-        m = m.repeat_interleave(k, 2).repeat_interleave(k, 3)[..., :h, :w]
-        logits = self(x * (1 - m) + m * x.mean((2, 3), keepdim=True))
+        m = torch.ones(b, 1, h, w, device=x.device, dtype=x.dtype)
+        if r > 0:
+            m = (torch.rand(b, 1, -(-h // k), -(-w // k), device=x.device) < r).to(x.dtype)
+            m = m.repeat_interleave(k, 2).repeat_interleave(k, 3)[..., :h, :w]
+            x = x * (1 - m) + m * x.mean((2, 3), keepdim=True)
+        if bg < 1:
+            edge = torch.cat([target[..., :4, :].flatten(2), target[..., -4:, :].flatten(2),
+                              target[..., :4].flatten(2), target[..., -4:].flatten(2)], 2)
+            fg = ((target - edge.median(2).values[..., None, None]).norm(dim=1, keepdim=True)
+                  > 0.04).to(x.dtype)
+            m = m * (bg + (1 - bg) * fg)
+        logits = self(x)
         per_px = nn.functional.binary_cross_entropy_with_logits(logits, target, reduction="none")
-        return (per_px * m).sum() / (m.sum() * x.shape[1]).clamp_min(1), logits, target
+        return (per_px * m).sum() / (m.sum() * target.shape[1]).clamp_min(1), logits, target
 
     def training_step(self, batch: Any, batch_idx: int) -> Tensor:
         views, y = batch  # y so entra na perda no braco head_finetune

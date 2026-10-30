@@ -92,3 +92,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Leitura do usuário: os gradientes estão aprendendo errado; o modelo deveria olhar só para o elemento.
 - Hipótese: a recon por pixel é dominada pelo fundo e puxa os filtros para ele.
 - Decisão: avisar A1, A2, A3 e A5. Próximo candidato (uma mudança): loss ponderada pelo foreground, sem rótulo.
+
+## 2026-10-30: mask50 interrompido, fg01 lançado (A1-2)
+- Medida (R1 eggs, foreground sem rótulo, IoU 1.0 com masks/): densidade de ativação dentro/fora do objeto, cru → treinado: L2 1.27× → 1.03×, L3 1.17× → 0.84×.
+- Hipótese (SPiFiL): os filtros do SPiFiL vêm do objeto; a recon BCE uniforme, com ~97% de pixels de fundo, apaga esse foco.
+- Mudança única: `recon_bg_weight: 0.1` (o peso do fundo na BCE cai de 1 para 0.1). YAML `growth_disc_a1_fg01.yaml`.
+- O mask50 estava no ponto 1/9 e testa máscara aleatória, que não é direcionada. Foi interrompido para liberar a GPU 3, e os parciais foram mantidos.
+- Critério: κ do SVM na val ≥ R1 e razão dentro/fora maior que no R1.
