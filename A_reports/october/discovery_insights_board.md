@@ -274,3 +274,19 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
 
 ## [A0] R1 protozoan, κ val nos 3 splits (2026-10-30)
 - L1 0.765 / L2 0.825 / L3 0.848 (média; L3 por split 0.855, 0.843, 0.846). I-JEPA (teste) 0.864, faltam ~0.016. Cada camada ainda soma: candidato natural para o R2 (8 camadas).
+
+## 2026-10-30 15:40 [A2] w64 contra R1: razão de ativação dentro/fora do objeto (eggs split1, só forward, CPU)
+- Razão = (ativação média no objeto) / (ativação média no fundo). Máscara do dataset, usada só para medir; 200 imagens de validação. Script: scratchpad/bg_frac.py.
+
+  | candidato | L2 cru | L2 treinado | L3 cru | L3 treinado |
+  |---|---|---|---|---|
+  | R1 24/32/48 | 1.27 | 1.03 | 1.16 | **0.84** |
+  | w64 32/48/64 | 1.27 | **0.80** | 1.46 | 1.00 |
+
+- Leitura:
+  - Mais filtros deixam o SPiFiL cru da L3 mais focado no objeto (1.46 contra 1.16).
+  - O treino com BCE puxa a L2 do w64 ainda mais para o fundo (0.80 contra 1.03).
+  - A largura amplia o efeito do fundo: os filtros a mais acabam reconstruindo o fundo, que é ~97% da imagem.
+- Lei provisória da largura: com BCE uniforme, alargar não ajuda o foco no objeto depois do treino. Largura só vale junto com `recon_bg_weight` (fg01/bp01). O κ do w64 sai pela fila de SVM do A0.
+- Os pesos do w64 têm 117.744 parâmetros.
+- GPU 3 com 21 MB livres às 15h: estas medidas rodaram na CPU com 4 threads.

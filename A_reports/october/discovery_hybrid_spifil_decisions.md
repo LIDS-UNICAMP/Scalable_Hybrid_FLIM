@@ -111,3 +111,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Parado o raw_vs_trained do A5; as 8 linhas já feitas ficam em results.jsonl.
 - Nenhum eval_svm até nova ordem. Só treino na GPU. A medida de ativação dentro/fora (só forward) continua liberada.
 - Pendentes para quando religar: val do resto do R1, w64, fg01, popz.
+
+## 2026-10-30 18:24: tudo sai da GPU 3 e vai para as GPUs 0, 1 e 2 (pedido do usuário)
+- A GPU 3 chegou a 47,8/49 GB, e um SVM do R1 caiu por OOM.
+- Paradas propositais: as sessões disc_*, svmq_* e watch_*, mais as esperas do A2 e do A3.
+- Relançado com skip: state, que pula os pontos prontos. Todos os YAMLs de treino e de eval agora têm gpu_ids [0, 1, 2] e max_per_gpu 1.
+- Cadeias em tmux: disc_a1_fg01; disc_a2 (w64 → bp01); disc_a3 (popz → sp200); disc_r2; disc_rand (rand → s1 → s2).
+- Cada treino, ao terminar, abre o svmq_<nome>. O SVM roda sob uma trava única (flock), um por vez. Monitor: tmux watch_disc.
