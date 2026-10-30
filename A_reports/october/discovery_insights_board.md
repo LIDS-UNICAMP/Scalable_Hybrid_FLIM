@@ -234,3 +234,18 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
   - Hipótese SPiFiL: os seeds vêm do objeto. Tirar o fundo da loss deve manter a razão > 1 e o cosseno com o grow mais alto, e o κ val deve subir. Mesmo encoder do R1: 59.504 parâmetros.
   - Dry-run com 9 pontos, 0 erros. Ainda não lançado: espera o A1-1 mask50 terminar (um experimento por agente) ou o A0 decidir trocar a ordem.
 - **A1-1 mask50, às 03:54:** só eggs s1 L1 e s2 L1–L2. A GPU 3 está com ~43 GB usados por 4 experimentos e está lenta. A val_recon_loss mascarada é ruidosa, então o early stop não corta e cada estágio vai até 200 épocas.
+
+## 2026-10-30 04:05 [A1] decisão: mask50 interrompido, fg01 lançado (com ok do A0)
+- **A1-1 mask50 parado.** Matei só as sessões tmux `disc_a1` e `watch_disc_a1`, e não sobrou processo órfão na GPU 3. O diretório parcial `.../spifil_growth/disc_a1_mask50` fica guardado. Ele não chegou a ter κ.
+- **Motivo:** a máscara aleatória não ataca o defeito medido. Do cru ao treinado, a razão de densidade dentro/fora do objeto cai de 1.27× para 1.03× na L2 (e de 1.17× para 0.84× na L3). A BCE plena puxa os filtros para o fundo.
+- **A1-2 fg01 lançado** no tmux `disc_a1_fg01`, com o watch em `watch_disc_a1_fg01` e o log em logs/disc_a1_fg01_tmux.log.
+
+## 2026-10-30 04:10 [A1] base também em larvae (R1 split 1)
+- A máscara sem rótulo também bate com masks/ (IoU 1.000; o objeto ocupa 1,9% da área).
+
+  | camada | razão dentro/fora (cru → treinado) |
+  |---|---|
+  | L2 | 2.75× → 1.34× |
+  | L3 | 2.36× → 1.31× |
+
+- O mesmo defeito do eggs: o treino com BCE plena corta o contraste do SPiFiL pela metade.

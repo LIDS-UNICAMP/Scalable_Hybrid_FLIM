@@ -75,3 +75,20 @@ def grow(**kwargs) -> int:
     with _swapped():
         print("[grow a3] z-score dos filtros sobre todos os patches candidatos")
         return _base.grow(**kwargs)
+
+
+def object_map(feats: torch.Tensor, frac: float = 0.25) -> torch.Tensor:
+    """Mascara de objeto SEM anotacao a partir da L1 do SPiFiL (B,C,H,W) -> (B,1,H,W) em [0,1].
+
+    O objeto ocupa 2-4% da imagem, entao os filtros que disparam em MAIS pixels sao
+    os de fundo: objeto = 1 - media dos `frac` mais densos, min-max por imagem.
+    AUC contra as mascaras de data/ (20 imagens de treino, split 1): eggs 0.936,
+    larvae 0.998, protozoan 1.000. Use com a L1 congelada (cosseno ~0.998 ao grow).
+    """
+    feats = feats.detach().relu()
+    density = (feats > 0).float().mean(dim=(0, 2, 3))
+    dense = density.argsort(descending=True)[: max(1, int(len(density) * frac))]
+    bg = feats[:, dense].mean(1, keepdim=True)
+    lo = bg.amin(dim=(2, 3), keepdim=True)
+    hi = bg.amax(dim=(2, 3), keepdim=True)
+    return 1 - (bg - lo) / (hi - lo + 1e-8)
