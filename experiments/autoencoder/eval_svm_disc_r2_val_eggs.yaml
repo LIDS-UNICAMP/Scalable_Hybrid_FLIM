@@ -1,0 +1,28 @@
+# SVM de checagem sobre cada camada da growth_disc_r2.
+name:   svm_disc_r2_val_eggs
+method: autoencoder
+runner: eval
+
+grid:
+  datasets:    [helminth-eggs]   # checagem da L4 (A4: sobreajuste?); camadas em treino saem com ckpt_epoch parcial
+  splits:      [1, 2, 3]
+  percentages: [50]
+
+runner_args:
+  probe:          svm
+  source:         growth_stages
+  family:         disc_r2
+  ckpt_selection: best
+  results_csv:    results/svm_disc_r2_val.csv
+  embed_mode:     flatten
+  eval_set:       val
+
+resources:
+  gpu_ids:             [0, 1, 2]
+  max_per_gpu:         1
+  cpus_per_experiment: 8
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_r2_val_eggs
+
+skip: state
