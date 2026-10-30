@@ -239,6 +239,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
                             e escolha DAQUELE experimento, nao default de biblioteca. So
                             avaliacao: nao entra na loss nem no gradiente.
         batch_norm:         BatchNorm2d logo apos cada conv do encoder. Off por default.
+        mask_ratio:         fracao de patches ``mask_patch``x``mask_patch`` escondidos (media da
+                            imagem) na entrada; a BCE so conta nos pixels escondidos. 0 = recon
+                            plena (default, comportamento de hoje).
     """
 
     def __init__(
@@ -265,6 +268,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
         fresh_decoder: bool = False,
         embed_mode: Optional[str] = None,
         batch_norm: bool = False,
+        mask_ratio: float = 0.0,
+        mask_patch: int = 20,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -596,8 +601,16 @@ class AutoEncoderFlimModule(pl.LightningModule):
 
     def _recon_loss(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         target = self._target_from_input(x)
-        logits = self(x)
-        return self.criterion(logits, target), logits, target
+        r, k = self.hparams.mask_ratio, self.hparams.mask_patch
+        if r <= 0:
+            logits = self(x)
+            return self.criterion(logits, target), logits, target
+        b, _, h, w = x.shape
+        m = (torch.rand(b, 1, -(-h // k), -(-w // k), device=x.device) < r).to(x.dtype)
+        m = m.repeat_interleave(k, 2).repeat_interleave(k, 3)[..., :h, :w]
+        logits = self(x * (1 - m) + m * x.mean((2, 3), keepdim=True))
+        per_px = nn.functional.binary_cross_entropy_with_logits(logits, target, reduction="none")
+        return (per_px * m).sum() / (m.sum() * x.shape[1]).clamp_min(1), logits, target
 
     def training_step(self, batch: Any, batch_idx: int) -> Tensor:
         views, y = batch  # y so entra na perda no braco head_finetune
