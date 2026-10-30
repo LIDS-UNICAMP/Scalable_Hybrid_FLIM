@@ -79,3 +79,110 @@ Agentes: **A0** = orquestrador (frente 1: baseline R1 e dilation R2), **A1** = f
 - Todo candidato inicializa as camadas com os kernels do SPiFiL, nunca aleatórios.
 - O melhor candidato de cada frente ganha um controle `random_layer_classic: true`, que o A0 roda. O SPiFiL tem de vencer esse controle.
 - Informe no bloco a similaridade de cosseno média entre os pesos de cada Lk no best ckpt e os do Lk_grow. Se os filtros se afastarem dos do SPiFiL, o ganho não conta.
+
+## 2026-10-30 [A4] Regras de treinamento (1ª análise: 23 estágios disc_* + 15 históricos, eggs/larvae a 50%)
+Fontes: ckpts best_kappa em artifacts/spifil_growth/disc_*/…/checkpoints e curvas `probe/val_recon_loss` pelo W&B (projeto flim-ssl). Os scripts estão no scratchpad a4/.
+1. **O "best" no fim é efeito do scheduler, não aprendizado.**
+   - O best sai nas épocas 193–199 de 200 (disc_r1, 21 de 22 estágios) e nas 964–990 de 1000 (layerwise5*).
+   - O early stop nunca dispara (wait_count 0 em todos os ckpts, patience 50).
+   - Com cosine até max_epochs, a lr vai a 0 e a loss cai ~1e-4 até o fim.
+2. **A loss chega a 1e-3 do mínimo cedo:** épocas 14–26 na L1, 8–11 na L2, 6–9 na L3, 8–11 nas L4–L5 (histórico).
+   - De 1000 para 200 épocas, o mínimo muda só 1,6e-4 (L1 eggs: 0.46743 → 0.46759).
+   - Camadas mais fundas convergem mais rápido.
+   - **Proposta:** max_epochs 60, cosine até 60, ~3x mais barato. Opcional: 60/40/30 para L1/L2/L3+. Antes de adotar, falta uma checagem: κ val de um ckpt de 60 épocas contra o de 200 numa célula.
+3. **A loss de reconstrução não prevê o κ.**
+   - Em eggs, a L3 tem loss maior que a L1 (0.4678 contra 0.4675), mas κ val maior (0.898 contra 0.891).
+   - Entre splits, a loss varia 1e-4 e o κ varia 2 pontos, sem correlação.
+   - O piso depende do dataset: eggs 0.4675, larvae 0.4649.
+   - **Regra:** a loss só serve para detectar NaN ou divergência. O ranking é sempre pelo SVM.
+4. **Largura, BN, aug e popz não mudam o piso da BCE.**
+   - O piso fica em 0.4674–0.4679: w64 (A2) 0.4677, popz (A3) 0.4679, bn 0.46743, aug 0.46743, R1 0.46759.
+   - A BN só atrasa a convergência: v10 0.4857 contra 0.4722; 1e-3 na época 43 contra 32.
+   - O efeito desses eixos, se houver, só aparece no SVM.
+   - A máscara (A1) tem piso 0.4794. Não é comparável, porque a loss só conta nos patches escondidos, e converge mais devagar (1e-3 nas épocas 37–42).
+5. **lr, wd e warmup nunca variaram:** 5e-4, 5e-2 e warmup 10 em todos os runs (configs/model/autoencoder/flim/helminth-eggs/split_1.yaml:8-9). Não há regra a tirar; é um eixo inexplorado.
+6. **Custo.**
+   - Sozinho na GPU: eggs 7,7–8,7 s/época, larvae 6–6,5 s/época.
+   - Com ~8 runs na GPU 3: 19–23 s/época, 2,5–3x mais lento. O gargalo é a CPU (load 111 em 96 núcleos).
+   - SVM flatten: ~4,4 min por job, 2 concorrentes (10 jobs em 22 min).
+7. **Contagem de parâmetros:** o state_dict tem o encoder duplicado, então a soma bruta dá o dobro. Real: L1 1.824, L3 ~59,5k.
+8. **Pendente:** a regra de profundidade (em que Lk o κ val para de subir e se a época do best muda) depende do R2 com 8 camadas e do novo teto de 5M de parâmetros.
+
+## 2026-10-30 01:50 [A2] o SPiFiL contribui? cos(pesos best, kernels do Lk_grow)
+- Formato: o `conv{k}-kernels.npy` do grow vem como (k·k·cin, cout), na ordem **HWC**. Comparar na ordem CHW dá cos≈0, um falso negativo.
+- disc_r1, cos médio por filtro:
+
+  | dataset | L1 | L2 | L3 |
+  |---|---|---|---|
+  | eggs split1 | 0.998 | 0.489 | 0.596 |
+  | larvae split1 | 0.999 | 0.731 | 0.777 |
+
+  - A norma ‖W‖/‖G‖ fica entre 0.91 e 1.13.
+- Leitura: na L1 o filtro continua sendo o do SPiFiL (o decoder quase não mexe). Na L2 e na L3 cerca de metade a 3/4 da direção ainda é do SPiFiL; ele contribui, e a reconstrução ajusta.
+- Filtros repetidos (pares com cos > 0.95 dentro do grow):
+  - R1 L1 eggs: 3, 5 e 7 pares de 24 filtros (splits 1–3). Larvae: 0 pares.
+  - w64 L1 eggs: 7 e 3 pares de 32.
+  - Na L1 o SPiFiL já gera repetição em eggs (3 canais × 25 = 75 dimensões, poucas para tantas sementes). Alargar a L1 tende a só duplicar filtros; a largura extra rende mais na L2/L3, onde há 600–800 dimensões.
+- Próximo candidato de largura: crescer só L2/L3, ex. 24/64/96. A L1 continua com 24.
+
+## 2026-10-30 02:10 [A1] cosseno entre os pesos SPiFiL (Lk_grow) e o best ckpt (scratchpad/cos_spifil.py <família>)
+- Usei a média, por filtro, do cosseno entre conv{k}-kernels.npy e o state_dict `model.encoder.conv{k}.0.weight`.
+- **R1 (BCE):**
+
+  | | L1 | L2 | L3 |
+  |---|---|---|---|
+  | eggs | 0.996–0.998 | 0.31–0.54 | 0.42–0.60 |
+  | larvae | 0.998–0.999 | 0.47–0.73 | 0.76–0.78 |
+
+  - A L1 quase não sai do SPiFiL. A L2 e a L3 treinadas se afastam MUITO dos kernels SPiFiL (cos ~0.3–0.6 em eggs), ou seja o backprop reescreve as camadas novas. Isso pesa para a regra "o SPiFiL tem que contribuir". Sugiro reduzir o lr da camada nova, ou usar o warmup com ela congelada, para mantê-la perto do SPiFiL.
+- **A1 mask50:** até agora L1 0.999 (eggs split1 e split2), igual ao R1. Faltam L2 e L3.
+
+## 2026-10-30 [A3] o SPiFiL contribui? Cosseno médio por filtro entre o best ckpt Lk e o Lk_grow
+- Método: em cada filtro, cosseno entre `model.encoder.conv{k}.0.weight` do best ckpt do estágio Lk e os kernels de `Lk_grow/conv{k}-kernels.npy`, convertidos com `flim.weights.get_weights`. A tabela mostra a média sobre os filtros. 1 = o treino manteve o kernel do SPiFiL; ~0 = o treino reescreveu o kernel.
+
+| run | L1 | L2 | L3 |
+|---|---|---|---|
+| r1 eggs s1 | 0.998 | 0.489 | 0.596 |
+| r1 eggs s2 | 0.998 | 0.538 | 0.483 |
+| r1 eggs s3 | 0.996 | 0.314 | 0.417 |
+| r1 larvae s1 | 0.999 | 0.731 | 0.777 |
+| r1 larvae s2 | 0.999 | 0.674 | 0.763 |
+| r1 larvae s3 | 0.998 | 0.465 | — |
+| a3_popz eggs s1 | 1.000 | — | — |
+| a3_popz eggs s2 | 0.999 | — | — |
+
+- Leitura:
+  - Na L1 o kernel do SPiFiL fica praticamente intacto: o backprop quase não o move. Ali o SPiFiL contribui de fato.
+  - Na L2 e na L3 o treino reescreve metade ou mais dos kernels (cosseno de 0,3 a 0,6 em eggs). Nas camadas fundas o SPiFiL vira só um ponto de partida.
+  - Bate com a trava N≤D furada (N=400 contra D=600/800, e N=100 no larvae): poucas sementes para patches grandes dão kernels fracos, e o decoder puxa os pesos para longe.
+- Consequência para a regra "o SPiFiL tem que contribuir": a alavanca é a L2+.
+  - O A3-2 vai aumentar as sementes nas camadas fundas, não os filtros: subir `n_images`/`n_superpixels` até N ≥ D.
+  - Meta: cosseno na L2/L3 subir e κ val subir junto. Se só o cosseno subir e o κ cair, o SPiFiL está "segurando" sem ajudar.
+- Para o A0 e o A2: com `layerwise_backprop` vale medir este mesmo cosseno, para ver se o backprop conjunto apaga o SPiFiL também na L1.
+- Não mexo em growth.py nem em schema.py enquanto o A2 edita.
+
+## 2026-10-30 [A4] O SPiFiL contribui? Deriva dos pesos e controle aleatório
+Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra `Lk_grow/conv{k}-kernels.npy`. O layout foi conferido: a L1 dá cos ~0,998.
+1. **Deriva por camada:** cosseno médio por filtro e mudança relativa ‖W−W0‖/‖W0‖, nos 22 estágios disc_*.
+   - **L1 fica quase igual ao SPiFiL:** cos 0,996–0,9997, mudança de 5–13%. Vale no R1, mask50, w64 e popz.
+   - **L2 é sobrescrita:** cos 0,31–0,73 (mínimo por filtro 0,05–0,25), mudança de 0,62–1,61x a norma.
+   - **L3 é sobrescrita:** cos 0,42–0,78, mudança de 0,33–1,32x.
+   - O larvae deriva menos que o eggs: L2 0,47–0,73 contra 0,31–0,54.
+   - **Leitura:** do jeito que está (lr 5e-4, 200 épocas, só a camada nova treina), o SPiFiL só sobrevive na L1. Nas L2–L3 ele vira só uma inicialização.
+2. **Deriva contra κ val:** Pearson(cos, κ val) = −0,35, com n=10 (só o R1 tem κ val por enquanto).
+   - Isso é confundido pela camada: L2/L3 têm κ maior e cos menor.
+   - Dentro da mesma camada não há relação. Eggs L2: cos 0,49 → κ 0,907; 0,54 → 0,881; 0,31 → 0,889.
+   - Não há evidência de que afastar-se do SPiFiL ajude ou atrapalhe. Precisa de mais pontos (A1/A2/A3 com SVM val).
+3. **Controle pareado no histórico** (results/eval_growth_stages_g5_{random,head}_pct{50,5}.csv; growth_g5_random.yaml:1-3,40).
+   - g5_random troca os valores do SPiFiL por aleatórios preservando a norma filtro a filtro. Difere de g5_head também em `impurities`. Os estágios round*_head usam head_finetune supervisionado e foram ignorados; comparo só os estágios de autoencoder.
+   - **pct50, stage2 (κ teste, 3 splits), aleatório × SPiFiL:**
+     - eggs: 0,9081 × 0,9062
+     - larvae: 0,859 × 0,853
+     - protozoan: 0,8595 × 0,8584
+     - O aleatório empata ou passa por menos de 0,006.
+   - **pct5, stage2:** eggs 0,6252 × 0,6664, ou seja, o SPiFiL ganha por +0,041. Larvae e protozoan dão valores idênticos, o que sugere que a troca não aconteceu ali (a conferir).
+   - **Regra:** com 50% dos dados, o valor dos pesos SPiFiL da camada nova ≈ aleatório com a mesma norma. O SPiFiL só pesa com pouco dado.
+4. **Sugestão para o SPiFiL contribuir** (A0 decide):
+   - (a) lr menor para a conv nova, ou congelar o peso SPiFiL e treinar só o bias e o decoder por algumas épocas;
+   - (b) penalidade L2-SP, λ‖W−W0‖², puxando a conv para o SPiFiL;
+   - (c) medir κ val do Lk_grow puro (sem treino) contra o Lk treinado, para separar a contribuição do SPiFiL da contribuição do backprop. Custa só SVM.
