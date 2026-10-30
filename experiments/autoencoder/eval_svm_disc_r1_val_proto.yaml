@@ -5,7 +5,7 @@ runner: eval
 
 grid:
   datasets:    [protozoan-cysts]
-  splits:      [1]   # 2 e 3 ainda treinando; somar quando o R1 acabar
+  splits:      [1, 2, 3]
   percentages: [50]
 
 runner_args:
