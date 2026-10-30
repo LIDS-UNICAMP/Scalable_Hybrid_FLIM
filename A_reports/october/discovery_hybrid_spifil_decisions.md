@@ -105,3 +105,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Aplicado em R2 (8 camadas), nos controles rand / rand_s1 / rand_s2 e no bp01 (A2).
 - Pareamento: a base de comparação passa a ser o fg01. O R2 difere do fg01 só na profundidade, o controle rand difere do fg01 só na init, e o bp01 difere do fg01 só no backprop das camadas antigas. Continua uma mudança por candidato.
 - O R1 (BCE uniforme) fica como referência antiga. Se o fg01 perder κ na val para o R1, a base volta para 1.0 e esses runs são refeitos.
+
+## 2026-10-30 14:05: SVM desativado (pedido do usuário)
+- Load de CPU em 245 com 96 núcleos e GPUs a 0–10%: o gargalo é a CPU. O SVM flatten do A5 levou até 4,6 h por célula.
+- Parado o raw_vs_trained do A5; as 8 linhas já feitas ficam em results.jsonl.
+- Nenhum eval_svm até nova ordem. Só treino na GPU. A medida de ativação dentro/fora (só forward) continua liberada.
+- Pendentes para quando religar: val do resto do R1, w64, fg01, popz.
