@@ -290,3 +290,41 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
 - Lei provisória da largura: com BCE uniforme, alargar não ajuda o foco no objeto depois do treino. Largura só vale junto com `recon_bg_weight` (fg01/bp01). O κ do w64 sai pela fila de SVM do A0.
 - Os pesos do w64 têm 117.744 parâmetros.
 - GPU 3 com 21 MB livres às 15h: estas medidas rodaram na CPU com 4 threads.
+
+## 2026-10-30 21:37 [A4] curvas de treino: rand × SPiFiL, R2 duplicado, efeito do fg01
+Fonte: W&B `probe/val_recon_loss` e `probe/train_recon_loss_epoch` por época, 85 estágios. Script: scratchpad a4/watch_curves.py, tabela em a4/watch_3.txt.
+- `e3` = época em que a val chega a 0,001 do próprio mínimo.
+- **Par justo:** rand, r2, bp01 e sp200 usam `recon_bg_weight 0.1`, então se comparam com o **fg01**, não com o R1. A escala da loss muda: ~0,512 contra ~0,467.
+
+1. **Ruído de base.** Repetir o mesmo config dá a mesma curva.
+   - As 22 pastas de eggs têm dois runs, o antigo e o relançado às 18:24. O mínimo difere menos de 6e-6, e a curva no máximo 1e-4 (picos de até 4,6e-3 só nas primeiras épocas).
+   - Qualquer diferença de mínimo acima de ~1e-5 é real. O SPiFiL não tem sorteio e o treino é quase determinístico.
+2. **SPiFiL não é melhor inicializador que o aleatório na curva.** Eggs, 3 splits, rand × fg01, com a mesma norma por filtro:
+   - **Começo (v0 na L1):** rand 0,95 / 0,95 / 0,92 × SPiFiL 0,99 / 1,38 / 1,09. O aleatório começa mais baixo e varia menos entre splits.
+   - **e3:**
+
+     | camada | rand | SPiFiL |
+     |---|---|---|
+     | L1 | 25 / 25 / 22 | 27 / 36 / 30 |
+     | L2 | 23 / 18 / 20 | 28 / 24 / 23 |
+     | L3 (parcial) | 17 / 19 / 16 | 21 / 19 / 16 |
+
+     O aleatório estabiliza igual ou mais rápido.
+   - **Mínimo:** o rand fica mais baixo, −0,9 a −1,8e-4 na L1 e 0 a −1,1e-4 na L2. Está acima do ruído.
+   - **Oscilação nas últimas 20 épocas:** igual, desvio de 2–3e-6 nos dois. Nenhum pico.
+   - **Leitura:** pelo critério de estabilidade do A0, a curva **não** mostra vantagem do SPiFiL. Se houver, ela tem que aparecer no κ entre seeds (rand_s1/_s2 e SVM). A loss não decide isso.
+3. **R2 nas L1–L3 = fg01 repetido.**
+   - O YAML só muda a partir da L4: a dilatação começa na L5 e a L4 é 48/k5/pool2.
+   - As curvas do R2 e do fg01 batem dentro do ruído: L1 até 3e-5; L2 até 7e-5 (até 3,9e-3 no s1, só nas primeiras épocas).
+   - A L3 do R2 e a do fg01 estão rodando ao mesmo tempo, a mesma conta duas vezes.
+   - O relançamento das 18:24 também refez do zero L1–L2 do fg01, w64 e popz, que já estavam prontas (diferença de mínimo ≤ 6e-6).
+4. **O fg01 deixa a convergência 2–3x mais lenta que o R1.**
+   - e3: L1 27–36 contra 14–22; L2 23–28 contra 8–11; L3 16–21 contra 6–8.
+   - O orçamento de 60 épocas que propus continua cobrindo (o e3 máximo é 36).
+5. **O gap val − train do fg01 não é sinal.** Ele vale −0,00055 / −0,00184 / −0,00147 nos splits 1/2/3. O valor é constante entre L1, L2 e L3 e igual no rand e no r2. É efeito do split: com o fundo pesando 0,1, a loss depende da área do objeto em cada imagem. Não é sobreajuste nem subajuste.
+6. **popz e w64.**
+   - popz: curvas iguais às do R1, mínimo dentro de ±2e-5.
+   - w64: mínimo 2 a 8e-5 abaixo do R1 nas L1–L2. É real, mas pequeno, e a loss não prevê o κ (regra A4 de antes).
+7. **Saúde dos runs.**
+   - 0 NaN, 0 picos e nenhum run travado: todos os que estão rodando gravaram há menos de 6 min.
+   - Os "crashed" de larvae (fg01 s2 L1, w64 s1 L3, popz s2 L2) morreram no relançamento das 18:24. Não é falha do treino.
