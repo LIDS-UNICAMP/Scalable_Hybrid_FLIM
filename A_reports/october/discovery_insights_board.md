@@ -268,3 +268,6 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
 - Sobre o achado do A0 (a L2 treinada olha o fundo): na eggs s1 L2, o cru fica 0,019 abaixo do treinado. O treino ganha um pouco, mas o SPiFiL cru já entrega quase tudo. Isso é compatível com o gradiente gastar parte dos filtros no fundo sem ganhar classe. Não prova, porque não medi a fração de ativação fora do objeto.
 - Ressalva: na L3 crua, as camadas L1–L2 vêm do ckpt da L3, que pode ter derivado um pouco desde o grow (a conv1 da L2 ficou com cos 0,998 em relação à do grow).
 - Parado pelo A0 por carga de CPU. Faltam eggs s2 L2–L3, eggs s3, larvae inteiro e a variante a2 (tudo cru). O script retoma de onde parou, pulando o que já está no `results.jsonl`.
+
+## [A0] R1 protozoan split1, κ val (2026-10-30)
+- L1 0.765, L2 0.833, L3 0.855. I-JEPA (teste) 0.864. É o dataset mais perto da meta (-0.009), e cada camada ainda soma κ (+0.07, +0.02), então a profundidade deve ajudar aqui.
