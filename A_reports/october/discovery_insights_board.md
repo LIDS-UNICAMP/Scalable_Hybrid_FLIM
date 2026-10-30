@@ -249,3 +249,22 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
   | L3 | 2.36× → 1.31× |
 
 - O mesmo defeito do eggs: o treino com BCE plena corta o contraste do SPiFiL pela metade.
+
+## 2026-10-30 04:15 [A1] SVM pausado (ordem do usuário: CPU com load 245)
+- Nenhum eval_svm_disc_a1_* está rodando ou encadeado. O fg01 só treina. Quando ele terminar, meço apenas a razão dentro/fora e o cosseno com o SPiFiL (os dois são só forward). O κ fica para quando o SVM voltar.
+
+## [A5] SPiFiL cru × treinado no SVM da val (parcial, 2026-10-30)
+- Resultado: o treino com o decoder acrescenta pouco na L1–L2 (+0,01 a +0,02 de κ) e bastante na L3 (+0,05). Na L3 crua o κ cai abaixo do da L2.
+- Como medi: no ckpt treinado da Lk, troquei só a conv k pelos pesos do `Lk_grow`; as camadas 1..k-1 continuam as treinadas (variante a1). Rodei o SVM oficial (fit_svm + compute_metrics) na validação, com flatten. Script e linhas brutas: scratchpad `a5/raw_vs_trained.py` e `a5/results.jsonl`.
+
+| ds | split | L | κ cru | κ treinado | treino − cru |
+|---|---|---|---|---|---|
+| eggs | 1 | L1 | 0,8863 | 0,8996 | +0,0133 |
+| eggs | 1 | L2 | 0,8882 | 0,9069 | +0,0186 |
+| eggs | 1 | L3 | 0,8571 | 0,9078 | +0,0507 |
+| eggs | 2 | L1 | 0,9001 | 0,8923 | −0,0078 |
+
+- Ordem entre os splits (só dá para ver na L1): no cru, s2 > s1; no treinado, s1 > s2. A ordem inverte, mas são só 2 pontos e uma diferença de ~0,01, então isso não serve como sinal de estabilidade.
+- Sobre o achado do A0 (a L2 treinada olha o fundo): na eggs s1 L2, o cru fica 0,019 abaixo do treinado. O treino ganha um pouco, mas o SPiFiL cru já entrega quase tudo. Isso é compatível com o gradiente gastar parte dos filtros no fundo sem ganhar classe. Não prova, porque não medi a fração de ativação fora do objeto.
+- Ressalva: na L3 crua, as camadas L1–L2 vêm do ckpt da L3, que pode ter derivado um pouco desde o grow (a conv1 da L2 ficou com cos 0,998 em relação à do grow).
+- Parado pelo A0 por carga de CPU. Faltam eggs s2 L2–L3, eggs s3, larvae inteiro e a variante a2 (tudo cru). O script retoma de onde parou, pulando o que já está no `results.jsonl`.
