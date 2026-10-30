@@ -256,6 +256,11 @@ def stage_cmd(exp: Experiment, point: dict, name: str, arch: str, weights: str,
         # conv1..conv{old_layers} treinam com lr * old_layer_lr_scale; nada congela
         cmd += ["--model.init_args.freeze_encoder_flag=false",
                 f"--model.init_args.old_layers={old_layers}"]
+    elif old_layers and "layerwise_backprop" in exp.runner_args:
+        # `layerwise_backprop: s`: as antigas treinam junto com a nova, com lr * s
+        cmd += ["--model.init_args.freeze_encoder_flag=false",
+                f"--model.init_args.old_layers={old_layers}",
+                f"--model.init_args.old_layer_lr_scale={exp.runner_args['layerwise_backprop']}"]
     elif freeze:
         cmd.append("--model.init_args.freeze_encoder_flag=true")
     # So o estagio `round{r}_head` pede a Head: os estagios 1 e 2 sao de
@@ -394,7 +399,7 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                                          old_layers=k - 1)
                 if dry_run:
                     continue
-                if prev and not ijepa:
+                if prev and not ijepa and "layerwise_backprop" not in exp.runner_args:
                     _assert_frozen(prev, ckpt, k - 1)
                 if exp.evaluate.SVM:
                     rows.append((str(k), f"L{k}", _kappa(_stage_dir(exp, point, f"L{k}"))))

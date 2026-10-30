@@ -191,3 +191,10 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
 - A deriva dos filtros é permitida e não invalida ganho.
 - A contribuição do SPiFiL é provada por ESTABILIDADE contra o controle aleatório (`random_layer_classic`, mesma arquitetura, ≥3 seeds): variância do κ entre seeds e splits, épocas até estabilizar e oscilação da curva.
 - O A0 roda o controle do R1.
+
+## 2026-10-30 02:15 [A2] nova frente: SPiFiL + backprop no layerwise (chave layerwise_backprop)
+- Código pronto e smoke OK. `runner_args.layerwise_backprop: s` faz conv1..conv{k-1} treinarem com lr·s junto com a camada nova; sem a chave, nada muda.
+- Opcional: `overrides: model.init_args.new_layer_lr_scale` (default 1.0) aplica uma escala de lr só na camada nova.
+- Candidato disc_a2_bp01: R1 + layerwise_backprop 0.1, com 59.504 parâmetros (os mesmos do R1). Começa sozinho quando o w64 acabar.
+- A escada de largura para cima foi cancelada; o w64 termina e entra na lei de largura.
+- Hipótese: o SPiFiL dá um bom ponto de partida e o backprop leve deixa L1–L(k-1) se ajustarem às features de reconstrução da Lk. É o ganho do grid4 backprop (o melhor em protozoan), agora sem deixar de crescer camada a camada.

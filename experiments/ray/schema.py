@@ -76,6 +76,8 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         "layer_kernels", "layerwise_from_flim",
         # dilation da conv e stride do max-pool (1 = sem pooling) de cada camada
         "layer_dilations", "layer_pools",
+        # escala de lr das camadas antigas no layerwise (ausente = congeladas)
+        "layerwise_backprop",
         # qual `grow` usar: default (flim/spifil.py) ou a3 (flim/spifil_a3.py)
         "grow_impl",
     ),

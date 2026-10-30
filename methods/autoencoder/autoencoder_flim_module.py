@@ -270,6 +270,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
         batch_norm: bool = False,
         mask_ratio: float = 0.0,
         mask_patch: int = 20,
+        old_layers: int = 0,
+        old_layer_lr_scale: float = 0.1,
+        new_layer_lr_scale: float = 1.0,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -335,7 +338,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
             n: p.detach().cpu().clone() for n, p in self.model.encoder.named_parameters()
         }
         if fresh_decoder:
-            freeze_encoder(self.model, except_last=True)
+            # `old_layers` > 0: conv1..conv{old_layers} treinam com lr * old_layer_lr_scale
+            if not old_layers:
+                freeze_encoder(self.model, except_last=True)
             delta = 0  # o log de congelamento abaixo le esta variavel
         elif freeze_encoder_flag:
             # Stage 1 (no init_ckpt): whole encoder frozen, whole decoder learning.
@@ -1010,11 +1015,21 @@ class AutoEncoderFlimModule(pl.LightningModule):
         total = self.hparams.max_epochs or 100
         # Same filter as classification_flim_module.py:232 — stage 1's frozen encoder is
         # then respected for free, with no optimizer state allocated for its kernels.
+        # Escala de lr por parametro: antigas (conv1..conv{old_layers}) e a nova (a ultima
+        # conv) do layerwise; o resto, e todos com os defaults, lr cheio num grupo so.
+        hp, enc = self.hparams, self.model.encoder
+        scale = {id(p): hp.new_layer_lr_scale
+                 for p in enc.blocks[f"conv{enc.n_layers}"].parameters()}
+        scale.update({id(p): hp.old_layer_lr_scale for n in range(1, hp.old_layers + 1)
+                      for p in enc.blocks[f"conv{n}"].parameters()})
+        groups: dict[float, list] = {}
+        # self.parameters(), nao self.model.parameters(): a Head vive fora de `model`.
+        # Sem Head os dois conjuntos sao identicos, entao nada muda no fluxo de recon.
+        for p in filter(lambda p: p.requires_grad, self.parameters()):
+            groups.setdefault(scale.get(id(p), 1.0), []).append(p)
         optimizer = AdamW(
-            # self.parameters(), nao self.model.parameters(): a Head vive fora de `model`.
-            # Sem Head os dois conjuntos sao identicos, entao nada muda no fluxo de recon.
-            filter(lambda p: p.requires_grad, self.parameters()),
-            lr=self.hparams.lr, weight_decay=self.hparams.weight_decay,
+            [{"params": ps, "lr": hp.lr * s} for s, ps in groups.items()],
+            lr=hp.lr, weight_decay=hp.weight_decay,
         )
         sched_warmup = LinearLR(optimizer, start_factor=0.01, total_iters=warmup)
         sched_cosine = CosineAnnealingLR(optimizer, T_max=max(1, total - warmup), eta_min=1e-5)
