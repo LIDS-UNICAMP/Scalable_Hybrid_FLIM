@@ -53,3 +53,29 @@ Agentes: **A0** = orquestrador (frente 1: baseline R1 e dilation R2), **A1** = f
 - **Profundidade:** não se limitem a 3 camadas. Basta passar `layerwise: N` com `layer_channels`, `layer_kernels`, `layer_pools` e `layer_dilations` de N itens. Sem código novo.
 - **Teto:** 5M de parâmetros (encoder mais projetora). Projetora ≤ encoder. O decoder não conta.
 - **R2 do A0:** vai ter 8 camadas (24/32/48/48/64×4; pool 2 nas L1–L4, sem pool nas L5–L8 com dilation 2,2,4,4; ~256k parâmetros). Sobe quando o R1 terminar.
+
+## 2026-10-30 01:35 [A2] teto de 5M: escada de largura planejada
+- Ordem dos candidatos de largura com kernel 5, um por vez, sempre em cima do vencedor anterior:
+  - w64 32/48/64: 117744
+  - w96 48/64/96: 234208
+  - w192 64/128/192: 824384
+  - w256 96/192/256: 1697344
+- Kernel 7 na L1 depois do melhor de largura. A profundidade fica com o A0 (R2), e combino com ela quando os dois tiverem resultado.
+- Risco: com o flatten, a L1 já tem C·99·99 dimensões, então o SVM fica mais lento à medida que a largura cresce.
+
+## 2026-10-30 [A3] trava N≤D com mais camadas: ela já é violada a partir da L2
+- Log do R1 (logs/disc_r1_tmux.log, linhas `[grow] N= D=`):
+  - L1: N=400, D=75. Só aqui N > D.
+  - L2: N=400, D=600 (24 canais × 5×5).
+  - L3: N=400, D=800.
+  - Larvae (2 classes) usa N=100 (2 imagens × 50 superpixels): D=600 e 800 com N=100.
+  - O R1 passa porque `budget_check: false`. O Mahalanobis do score usa shrinkage e não está bem condicionado. É provável que isso pese mais no larvae, onde a L2/L3 ganha pouco.
+- Em camadas mais fundas fica pior: com k5, a L4 de 48 canais tem D=1200. O N continua 400, porque as sementes só são projetadas, não aumentam.
+- Na minha montagem (popz), média e desvio são por feature (diagonal): 400 amostras por feature continuam sãs para qualquer D. A dobra dos filtros não quebra. O que fica fraco é o score/ranking (covariância cheia) do pacote.
+- Sugestão para quem for crescer mais camadas: subir `n_images` e `n_superpixels` nas camadas fundas, para N chegar a pelo menos 2·D (L4 k5 com 48 canais pede ~2400 sementes). Outra saída é kernel 3 nas camadas fundas: D=48·9=432, já abaixo de N=400×… com ~10 imagens/classe. Vai ser o meu próximo eixo (A3-2: mais sementes), depois do resultado do popz.
+- Parâmetros: com o teto de 5M há muita folga. O A3-1 usa 59.504.
+
+## 2026-10-30 [A0] REGRA QUE PREVALECE: o SPiFiL tem que contribuir
+- Todo candidato inicializa as camadas com os kernels do SPiFiL, nunca aleatórios.
+- O melhor candidato de cada frente ganha um controle `random_layer_classic: true`, que o A0 roda. O SPiFiL tem de vencer esse controle.
+- Informe no bloco a similaridade de cosseno média entre os pesos de cada Lk no best ckpt e os do Lk_grow. Se os filtros se afastarem dos do SPiFiL, o ganho não conta.
