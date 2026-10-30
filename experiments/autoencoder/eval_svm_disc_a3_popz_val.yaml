@@ -1,0 +1,28 @@
+# SVM de checagem sobre cada camada da growth_disc_a3_popz.
+name:   svm_disc_a3_popz_val
+method: autoencoder
+runner: eval
+
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]
+  percentages: [50]
+
+runner_args:
+  probe:          svm
+  source:         growth_stages
+  family:         disc_a3_popz
+  ckpt_selection: best
+  results_csv:    results/svm_disc_a3_popz_val.csv
+  embed_mode:     flatten
+  eval_set:       val
+
+resources:
+  gpu_ids:             [3]
+  max_per_gpu:         2
+  cpus_per_experiment: 8
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_a3_popz_val
+
+skip: state

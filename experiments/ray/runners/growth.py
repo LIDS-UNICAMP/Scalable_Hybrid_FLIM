@@ -286,7 +286,11 @@ def _grow_once(exp: Experiment, point: dict, gpu_id: int, ckpt: str, arch: str,
         # import tardio: eval.growth_stages puxa dataset/SVM, que o launcher nao precisa
         from eval.growth_stages import load_stage_module
         encoder = load_stage_module(ckpt, device).model.encoder
-    return grow(encoder=encoder, ckpt=ckpt, arch_json=arch,
+    # `grow_impl: a3` = SPiFiL montado em flim/spifil_a3.py (z-score sobre todos os patches)
+    impl = grow
+    if exp.runner_args.get("grow_impl", "default") == "a3":
+        from flim.spifil_a3 import grow as impl
+    return impl(encoder=encoder, ckpt=ckpt, arch_json=arch,
                 flim_weights_path=weights, dataset=_short(point),
                 split=point["split"], percentage=point["percentage"], out=out,
                 device=device, **knobs)
