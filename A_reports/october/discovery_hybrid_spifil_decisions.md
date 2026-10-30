@@ -70,3 +70,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Toda camada nasce dos kernels gerados pelo SPiFiL, nunca de inicialização aleatória. O treino com o decoder ajusta a partir deles.
 - **Prova obrigatória:** o melhor candidato de cada frente ganha um controle idêntico com `random_layer_classic: true` (mesma arquitetura, filtros aleatórios). O SPiFiL só "contribui" se ganhar do controle no κ val. Esse controle entra na fila da GPU 3 após o R1.
 - Um ganho de κ que venha de os filtros se afastarem dos kernels SPiFiL (fine-tune longo, lr alta) não vale. Por isso cada frente mede a similaridade entre os pesos treinados e os do grow.
+
+### 2026-10-30 — usuário: encoder pequeno, profundo, com SPiFiL + backprop juntos
+- **Norte:** encoder pequeno e profundo, sempre nascendo do SPiFiL e sempre testando backprop junto com o SPiFiL.
+- **Largura:** a escada de largura do A2 (w96–w256, até 1,7M) foi cancelada. O w64 termina e entra só como ponto da lei de largura.
+- **A2 muda de frente:** passa a cuidar de "SPiFiL + backprop". Cria a chave `layerwise_backprop: <escala de lr>`, com que as camadas antigas treinam com lr reduzido em vez de congelar. Hoje isso existe só no método ijepa_grow (growth.py:255-258).
+- **Variante:** um fine-tune ponta a ponta só com reconstrução depois da última camada.
+- **Por quê:** no histórico, o SPiFiL + backprop (grid4) foi o melhor SPiFiL a partir de 25% em eggs e protozoan (report:108-109). O SPiFiL dá o ponto de partida e o backprop ajusta o conjunto. A similaridade de cosseno aos kernels do grow vigia se o SPiFiL continua presente.
