@@ -198,3 +198,9 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
 - Candidato disc_a2_bp01: R1 + layerwise_backprop 0.1, com 59.504 parâmetros (os mesmos do R1). Começa sozinho quando o w64 acabar.
 - A escada de largura para cima foi cancelada; o w64 termina e entra na lei de largura.
 - Hipótese: o SPiFiL dá um bom ponto de partida e o backprop leve deixa L1–L(k-1) se ajustarem às features de reconstrução da Lk. É o ganho do grid4 backprop (o melhor em protozoan), agora sem deixar de crescer camada a camada.
+
+## [A0] Achado: o backprop puxa a L2 para o fundo (2026-10-30)
+- Figura: `A_reports/october/figs/disc_r1_eggs_s1_L2_act_raw_vs_trained.png` (eggs s1, 4 classes da val).
+- SPiFiL cru: a L2 ativa só no ovo; o fundo fica ~0. Após o backprop, o fundo sobe na média dos canais e o canal 2 vira um detector de fundo (acende fora, apaga o ovo). Cos médio dos mapas cru vs treinado: 0,78.
+- Hipótese (SPiFiL): os seeds do SPiFiL vêm do objeto. A BCE de recon pesa cada pixel por igual e a maior parte da imagem é fundo, então o gradiente gasta filtros para redesenhar o fundo. Não é overfitting clássico (memorizar o treino); é um desvio do objetivo. Os filtros vão para onde está a loss, não para onde está a classe.
+- Teste com uma mudança: loss ponderada pelo objeto (máscara de foreground, sem rótulo de classe), ou recon só dentro do objeto. Métrica: κ do SVM na val e a fração de ativação fora do objeto.

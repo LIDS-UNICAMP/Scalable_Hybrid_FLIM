@@ -86,3 +86,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
   - (3) a oscilação da curva de val_recon_loss;
   - (4) o κ médio, que pode empatar.
 - **`new_layer_lr_scale`:** deixa de ser obrigatório. Vira só um eixo opcional.
+
+## 2026-10-30: achado de ativação no fundo
+- Observação: no SPiFiL cru, a L2 ativa só no objeto. Depois do backprop, filtros passam a ativar no fundo (eggs s1, cos 0,78).
+- Leitura do usuário: os gradientes estão aprendendo errado; o modelo deveria olhar só para o elemento.
+- Hipótese: a recon por pixel é dominada pelo fundo e puxa os filtros para ele.
+- Decisão: avisar A1, A2, A3 e A5. Próximo candidato (uma mudança): loss ponderada pelo foreground, sem rótulo.
