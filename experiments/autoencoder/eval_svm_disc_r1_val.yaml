@@ -4,7 +4,7 @@ method: autoencoder
 runner: eval
 
 grid:
-  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  datasets:    [helminth-eggs, helminth-larvae]   # protozoan saiu pelo _proto
   splits:      [1, 2, 3]
   percentages: [50]
 
