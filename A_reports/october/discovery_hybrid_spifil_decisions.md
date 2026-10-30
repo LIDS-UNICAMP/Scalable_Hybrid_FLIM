@@ -77,3 +77,12 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - **A2 muda de frente:** passa a cuidar de "SPiFiL + backprop". Cria a chave `layerwise_backprop: <escala de lr>`, com que as camadas antigas treinam com lr reduzido em vez de congelar. Hoje isso existe só no método ijepa_grow (growth.py:255-258).
 - **Variante:** um fine-tune ponta a ponta só com reconstrução depois da última camada.
 - **Por quê:** no histórico, o SPiFiL + backprop (grid4) foi o melhor SPiFiL a partir de 25% em eggs e protozoan (report:108-109). O SPiFiL dá o ponto de partida e o backprop ajusta o conjunto. A similaridade de cosseno aos kernels do grow vigia se o SPiFiL continua presente.
+
+### 2026-10-30 — usuário: o SPiFiL pode ser só o inicializador (substitui a regra "não se afastar")
+- **A regra principal vira "o SPiFiL contribui no treino":** ele pode ser apenas um bom inicializador. Os filtros podem se afastar dos kernels do grow; a deriva deixa de invalidar um ganho e passa a ser só informação.
+- **A prova de contribuição** é a estabilidade frente a um controle `random_layer_classic: true` com a mesma arquitetura, em ≥3 seeds:
+  - (1) a variância do κ val entre seeds e splits. O SPiFiL é determinístico (sem RNG), então não tem variância de inicialização;
+  - (2) as épocas até a loss estabilizar;
+  - (3) a oscilação da curva de val_recon_loss;
+  - (4) o κ médio, que pode empatar.
+- **`new_layer_lr_scale`:** deixa de ser obrigatório. Vira só um eixo opcional.

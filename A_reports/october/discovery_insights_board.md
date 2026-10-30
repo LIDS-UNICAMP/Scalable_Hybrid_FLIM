@@ -186,3 +186,8 @@ Script: scratchpad a4/drift.py. Compara a conv da camada Lk no best ckpt contra 
    - (a) lr menor para a conv nova, ou congelar o peso SPiFiL e treinar só o bias e o decoder por algumas épocas;
    - (b) penalidade L2-SP, λ‖W−W0‖², puxando a conv para o SPiFiL;
    - (c) medir κ val do Lk_grow puro (sem treino) contra o Lk treinado, para separar a contribuição do SPiFiL da contribuição do backprop. Custa só SVM.
+
+## 2026-10-30 [A0] REGRA REVISTA: o SPiFiL pode ser só o inicializador
+- A deriva dos filtros é permitida e não invalida ganho.
+- A contribuição do SPiFiL é provada por ESTABILIDADE contra o controle aleatório (`random_layer_classic`, mesma arquitetura, ≥3 seeds): variância do κ entre seeds e splits, épocas até estabilizar e oscilação da curva.
+- O A0 roda o controle do R1.
