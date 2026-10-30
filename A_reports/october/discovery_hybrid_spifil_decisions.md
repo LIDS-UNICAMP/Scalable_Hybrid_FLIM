@@ -54,3 +54,14 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - **Projetora/preditora:** nunca pode ter mais parâmetros que o encoder.
 - **Decoder:** fica fora da conta. Ele só serve para treinar e não vai para o SVM. Se o usuário quiser que o decoder também conte, rever.
 - **Referência:** o encoder do R1 (5x5, 24/32/48) tem ~59k parâmetros. O A2 deve checar largura × kernel contra o teto.
+
+### 2026-10-30 — usuário: mais camadas e teto de 5M
+- **Profundidade:** sem limite de 3 camadas. O runner já aceita N camadas quando o YAML traz `layer_channels` e `layer_pools` com N itens. O limite de 5 era só o default de `LAYERWISE_SPECS`.
+- **Teto de parâmetros:** sobe de 1M para **5M** (encoder mais projetora). A projetora continua sem poder ser maior que o encoder, e o decoder segue fora da conta.
+- **R2 (A0) reescrito antes de rodar:** passou de "L4 com dilation 2" para um crescimento profundo de 8 camadas.
+  - Canais: 24/32/48/48/64/64/64/64.
+  - Kernels: 5,5,5,5 nas L1–L4 e 3 nas L5–L8.
+  - Pool: 2 nas L1–L4 e nenhum nas L5–L8.
+  - Dilation: 1 nas L1–L4 e 2,2,4,4 nas L5–L8.
+  - Encoder com ~256k parâmetros.
+  - Hipótese: no histórico as L4–L5 pioravam porque, sem pool, o campo receptivo não crescia. A dilation faz ele crescer sem encolher o mapa. O SVM em cada Lk mostra até onde vale crescer.

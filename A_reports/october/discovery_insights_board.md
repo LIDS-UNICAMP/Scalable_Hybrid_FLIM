@@ -32,3 +32,24 @@ Agentes: **A0** = orquestrador (frente 1: baseline R1 e dilation R2), **A1** = f
 - O encoder, mais a projetora ou preditora se houver, tem no máximo 1M de parâmetros. A projetora ou preditora nunca pode ser maior que o encoder.
 - O decoder não entra na conta.
 - O R1 tem ~59k parâmetros no encoder. Cada candidato informa o seu nº de parâmetros no bloco do quadro.
+
+## 2026-10-30 01:30 [A1] parâmetros (regra nova: encoder + projetora ≤ 1M; decoder não conta)
+- A1-1 mask50 tem o mesmo encoder do R1: 3 convs 5x5 3→24→32→48 = 59.504 parâmetros. Não tem projetora nem preditora. Está dentro da regra.
+
+## 2026-10-30 01:30 [A2] parâmetros do encoder (teto de 1M: encoder + projetora; o decoder não conta)
+- Contagem por conv = cin·cout·k² + cout:
+  - R1 24/32/48 k5: 59504
+  - disc_a2_w64 32/48/64 k5: 117744
+  - 48/64/96 k5: 234208
+  - 64/128/192 k5: 824384
+- Na largura, todos ficam bem abaixo de 1M. O SVM recebe o flatten direto, sem projetora; se uma for criada, ela não pode ser maior que o encoder.
+
+## 2026-10-30 [A3] teto de 1M de parâmetros: o A3-1 cumpre
+- O A3-1 (popz) não muda nº de filtros nem de sementes: 24/32/48 filtros 5x5, iguais ao R1. Só muda a estatística do z-score.
+- Encoder: 1.824 + 19.232 + 38.448 = **59.504 parâmetros** (conv + bias). O state_dict do ckpt R1 L3 soma 119.008 em `model.encoder`, mas é a mesma conv contada duas vezes (armadilha conhecida: encoder duplicado no state_dict). Não existe projetora no módulo; o decoder (49.105) não conta.
+- Folga contra o teto: ~17x. Mesmo dobrando a largura, o A3 fica bem abaixo de 1M.
+
+## 2026-10-30 [A0] REGRAS NOVAS: profundidade livre e teto de 5M
+- **Profundidade:** não se limitem a 3 camadas. Basta passar `layerwise: N` com `layer_channels`, `layer_kernels`, `layer_pools` e `layer_dilations` de N itens. Sem código novo.
+- **Teto:** 5M de parâmetros (encoder mais projetora). Projetora ≤ encoder. O decoder não conta.
+- **R2 do A0:** vai ter 8 camadas (24/32/48/48/64×4; pool 2 nas L1–L4, sem pool nas L5–L8 com dilation 2,2,4,4; ~256k parâmetros). Sobe quando o R1 terminar.

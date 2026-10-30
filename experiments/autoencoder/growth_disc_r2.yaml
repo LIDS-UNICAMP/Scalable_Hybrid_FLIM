@@ -1,5 +1,5 @@
-# Descoberta R2: R1 + L4 (48 filtros, dilatacao 2, sem pool). Re-treina L1..L3:
-# layerwise_from_flim parte do FLIM de data/, nao do checkpoint do R1.
+# Descoberta R2: crescimento profundo, 8 camadas (antes 3). L4 ainda com pool; de L5 a L8 sem pool,
+# com dilatacao 2,2,4,4 para o campo receptivo crescer sem encolher o mapa. Re-treina L1..L3.
 name:   spifil_growth_disc_r2
 method: autoencoder
 runner: growth
@@ -17,12 +17,12 @@ resources:
   num_workers:         2
 
 runner_args:
-  layerwise:  4
+  layerwise:  8
   paper_classes: true
-  layer_channels: [24, 32, 48, 48]
-  layer_kernels:  [5, 5, 5, 5]
-  layer_dilations: [1, 1, 1, 2]
-  layer_pools:    [2, 2, 2, 1]
+  layer_channels: [24, 32, 48, 48, 64, 64, 64, 64]
+  layer_kernels:  [5, 5, 5, 5, 3, 3, 3, 3]
+  layer_dilations: [1, 1, 1, 1, 2, 2, 4, 4]
+  layer_pools:    [2, 2, 2, 2, 1, 1, 1, 1]
   kernel_size: 5
   superpixels: disf
   n_superpixels: 50
