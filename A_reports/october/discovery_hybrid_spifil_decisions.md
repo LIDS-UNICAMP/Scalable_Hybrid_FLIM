@@ -216,3 +216,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Estabilidade: o rand varia 0.012–0.022 entre seeds, em média (até 0.039); o SPiFiL repetido varia ≤0.008.
 - Regra: o ganho do SPiFiL cresce quanto pior o aleatório vai no dataset. Critério "SPiFiL tem que contribuir": cumprido.
 - bp01c1280: as L1–L3 repetem o bp01, mas não vou cortar. O ckpt de L1–L3 é escolhido pelo κ da média, e a L3 da própria família é o controle limpo da camada 1x1. Começar da L3 do bp01 exigiria uma chave nova no runner.
+
+## 2026-10-31: w64fg não soma; L4 1x1 do c1280 baixa a loss
+- w64fg L3: eggs 0.914/0.885/0.892 (0.897), larvae 0.853/0.800/0.845 (0.833), protozoan 0.879/0.861 (s3 pendente). Empata com w64, fg01 e bp01 dentro do ruído: largura e fundo 0.1 não somam.
+- c1280 L4 (~120 épocas): é a primeira camada além da L3 que baixa a val loss (−8e-5 / −7e-5 contra a L3). A distância val − treino sobe só +1e-4 (no R2, +5e-4). Sem early stop, memória estável. O veredito sai no κ avgpool L4 × L3.
