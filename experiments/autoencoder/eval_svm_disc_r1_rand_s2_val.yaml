@@ -5,7 +5,7 @@ runner: eval
 
 grid:
   datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
-  splits:      [1]
+  splits:      [1, 2, 3]   # regra: 3 splits sempre (split 1 ja pronto, skip:state)
   percentages: [50]
 
 runner_args:

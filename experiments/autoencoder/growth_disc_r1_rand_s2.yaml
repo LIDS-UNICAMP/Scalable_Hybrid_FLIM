@@ -7,7 +7,7 @@ runner: growth
 grid:
   init:        [flim]
   datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
-  splits:      [1]
+  splits:      [2, 3]   # split 1 ja pronto; skip:state nao pula (memoria), entao fica fora
   percentages: [50]
 
 resources:
