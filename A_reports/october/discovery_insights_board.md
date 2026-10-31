@@ -887,3 +887,50 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
 - **Regra para larvae:** só confiar numa diferença de κ val maior que ~0,05, ou numa média de várias seeds por split. Diferenças de 0,03–0,05 num split só, como as do rand × SPiFiL em larvae s2/s3, ficam **inconclusivas**.
 - O placar rand × SPiFiL em larvae fica em aberto até as seeds s1/s2 nos splits 2/3. **Protozoan s1 continua sendo o único ponto em que o SPiFiL vence com folga contra 2 seeds** (+0,062 / +0,083).
 - **sp200 × fg01 em eggs L3:** 0,885 / 0,893 / 0,887 contra 0,894 / 0,898 / 0,887. Empate.
+
+## 2026-10-31 14:42 [A4] κ val L3: em protozoan s1, todas as 5 variantes SPiFiL passam as 2 seeds do rand
+- **Protozoan s1 L3:**
+
+  | SPiFiL | κ | | rand | κ |
+  |---|---|---|---|---|
+  | fg01 | 0,877 | | rand seed 0 | 0,815 |
+  | w64 | 0,868 | | rand_s1 | 0,794 |
+  | popz | 0,860 | | | |
+  | sp200 | 0,856 | | | |
+  | R1 | 0,855 | | | |
+
+  - **O pior SPiFiL (0,855) fica 0,040 acima da melhor seed do rand (0,815).** As 5 variantes SPiFiL ocupam a faixa 0,855–0,877 (0,022 de largura); as 2 seeds do rand, 0,794–0,815.
+  - **As duas faixas não se sobrepõem.** Variar o SPiFiL (largura, z-score, superpixels, peso do fundo) mexe menos que trocar SPiFiL por aleatório.
+  - **É a evidência mais forte até agora de que o SPiFiL contribui como inicializador**, pelo menos em protozoan. Falta repetir no s2/s3 com as seeds novas.
+- **sp200 larvae, completo:** 0,890 / 0,776 / 0,847, média **0,838**, contra fg01 0,836. A média é igual e a variância é 10x maior. Isso reforça a regra de larvae: um treino só não decide; a média sim.
+
+## 2026-10-31 15:13 [A4] κ val L3, split 1: o rand já tem 3 seeds
+
+| s1 L3 | rand seed 0 / 1 / 2 | média ± desvio entre seeds | SPiFiL (fg01) | outras variantes SPiFiL |
+|---|---|---|---|---|
+| eggs | 0,898 / 0,911 / 0,882 | 0,897 ± **0,015** | 0,894 (repetições 0,894 / 0,910 / 0,899: ± **0,008**) | w64 0,913, sp200 0,885, popz 0,904 |
+| larvae | 0,848 / 0,859 / 0,821 | 0,843 ± **0,019** | 0,839 | sp200 0,890, w64 0,859, R1 0,847 |
+| protozoan | 0,815 / 0,794 / (pendente) | 0,805 ± 0,015 | **0,877** | as 5 variantes ficam em 0,855–0,877 |
+
+- **Variação entre seeds do aleatório no s1:** desvio de 0,015 em eggs e 0,019 em larvae. O desvio do SPiFiL ao repetir o mesmo config em eggs s1 é de 0,008. **No s1, o SPiFiL varia cerca de metade do aleatório,** mas com n = 3 isso ainda não é significativo.
+- **Médias no s1:**
+  - eggs: empate (rand 0,897 contra SPiFiL 0,894–0,901).
+  - larvae: empate (0,843 contra 0,839).
+  - **protozoan: o SPiFiL ganha com folga, por 0,050 a 0,072,** cerca de 4x o desvio entre seeds.
+- **Novo na vigia:** disc_w64fg (w64 + fundo 0,1), lançado pelo A0.
+- **Curvas:** 0 NaN, nenhum run travado. As seeds dos splits 2/3 estão entre a L2 e a L3.
+
+## 2026-10-31 15:24 [A4] κ val protozoan s1 L3 com 3 seeds do rand: a vantagem do SPiFiL se mantém
+- **rand seed 0 / 1 / 2:** 0,815 / 0,794 / **0,832**, média **0,814 ± 0,019**.
+- **SPiFiL, 5 variantes:** 0,855–0,877, com o fg01 em 0,877.
+- **fg01 − média do rand = +0,063, cerca de 3,4 desvios entre seeds.** O pior SPiFiL (R1, 0,855) fica 0,023 acima da melhor seed do rand (0,832). **As faixas continuam sem sobreposição.**
+- **Fechado o s1 com 3 seeds nos 3 datasets (L3):**
+
+  | dataset | resultado | diferença |
+  |---|---|---|
+  | eggs | empate | SPiFiL −0,003 |
+  | larvae | empate | SPiFiL −0,004 |
+  | protozoan | **SPiFiL vence** | **+0,063** |
+
+- **Regra (s1):** o SPiFiL como inicializador ajuda onde o dataset é mais difícil para o aleatório (protozoan, com o rand em ~0,81), e é neutro onde o aleatório já vai bem (eggs ~0,90).
+- Os splits 2/3 com seeds ainda estão treinando.

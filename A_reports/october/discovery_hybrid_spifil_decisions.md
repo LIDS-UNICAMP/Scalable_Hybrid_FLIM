@@ -166,3 +166,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Larvae é binário, com 223 casos na classe minoritária. O κ de um único treino varia ±0.05 entre candidatos parecidos.
 - Regra nova: em larvae, Δκ < ~0.05 num split só é inconclusivo. Para decidir, usar a média de ≥2 seeds por split. A entrada "só SPiFiL + fundo 0.1 é estável" fica retirada.
 - De pé: protozoan s1, o SPiFiL vence 2 seeds do rand por 0.06–0.08. O w64 em protozoan dá +0.011 nos 3 splits. O w64fg segue, motivado só pelo protozoan.
+
+## 2026-10-31: split 1 fechado com 3 seeds do rand (L3)
+- eggs: rand 0.897 (3 seeds) × SPiFiL 0.894. Empate.
+- larvae: rand 0.843 × SPiFiL 0.839. Empate.
+- protozoan: rand 0.815/0.794/0.832 (0.814 ± 0.019) × fg01 0.877, ou +0.063 (~3.4 dp). Até o pior SPiFiL (R1, 0.855) passa a melhor seed.
+- Conclusão parcial: o SPiFiL contribui como inicializador em protozoan (7 classes, o mais difícil) e é neutro em eggs e larvae. Os splits 2 e 3 das seeds estão treinando.
