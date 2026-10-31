@@ -182,3 +182,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - bp01 L3 (média dos 3 splits): eggs 0.902 (+0.010 contra o fg01, 3/3), larvae 0.829 (empate), protozoan 0.866 (+0.010, 3/3; o maior protozoan até agora).
 - Novo candidato bp01w64 = bp01 + largura 32/48/64 (uma mudança). Motivo: o w64 deu +0.011 em protozoan com BCE uniforme.
 - O SVM das seeds 1 e 2 roda já nos ckpts de L3 prontos (só a L3; uma L3 existe só quando o ponto terminou), sem esperar o growth inteiro.
+
+## 2026-10-31: SPiFiL × rand com seeds, eggs fechado e larvae s2
+- eggs (3 seeds × 3 splits): o rand tem média ~0.008 maior (≤1 dp por split). Entre seeds ele varia 0.010–0.016; o SPiFiL repetido varia ≤0.0003 no s2/s3 (no s1, até 0.016). Empate na média, e o SPiFiL é mais reprodutível.
+- larvae s2: o rand_s1 também cai (0.794 ≈ 0.787 da seed 0). fg01 0.831, ou +0.041 (~8 dp). Ressalva: o sp200 também cai ali (0.776), então o efeito é do fg01, não de toda variante SPiFiL.
+- protozoan s1: +0.063 (3.4 dp).
+- Regra de treino: onde o aleatório vai mal, o SPiFiL ajuda; onde vai bem, é neutro e mais reprodutível. Faltam larvae s3 e protozoan s2/s3 com seeds.

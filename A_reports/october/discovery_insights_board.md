@@ -976,3 +976,31 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
 - **κ das seeds do rand nos splits 2/3:** o SVM está encadeado **depois do growth inteiro** de cada seed (`launch …; flock svm.lock …`).
   - Já há 5 ckpts L3 prontos sem κ: rand_s1 eggs s2/s3 e larvae s2; rand_s2 eggs s2/s3 e larvae s2.
   - Ainda faltam ~3–4 h de growth (larvae s3 e protozoan s2/s3).
+
+## 2026-10-31 16:31 [A4] nota curta: eggs s2 L3 com 2 seeds do rand
+- **rand seed 0 / rand_s1:** 0,920 / 0,911.
+- **SPiFiL (fg01):** 0,898, com as repetições dando 0,8983 / 0,8982.
+- **As 2 seeds do rand ficam acima do SPiFiL**, por +0,013 e +0,022. Em eggs s2, o aleatório ganha de forma estável. O rand_s2 está pendente.
+- **Até aqui:** em eggs, o SPiFiL empata ou perde para o aleatório (s1 empata; s2 perde por ~0,017). Em protozoan s1, ganha por +0,063. É coerente com a regra "o SPiFiL ajuda onde o aleatório vai mal".
+
+## 2026-10-31 16:57 [A4] κ val L3, seeds do rand × SPiFiL (fg01): eggs fechado com 3×3, larvae s2 com 2 seeds
+
+| L3 | split | rand (seeds) | média ± desvio | SPiFiL | SPiFiL − média do rand | em desvios |
+|---|---|---|---|---|---|---|
+| eggs | s1 | 0,898 / 0,911 / 0,882 | 0,897 ± 0,015 | 0,894 | −0,003 | −0,2 |
+| eggs | s2 | 0,920 / 0,911 / 0,888 | 0,906 ± 0,016 | 0,898 | −0,008 | −0,5 |
+| eggs | s3 | 0,908 / 0,905 / 0,889 | 0,901 ± 0,010 | 0,887 | −0,014 | −1,4 |
+| larvae | s1 | 0,848 / 0,859 / 0,821 | 0,843 ± 0,019 | 0,839 | −0,004 | −0,2 |
+| larvae | s2 | 0,787 / 0,794 | 0,790 ± 0,005 | **0,831** | **+0,041** | +8 |
+| protozoan | s1 | 0,815 / 0,794 / 0,832 | 0,814 ± 0,019 | **0,877** | **+0,063** | +3,4 |
+
+- **eggs (9 treinos do rand × 3 do SPiFiL):** o rand ganha por pouco (média −0,008 para o SPiFiL), dentro de ~1 desvio por split.
+  - **Variação entre seeds do rand:** desvio de 0,010–0,016. **Variação do SPiFiL ao repetir o mesmo config:** ≤0,0003 no s2/s3 e 0,008 no s1.
+  - **Em eggs, o SPiFiL é muito mais reprodutível, e o aleatório tem média um pouco maior.**
+- **larvae s2:** o rand_s1 também cai (0,794), igual à seed 0 (0,787). **A queda do rand em larvae s2 não é azar de seed.** As duas seeds ficam ~0,04 abaixo do fg01.
+  - Mas o sp200 (SPiFiL) também dá 0,776 nesse split. Então "o SPiFiL ganha em larvae s2" vale para o fg01, **não para toda variante SPiFiL**.
+- **Regra até aqui:**
+  1. Em eggs, o aleatório e o SPiFiL empatam na média, e o SPiFiL é mais reprodutível.
+  2. Em protozoan s1 e larvae s2, o SPiFiL (fg01) ganha por 3–8 desvios entre seeds do rand.
+  3. **Onde o aleatório vai mal, o SPiFiL ajuda. Onde ele vai bem, é neutro.**
+- **Pendentes:** rand_s2 larvae s2, larvae s3 (s1/s2) e protozoan s2/s3 (s1/s2).
