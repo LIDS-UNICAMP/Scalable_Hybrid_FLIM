@@ -16,6 +16,7 @@ runner_args:
   results_csv:    results/svm_disc_a2_bp01_val.csv
   embed_mode:     flatten
   eval_set:       val
+  stages:         [L3]   # so a camada de decisao: 9 jobs em vez de 27 (CPU)
 
 resources:
   gpu_ids:             [1]   # SVM: 1 por vez na maquina
