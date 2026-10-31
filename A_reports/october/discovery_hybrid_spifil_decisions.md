@@ -225,3 +225,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - eggs 0.929/0.892/0.897 (0.906; o s1 é o maior κ de eggs medido), larvae 0.864/0.822/0.849 (0.845). Ganha +0.004 sobre o bp01 em eggs e +0.009 sobre o fg01 em larvae: dentro do ruído, mas no topo dos dois. Protozoan pendente.
 - Em eggs, a ordem da loss de L3 (fg01 → bp01 → bp01w64) bate com a do κ. Em larvae não bate: a curva continua sem prever κ em geral.
 - Base nova provisória: bp01w64 (backprop 0.1 + fundo 0.1 + largura 32/48/64). Fecha quando sair o protozoan.
+
+## 2026-11-01: bp01w64 é a nova base; c1280 L4 sobreajusta em larvae
+- bp01w64 L3 (κ val, média de 3 splits): eggs 0.906 (1º), larvae 0.845 (1º), protozoan 0.865 (empate no 1º; s1 0.888 é recorde). Único candidato no topo dos 3 datasets. Contra o rand: +0.005 / +0.022 / +0.056. Decisão: bp01w64 vira a base.
+- c1280 L4 em larvae: early stop 3/3 (best 96/98/138), distância val − treino +3–4e-4, loss igual à da L3. É a assinatura de sobreajuste do R2. Previsão para o κ avgpool: larvae L4 < L3 nos 3 splits; eggs s2 <, s1 ≈, s3 ≥. O veredito sai no SVM.
