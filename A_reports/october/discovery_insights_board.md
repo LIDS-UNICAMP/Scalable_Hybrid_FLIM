@@ -500,3 +500,85 @@ Fonte: W&B `probe/val_recon_loss` e `probe/train_recon_loss_epoch` por época, 8
   - A época do best da L8 é 74 / 74 / 81.
 - **R2 larvae s1 L1 = fg01 larvae s1 L1:** 0,49474 nos dois. Confirma a duplicação também em larvae.
 - **Saúde:** 0 NaN, nenhum run travado. Agora rodam protozoan L2 (fg01, popz, rand), w64 protozoan L1 e R2 larvae L1–L2.
+
+## 2026-10-31 03:52 [A4] curvas, 10ª passada (nota curta)
+- **Protozoan L2, rand × SPiFiL (fg01), parcial na época ~110–136:**
+  - Mínimo: rand 0,50757 / 0,50770 / 0,50794 contra SPiFiL 0,50758 / 0,50776 / 0,50801 (o s3 ainda está em épocas diferentes).
+  - e3: rand 19 / 16 / 13 contra SPiFiL 21 / 19 / 19.
+  - O padrão de antes se mantém: o rand estabiliza antes.
+- **R2 larvae s1 L2 = fg01:** 0,49513 nos dois. Mais uma conta repetida.
+- **Saúde:** 0 NaN, nenhum run travado, e nenhum salto da val em protozoan nesta janela.
+
+## 2026-10-31 04:39 [A4] curvas, 11ª passada: protozoan L2 fechada; o R2 larvae L4 repete a assinatura de eggs
+- **Protozoan L2, rand × SPiFiL (fg01):**
+
+  | | rand | SPiFiL |
+  |---|---|---|
+  | mínimo (s1/s2/s3) | 0,50751 / 0,50763 / 0,50782 (s3 na época 197) | 0,50752 / 0,50770 / 0,50792 |
+  | e3 | 19 / 20 / 17 | 22 / 20 / 23 |
+
+  - O rand fica mais baixo nos 3 splits, por 1e-5, 7e-5 e 1e-4.
+  - **Placar em 24 estágios:**
+    - Loss mais baixa: rand em 19, SPiFiL em 4 (no máximo 4e-5), 1 empate.
+    - Estabiliza antes: rand em 22, 2 empates. O SPiFiL não foi mais rápido em nenhum.
+- **R2 larvae s1 L4, parcial (50 épocas):** a distância val − treino salta de +0,00005 (L3) para **+0,00052**. É o mesmo salto de ~+0,0005 da L4 em eggs.
+  - A L3 do R2 larvae s1 é igual à do fg01: 0,49566 contra 0,49565.
+  - **A regra "a camada nova passa a ajustar só o treino a partir da L4" começa a se repetir em larvae.** Confirmo quando a L4 fechar.
+- **Saúde:** 0 NaN, nenhum run travado. Rodam as L3 de protozoan em fg01, popz e rand, a L2 do w64 e as L2–L4 do R2 larvae.
+
+## 2026-10-31 05:25 [A4] curvas, 12ª passada: a regra de profundidade se repete em larvae, e mais forte
+- **R2 larvae, L3 contra L4** (época do best | loss mínima da val | val − treino):
+
+  | split | L3 | L4 | early stop |
+  |---|---|---|---|
+  | s1 | 175 \| 0,49566 \| +0,00005 | **128** \| 0,49670 \| **+0,00141** | na época 179 |
+  | s2 | 181 \| 0,49596 \| −0,00019 | **109** \| 0,49718 \| **+0,00148** | na época 160 |
+
+  - Da L3 para a L4, a distância val − treino sobe **+0,0014 a +0,0017**, cerca de 3x o salto de eggs (+0,0004 a +0,0005).
+  - A loss mínima sobe ~1e-3.
+  - A L5 do s1 (parcial, 75 épocas) tem a distância em +0,00088 e best na época 57.
+  - **Regra (curva, 2 datasets):** a partir da L4, a camada nova ajusta o treino e não a val. Em larvae isso é mais forte que em eggs. **Hipótese:** o larvae tem menos imagens por classe, então a camada nova (48 filtros, kernel 5, ~58k parâmetros nesta camada) tem mais folga para decorar.
+  - O κ val L3 × L4 do larvae é o teste mais barato para saber se esse sobreajuste custa κ.
+- **Protozoan L3, rand × SPiFiL (fg01), parcial na época ~104–115:**
+  - Mínimo: rand 0,50803 / 0,50818 contra SPiFiL 0,50798 / 0,50815. O SPiFiL está 3–5e-5 abaixo, mas na época 115 contra 106 no s1.
+  - e3: rand 13 / 16 contra SPiFiL 15 / 16.
+  - Ainda empatado; espero fechar.
+- **Saúde:** 0 NaN, nenhum run travado.
+
+## 2026-10-31 06:13 [A4] curva × κ val: a profundidade custa κ a partir da L4, e o piso de ruído do κ é ~0,01
+Fontes: results/svm_disc_r2_val.csv e svm_disc_a1_fg01_val.csv (só leitura) e as curvas do W&B.
+
+1. **Ruído do κ entre re-runs do mesmo config.**
+   - Comparei fg01 × R2 nas L1–L3: o mesmo YAML, a mesma época do ckpt e curvas iguais até 1e-5.
+
+     | estágio | Δκ (R2 − fg01) |
+     |---|---|
+     | L1, s1/s2/s3 | 0,0000 / 0,0000 / 0,0000 (pesos idênticos) |
+     | L2, s1/s2/s3 | **+0,0085** / −0,0013 / −0,0002 |
+     | L3, s1/s2 | **−0,0114** / −0,0001 |
+
+   - **Regra:** do L2 em diante, a GPU não é bit-determinística. Uma diferença de pesos que nem aparece na loss já move o κ val em até ±0,011.
+   - **Uma diferença de κ abaixo de ~0,012 entre candidatos, num único split, é ruído.** Vale para A1, A2, A3 e A0. Para afirmar um ganho, peça média dos 3 splits e uma diferença maior que ~0,01.
+2. **Profundidade: o κ val do R2 eggs bate o pico na L2–L3 e cai a partir da L4**, como a curva tinha antecipado.
+
+   | camada | κ s1 | κ s2 | época do best (s1/s2) |
+   |---|---|---|---|
+   | L1 | 0,888 | 0,899 | 199 / 197 |
+   | L2 | 0,899 | 0,901 | 198 / 197 |
+   | L3 | 0,899 | 0,898 | 199 / 197 |
+   | L4 | 0,872 | 0,891 | 137 / 133 |
+   | L5 | 0,863 | 0,862 | 108 / 102 |
+   | L6 | 0,877 | 0,836 | 99 / 88 |
+   | L7 | 0,839 | 0,845 | 117 / 82 |
+   | L8 | **0,808** | **0,820** | 74 / 74 |
+
+   - De L3 para L4, o κ cai 0,027 (s1) e 0,007 (s2). De L3 para L8, cai 0,09 e 0,08.
+   - **Regra barata, sem SVM:** Spearman(época do best, κ) = **+0,85** nas L3–L8 (n = 12). **Se o early stop disparou, ou seja, se o best saiu antes da época ~150, a camada nova piorou o κ.** Isso valeu em todos os 10 estágios L4–L8 com κ.
+   - Dentro de cada split, a distância val − treino também cai junto com o κ. Juntando os splits, a correlação é só −0,41, porque cada split tem o seu próprio nível de base.
+   - **Ressalva:** o flatten encolhe de 27.648 dimensões (L3) para 5.808 (L4) e 7.744 (L5–L8). Parte da queda pode vir de mapa pequeno (11x11), não só de sobreajuste. Para separar as duas causas, seria preciso o κ de uma L4 sem pool.
+3. **Consequência para o R2:** com a configuração atual (48–64 filtros e kernel 5/3 depois da L3), **ir além da L3 não ajuda em eggs.** Em larvae, a curva da L4 é ainda pior (val − treino +0,0014 a +0,0017). A previsão é a mesma queda de κ; ela pede confirmação.
+4. **Protozoan L3, rand × SPiFiL (fg01):**
+   - Mínimo: rand 0,50788 / 0,50803 contra SPiFiL 0,50790 / 0,50806. O rand fica 2–3e-5 abaixo.
+   - e3: rand 18 / 17 / 18 contra SPiFiL 17 / 16 / 17. **É a primeira camada em que o SPiFiL estabiliza antes, por 1 época,** o que está dentro do ruído.
+   - **Placar em 26 estágios:** loss mais baixa, rand 21, SPiFiL 4, 1 empate. Estabiliza antes: rand 22, SPiFiL 3 (por 1 época), 1 empate.
+5. **Saúde:** 0 NaN, nenhum run travado. O fg01 terminou (a sessão tmux fechou). Os picos marcados no R2 larvae L5–L7 são o mesmo ruído de avaliação de antes, com a train estável.

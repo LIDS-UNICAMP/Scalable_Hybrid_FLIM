@@ -123,3 +123,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - 21 estágios (eggs/larvae L1–L3, protozoan L1). Pareado: SPiFiL vs aleatório com a mesma forma e a mesma norma por filtro, os dois com fundo 0.1.
 - O aleatório chega a uma loss mais baixa em 16 de 21; o SPiFiL ganha em 4 (≤4e-5); 1 empate. O aleatório estabiliza antes em 20 de 21. A oscilação é igual.
 - Conclusão: na otimização, o SPiFiL não é um inicializador melhor. A hipótese "o SPiFiL deixa o treino estável" caiu pela curva. Resta testar pelo κ: média e variância entre seeds (rand, rand_s1, rand_s2) e splits.
+
+## 2026-10-31: R2 (8 camadas) interrompido
+- κ val eggs (s1/s2): L3 0.898/0.898 → L4 0.871/0.891 → L5 0.863/0.862 → L6 0.877/0.835 → L7 0.839/0.844 → L8 0.808/0.819. A profundidade custa κ a partir da L4.
+- Curva do larvae (A4): na L4 a distância val − treino salta ~3x a do eggs, e o early stop dispara cedo. Prevê a mesma queda.
+- As L1–L3 do R2 eram cópia do fg01 (mesmo config). Continuar seria só gastar GPU. Interrompido às ~05:50; os parciais ficam.
+- Ruído de re-run do κ ≈ 0.01 por split (fg01 × R2 com config idêntico). A partir de agora, decisão só pela média dos 3 splits.
+- Ressalva: depois da L3 o mapa fica pequeno (12x12 → 11x11 com dilatação), então parte da queda pode ser o flatten menor e não só sobreajuste. A profundidade com mapa grande (pool só no fim) segue em aberto.
