@@ -328,3 +328,102 @@ Fonte: W&B `probe/val_recon_loss` e `probe/train_recon_loss_epoch` por época, 8
 7. **Saúde dos runs.**
    - 0 NaN, 0 picos e nenhum run travado: todos os que estão rodando gravaram há menos de 6 min.
    - Os "crashed" de larvae (fg01 s2 L1, w64 s1 L3, popz s2 L2) morreram no relançamento das 18:24. Não é falha do treino.
+
+## 2026-10-30 22:19 [A4] curvas, 2ª passada: L3 de eggs fechada
+- **L3, rand × SPiFiL (fg01)**, splits 1/2/3:
+
+  | | rand | SPiFiL |
+  |---|---|---|
+  | mínimo da val | 0,51279 / 0,51179 / 0,51227 | 0,51282 / 0,51181 / 0,51233 |
+  | e3 | 19 / 20 / 18 | 26 / 22 / 22 |
+
+  - O rand chega 2 a 6e-5 mais baixo, acima do ruído de 6e-6, e estabiliza 2 a 7 épocas antes.
+  - É o mesmo padrão da L1 e da L2: **nas 3 camadas e nos 3 splits, a curva não mostra vantagem do SPiFiL como inicializador.** Falta o κ.
+- **R2 L3 = fg01 L3:** 0,51280 / 0,51182 / 0,51233 contra 0,51282 / 0,51181 / 0,51233. Confirma a duplicação até a L3.
+- **R2 L4 começou.** A curva parcial é saudável: e3 23 no s1 (86 épocas), 12 e 11 nos s2 e s3 (só 34 e 26 épocas, ainda cedo). A regra de profundidade sai quando houver L5–L8 e o κ.
+- **Larvae relançado de novo.** A L1 do s1 voltou a rodar do zero em fg01, w64 e popz, e já tinha 200 épocas prontas. É o mesmo desperdício do relançamento das 18:24.
+- **Saúde:** 0 NaN, 0 picos, nenhum run travado.
+
+## 2026-10-30 23:00 [A4] curvas, 3ª passada: 1º early stop (R2 L4) e larvae rand × SPiFiL
+- **R2 L4, eggs s1: primeiro early stop entre todos os runs disc_*.** O mínimo da val cai na época 137, e o run para na 187 (137 + paciência 50). A lr ainda estava em 1,6e-5, ou seja, não foi o cosine chegando a zero. Depois do mínimo, a val sobe 8,7e-5.
+- **A distância val − treino cresce na L4 nos 3 splits.** É o primeiro sinal de sobreajuste com a profundidade:
+
+  | split | L1–L3 | L4 | mudança |
+  |---|---|---|---|
+  | s1 | −0,00055 | +0,00010 | +0,00065 |
+  | s2 | −0,00180 | −0,00128 | +0,0005 (L4 parcial) |
+  | s3 | −0,00143 | −0,00107 | +0,0003 (L4 parcial) |
+
+  - Nas L1–L3 esse valor era constante, um efeito do split. Na L4 ele sai do patamar.
+  - Na L4 a imagem já está reduzida a 12x12, e a camada nova tem 48 filtros com kernel 5. **Hipótese:** a partir daqui a camada nova decora o treino. O κ val da L4 contra o da L3 confirma ou não. A L5 (dilatação 2, sem pool) já começou.
+- **Larvae L1, rand × SPiFiL (fg01):**
+
+  | | rand | SPiFiL |
+  |---|---|---|
+  | mínimo s1 | 0,49471 | 0,49474 |
+  | mínimo s2 | 0,49490 | 0,49504 |
+  | e3 s1 / s2 | 28 / 27 | 34 / 31 |
+
+  - O rand chega mais baixo e estabiliza antes, o mesmo padrão do eggs. O SPiFiL não vence na curva em nenhum dataset até agora.
+- **Saúde:** 0 NaN, 0 picos, nenhum run travado.
+
+## 2026-10-30 23:42 [A4] curvas, 4ª passada: regra de profundidade (R2 eggs, só a curva, sem κ)
+
+| camada | época do best (s1/s2/s3) | val − treino (s1/s2/s3) | early stop |
+|---|---|---|---|
+| L1–L3 | 197–199 | −0,00043 / −0,00177 / −0,00139 (L3) | nunca |
+| L4 (48 filtros, kernel 5, pool, 12x12) | **137 / 133 / 152** | +0,00010 / −0,00127 / −0,00097 | **s1 na 188, s2 na 184**; s3 foi até 200 |
+| L5 (dilatação 2, sem pool), parcial | 108 / 89 / 66 até agora | +0,00022 / −0,00138 / −0,00114 | s1 vai parar por volta da 158 |
+
+- **Regra de profundidade (curva):**
+  - Até a L3, a val melhora até o fim do cosine.
+  - **A partir da L4, a val para de melhorar antes**, por volta da época 135–150, e o early stop dispara.
+  - A distância val − treino sobe +0,0004 a +0,0005 nos 3 splits. A camada nova passa a ajustar o treino mais que a val.
+  - A L5 tem loss mínima maior que a L4: +8e-5 no s1, com a L5 ainda parcial nos outros splits.
+- **Leitura:** pela reconstrução, o ponto de virada está entre a L3 e a L4 em eggs. Isso não prova que o κ para de subir, porque a loss não prevê o κ. Mas o primeiro lugar a medir com o SVM val é **L3 × L4 × L5**.
+- **Época do best muda com a profundidade?** Sim: 197–199 (L1–L3), 133–152 (L4) e 66–108 até agora (L5).
+- **Larvae L2, rand × SPiFiL (fg01, parcial):**
+  - Mínimo do rand mais baixo: −5e-5 / −1,6e-4 / −2,8e-4.
+  - e3: 19 / 18 / 19 no rand contra 24 / 27 / 22 no SPiFiL.
+  - L1 s3: rand 0,49511 e e3 24 contra SPiFiL 0,49520 e e3 34.
+  - **Até aqui são 9 de 9 estágios de larvae e eggs (L1–L3) em que o aleatório chega igual ou melhor na curva.**
+- **Saúde:** 0 NaN, nenhum run travado. O w64 larvae s3 L1 começou alto (v0 2,48), mas convergiu normal (0,46490).
+
+## 2026-10-31 00:24 [A4] curvas, 5ª passada: R2 L5 fechada; larvae L2 rand × SPiFiL fechada
+- **R2 eggs L5 (dilatação 2, sem pool):** early stop nos 3 splits, na época 159 / 153 / 178, com o best na 108 / 102 / 127.
+  - A distância val − treino continua subindo: +0,00018 / −0,00100 / −0,00074, contra +0,00010 / −0,00127 / −0,00097 na L4.
+  - A loss mínima da L5 fica acima da L4: +8e-5 / +2e-5 / +1e-5.
+  - A L6 já começou; no s1 o best está na época 99.
+  - **Regra confirmada (curva):** de L4 em diante, todo estágio para cedo, cerca de 50 épocas depois de um best entre as épocas 100 e 150, e a distância val − treino cresce de uma camada para a outra. Pela reconstrução, as camadas sem pool não ajudam.
+- **Larvae L2, rand × SPiFiL (fg01), fechada:**
+
+  | | rand | SPiFiL |
+  |---|---|---|
+  | mínimo (s1/s2/s3) | 0,49507 / 0,49522 / 0,49547 | 0,49513 / 0,49537 / 0,49558 |
+  | e3 | 19 / 18 / 19 | 24 / 27 / 27 |
+
+  - **Placar até aqui: 15 de 15 estágios** (eggs L1–L3 e larvae L1–L2) em que o aleatório chega numa loss igual ou mais baixa e estabiliza antes.
+- **Saúde:** 0 NaN, nenhum run travado.
+
+## 2026-10-31 01:06 [A4] curvas, 6ª passada: larvae L3 empata; R2 L6 continua a regra
+- **Larvae L3, rand × SPiFiL (fg01):**
+
+  | | rand | SPiFiL |
+  |---|---|---|
+  | mínimo (s1/s2/s3) | 0,49566 / 0,49581 / 0,49608 | 0,49565 / 0,49597 / 0,49604 |
+  | e3 | 22 / 26 / 27 | 22 / 27 / 29 |
+
+  - **É a primeira camada em que o SPiFiL empata ou vence de leve:** no s1 por 1e-5 (perto do ruído de 6e-6) e no s3 por 4e-5. No s2, o rand vence por 1,6e-4.
+  - **Placar corrigido: em 16 de 18 estágios o rand chega igual ou mais baixo. Nos 2 restantes o SPiFiL ganha por no máximo 4e-5.** Na loss, os dois inicializadores são praticamente equivalentes. O desempate tem que vir do κ.
+- **R2 eggs L6:**
+  - Early stop no s1 na época 150 (best na 99) e no s2 na 139 (best na 88). O s3 ainda roda, com best na 120.
+  - A distância val − treino cresce de novo: +0,00035 / −0,00091 contra +0,00018 / −0,00100 na L5.
+  - A loss mínima da L6 fica 2e-5 acima da L5.
+- **Época do best por camada** (média dos splits, R2 eggs): L1–L3 ~198, L4 ~141, L5 ~112, L6 ~94 (dois splits). **Ela cai ~20–30 épocas por camada depois da L3.**
+- **Saúde:** 0 NaN, nenhum run travado. O w64 larvae s1 L3, que tinha morrido na época 188 no relançamento, está na 193 e seguindo.
+
+## [A0] fg01 (fundo 0.1): o foco no objeto NÃO voltou (2026-10-31)
+- Razão de densidade de ativação dentro/fora (eggs s1, cru → treinado): L2 1.24 → 0.93 (no R1: 1.27 → 1.03); L3 1.20 → 0.94 (no R1: 1.16 → 0.84).
+- O peso menor do fundo na loss não impede o encoder de ativar no fundo. A L2 fica até pior que no R1; a L3 melhora pouco e continua abaixo de 1.
+- κ val (eggs): s1 L2 0.890 / L3 0.910 (R1: 0.907 / 0.908); s2 L2 0.903 (R1: 0.880). Empate até agora.
+- Leitura: o desvio para o fundo não vem só do peso dos pixels na loss. Candidatos: o próprio fundo constante serve de "referência" para o decoder; ou o max-pool/ReLU espalham a ativação. Próximo teste, se for o caso: penalizar a ativação fora do objeto no encoder (sem rótulo de classe).
