@@ -197,3 +197,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - rand L3: 0.791 (seed 0) / 0.840 (seed 1). fg01 0.838. Diferença na média +0.023 (~0.7 dp): inconclusivo, a queda da seed 0 foi azar de seed. No larvae s2, ao contrário, as 3 seeds caem juntas.
 - Placar com ≥2 seeds (7 células): o SPiFiL vence 2 (protozoan s1 +0.063, larvae s2 +0.037), empata 5 e não perde nenhuma.
 - Evidência mais estável: o κ do rand varia 0.007–0.035 entre seeds (mediana ~0.016); o SPiFiL repetido varia ≤0.0003–0.008. O SPiFiL serve como inicializador que estabiliza o treino. Falta protozoan s2/s3 com seeds.
+
+## 2026-10-31: protozoan s2/s3 com 2 seeds do rand; SPiFiL contribui
+- protozoan L3 (conferido nos CSVs): rand s2 0.802/0.804, s3 0.797/0.818; fg01 0.836 / 0.853. Vantagem do SPiFiL nos 3 splits: +0.063 / +0.033 / +0.045. Média: 0.855 contra 0.808.
+- Placar L3: protozoan vence 3/3, larvae vence s2 e empata s1/s3, eggs empata 3/3. O rand não vence nenhuma célula fora do ruído.
+- Estabilidade: o rand varia 0.002–0.035 entre seeds (mediana ~0.015); o SPiFiL repetido varia ≤0.008.
+- Conclusão: o critério "SPiFiL tem que contribuir" está cumprido. O SPiFiL ganha onde o aleatório vai mal e deixa o treino reprodutível. Falta só o rand_s2 em larvae s3 e protozoan s2/s3.
