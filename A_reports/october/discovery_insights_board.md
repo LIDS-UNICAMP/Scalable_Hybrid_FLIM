@@ -582,3 +582,137 @@ Fontes: results/svm_disc_r2_val.csv e svm_disc_a1_fg01_val.csv (só leitura) e a
    - e3: rand 18 / 17 / 18 contra SPiFiL 17 / 16 / 17. **É a primeira camada em que o SPiFiL estabiliza antes, por 1 época,** o que está dentro do ruído.
    - **Placar em 26 estágios:** loss mais baixa, rand 21, SPiFiL 4, 1 empate. Estabiliza antes: rand 22, SPiFiL 3 (por 1 época), 1 empate.
 5. **Saúde:** 0 NaN, nenhum run travado. O fg01 terminou (a sessão tmux fechou). Os picos marcados no R2 larvae L5–L7 são o mesmo ruído de avaliação de antes, com a train estável.
+
+## 2026-10-31 06:59 [A4] curvas, 14ª passada: o κ da profundidade fecha em 3/3 splits; sp200 e rand_s1 entram
+- **R2 eggs s3, κ val:**
+
+  | L2 | L3 | L4 | L5 | L6 | L7 | L8 |
+  |---|---|---|---|---|---|---|
+  | 0,892 | 0,887 | **0,856** | 0,844 | 0,848 | 0,829 | 0,823 |
+
+  - A época do best vai 199 → 198 → 152 → 127 → 120 → 124 → 81.
+  - **Nos 3 splits, o κ é máximo na L2–L3 e cai a partir da L4.** Em todos os 15 estágios L4–L8, o early stop disparou (ou o best saiu antes da época ~155) e o κ ficou abaixo da L3 do mesmo split. A regra "early stop disparou ⇒ a camada piorou o κ" fecha 15 de 15.
+- **O R2 larvae parou:** L7 s1, L6 s2 e L4 s3 ficaram como "crashed" ao mesmo tempo, há ~0,8 h. Imagino que o A0 tenha parado depois da regra de profundidade; não é falha do treino.
+- **Popz × R1, κ val s1:** L2 0,9127 contra 0,9068 (+0,006); L3 0,9041 contra 0,9077 (−0,004). **As duas diferenças estão dentro do ruído de re-run (~0,012).**
+- **sp200 (A3, fundo 0.1) × fg01, L1:**
+  - Mínimo: 0,51216 / 0,51112 / 0,51163 contra 0,51211 / 0,51117 / 0,51171, ou seja, ±5e-5 sem direção.
+  - e3: 28 / 32 / 27 contra 27 / 36 / 30.
+  - Na curva, o sp200 é indistinguível do fg01.
+- **Seed do aleatório (rand_s1 × rand), larvae s1 L1:** mínimo 0,49467 contra 0,49471 e e3 32 contra 28. É a variação de seed numa camada só.
+  - A diferença de 4e-5 entre seeds do aleatório é do mesmo tamanho da diferença rand × SPiFiL. **Isso reforça que, na curva, os dois inicializadores são indistinguíveis.**
+- **Saúde:** 0 NaN, nenhum run travado entre os ativos (w64 protozoan L3, sp200 eggs L2, rand_s1).
+
+## 2026-10-31 07:46 [A4] curvas, 15ª passada: seeds do aleatório × SPiFiL na curva; bp01 L1 = fg01 L1
+- O R2 saiu da vigia (o A0 o parou de propósito).
+- **Seeds do aleatório × SPiFiL, loss mínima da val no split 1:**
+
+  | estágio | rand (seed 0) | rand_s1 | SPiFiL (fg01) | faixa entre seeds | onde fica o SPiFiL |
+  |---|---|---|---|---|---|
+  | eggs L1 | 0,51202 | 0,51192 | 0,51211 | 1,0e-4 | 9e-5 acima do melhor seed |
+  | larvae L2 | 0,49507 | 0,49516 | 0,49513 | 9e-5 | **dentro da faixa** |
+  | protozoan L1 | 0,50724 | 0,50721 | 0,50721 | 3e-5 | **empata com o melhor seed** |
+
+  - e3 em eggs L1: 25 / 26 (seeds) contra 27 (SPiFiL).
+  - **Na curva, trocar a seed do aleatório move a loss tanto quanto trocar aleatório por SPiFiL.** As diferenças rand × SPiFiL do placar de antes (≤ 1e-4) estão dentro da variação entre seeds. Não há sinal de estabilidade do SPiFiL na otimização.
+- **κ por seed:** o script está pronto (scratchpad a4/kappa_seeds.py). Ele compara o desvio do κ entre as seeds rand/s1/s2 com o desvio entre splits e entre re-runs do SPiFiL (o R2 nas L1–L3 serve de repetição do fg01).
+  - Do lado SPiFiL, o desvio por **re-run** no s1 é de 0,0085 (L2) e 0,0114 (L3); no s2 e no s3, ≤ 0,0013.
+  - Faltam os CSVs `svm_disc_r1_rand*_val.csv`.
+- **bp01 L1 = fg01 L1:** 0,51213 / 0,51118 / 0,51171 contra 0,51211 / 0,51117 / 0,51171, com e3 igual. O `layerwise_backprop` não age na L1, porque não há camada antiga para treinar. Estes 3 estágios são repetição.
+  - **Regra:** uma variante que só muda as camadas ≥ 2 pode começar do ckpt L1 do fg01.
+- **Saúde:** 0 NaN, nenhum run travado. Rodam bp01 L1, sp200 L3 e rand_s1 (eggs L2, larvae L3, protozoan L2).
+
+## 2026-10-31 08:32 [A4] curvas, 16ª passada (nota curta; o κ do rand ainda não saiu)
+- **Seeds do aleatório × SPiFiL na loss mínima, split 1:**
+
+  | estágio | rand | rand_s1 | SPiFiL | posição do SPiFiL |
+  |---|---|---|---|---|
+  | eggs L2 | 0,51238 | 0,51234 | 0,51239 | 1e-5 acima da faixa (≈ ruído) |
+  | eggs L3 | 0,51279 | 0,51285 | 0,51282 | **no meio da faixa** |
+  | larvae L3 | 0,49566 | 0,49571 | 0,49565 | na borda de baixo (melhor por 1e-5) |
+
+  - Somando com a passada anterior: em 6 estágios com duas seeds, o SPiFiL fica dentro da faixa ou a até 1e-5 dela em 5. A exceção é eggs L1, 9e-5 acima.
+- **bp01 L2 (A2, camadas antigas com lr 0,1×) × fg01:** s2 0,51141 contra 0,51143; s1 0,51239 contra 0,51239 (ainda parcial). O backprop leve não muda a loss. Se tem efeito, só o κ mostra.
+- **sp200 L3 × fg01:** 0,51288 / 0,51179 / 0,51233 contra 0,51282 / 0,51181 / 0,51232. Iguais dentro de ±6e-5.
+- **Saúde:** 0 NaN, nenhum run travado.
+
+## 2026-10-31 09:19 [A4] curvas, 17ª passada (nota curta)
+- **bp01 L3 × fg01 L3** (A2: L1–L2 treinando com lr 0,1× junto com a L3):
+  - Mínimo: s1 0,51276 contra 0,51282 (−6e-5); s2 0,51177 contra 0,51181 (−4e-5).
+  - Época do best no s1: 189 contra 197.
+  - É o primeiro efeito do bp01 na curva. Vai na mesma direção nos dois splits e fica acima do ruído de re-run (6e-6), **mas dentro da faixa entre seeds do aleatório (6e-5).**
+  - Na L2, o efeito não aparece (0,51238 contra 0,51239). Só o κ decide.
+- **sp200 × fg01 em larvae:**
+  - L1: 0,49471 / 0,49486 / 0,49524 contra 0,49474 / 0,49504 / 0,49520.
+  - L2: 0,49517 / 0,49533 contra 0,49513 / 0,49537.
+  - Diferenças de ±2e-4 sem direção. Na curva, os dois são iguais.
+- **Protozoan s1 L2:** rand_s1 0,50748, rand 0,50751 e SPiFiL 0,50752. O SPiFiL fica 1e-5 acima da faixa entre seeds.
+- **Placar seeds × SPiFiL:** em 7 estágios com 2 seeds, o SPiFiL fica dentro da faixa, ou a até 1e-5 dela, em 6.
+- **Saúde:** 0 NaN, nenhum run travado. Seguem rodando disc_a2 (bp01), disc_a3 (sp200) e disc_rand (s1). Ainda não há `svm_disc_r1_rand*_val.csv`.
+
+## 2026-10-31 10:05 [A4] curvas, 18ª passada (nota curta)
+- **bp01 L3 × fg01 L3 em eggs, 3 de 3 splits:** 0,51276 / 0,51177 / 0,51225 contra 0,51282 / 0,51181 / 0,51232, ou seja, **−6, −4 e −7e-5**.
+  - É o único eixo desta rodada com efeito de direção consistente na loss. Ele aparece só na L3: na L2 a diferença é ≤1e-5, em eggs e em larvae.
+  - O tamanho fica perto da faixa entre seeds do aleatório (6e-5). Ainda falta o κ para dizer se vira ganho.
+- **bp01 larvae L1 = fg01 larvae L1:** 0,49474 / 0,49504 / 0,49520 nos dois. Mais 3 estágios repetidos (a regra "L1 de variante que só muda as camadas ≥2 = ckpt do fg01").
+- **sp200 larvae L3 × fg01:** 0,49572 / 0,49592 / 0,49604 contra 0,49565 / 0,49597 / 0,49604. Iguais.
+- **Saúde:** 0 NaN, nenhum run travado. Ainda não há `svm_disc_r1_rand*_val.csv`.
+
+## 2026-10-31 10:51 [A4] curvas, 19ª passada (nota curta)
+- **bp01 L3 × fg01 L3, agora com larvae:** s1 0,49562 contra 0,49565 (−3e-5) e s2 0,49587 contra 0,49597 (−1e-4).
+  - **5 de 5 splits com o bp01 L3 abaixo** (eggs −4 a −7e-5, larvae −3e-5 a −1e-4). Na L2, a diferença continua ≤2e-5.
+  - Leitura: deixar L1–L2 se ajustarem junto com a L3 (lr 0,1×) baixa a loss de reconstrução da L3 de forma consistente. Vale o κ do bp01 L3 contra o fg01 L3.
+- **3 seeds do aleatório, larvae s1 L1:** rand / s1 / s2 = 0,49471 / 0,49467 / 0,49469 (faixa de 4e-5). O SPiFiL dá 0,49474, 3e-5 acima da faixa.
+  - e3: 28 / 32 / 37 contra 34 no SPiFiL, dentro da faixa.
+  - **Com 3 seeds, a época de estabilizar varia 9 épocas entre seeds.** Logo, a diferença de "velocidade" rand × SPiFiL do placar (≤8 épocas) também cabe na variação entre seeds.
+- **Protozoan s1 L3:** rand e rand_s1 dão 0,50788 os dois; o SPiFiL dá 0,50790 (+2e-5).
+- **sp200 protozoan L1 × fg01:** 0,50720 / 0,50739 contra 0,50721 / 0,50737. Iguais.
+- **Saúde:** 0 NaN, nenhum run travado. Ainda não há `svm_disc_r1_rand*_val.csv`.
+
+## 2026-10-31 11:38 [A4] curvas, 20ª passada: 3 seeds do aleatório × SPiFiL no split 1 (loss mínima | e3)
+
+| estágio | rand | rand_s1 | rand_s2 | SPiFiL | SPiFiL em relação à faixa |
+|---|---|---|---|---|---|
+| eggs L1 | 0,51202 \| 25 | 0,51192 \| 26 | 0,51191 \| 25 | 0,51211 \| 27 | 9e-5 acima, e3 +1 |
+| larvae L1 | 0,49471 \| 28 | 0,49467 \| 32 | 0,49469 \| 37 | 0,49474 \| 34 | 3e-5 acima, e3 dentro |
+| larvae L2 | 0,49507 \| 19 | 0,49516 \| 24 | 0,49505 \| 16 | 0,49513 \| 24 | **dentro, dentro** |
+| protozoan L1 | 0,50724 \| 21 | 0,50721 \| 27 | 0,50719 \| 28 | 0,50721 \| 26 | **dentro, dentro** |
+
+- **Leitura:** o desvio entre seeds do aleatório vai de 2e-5 a 6e-5 na loss e de 2 a 9 épocas no e3. O SPiFiL cai dentro da faixa das 3 seeds em 2 de 4 estágios, e logo acima nos outros 2. **Em nenhum estágio o SPiFiL fica melhor que a melhor seed.** Na curva, ele se comporta como "mais uma seed do aleatório" ou um pouco pior.
+- **bp01 larvae s3 L3:** 0,49602 contra 0,49604 no fg01. **São 6 de 6 splits com o bp01 L3 abaixo do fg01 L3.**
+- **bp01 protozoan L1 = fg01:** 0,50721 / 0,50739 contra 0,50721 / 0,50737, de novo repetido.
+- **Saúde:** 0 NaN, nenhum run travado. Ainda não há κ do rand.
+
+## 2026-10-31 12:24 [A4] curvas, 21ª passada (nota curta)
+- **Mais dois estágios com 3 seeds do aleatório, split 1:**
+
+  | estágio | rand / s1 / s2 | SPiFiL | posição do SPiFiL |
+  |---|---|---|---|
+  | eggs L2 | 0,51238 / 0,51234 / 0,51235 | 0,51239 | 1e-5 acima (≈ ruído) |
+  | larvae L3 | 0,49566 / 0,49571 / 0,49567 | 0,49565 | **1e-5 abaixo**; e3 22 contra 22 / 24 / 20 |
+
+  - **Placar com 3 seeds em 6 estágios:** o SPiFiL fica abaixo da faixa em 1 (por 1e-5), dentro em 2 e acima em 3 (por 1e-5, 3e-5 e 9e-5).
+  - É o retrato de uma seed qualquer. Não há vantagem sistemática.
+- **sp200 protozoan L2 × fg01:** 0,50755 / 0,50772 contra 0,50752 / 0,50770. Iguais.
+- **Saúde:** 0 NaN, nenhum run travado. Ainda não há κ do rand.
+
+## 2026-10-31 12:56 [A4] κ val, 1º resultado: rand (seed 0) × SPiFiL na L3 de eggs
+Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e svm_disc_r2_val.csv (só leitura). Script: scratchpad a4/kappa_seeds.py.
+
+| eggs L3 | s1 | s2 | s3 | média | desvio entre splits |
+|---|---|---|---|---|---|
+| **SPiFiL (fg01, ckpt atual)** | 0,8938 | 0,8983 | 0,8868 | **0,8930** | **0,0058** |
+| SPiFiL, repetições do mesmo config | 0,9100 (fg01 antigo) e 0,8986 (R2) | 0,8982 (R2) | 0,8865 (R2) | — | — |
+| **rand seed 0** | 0,8979 | **0,9200** | **0,9078** | **0,9086** | **0,0111** |
+| rand − SPiFiL | +0,004 | **+0,022** | **+0,021** | **+0,016** | — |
+
+1. **Ruído por repetição do SPiFiL** (o mesmo YAML treinado de novo):
+   - No s1 há 3 repetições: 0,9100 / 0,8938 / 0,8986, com faixa de **0,016** e desvio de 0,008.
+   - No s2 e no s3 há 2 repetições cada, com faixa de ≤0,0003.
+   - **O s1 é instável; o s2 e o s3, não.** A linha 0,9100 que usei antes vinha do run anterior ao relançamento das 18:24. O ckpt atual dá 0,8938.
+2. **Média:** o rand seed 0 fica +0,016 acima do SPiFiL.
+   - No s1, a diferença (+0,004) está dentro do ruído do s1.
+   - **No s2 e no s3, a diferença (+0,021 a +0,022) é ~70x maior que o ruído por repetição desses splits.** Ali o aleatório é melhor de verdade, pelo menos com esta seed.
+3. **Estabilidade entre splits (critério do A0):** o desvio do SPiFiL (0,0058) é menor que o do rand (0,0111).
+   - É o primeiro ponto a favor do SPiFiL. Mas é estabilidade **em torno de uma média mais baixa**. Com n = 3 splits, a diferença de desvios também não é significativa.
+   - Para fechar o critério, faltam s1 e s2 do rand: o desvio **entre seeds** contra o desvio entre repetições do SPiFiL.
+4. **Leitura provisória:** na L3 de eggs, o aleatório com a mesma norma dá κ igual ou maior que o SPiFiL. O SPiFiL só vence em "variar menos entre splits", e ainda sem significância.

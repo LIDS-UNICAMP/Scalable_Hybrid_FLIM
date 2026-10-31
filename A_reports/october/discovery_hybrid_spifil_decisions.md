@@ -130,3 +130,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - As L1–L3 do R2 eram cópia do fg01 (mesmo config). Continuar seria só gastar GPU. Interrompido às ~05:50; os parciais ficam.
 - Ruído de re-run do κ ≈ 0.01 por split (fg01 × R2 com config idêntico). A partir de agora, decisão só pela média dos 3 splits.
 - Ressalva: depois da L3 o mapa fica pequeno (12x12 → 11x11 com dilatação), então parte da queda pode ser o flatten menor e não só sobreajuste. A profundidade com mapa grande (pool só no fim) segue em aberto.
+
+## 2026-10-31: 1º κ do controle aleatório. O rand vence o SPiFiL na L3 de eggs
+- Pareados (mesmo config, fundo 0.1; o rand tem a mesma norma por filtro do SPiFiL, seed 42). κ val L3 eggs s1/s2/s3: rand 0.898/0.920/0.908 (média 0.909); fg01 (SPiFiL) 0.894/0.898/0.887 (média 0.893). Δ = +0.016 para o rand.
+- s2/s3: Δ +0.021/+0.022, acima do ruído de re-run desses splits (≤0.0003). s1: dentro do ruído (até 0.016).
+- O SPiFiL varia menos entre splits (dp 0.006 contra 0.011), mas em torno de uma média mais baixa; com n=3 isso não é significativo.
+- Leitura: até aqui o SPiFiL não contribui como inicializador, nem na curva nem no κ. Faltam as seeds s1/s2 do rand e os outros datasets.
+- Erro operacional: o relançamento das 18:24 NÃO pulou os pontos prontos (0 pulados). O fg01/w64/popz retreinaram o eggs; o ckpt de topo foi substituído, mas o run antigo (flim-ssl/oza2fp2k) continua no disco. O κ antigo do fg01 eggs s1 L3 (0.910) é desse ckpt antigo.
