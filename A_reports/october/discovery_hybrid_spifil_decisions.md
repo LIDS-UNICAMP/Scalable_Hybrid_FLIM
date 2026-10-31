@@ -210,3 +210,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Limite medido: o SPiFiL dá 1 filtro por semente. Com 50 sp por imagem e 1 imagem por classe, o larvae dá 100 filtros. Com 600 sp, dá 964. Escolha do usuário: o SPiFiL dá o que conseguir, e o resto até 1280 é aleatório na norma média dos filtros SPiFiL, com bias 0 (novo `fill_random_last`, só na última camada; L1–L3 intactas).
 - Leitura: média por canal (avgpool2d), também no κ de treino. Achatado daria 737k-d, inviável para a CPU. Efeito colateral: a época do ckpt de L1–L3 é escolhida pela média, não pelo achatado. Por isso o SVM avalia L3 e L4 na mesma leitura, e a L3 dessa família é a referência da camada 1x1.
 - Params do encoder ~120k (≤5M).
+
+## 2026-10-31: controle aleatório fechado (L3, 3 seeds × 3 splits × 3 datasets)
+- protozoan: SPiFiL 0.855 contra rand 0.809 (+0.046, vence 3/3 por 3 a 9 dp). larvae: +0.013 (vence s2 por 5.7 dp, empata s1/s3). eggs: −0.008 (empate 3/3, ≤1.3 dp). Geral: +0.017. O rand não supera o SPiFiL em nenhuma célula fora do ruído.
+- Estabilidade: o rand varia 0.012–0.022 entre seeds, em média (até 0.039); o SPiFiL repetido varia ≤0.008.
+- Regra: o ganho do SPiFiL cresce quanto pior o aleatório vai no dataset. Critério "SPiFiL tem que contribuir": cumprido.
+- bp01c1280: as L1–L3 repetem o bp01, mas não vou cortar. O ckpt de L1–L3 é escolhido pelo κ da média, e a L3 da própria família é o controle limpo da camada 1x1. Começar da L3 do bp01 exigiria uma chave nova no runner.
