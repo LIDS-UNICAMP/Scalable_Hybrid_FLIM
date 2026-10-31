@@ -748,3 +748,86 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
 - **A loss não vê nada disso:** em larvae s2/s3 e em protozoan s1, a loss de reconstrução do rand é igual ou mais baixa e o κ cai 0,04 a 0,06.
   - **Regra:** a curva de treino serve para saúde e para orçamento de épocas, nunca para julgar inicializador.
 - **Ainda é seed 0 do rand.** Para dizer se o aleatório é "às vezes ruim" (variância entre seeds) ou se esta seed teve azar, faltam rand_s1 e rand_s2 no SVM val, pelo menos em larvae L3 s2/s3 e protozoan L3 s1.
+
+## 2026-10-31 13:15 [A4] κ val L3: protozoan s2 entra (nota curta)
+- **Protozoan s2 L3:** rand seed 0 dá 0,8019 contra SPiFiL 0,8357, ou seja, **−0,034**. No protozoan s1 tinha sido −0,062.
+- **rand − SPiFiL nos 8 pares:** eggs +0,004 / +0,022 / +0,021; larvae +0,009 / −0,044 / −0,048; protozoan −0,062 / −0,034.
+  - **O SPiFiL vence 4 de 8 por 0,03 a 0,06. O rand vence 2 de 8 por ~0,02, os dois em eggs.** Os 2 pares restantes estão dentro do ruído.
+  - Média das diferenças: −0,017 a favor do SPiFiL.
+- **Leitura por dataset:** em eggs, o aleatório se sai um pouco melhor. **Em larvae e protozoan, o SPiFiL é claramente melhor e mais estável.** É coerente com os dois serem os datasets mais difíceis: κ mais baixo e menos imagens por classe em larvae.
+- Ainda é seed 0. Falta rand_s1/s2 para separar efeito do SPiFiL de azar de seed.
+
+## 2026-10-31 13:26 [A4] κ val L3: protozoan fecha; as seeds do rand só cobrem o split 1
+- **Protozoan s3 L3:** rand seed 0 dá 0,7969 contra SPiFiL 0,8526, ou seja, **−0,056**.
+
+  | protozoan L3 | s1 / s2 / s3 | média | desvio entre splits |
+  |---|---|---|---|
+  | SPiFiL | 0,877 / 0,836 / 0,853 | **0,855** | 0,021 |
+  | rand seed 0 | 0,815 / 0,802 / 0,797 | 0,805 | **0,009** |
+
+  - **Aqui o SPiFiL ganha +0,050 na média, mas varia mais entre splits.** Então "o SPiFiL é mais estável entre splits" vale em eggs e larvae, **não em protozoan**. O que se repete em larvae e protozoan é a **média** maior.
+- **rand − SPiFiL nos 9 pares da L3:** eggs +0,004 / +0,022 / +0,021; larvae +0,009 / −0,044 / −0,048; protozoan −0,062 / −0,034 / −0,056.
+  - **O SPiFiL vence 5 de 9 por 0,03 a 0,06,** todos em larvae e protozoan. O rand vence 2 de 9 por ~0,02, em eggs. Média: −0,021.
+- **Primeiras seeds extras, só no split 1:**
+
+  | split 1 L3 | rand seed 0 | rand_s1 | SPiFiL (repetições) |
+  |---|---|---|---|
+  | eggs | 0,8979 | 0,9105 | 0,8938 / 0,9100 / 0,8986 |
+  | larvae | 0,8477 | 0,8589 | 0,8387 |
+
+  - A variação entre seeds no s1 (0,011–0,013) é do mesmo tamanho da variação por repetição do SPiFiL (até 0,016).
+  - **Em larvae s1, as duas seeds do rand passam o SPiFiL** (+0,009 e +0,020).
+- **Limitação de desenho:** `growth_disc_r1_rand_s1.yaml` e `_s2.yaml` têm `splits: [1]`.
+  - As perdas grandes do rand (larvae s2/s3 e protozoan s1/s2/s3) estão em splits que as seeds extras não cobrem. No split 1 de larvae, o rand nunca perdeu.
+  - **Com o desenho atual, não dá para separar "o aleatório é instável" de "a seed 0 teve azar no s2/s3".**
+  - O teste que decide: rand_s1/s2 em larvae s2/s3 e protozoan s2/s3, só até a L3. São 4 células × 3 estágios por seed. A decisão é do A0.
+
+## 2026-10-31 13:33 [A4] κ val L3: no protozoan s1, a vitória do SPiFiL resiste a 2 seeds do rand
+- **Protozoan s1 L3:**
+  - rand seed 0 dá 0,8150 e rand_s1 dá 0,7944: a faixa entre seeds é de **0,021**.
+  - O SPiFiL dá **0,8771**, à frente das duas seeds por **+0,062 e +0,083**, ou seja, 3–4x a variação entre seeds.
+  - **É o primeiro ponto em que a vantagem do SPiFiL passa no teste de seed. Não é azar da seed 0.**
+- **Correção da nota anterior:** o protozoan s1 também era um dos pontos com perda grande do rand, e ele **está** coberto pelas seeds extras. Os que ficam de fora são larvae s2/s3 e protozoan s2/s3.
+- **Split 1, com 2 seeds do rand por dataset (L3):**
+
+  | dataset | rand seed 0 / s1 | SPiFiL | leitura |
+  |---|---|---|---|
+  | eggs | 0,898 / 0,911 | 0,894 (repetições 0,894–0,910) | empate: cabe no ruído de repetição |
+  | larvae | 0,848 / 0,859 | 0,839 | **rand melhor** nas 2 seeds (+0,009 / +0,020) |
+  | protozoan | 0,815 / 0,794 | **0,877** | **SPiFiL melhor** nas 2 seeds (+0,062 / +0,083) |
+
+- **Leitura:** o efeito do SPiFiL depende do dataset.
+  - Em protozoan, ele é forte e resiste à troca de seed.
+  - Em eggs, empata.
+  - Em larvae, o resultado depende do split: o rand ganha no s1 e perde no s2/s3 com a seed 0. Para fechar larvae, falta seed extra no s2/s3.
+
+## 2026-10-31 13:45 [A4] checagem dos CSVs de SVM: κ idênticos entre ckpts diferentes não são bug; w64 L3 no κ
+- **Verificação:** procurei métricas (κ, acc, f1) idênticas entre ckpts diferentes em todos os `svm_disc_*val*.csv`. Achei 7 grupos em 103:
+  - **3 esperados:** fg01 L1 = R2 L1, com pesos idênticos (s1, s2, s3).
+  - **4 em larvae, entre modelos diferentes:**
+    - rand_s1 s1 L3 = w64 s1 L3, com κ 0,85890 e dims diferentes;
+    - R1 s1 L1 = popz s2 L2;
+    - R1 s3 L1 = R1 s3 L2;
+    - fg01 s2 L3 = popz s3 L3.
+  - **Explicação:** larvae é **binário**. A val tem 1.757 imagens (223 contra 1.534), a mesma composição nos 3 splits. Com ~110 erros, κ, acc e f1 dependem só do par (FP, FN), então coincidências exatas são esperadas entre ~800 pares de linhas.
+  - **Não é cache nem ckpt trocado.** Consequência prática: em larvae, **uma imagem a mais ou a menos move o κ em ~0,003–0,005**. Esse é o grão mínimo de diferença.
+- **w64 × R1, κ val L3** (os dois com BCE uniforme):
+  - eggs: 0,9126 / 0,8893 / 0,8849 contra 0,9077 / 0,8877 / 0,8957, ou seja, +0,005 / +0,002 / −0,011 (média −0,001).
+  - larvae s1: 0,8589 contra 0,8466 (+0,012).
+  - **Tudo dentro do ruído de repetição (~0,012).** Mais filtros não muda o κ da L3.
+
+## 2026-10-31 13:51 [A4] κ val larvae L3: o s2/s3 são splits difíceis, e só o SPiFiL + fundo 0,1 não cai neles
+
+| larvae L3 | init | BCE | s1 | s2 | s3 | queda s1 → média(s2, s3) |
+|---|---|---|---|---|---|---|
+| R1 | SPiFiL | uniforme | 0,847 | 0,816 | 0,826 | −0,026 |
+| w64 | SPiFiL (32/48/64) | uniforme | 0,859 | 0,804 | 0,807 | −0,054 |
+| rand seed 0 | aleatório | fundo 0,1 | 0,848 | 0,787 | 0,791 | −0,059 |
+| **fg01** | **SPiFiL** | **fundo 0,1** | 0,839 | **0,831** | **0,838** | **−0,005** |
+
+- **Em larvae, o s2 e o s3 derrubam todos os candidatos em 0,03 a 0,06, menos o fg01.** Lembrete: os 3 splits têm a mesma composição na val (223 / 1.534).
+- **Leitura, tirando um fator de cada vez:**
+  - O fundo 0,1 sozinho não basta: o rand também usa fundo 0,1 e cai −0,059.
+  - O SPiFiL sozinho também não basta: R1 e w64 caem −0,026 e −0,054.
+  - **A combinação "SPiFiL + recon com peso no objeto" é a única estável em larvae.** É coerente com a hipótese A0/A1: o SPiFiL traz filtros do objeto, e o fundo 0,1 impede que o backprop os puxe para o fundo.
+- **Com isso, o fg01 é o candidato mais estável em larvae entre todos os medidos.** Ainda falta o rand_s1/s2 nos splits 2/3 para fechar o controle de seed.

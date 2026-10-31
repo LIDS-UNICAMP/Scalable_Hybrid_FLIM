@@ -144,3 +144,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Perfil: o rand ganha ~0.02 em eggs, mas tem quedas grandes e esporádicas (larvae s2/s3 −0.044/−0.048, protozoan s1 −0.062). O SPiFiL fica estável (dp ≤0.006 em eggs e larvae). A loss não vê nada disso.
 - Hipótese (SPiFiL como inicializador): ele não melhora a otimização, mas evita mínimos ruins para a classificação. Faltam as seeds 1 e 2 do rand para descartar o azar da seed 42; os SVMs delas estão na frente da fila.
 - popz (L3): 0.886 / 0.820 / 0.844, abaixo do fg01. O z-score populacional não ajuda.
+
+## 2026-10-31: larvae L3, só SPiFiL + fundo 0.1 fica estável entre splits (A4)
+- Queda de κ val do s1 para a média do s2/s3: R1 −0.026; w64 −0.054; rand seed 42 + fundo 0.1 −0.059; fg01 (SPiFiL + fundo 0.1) −0.005.
+- Leitura: nenhum dos dois fatores basta sozinho; a combinação é a única estável.
+- Ressalva: a medida dentro/fora em eggs s1 NÃO mostrou o fg01 mantendo o foco no objeto (L2 0.93, L3 0.94). Então o mecanismo "o fundo 0.1 segura os filtros no objeto" não está provado; o efeito pode vir de outro lugar. Medir dentro/fora no larvae s2/s3 (fg01 × R1 × rand) separa as duas leituras.
+- Falta o controle de seed do rand no s2/s3 (seeds 1 e 2 treinando).
