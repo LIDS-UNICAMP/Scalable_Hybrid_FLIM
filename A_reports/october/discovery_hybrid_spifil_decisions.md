@@ -220,3 +220,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-10-31: w64fg não soma; L4 1x1 do c1280 baixa a loss
 - w64fg L3: eggs 0.914/0.885/0.892 (0.897), larvae 0.853/0.800/0.845 (0.833), protozoan 0.879/0.861 (s3 pendente). Empata com w64, fg01 e bp01 dentro do ruído: largura e fundo 0.1 não somam.
 - c1280 L4 (~120 épocas): é a primeira camada além da L3 que baixa a val loss (−8e-5 / −7e-5 contra a L3). A distância val − treino sobe só +1e-4 (no R2, +5e-4). Sem early stop, memória estável. O veredito sai no κ avgpool L4 × L3.
+
+## 2026-11-01: bp01w64 no topo em eggs e larvae (L3, κ val)
+- eggs 0.929/0.892/0.897 (0.906; o s1 é o maior κ de eggs medido), larvae 0.864/0.822/0.849 (0.845). Ganha +0.004 sobre o bp01 em eggs e +0.009 sobre o fg01 em larvae: dentro do ruído, mas no topo dos dois. Protozoan pendente.
+- Em eggs, a ordem da loss de L3 (fg01 → bp01 → bp01w64) bate com a do κ. Em larvae não bate: a curva continua sem prever κ em geral.
+- Base nova provisória: bp01w64 (backprop 0.1 + fundo 0.1 + largura 32/48/64). Fecha quando sair o protozoan.
