@@ -177,3 +177,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - bp01 (fg01 + camadas antigas treinando com lr 0.1×): 0.908/0.906/0.894 (média 0.902). fg01: 0.894/0.898/0.887 (0.893). Δ +0.010 com o mesmo sinal nos 3 splits. É o melhor eggs até agora.
 - A loss da L3 do bp01 já era mais baixa em 6 de 6 splits. Regra: no mesmo encoder com mais liberdade de backprop, loss menor acompanha κ maior. Entre inicializadores diferentes isso não vale.
 - Apoia a orientação do usuário de explorar o backprop junto com o SPiFiL. Próximo: bp01 em larvae e protozoan; se confirmar, combinar bp01 + w64fg (uma mudança de cada vez).
+
+## 2026-10-31: bp01 é o melhor nos 3 datasets; lançado bp01w64
+- bp01 L3 (média dos 3 splits): eggs 0.902 (+0.010 contra o fg01, 3/3), larvae 0.829 (empate), protozoan 0.866 (+0.010, 3/3; o maior protozoan até agora).
+- Novo candidato bp01w64 = bp01 + largura 32/48/64 (uma mudança). Motivo: o w64 deu +0.011 em protozoan com BCE uniforme.
+- O SVM das seeds 1 e 2 roda já nos ckpts de L3 prontos (só a L3; uma L3 existe só quando o ponto terminou), sem esperar o growth inteiro.

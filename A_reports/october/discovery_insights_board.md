@@ -948,3 +948,31 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
   - **Regra refinada:** a loss não prevê o κ **entre inicializadores diferentes** (rand × SPiFiL). Mas, para **o mesmo encoder com mais liberdade de treino** (backprop nas camadas antigas), loss mais baixa veio junto com κ mais alto.
 - O bp01 s1 (0,908) fica no topo da faixa das 3 seeds do rand em eggs s1 (0,882–0,911).
 - **Próximo ponto que importa:** o bp01 em larvae e protozoan L3, onde o SPiFiL já tinha vantagem.
+
+## 2026-10-31 15:42 [A4] κ val: o bp01 em larvae L3 empata, e a regra "loss prevê κ" fica restrita
+- **bp01 × fg01, larvae L3:** 0,817 / 0,829 / 0,841 contra 0,839 / 0,831 / 0,838, ou seja, −0,022 / −0,001 / +0,002 (média −0,007).
+  - Dentro do grão de larvae (±0,05 num treino só). **É empate.**
+- **Correção da regra da nota anterior:** em larvae, a loss da L3 do bp01 também era mais baixa nos 3 splits (−3e-5 a −1e-4), e o κ não subiu. **"Para o mesmo encoder, loss mais baixa ⇒ κ mais alto" só valeu em eggs (3/3), não em larvae (0/3).** Volto à regra geral: **a loss não prevê o κ**, com eggs como exceção a confirmar.
+- **bp01 até aqui:** +0,010 em eggs (3/3 splits), empate em larvae. Falta protozoan.
+
+## 2026-10-31 15:53 [A4] nota curta
+- **bp01 protozoan s1 L3 = 0,882,** o maior κ de protozoan s1 medido até agora.
+  - Contra o fg01 (0,877), dá +0,005, dentro do ruído.
+  - Contra a média das 3 seeds do rand (0,814), dá +0,068.
+  - Espero os splits s2/s3 para fechar.
+- Seeds do rand nos splits 2/3: ainda sem κ. Curvas: 0 NaN, nenhum run travado.
+
+## 2026-10-31 16:20 [A4] κ val: o bp01 ganha em protozoan nos 3 splits; o κ das seeds s2/s3 só sai no fim do growth
+- **bp01 × fg01, protozoan L3:**
+
+  | | s1 | s2 | s3 | média |
+  |---|---|---|---|---|
+  | bp01 | 0,882 | 0,854 | 0,860 | **0,866** |
+  | fg01 | 0,877 | 0,836 | 0,853 | 0,855 |
+  | diferença | +0,005 | +0,018 | +0,007 | **+0,010** |
+
+  - **Sinal positivo nos 3 splits.** A média de 0,866 é a maior de protozoan entre todas as variantes (w64 0,860, fg01 0,855, R1 0,848). Numericamente passa o I-JEPA (0,864), mas o I-JEPA é teste e isto é val.
+  - **Placar do bp01 (L3):** eggs +0,010 (3/3), larvae −0,007 (empate), protozoan +0,010 (3/3). **É a melhor variante nos 3 datasets juntos.**
+- **κ das seeds do rand nos splits 2/3:** o SVM está encadeado **depois do growth inteiro** de cada seed (`launch …; flock svm.lock …`).
+  - Já há 5 ckpts L3 prontos sem κ: rand_s1 eggs s2/s3 e larvae s2; rand_s2 eggs s2/s3 e larvae s2.
+  - Ainda faltam ~3–4 h de growth (larvae s3 e protozoan s2/s3).
