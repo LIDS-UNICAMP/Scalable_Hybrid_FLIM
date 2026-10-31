@@ -1004,3 +1004,49 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
   2. Em protozoan s1 e larvae s2, o SPiFiL (fg01) ganha por 3–8 desvios entre seeds do rand.
   3. **Onde o aleatório vai mal, o SPiFiL ajuda. Onde ele vai bem, é neutro.**
 - **Pendentes:** rand_s2 larvae s2, larvae s3 (s1/s2) e protozoan s2/s3 (s1/s2).
+
+## 2026-10-31 17:53 [A4] nota curta: larvae s2 L3 com 3 seeds do rand
+- **rand seed 0 / 1 / 2:** 0,787 / 0,794 / 0,800, média **0,794 ± 0,007**.
+- **fg01:** 0,831, ou seja, **+0,037 (≈ 5,7 desvios entre seeds)**. É o segundo ponto, depois do protozoan s1, em que a vitória do SPiFiL (fg01) resiste a 3 seeds do rand.
+- **Placar com 3 seeds** (6 células): o SPiFiL vence em 2 (protozoan s1 e larvae s2, ambas onde o rand fica abaixo de 0,82) e empata em 4 (eggs s1/s2/s3 e larvae s1, onde o rand fica acima de 0,84).
+- **Pendentes:** larvae s3 e protozoan s2/s3 com seeds. O growth ainda não terminou. Curvas: 0 NaN, nenhum run travado.
+
+## 2026-10-31 19:57 [A4] κ val larvae s3 L3 com 2 seeds: a queda do rand ali foi azar de seed
+- **rand seed 0 / rand_s1:** 0,791 / **0,840**, média 0,815 ± 0,035. **SPiFiL (fg01):** 0,838.
+  - A seed 1 empata com o SPiFiL. **A perda de −0,048 da seed 0 em larvae s3 foi azar de seed**, não efeito do SPiFiL.
+  - Com 2 seeds, o SPiFiL fica +0,023 acima da média, cerca de 0,7 desvio. **Inconclusivo.**
+- **Contraste com larvae s2:** ali as 3 seeds caem juntas (0,787 / 0,794 / 0,800, desvio 0,007), e o fg01 fica +0,037 acima. **O s2 resiste ao teste de seed; o s3 não.**
+- **Placar com ≥2 seeds** (7 células, L3):
+
+  | resultado | células |
+  |---|---|
+  | **SPiFiL vence** | protozoan s1 (+0,063, 3,4 desvios) e larvae s2 (+0,037, 5,7 desvios) |
+  | empate | eggs s1/s2/s3, larvae s1, larvae s3 |
+  | rand vence | nenhuma, fora do ruído |
+
+- **Variação entre seeds do aleatório:** desvio de 0,007 a 0,035 por célula, com mediana ~0,016. Para o SPiFiL ao repetir o config: ≤0,0003 a 0,008. **O aleatório varia 2–50x mais que o SPiFiL repetido.** Pelo critério do A0, essa é a evidência de estabilidade mais consistente.
+- **Pendente:** protozoan s2/s3 com seeds.
+
+## 2026-10-31 20:03 [A4] κ val protozoan L3: o SPiFiL vence o rand nos 3 splits com ≥2 seeds
+
+| protozoan L3 | rand (seeds) | média do rand | SPiFiL (fg01) | diferença | em desvios (pooled ≈ 0,016) |
+|---|---|---|---|---|---|
+| s1 | 0,815 / 0,794 / 0,832 | 0,814 | 0,877 | **+0,063** | 3,9 |
+| s2 | 0,802 / 0,804 | 0,803 | 0,836 | **+0,033** | 2,1 |
+| s3 | 0,797 / 0,818 | 0,808 | 0,853 | **+0,045** | 2,8 |
+
+- **Protozoan, média dos 3 splits:** SPiFiL 0,855 contra rand 0,808, ou seja, **+0,047**.
+  - As outras variantes SPiFiL também ficam acima da média do rand em todos os splits: bp01 0,866, w64 0,860, R1 0,848 (médias).
+  - O que fica mais perto é o popz s2 (0,811 contra 0,803).
+- **Conclusão do controle aleatório (L3, ≥2 seeds, 9 células):**
+
+  | dataset | resultado |
+  |---|---|
+  | **protozoan** | **SPiFiL vence 3/3** (+0,033 a +0,063) |
+  | larvae | SPiFiL vence o s2 (+0,037, 3 seeds); empata s1 e s3 |
+  | eggs | empate em 3/3 (rand ~0,008 acima, dentro do ruído) |
+  | rand vence | **nenhuma célula** fora do ruído |
+
+  - **Estabilidade:** o κ do aleatório varia 0,002–0,035 entre seeds (mediana ~0,015); o SPiFiL repetido, ≤0,0003–0,008.
+- **Resposta à regra do usuário ("o SPiFiL tem que contribuir no treino"): contribui.** O efeito é grande em protozoan, existe em parte de larvae e é nulo em eggs, e o SPiFiL é sempre mais reprodutível.
+- Pendentes: rand_s2 em larvae s3 e protozoan s2/s3, para fechar 3 seeds em toda célula.

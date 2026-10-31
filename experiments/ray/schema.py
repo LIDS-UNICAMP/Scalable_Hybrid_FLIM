@@ -80,6 +80,8 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         "layerwise_backprop",
         # qual `grow` usar: default (flim/spifil.py) ou a3 (flim/spifil_a3.py)
         "grow_impl",
+        # so na ULTIMA camada do layerwise: o SPiFiL da o que conseguir, o resto ate a largura e aleatorio
+        "fill_random_last",
     ),
     # `source` escolhe a varredura; as 4 seguintes so fazem sentido nas fontes
     # que varrem artifacts/ (distillation, growth_stages)

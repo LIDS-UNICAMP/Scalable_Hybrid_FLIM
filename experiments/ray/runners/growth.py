@@ -390,7 +390,9 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                                    if "layer_dilations" in exp.runner_args else []))
                 elif _grow_once(exp, point, gpu_id, ckpt, arch, weights, grow_dir,
                                 out_channels=width, kernel_size=kernels[k - 1],
-                                pool_stride=stride, dilation=dilations[k - 1]) == GROW_EXHAUSTED:
+                                pool_stride=stride, dilation=dilations[k - 1],
+                                fill_random=k == layerwise
+                                and exp.runner_args.get("fill_random_last", False)) == GROW_EXHAUSTED:
                     result["reason"] = f"spifil grow recusou L{k}: N <= D"
                     break
                 arch, weights = os.path.join(grow_dir, ARCH_JSON_FILENAME), grow_dir
