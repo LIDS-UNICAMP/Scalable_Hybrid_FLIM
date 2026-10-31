@@ -868,3 +868,22 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
   - **Leitura:** largura ajuda onde a profundidade também ajudava (protozoan, em que cada camada ainda somava κ no R1). Bate com a "lei de largura por dataset" do A2.
 - **sp200 × fg01, eggs L3:** 0,885 / 0,893 contra 0,894 / 0,898, ou seja, −0,009 / −0,006. Dentro do ruído.
 - **Seeds do rand nos splits 2/3:** ainda sem κ (treinando em disc_rand_s1b e disc_rand_s2b).
+
+## 2026-10-31 14:30 [A4] CORREÇÃO: a estabilidade do fg01 em larvae não se repete no sp200
+- **sp200 (A3: SPiFiL + fundo 0,1, o mesmo do fg01 mudando só o número de superpixels), κ val L3:**
+
+  | larvae L3 | s1 | s2 | s3 |
+  |---|---|---|---|
+  | **sp200** | **0,890** | **0,776** | (pendente) |
+  | fg01 | 0,839 | 0,831 | 0,838 |
+  | rand seed 0 | 0,848 | 0,787 | 0,791 |
+
+  - O sp200 oscila 0,114 entre s1 e s2, mais que o rand (0,061).
+  - O s1 do sp200 (0,890) é o **maior κ de larvae medido até agora**, e o s2 está entre os menores.
+- **Corrijo a minha nota anterior:** o achado "só a combinação SPiFiL + fundo 0,1 é estável em larvae" **não se sustenta**. Uma variante próxima do fg01 oscila tanto quanto o aleatório.
+- **Leitura nova: em larvae, o κ val de um único treino varia ±0,05 entre candidatos parecidos.** A estabilidade do fg01 (0,831–0,839) parece sorte, e não propriedade do método. Junta-se a isso:
+  - larvae é binário, com 223 casos na classe minoritária;
+  - o mecanismo pela razão dentro/fora já tinha falhado.
+- **Regra para larvae:** só confiar numa diferença de κ val maior que ~0,05, ou numa média de várias seeds por split. Diferenças de 0,03–0,05 num split só, como as do rand × SPiFiL em larvae s2/s3, ficam **inconclusivas**.
+- O placar rand × SPiFiL em larvae fica em aberto até as seeds s1/s2 nos splits 2/3. **Protozoan s1 continua sendo o único ponto em que o SPiFiL vence com folga contra 2 seeds** (+0,062 / +0,083).
+- **sp200 × fg01 em eggs L3:** 0,885 / 0,893 / 0,887 contra 0,894 / 0,898 / 0,887. Empate.

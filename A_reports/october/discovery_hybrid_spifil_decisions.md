@@ -160,3 +160,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Motivo: o w64 (BCE uniforme) foi o 1º ganho com o mesmo sinal nos 3 splits em protozoan L3: 0.868/0.860/0.851 (média 0.860, contra 0.848 do R1 e 0.864 do I-JEPA). Em eggs e larvae empata.
 - Hipótese: a largura dá capacidade em protozoan (7 classes, onde a profundidade também somava), e o fundo 0.1 traz a estabilidade vista em larvae. Uma mudança contra o fg01: a largura. 117.744 parâmetros.
 - 3 datasets × 3 splits, GPUs 0-2, SVM só na L3 depois do treino.
+
+## 2026-10-31: correção. A estabilidade do fg01 em larvae era sorte
+- O sp200 (SPiFiL + fundo 0.1, só muda os superpixels) em larvae L3: s1 0.890 (o maior de larvae), s2 0.776. Oscila 0.114, mais que o rand.
+- Larvae é binário, com 223 casos na classe minoritária. O κ de um único treino varia ±0.05 entre candidatos parecidos.
+- Regra nova: em larvae, Δκ < ~0.05 num split só é inconclusivo. Para decidir, usar a média de ≥2 seeds por split. A entrada "só SPiFiL + fundo 0.1 é estável" fica retirada.
+- De pé: protozoan s1, o SPiFiL vence 2 seeds do rand por 0.06–0.08. O w64 em protozoan dá +0.011 nos 3 splits. O w64fg segue, motivado só pelo protozoan.
