@@ -192,3 +192,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-10-31: larvae s2 com 3 seeds do rand
 - rand L3: 0.787 / 0.794 / 0.800 (média 0.794). fg01 0.831, ou +0.037 (~6 dp entre seeds).
 - Placar nas 6 combinações dataset×split com 3 seeds: o SPiFiL vence as 2 em que o rand fica abaixo de 0.82 (protozoan s1, larvae s2) e empata as 4 em que o rand fica acima de 0.84 (eggs s1–s3, larvae s1). A regra de treino se mantém.
+
+## 2026-10-31: larvae s3 com 2 seeds do rand
+- rand L3: 0.791 (seed 0) / 0.840 (seed 1). fg01 0.838. Diferença na média +0.023 (~0.7 dp): inconclusivo, a queda da seed 0 foi azar de seed. No larvae s2, ao contrário, as 3 seeds caem juntas.
+- Placar com ≥2 seeds (7 células): o SPiFiL vence 2 (protozoan s1 +0.063, larvae s2 +0.037), empata 5 e não perde nenhuma.
+- Evidência mais estável: o κ do rand varia 0.007–0.035 entre seeds (mediana ~0.016); o SPiFiL repetido varia ≤0.0003–0.008. O SPiFiL serve como inicializador que estabiliza o treino. Falta protozoan s2/s3 com seeds.
