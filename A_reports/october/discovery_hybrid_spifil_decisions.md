@@ -150,3 +150,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Leitura: nenhum dos dois fatores basta sozinho; a combinação é a única estável.
 - Ressalva: a medida dentro/fora em eggs s1 NÃO mostrou o fg01 mantendo o foco no objeto (L2 0.93, L3 0.94). Então o mecanismo "o fundo 0.1 segura os filtros no objeto" não está provado; o efeito pode vir de outro lugar. Medir dentro/fora no larvae s2/s3 (fg01 × R1 × rand) separa as duas leituras.
 - Falta o controle de seed do rand no s2/s3 (seeds 1 e 2 treinando).
+
+## 2026-10-31: o mecanismo "foco no objeto" caiu (A4, larvae L3)
+- Razão de ativação dentro/fora treinada, s1/s2/s3: fg01 1.46/1.63/1.16; R1 1.30/1.37/1.32; rand 1.37/1.21/1.36. Spearman(razão, κ) nos 9 pontos = 0.20 (p=0.60).
+- A estabilidade do fg01 no larvae é real no κ, mas não vem de manter o foco médio no objeto. A razão média de ativação não serve de proxy do κ; deixamos de usá-la para decidir.
+- O que se mantém: o SPiFiL cru é 2.2–3.1x mais focado no objeto que o aleatório cru (1.3–2.0x), e o treino puxa todos para ~1.2–1.6.

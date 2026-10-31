@@ -831,3 +831,24 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
   - O SPiFiL sozinho também não basta: R1 e w64 caem −0,026 e −0,054.
   - **A combinação "SPiFiL + recon com peso no objeto" é a única estável em larvae.** É coerente com a hipótese A0/A1: o SPiFiL traz filtros do objeto, e o fundo 0,1 impede que o backprop os puxe para o fundo.
 - **Com isso, o fg01 é o candidato mais estável em larvae entre todos os medidos.** Ainda falta o rand_s1/s2 nos splits 2/3 para fechar o controle de seed.
+
+## 2026-10-31 13:58 [A4] mecanismo testado em larvae L3: a razão dentro/fora NÃO explica a estabilidade do fg01
+- **Como medi:** cópia do bg_frac.py com o split como argumento (scratchpad a4/bg_frac_split.py), só CPU, 200 imagens da val. Razão = densidade de ativação no objeto / densidade no fundo, com a máscara do dataset usada só para medir.
+  - Saída: a4/bgfrac_larvae_L3.txt.
+  - Conferência: o R1 s1 treinado deu **1,30**, contra o 1,31 do A1.
+
+| larvae L3, treinado (cru) | s1 | s2 | s3 | κ val s1 / s2 / s3 |
+|---|---|---|---|---|
+| fg01 (SPiFiL + fundo 0,1) | 1,46 (2,27) | **1,63** (3,05) | **1,16** (2,19) | 0,839 / 0,831 / 0,838 |
+| R1 (SPiFiL, uniforme) | 1,30 (2,38) | 1,37 (2,36) | 1,32 (2,27) | 0,847 / 0,816 / 0,826 |
+| rand (aleatório + fundo 0,1) | 1,37 (1,97) | 1,21 (1,30) | 1,36 (1,56) | 0,848 / 0,787 / 0,791 |
+
+- **O mecanismo não se sustenta:**
+  - O fg01 tem a maior razão no s1 e no s2, mas a **menor de todas no s3** (1,16), e mesmo assim o κ dele no s3 é estável (0,838).
+  - O rand s3 tem razão 1,36, igual à do R1, e κ 0,791, isto é, 0,035 abaixo.
+  - Nos 9 pontos, Spearman(razão treinada, κ) = **0,20 (p = 0,60)**: sem relação.
+  - Isso concorda com a ressalva do A0 para eggs s1 (fg01 com razão 0,93–0,94).
+- **O que se mantém:**
+  - O SPiFiL cru tem 2,2–3,1x mais ativação no objeto. O aleatório cru tem 1,3–2,0x, porque o objeto tem textura até para filtros aleatórios.
+  - Em todos os candidatos, o treino puxa a razão para ~1,2–1,6.
+  - **A estabilidade do κ do fg01 em larvae é real, mas não vem de "manter o foco no objeto" pela média dos canais.** A causa está em outro lugar: talvez poucos canais discriminativos, que a média esconde, ou outra coisa. A razão média não serve de métrica proxy do κ.
