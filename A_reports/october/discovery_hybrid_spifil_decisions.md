@@ -118,3 +118,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Relançado com skip: state, que pula os pontos prontos. Todos os YAMLs de treino e de eval agora têm gpu_ids [0, 1, 2] e max_per_gpu 1.
 - Cadeias em tmux: disc_a1_fg01; disc_a2 (w64 → bp01); disc_a3 (popz → sp200); disc_r2; disc_rand (rand → s1 → s2).
 - Cada treino, ao terminar, abre o svmq_<nome>. O SVM roda sob uma trava única (flock), um por vez. Monitor: tmux watch_disc.
+
+## 2026-10-31: SPiFiL como inicializador, veredito pela curva (A4)
+- 21 estágios (eggs/larvae L1–L3, protozoan L1). Pareado: SPiFiL vs aleatório com a mesma forma e a mesma norma por filtro, os dois com fundo 0.1.
+- O aleatório chega a uma loss mais baixa em 16 de 21; o SPiFiL ganha em 4 (≤4e-5); 1 empate. O aleatório estabiliza antes em 20 de 21. A oscilação é igual.
+- Conclusão: na otimização, o SPiFiL não é um inicializador melhor. A hipótese "o SPiFiL deixa o treino estável" caiu pela curva. Resta testar pelo κ: média e variância entre seeds (rand, rand_s1, rand_s2) e splits.

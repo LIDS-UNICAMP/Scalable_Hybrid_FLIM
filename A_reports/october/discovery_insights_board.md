@@ -427,3 +427,76 @@ Fonte: W&B `probe/val_recon_loss` e `probe/train_recon_loss_epoch` por época, 8
 - O peso menor do fundo na loss não impede o encoder de ativar no fundo. A L2 fica até pior que no R1; a L3 melhora pouco e continua abaixo de 1.
 - κ val (eggs): s1 L2 0.890 / L3 0.910 (R1: 0.907 / 0.908); s2 L2 0.903 (R1: 0.880). Empate até agora.
 - Leitura: o desvio para o fundo não vem só do peso dos pixels na loss. Candidatos: o próprio fundo constante serve de "referência" para o decoder; ou o max-pool/ReLU espalham a ativação. Próximo teste, se for o caso: penalizar a ativação fora do objeto no encoder (sem rótulo de classe).
+
+## 2026-10-31 01:48 [A4] curvas, 7ª passada: a lei de profundidade do R2 se mantém até a L7; 1 pico isolado em protozoan
+- **R2 eggs, distância val − treino por camada.** Ela sobe sem parar a partir da L3, nos 3 splits:
+
+  | split | L3 | L4 | L5 | L6 | L7 |
+  |---|---|---|---|---|---|
+  | s1 | −0,00043 | +0,00010 | +0,00018 | +0,00035 | **+0,00096** |
+  | s2 | −0,00177 | −0,00127 | −0,00100 | −0,00091 | −0,00079 |
+  | s3 | −0,00139 | −0,00097 | −0,00074 | −0,00066 | (em treino) |
+
+  - A loss mínima sobe a cada camada: L7 contra L6, +2,3e-5 (s1) e +1,1e-5 (s2).
+  - A época do best da L7 é 117 (s1) e 82 (s2): no s1 ela parou de cair.
+  - O early stop dispara em todo estágio de L4 em diante, menos na L4 do s3, que chegou a 200 épocas.
+  - A L8 começou nos s1 e s2.
+- **Pico isolado, inofensivo: fg01 protozoan s1 L1, época 112.** A val pula de 0,5073 para 0,5161 e volta a 0,5073 na época seguinte. A train não se mexe (0,5089), e a lr está em 2,3e-4. É um transiente de uma única avaliação da val, não divergência. O early stop olha o mínimo, então não é afetado. Nenhuma ação necessária.
+- **Protozoan L1, rand × SPiFiL (parcial, mesma época):**
+  - s1 e s2: o SPiFiL está 3e-5 abaixo do rand na época ~110–116.
+  - e3: SPiFiL 23 / 26 contra rand 20 / 19.
+  - Ainda é cedo para julgar.
+- **Saúde:** 0 NaN, nenhum run travado. O larvae fechou em todas as famílias; agora rodam protozoan L1 (fg01, w64, popz, rand) e o R2 eggs L7–L8.
+
+## 2026-10-31 02:29 [A4] curvas, 8ª passada: R2 eggs L8 fechada (s1/s2) e tabela final de profundidade pela curva
+- **R2 eggs, a curva de L1 a L8** (época do best | loss mínima da val | val − treino):
+
+  | | s1 | s2 | s3 |
+  |---|---|---|---|
+  | L3 | 199 \| 0,51280 \| −0,00043 | 197 \| 0,51182 \| −0,00177 | 198 \| 0,51233 \| −0,00139 |
+  | L4 | 137 \| 0,51347 \| +0,00010 | 133 \| 0,51243 \| −0,00127 | 152 \| 0,51284 \| −0,00097 |
+  | L5 | 108 \| 0,51355 \| +0,00018 | 102 \| 0,51264 \| −0,00100 | 127 \| 0,51297 \| −0,00074 |
+  | L6 | 99 \| 0,51375 \| +0,00035 | 88 \| 0,51287 \| −0,00091 | 120 \| 0,51309 \| −0,00066 |
+  | L7 | 117 \| 0,51398 \| +0,00096 | 82 \| 0,51298 \| −0,00079 | 124 \| 0,51323 \| −0,00055 |
+  | L8 | **74** \| 0,51419 \| +0,00077 | **74** \| 0,51311 \| −0,00038 | (em treino) |
+
+- **Regra de profundidade (curva):**
+  - A cada camada depois da L3, a loss mínima da val sobe 1–2e-5 e a distância val − treino sobe em 13 de 14 passos.
+  - A época do best cai de ~198 (L1–L3) para ~100–140 (L4–L7) e para 74 (L8). A L8 para de melhorar logo depois do warmup e do começo do cosine.
+  - **A partir da L4, o treino de cada camada nova só ajusta o treino. Pela reconstrução, não há ganho em ir além da L3 em eggs.**
+  - O que decide é o κ val L3 × L4 × … × L8 do SVM. Sugiro priorizar L3, L4, L6 e L8 do s1.
+- **Ruído da val em protozoan:** a val dá saltos isolados enquanto a lr ainda está alta, e a train fica parada.
+  - fg01 s1 L1: +0,0088 na época 112.
+  - w64 s2 L1: +3e-3 na época 71 e +1e-3 nas épocas 69, 73 e 83, com a train em 0,4671 o tempo todo.
+  - Isso não aparece em eggs nem em larvae e some quando a lr cai. É ruído da avaliação (val pequena ou com imagens difíceis), não instabilidade. Não pede ação; o early stop usa o mínimo.
+- **Protozoan L1, rand × SPiFiL (fg01), quase no fim (épocas 177–188):**
+  - Mínimo: SPiFiL 0,50721 / 0,50738 contra rand 0,50725 / 0,50740 nos s1/s2. O SPiFiL fica 2–4e-5 abaixo.
+  - e3: SPiFiL 26 / 28 / 27 contra rand 21 / 20 / 21. O SPiFiL estabiliza ~6 épocas depois.
+  - **Protozoan é o primeiro dataset em que o SPiFiL chega mais baixo,** mas estabiliza mais tarde. Fecho na próxima passada.
+- **R2 começou larvae L1.** Ele repete o fg01 até a L3 (mesmo YAML), de novo conta repetida, como em eggs.
+- **Saúde:** 0 NaN, nenhum run travado.
+
+## 2026-10-31 03:11 [A4] curvas, 9ª passada: placar final da L1, rand × SPiFiL; profundidade do R2 eggs fechada
+- **Protozoan L1, rand × SPiFiL (fg01), fechada:**
+
+  | | SPiFiL | rand |
+  |---|---|---|
+  | mínimo (s1/s2/s3) | 0,50721 / 0,50737 / 0,50758 | 0,50724 / 0,50739 / 0,50758 |
+  | e3 | 26 / 28 / 27 | 21 / 20 / 21 |
+
+  - O SPiFiL fica 3e-5 e 2e-5 abaixo nos s1 e s2 e empata no s3, mas estabiliza 5–8 épocas depois.
+- **Placar de 21 estágios** (eggs L1–L3, larvae L1–L3, protozoan L1):
+
+  | quem chega mais baixo na loss | estágios |
+  |---|---|
+  | rand | 16 |
+  | SPiFiL | 4 (por no máximo 4e-5: larvae L3 s1/s3, protozoan L1 s1/s2) |
+  | empate | 1 |
+
+  - **Estabilizar mais rápido:** o rand vence em 20 de 21; o único empate é larvae L3 s1, com 22 contra 22.
+  - **Conclusão pela curva:** o SPiFiL não é inicializador melhor que o aleatório com a mesma norma. Nem em velocidade nem em oscilação: o desvio no fim é o mesmo, 1–3e-6. Na loss mínima, os dois são equivalentes. Se o SPiFiL tem vantagem, ela só pode estar no **κ** (entre seeds e splits), não na otimização.
+- **R2 eggs s3 L8 fechada:** best na época 81, parada na 132. A loss sobe +1,7e-5 sobre a L7, e a distância val − treino passa de −0,00055 para −0,00035.
+  - **Na tabela completa, a distância val − treino sobe em 14 de 15 passos de camada depois da L3.** A única exceção é s1 L7 → L8.
+  - A época do best da L8 é 74 / 74 / 81.
+- **R2 larvae s1 L1 = fg01 larvae s1 L1:** 0,49474 nos dois. Confirma a duplicação também em larvae.
+- **Saúde:** 0 NaN, nenhum run travado. Agora rodam protozoan L2 (fg01, popz, rand), w64 protozoan L1 e R2 larvae L1–L2.
