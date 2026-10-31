@@ -172,3 +172,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - larvae: rand 0.843 × SPiFiL 0.839. Empate.
 - protozoan: rand 0.815/0.794/0.832 (0.814 ± 0.019) × fg01 0.877, ou +0.063 (~3.4 dp). Até o pior SPiFiL (R1, 0.855) passa a melhor seed.
 - Conclusão parcial: o SPiFiL contribui como inicializador em protozoan (7 classes, o mais difícil) e é neutro em eggs e larvae. Os splits 2 e 3 das seeds estão treinando.
+
+## 2026-10-31: bp01 vence o fg01 em eggs L3 nos 3 splits
+- bp01 (fg01 + camadas antigas treinando com lr 0.1×): 0.908/0.906/0.894 (média 0.902). fg01: 0.894/0.898/0.887 (0.893). Δ +0.010 com o mesmo sinal nos 3 splits. É o melhor eggs até agora.
+- A loss da L3 do bp01 já era mais baixa em 6 de 6 splits. Regra: no mesmo encoder com mais liberdade de backprop, loss menor acompanha κ maior. Entre inicializadores diferentes isso não vale.
+- Apoia a orientação do usuário de explorar o backprop junto com o SPiFiL. Próximo: bp01 em larvae e protozoan; se confirmar, combinar bp01 + w64fg (uma mudança de cada vez).

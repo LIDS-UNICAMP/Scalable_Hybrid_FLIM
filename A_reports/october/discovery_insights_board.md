@@ -934,3 +934,17 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
 
 - **Regra (s1):** o SPiFiL como inicializador ajuda onde o dataset é mais difícil para o aleatório (protozoan, com o rand em ~0,81), e é neutro onde o aleatório já vai bem (eggs ~0,90).
 - Os splits 2/3 com seeds ainda estão treinando.
+
+## 2026-10-31 15:36 [A4] κ val: o bp01 L3 ganha do fg01 em eggs nos 3 splits, e a curva tinha previsto
+
+| eggs L3 | s1 | s2 | s3 | média |
+|---|---|---|---|---|
+| bp01 (L1–L2 com lr 0,1× junto da L3) | 0,908 | 0,906 | 0,894 | **0,902** |
+| fg01 | 0,894 | 0,898 | 0,887 | 0,893 |
+| diferença | +0,014 | +0,007 | +0,007 | **+0,010** |
+
+- **Mesmo sinal nos 3 splits.** Cada diferença isolada está dentro do ruído de repetição (~0,012), mas o padrão se repete.
+- **Primeira vez que a curva de treino antecipou o κ.** A loss mínima da L3 do bp01 já era 4–7e-5 mais baixa que a do fg01 em 3 de 3 splits de eggs (e em 3 de 3 de larvae).
+  - **Regra refinada:** a loss não prevê o κ **entre inicializadores diferentes** (rand × SPiFiL). Mas, para **o mesmo encoder com mais liberdade de treino** (backprop nas camadas antigas), loss mais baixa veio junto com κ mais alto.
+- O bp01 s1 (0,908) fica no topo da faixa das 3 seeds do rand em eggs s1 (0,882–0,911).
+- **Próximo ponto que importa:** o bp01 em larvae e protozoan L3, onde o SPiFiL já tinha vantagem.
