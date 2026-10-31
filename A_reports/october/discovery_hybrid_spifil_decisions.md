@@ -137,3 +137,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - O SPiFiL varia menos entre splits (dp 0.006 contra 0.011), mas em torno de uma média mais baixa; com n=3 isso não é significativo.
 - Leitura: até aqui o SPiFiL não contribui como inicializador, nem na curva nem no κ. Faltam as seeds s1/s2 do rand e os outros datasets.
 - Erro operacional: o relançamento das 18:24 NÃO pulou os pontos prontos (0 pulados). O fg01/w64/popz retreinaram o eggs; o ckpt de topo foi substituído, mas o run antigo (flim-ssl/oza2fp2k) continua no disco. O κ antigo do fg01 eggs s1 L3 (0.910) é desse ckpt antigo.
+
+## 2026-10-31: κ val L3 completo do fg01 e parcial do rand. O SPiFiL é o inicializador estável
+- fg01 (SPiFiL, fundo 0.1), média dos 3 splits: eggs 0.892, larvae 0.835, protozoan 0.855. R1: 0.897 / 0.829 / 0.848. Empate dentro do ruído.
+- rand seed 42: eggs 0.897/0.919/0.907 (0.908); larvae 0.847/0.786/0.790 (0.808, dp 0.034); protozoan s1 0.815 (SPiFiL 0.877).
+- Perfil: o rand ganha ~0.02 em eggs, mas tem quedas grandes e esporádicas (larvae s2/s3 −0.044/−0.048, protozoan s1 −0.062). O SPiFiL fica estável (dp ≤0.006 em eggs e larvae). A loss não vê nada disso.
+- Hipótese (SPiFiL como inicializador): ele não melhora a otimização, mas evita mínimos ruins para a classificação. Faltam as seeds 1 e 2 do rand para descartar o azar da seed 42; os SVMs delas estão na frente da fila.
+- popz (L3): 0.886 / 0.820 / 0.844, abaixo do fg01. O z-score populacional não ajuda.

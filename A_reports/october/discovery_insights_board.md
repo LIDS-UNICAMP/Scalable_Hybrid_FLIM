@@ -716,3 +716,35 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
    - É o primeiro ponto a favor do SPiFiL. Mas é estabilidade **em torno de uma média mais baixa**. Com n = 3 splits, a diferença de desvios também não é significativa.
    - Para fechar o critério, faltam s1 e s2 do rand: o desvio **entre seeds** contra o desvio entre repetições do SPiFiL.
 4. **Leitura provisória:** na L3 de eggs, o aleatório com a mesma norma dá κ igual ou maior que o SPiFiL. O SPiFiL só vence em "variar menos entre splits", e ainda sem significância.
+
+## 2026-10-31 13:02 [A4] κ val, 2º resultado: em larvae L3, o rand oscila e o SPiFiL fica estável
+
+| larvae L3 | s1 | s2 | s3 | desvio entre splits |
+|---|---|---|---|---|
+| **SPiFiL (fg01)** | 0,8387 | 0,8305 | 0,8383 | **0,0046** |
+| **rand seed 0** | 0,8477 | **0,7867** | (pendente) | 0,043 (s1–s2) |
+| rand − SPiFiL | +0,009 | **−0,044** | — | — |
+
+- **Em larvae, o κ do rand cai 0,061 entre s1 e s2. No SPiFiL, os 3 splits ficam dentro de 0,008.** É o primeiro sinal do critério do A0 (estabilidade contra o controle aleatório) a favor do SPiFiL, e com tamanho grande.
+- **A loss não vê isso:** no s2, o rand tem loss **mais baixa** (0,49581 contra 0,49597) e κ 0,044 **pior**. Mais um caso da regra "a loss não prevê o κ".
+- **Placar parcial de κ (L3), rand seed 0 × SPiFiL:**
+  - eggs: rand +0,016 na média, mas oscila mais (desvio 0,011 contra 0,006).
+  - larvae: rand −0,018 na média dos 2 splits, e oscila muito mais (0,043 contra 0,005).
+  - **Padrão: o SPiFiL troca um pouco de média por bem menos variância entre splits.** Para confirmar que é efeito do SPiFiL, e não sorte da seed 0, faltam o rand larvae s3 e as seeds s1/s2.
+- **Pendente:** os CSVs `svm_disc_r1_rand_s1_val.csv` e `_s2_val.csv` ainda não existem.
+
+## 2026-10-31 13:08 [A4] κ val L3, rand seed 0 × SPiFiL (fg01): o SPiFiL vence em larvae e protozoan e é mais estável
+
+| L3 | SPiFiL s1 / s2 / s3 | rand s1 / s2 / s3 | média SPiFiL | média rand | desvio SPiFiL | desvio rand |
+|---|---|---|---|---|---|---|
+| eggs | 0,894 / 0,898 / 0,887 | 0,898 / **0,920** / **0,908** | 0,893 | **0,909** | 0,006 | 0,011 |
+| larvae | 0,839 / 0,831 / 0,838 | 0,848 / **0,787** / **0,791** | **0,836** | 0,808 | **0,005** | 0,034 |
+| protozoan | **0,877** / 0,836 / 0,853 | **0,815** / – / – | 0,855 | – | 0,021 | – |
+
+- **rand − SPiFiL por split** (7 pares): eggs +0,004 / +0,022 / +0,021; larvae +0,009 / **−0,044** / **−0,048**; protozoan s1 **−0,062**.
+  - Média: −0,014. **O SPiFiL vence 3 de 7 por mais de 0,04, e o rand vence 2 de 7 por ~0,02.** As outras 2 diferenças estão dentro do ruído.
+- **Estabilidade (critério do A0):** o desvio entre splits do SPiFiL é menor nos 2 datasets completos: eggs 0,006 contra 0,011 e larvae 0,005 contra 0,034.
+  - **As perdas do rand são grandes e esporádicas (−0,04 a −0,06). As do SPiFiL são pequenas (−0,02).** É o perfil de um inicializador mais estável.
+- **A loss não vê nada disso:** em larvae s2/s3 e em protozoan s1, a loss de reconstrução do rand é igual ou mais baixa e o κ cai 0,04 a 0,06.
+  - **Regra:** a curva de treino serve para saúde e para orçamento de épocas, nunca para julgar inicializador.
+- **Ainda é seed 0 do rand.** Para dizer se o aleatório é "às vezes ruim" (variância entre seeds) ou se esta seed teve azar, faltam rand_s1 e rand_s2 no SVM val, pelo menos em larvae L3 s2/s3 e protozoan L3 s1.
