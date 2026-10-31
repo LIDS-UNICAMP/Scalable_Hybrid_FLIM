@@ -852,3 +852,19 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
   - O SPiFiL cru tem 2,2–3,1x mais ativação no objeto. O aleatório cru tem 1,3–2,0x, porque o objeto tem textura até para filtros aleatórios.
   - Em todos os candidatos, o treino puxa a razão para ~1,2–1,6.
   - **A estabilidade do κ do fg01 em larvae é real, mas não vem de "manter o foco no objeto" pela média dos canais.** A causa está em outro lugar: talvez poucos canais discriminativos, que a média esconde, ou outra coisa. A razão média não serve de métrica proxy do κ.
+
+## 2026-10-31 14:23 [A4] κ val L3: o w64 ganha em protozoan nos 3 splits; o sp200 empata em eggs
+- **w64 × R1, protozoan L3** (os dois com BCE uniforme; o w64 tem 32/48/64 filtros):
+
+  | | s1 | s2 | s3 | média |
+  |---|---|---|---|---|
+  | w64 | 0,868 | 0,860 | 0,851 | **0,860** |
+  | R1 | 0,855 | 0,843 | 0,846 | 0,848 |
+  | diferença | +0,013 | +0,017 | +0,005 | **+0,011** |
+
+  - **É o primeiro ganho com o mesmo sinal nos 3 splits** entre as variantes medidas. Cada split isolado está perto do ruído (~0,012), mas os 3 apontam para o mesmo lado.
+  - **A média de 0,860 fica a 0,004 do I-JEPA (0,864, teste).**
+  - Em eggs e larvae, o w64 empata ou perde: eggs −0,001 e larvae −0,006 na média.
+  - **Leitura:** largura ajuda onde a profundidade também ajudava (protozoan, em que cada camada ainda somava κ no R1). Bate com a "lei de largura por dataset" do A2.
+- **sp200 × fg01, eggs L3:** 0,885 / 0,893 contra 0,894 / 0,898, ou seja, −0,009 / −0,006. Dentro do ruído.
+- **Seeds do rand nos splits 2/3:** ainda sem κ (treinando em disc_rand_s1b e disc_rand_s2b).

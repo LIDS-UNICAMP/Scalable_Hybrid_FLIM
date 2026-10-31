@@ -155,3 +155,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Razão de ativação dentro/fora treinada, s1/s2/s3: fg01 1.46/1.63/1.16; R1 1.30/1.37/1.32; rand 1.37/1.21/1.36. Spearman(razão, κ) nos 9 pontos = 0.20 (p=0.60).
 - A estabilidade do fg01 no larvae é real no κ, mas não vem de manter o foco médio no objeto. A razão média de ativação não serve de proxy do κ; deixamos de usá-la para decidir.
 - O que se mantém: o SPiFiL cru é 2.2–3.1x mais focado no objeto que o aleatório cru (1.3–2.0x), e o treino puxa todos para ~1.2–1.6.
+
+## 2026-10-31: novo candidato w64fg = fg01 + largura 32/48/64
+- Motivo: o w64 (BCE uniforme) foi o 1º ganho com o mesmo sinal nos 3 splits em protozoan L3: 0.868/0.860/0.851 (média 0.860, contra 0.848 do R1 e 0.864 do I-JEPA). Em eggs e larvae empata.
+- Hipótese: a largura dá capacidade em protozoan (7 classes, onde a profundidade também somava), e o fundo 0.1 traz a estabilidade vista em larvae. Uma mudança contra o fg01: a largura. 117.744 parâmetros.
+- 3 datasets × 3 splits, GPUs 0-2, SVM só na L3 depois do treino.
