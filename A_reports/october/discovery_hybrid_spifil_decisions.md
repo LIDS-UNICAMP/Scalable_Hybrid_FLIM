@@ -262,3 +262,34 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Ressalva: o ckpt da L3 é escolhido pelo κ avg. Por isso o SVM flatten da L3 também roda em 50%, para checar contra o bp01w64 (0.906/0.845/0.865).
 - 200 épocas por camada, como em 50% (o corte para 60 não foi validado no κ, e a lei precisa da mesma receita). max_per_gpu 2 nas GPUs 0–2 (L4 ~3 GB).
 - SVM ao fim do treino, sob o flock: primeiro o avg (L3, L4), depois o flatten (L3, incluindo 50%).
+
+## 2026-11-01: grade g20, 20 tentativas para alcançar o I-JEPA (pedido do usuário)
+- Alvo (I-JEPA, teste): eggs 0.940, larvae 0.943, protozoan 0.864. Melhor val atual: 0.906 / 0.917 / 0.866.
+- Cada experimento muda 1 knob da base: bp01w64 L3 flatten para eggs/protozoan, bp01w64c1280 L4 avg para larvae. Tudo parte do SPiFiL e treina sem rótulo (decoder).
+- Foco onde falta mais: 8 eggs, 8 larvae, 4 protozoan. Cada um roda 1 dataset × 3 splits, em fila numa GPU fixa (5 por GPU, GPUs 0–3).
+- Cuidado com o job do crispim (lejepa, ~18 GB por GPU): o A6 vigia a memória e mata um g20 nosso se uma GPU ficar com < 4 GB livres. Pico na largada: 29–35 de 49 GB.
+- Leis buscadas: backprop 0 → 0.1 → 0.3 → 1.0; largura 48 → 64 → 96 → 128; largura da 1x1 1280 → 2560; sementes 50 → 100.
+- Em paralelo: o A5 busca ideias na literatura (pooling, objetivos SSL para CNN, leis de escala, FLIM).
+
+| id | dataset | base | mudança | GPU | hipótese SPiFiL |
+|---|---|---|---|---|---|
+| e_bp03 | helminth-eggs | flat | {'layerwise_backprop': 0.3} | GPU 0 | camadas antigas acompanham mais o filtro SPiFiL novo |
+| e_bp10 | helminth-eggs | flat | {'layerwise_backprop': 1.0} | GPU 1 | SPiFiL so como init, encoder todo livre |
+| e_w96 | helminth-eggs | flat | {'layer_channels': [48, 64, 96]} | GPU 2 | mais prototipos SPiFiL por classe |
+| e_w128 | helminth-eggs | flat | {'layer_channels': [64, 96, 128]} | GPU 3 | lei da largura, 2o ponto |
+| e_aug | helminth-eggs | flat | {'data.init_args.geo_aug': True} | GPU 0 | invariancia a rotacao/flip sobre o SPiFiL |
+| e_bn | helminth-eggs | flat | {'model.init_args.batch_norm': True} | GPU 1 | BN estabiliza a escala dos filtros SPiFiL |
+| e_bg0 | helminth-eggs | flat | {'model.init_args.recon_bg_weight': 0.0} | GPU 2 | fundo nao reconstruido: foco total no ovo |
+| e_k3 | helminth-eggs | flat | {'kernel_size': 3} | GPU 3 | patch SPiFiL menor, mais local |
+| l_bp03 | helminth-larvae | avg | {'layerwise_backprop': 0.3} | GPU 0 | camadas antigas acompanham mais o filtro SPiFiL novo |
+| l_bp10 | helminth-larvae | avg | {'layerwise_backprop': 1.0} | GPU 1 | SPiFiL so como init, encoder todo livre |
+| l_w96 | helminth-larvae | avg | {'layer_channels': [48, 64, 96, 1280]} | GPU 2 | base mais larga sob a 1x1 |
+| l_aug | helminth-larvae | avg | {'data.init_args.geo_aug': True} | GPU 3 | larva em qualquer orientacao: invariancia ajuda |
+| l_bn | helminth-larvae | avg | {'model.init_args.batch_norm': True} | GPU 0 | BN estabiliza a escala dos filtros SPiFiL |
+| l_c2560 | helminth-larvae | avg | {'layer_channels': [32, 48, 64, 2560]} | GPU 1 | lei da largura da 1x1, 2o ponto |
+| l_bg0 | helminth-larvae | avg | {'model.init_args.recon_bg_weight': 0.0} | GPU 2 | fundo nao reconstruido: foco total na larva |
+| l_sp100 | helminth-larvae | avg | {'n_superpixels': 100} | GPU 3 | mais sementes: mais filtros SPiFiL, menos aleatorios na 1x1 |
+| p_bp03 | protozoan-cysts | flat | {'layerwise_backprop': 0.3} | GPU 0 | camadas antigas acompanham mais o filtro SPiFiL novo |
+| p_w96 | protozoan-cysts | flat | {'layer_channels': [48, 64, 96]} | GPU 1 | largura ajudou protozoan (w64) |
+| p_aug | protozoan-cysts | flat | {'data.init_args.geo_aug': True} | GPU 2 | invariancia a rotacao/flip sobre o SPiFiL |
+| p_bn | protozoan-cysts | flat | {'model.init_args.batch_norm': True} | GPU 3 | BN estabiliza a escala dos filtros SPiFiL |
