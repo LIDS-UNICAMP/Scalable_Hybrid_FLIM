@@ -391,3 +391,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-01: lei do kernel em eggs, k3 perde; lançado e_k7
 - e_k3 (kernel 3x3 em L1–L3): gem L4 0.900/0.866/0.859 (0.875) contra 0.899 da base (−0.024, nos 3 splits). Avg L4 0.861 (−0.019), avg L3 0.827 (−0.015). Passa da variação do pipeline (~0.018), e o confundidor da sonda (gem) favorece o k3, então a perda real é ≥0.024. Primeiro eixo da g20 acima do ruído.
 - Hipótese SPiFiL: o patch do superpixel recortado pelo filtro carrega a forma local do ovo; com 3x3 ele fica pequeno demais. Próximo ponto da lei: e_k7 (layer_kernels [7,7,7,1]), na fila logo depois de e_base/p_base.
+
+## 2026-11-01: eggs, backprop 0.3 empata
+- e_bp03 (layerwise_backprop 0.3): gem L4 0.914/0.920/0.881 (0.905) contra 0.899 da base (+0.006, dentro do ruído; parte pode ser o viés da sonda gem). Contra o e_k3, na mesma rodada g20, fica +0.030.
+- Hipótese SPiFiL: com mais backprop, as camadas antigas acompanham melhor o filtro SPiFiL novo. Em eggs, a lei do backprop é plana de 0.1 a 0.3; falta o ponto bp 1.0 (e_bp10).
