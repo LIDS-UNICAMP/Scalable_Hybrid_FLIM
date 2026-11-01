@@ -100,6 +100,8 @@ from sklearn.svm import SVC
 from torch import Tensor
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from timm.layers.grn import GlobalResponseNorm
+from torchvision.ops import SqueezeExcitation
 
 # core/blocks/init.py:44 — copia byte-a-byte de src/models/models.py:672, conferida
 # pelo MA-06. As funcoes de init nao sao re-exportadas por core.blocks de proposito,
@@ -168,6 +170,13 @@ def _freeze_for_growth(model: nn.Module, delta: int) -> None:
         param.requires_grad = False
     for param in model.decoder.to_image.parameters():
         param.requires_grad = False
+
+
+class _TwoSigmoid(nn.Sigmoid):
+    """Gate do SE: 2*sigmoid, que com fc2 zerado nasce exatamente 1."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        return 2 * super().forward(x)
 
 
 class Head(nn.Module):
@@ -239,6 +248,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
                             e escolha DAQUELE experimento, nao default de biblioteca. So
                             avaliacao: nao entra na loss nem no gradiente.
         batch_norm:         BatchNorm2d logo apos cada conv do encoder. Off por default.
+        se_reduction:       Squeeze-and-Excitation apos a ativacao de cada conv do encoder,
+                            gargalo ``max(C // r, 4)``. 0 = off (default).
+        grn:                Global Response Normalization (ConvNeXt V2) so no ultimo bloco do
+                            encoder, depois da ativacao. Nasce identidade. Off por default.
         mask_ratio:         fracao de patches ``mask_patch``x``mask_patch`` escondidos (media da
                             imagem) na entrada; a BCE so conta nos pixels escondidos. 0 = recon
                             plena (default, comportamento de hoje).
@@ -271,6 +284,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
         fresh_decoder: bool = False,
         embed_mode: Optional[str] = None,
         batch_norm: bool = False,
+        se_reduction: int = 0,
+        grn: bool = False,
         mask_ratio: float = 0.0,
         mask_patch: int = 20,
         recon_bg_weight: float = 1.0,
@@ -341,6 +356,27 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self._flim_ref = {
             n: p.detach().cpu().clone() for n, p in self.model.encoder.named_parameters()
         }
+        if se_reduction:
+            # conv -> [BN] -> ReLU -> SE -> pool. Dentro de conv{n}: congelamento, lr das
+            # antigas e sonda SVM o pegam sozinhos. Depois do _flim_ref: flim_drift fica so FLIM.
+            # fc2 zerado + gate 2*sigmoid: nasce exatamente identidade, o filtro SPiFiL nao muda.
+            for n in range(1, _arch["nlayers"] + 1):
+                block = self.model.encoder.blocks[f"conv{n}"]
+                se = SqueezeExcitation(channels[n], max(channels[n] // se_reduction, 4),
+                                       scale_activation=_TwoSigmoid)
+                nn.init.zeros_(se.fc2.weight)
+                nn.init.zeros_(se.fc2.bias)
+                pool = [i for i, m in enumerate(block) if isinstance(m, nn.MaxPool2d)]
+                block.insert(pool[0] if pool else len(block), se)
+        if grn:
+            # GRN (ConvNeXt V2) so no ULTIMO bloco, depois do SE: as chaves do SE das antigas
+            # nao mudam de indice quando, na camada seguinte, este GRN deixa de existir e e
+            # descartado pelo load strict=False. gamma=beta=0: identidade exata.
+            n = _arch["nlayers"]
+            block = self.model.encoder.blocks[f"conv{n}"]
+            pool = [i for i, m in enumerate(block) if isinstance(m, nn.MaxPool2d)]
+            block.insert(pool[0] if pool else len(block),
+                         GlobalResponseNorm(channels[n], channels_last=False))
         if fresh_decoder:
             # `old_layers` > 0: conv1..conv{old_layers} treinam com lr * old_layer_lr_scale
             if not old_layers:
