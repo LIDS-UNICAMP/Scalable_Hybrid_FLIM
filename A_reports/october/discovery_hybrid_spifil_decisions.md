@@ -387,3 +387,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - gem L4 κ val contra a média do grupo (0.913): aug 0.919 (+0.008), bg0 0.917 (+0.005), bp10 0.914 (0.000), sp100 0.903 (−0.014). Avg L4: todos entre 0.895 e 0.902 (±0.005).
 - Nenhum eixo passa do ruído. Em larvae, os botões de treino mexem menos que a variação do pipeline inteiro: platô de ~0.91–0.92 (val). O teste da base deu 0.939 com gem, contra o I-JEPA 0.943.
 - Leitura: o que falta em larvae não vem de treino de 1 knob. As próximas apostas são a leitura (gem_dense, na fila de SVM) e as técnicas que mudam a representação (âncora, GRN, SE).
+
+## 2026-11-01: lei do kernel em eggs, k3 perde; lançado e_k7
+- e_k3 (kernel 3x3 em L1–L3): gem L4 0.900/0.866/0.859 (0.875) contra 0.899 da base (−0.024, nos 3 splits). Avg L4 0.861 (−0.019), avg L3 0.827 (−0.015). Passa da variação do pipeline (~0.018), e o confundidor da sonda (gem) favorece o k3, então a perda real é ≥0.024. Primeiro eixo da g20 acima do ruído.
+- Hipótese SPiFiL: o patch do superpixel recortado pelo filtro carrega a forma local do ovo; com 3x3 ele fica pequeno demais. Próximo ponto da lei: e_k7 (layer_kernels [7,7,7,1]), na fila logo depois de e_base/p_base.

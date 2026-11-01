@@ -1654,3 +1654,19 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
   - aug: 0,919, o maior, mas dentro do ruído.
 - **Leitura:** em larvae, os botões de treino mexem menos que a variação do pipeline inteiro (~0,018 na média de 3 splits). **O gem L4 do larvae está num platô de ~0,91–0,92.** O I-JEPA tem 0,943 (teste).
 - **Faltam:** l_bn, l_bp03 e l_w96 (pausados, voltam pela fila), e os e/p, que estão na L4 do s1–s2.
+- 20:13 LANÇA g20_e_base na GPU2. A soma estava em 14,4–14,6 GB em 2 checagens seguidas.
+- 20:41 LANÇA g20_p_base na GPU3. A soma estava em 13,4 GB em 2 checagens seguidas.
+
+## 2026-11-01 20:47 [A4] g20 eggs, 1º κ val: e_k3 (kernel 3) perde para o kernel 5
+
+| eggs, L4 | s1 / s2 / s3 | média | base bp01w64c1280 (kernel 5) | Δ |
+|---|---|---|---|---|
+| **gem** | 0,900 / 0,866 / 0,859 | **0,875** | 0,899 (0,909 / 0,892 / 0,894) | **−0,024** (−0,009 / −0,026 / −0,035) |
+| avg | 0,869 / 0,854 / 0,860 | 0,861 | 0,880 | −0,019 |
+| avg L3 | 0,827 / 0,832 / 0,823 | 0,827 | 0,842 | −0,015 |
+
+- **O kernel 3 piora eggs nas 3 leituras e nos 3 splits.** O gem cai −0,024, acima da variação do pipeline inteiro (~0,018 na média).
+- **O confundidor da sonda joga a favor do k3:** o e_k3 tem sonda gem, e a base tinha sonda avg. A perda real no gem tende a ser **≥ 0,024**.
+- **Lei do eixo kernel (eggs, gem L4):** kernel 5 dá 0,899 e kernel 3 dá 0,875. **O patch SPiFiL menor e mais local perde em eggs.** Bate com a curva: o e_k3 tinha early stop cedo (best na 105 no s1).
+- É o 1º eixo da g20 com efeito acima do ruído. Ainda não há grupo eggs para comparar (só o e_k3 fechou).
+- **Saúde:** 18 estágios rodando, 0 NaN, nenhuma divergência.
