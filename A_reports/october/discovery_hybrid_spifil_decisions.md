@@ -363,3 +363,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - `spifil_anchor` (λ): soma `λ·Σ ||W_k − W0_k||²/||W0_k||²` à loss. W0 = pesos no início do run, ou seja, o kernel SPiFiL cru (L<k>_grow) para a camada nova e o ckpt anterior para as antigas. Começa em 0; desligado, nada muda.
 - Escolha de λ: o A7 calibrou na L4 (drift 0.033, λ 1.8/8.8/17.6 para 10/50/100% da BCE). Mas o A8 mostra drift relativo ~1 nas L2/L3 sem âncora, onde o contraste some. Lá, λ 0.3 já vale ~50% da BCE, e λ 3 trava forte. Grade: λ ∈ {0.3, 3} em eggs e larvae (e_anc03, e_anc3, l_anc03, l_anc3), base bp01w64c1280.
 - Hipótese (do usuário): o SPiFiL traz conhecimento a priori (contraste objeto/fundo). Prender os kernels perto dele preserva esse contraste e sobe o κ. Na fila logo depois dos GRN.
+
+## 2026-11-01: 1º κ da g20, l_sp100 (100 superpixels) empata
+- larvae κ val: gem L4 0.914/0.908/0.887 (0.903, contra 0.910 da base), avg L4 0.902 (contra 0.917, −0.016, na borda do ruído), avg L3 0.897 (contra 0.900).
+- Lei das sementes SPiFiL (50 → 100): plana em larvae. Ter mais filtros SPiFiL e menos aleatórios na 1x1 não ajuda.

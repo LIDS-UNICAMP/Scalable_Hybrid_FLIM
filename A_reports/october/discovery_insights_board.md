@@ -1530,3 +1530,39 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
 - **Máscara sem rótulo = máscara GT, pixel a pixel:** as imagens já vêm com fundo constante; o objeto ocupa só 2–4 % da imagem.
 - **FINAL:** com bp 0,1 as camadas velhas ainda andam ~+10–20 % (L2 rel 0,49 → 0,58).
 - Saídas: `act_drift/` em 40 pontos (4 famílias × 9 + 4 g20). Relatório: `discovery_act_drift.md`.
+
+## 2026-11-01 17:38 [A4] ANOMALIA: 7 famílias g20 morreram por volta das 17:10–17:20
+- **Pausa registrada pela A6 (17:15):** l_bp03.
+- **Sem registro:**
+  - l_bn: no s2 L3; o s1 tem L4.
+  - l_w96: no s2 L1.
+  - **p_aug, p_bn, p_bp03 e p_w96: no s1 L2–L3, sem nenhum split pronto, ~4 h perdidas.**
+- **Os logs tmux terminam no SUBMIT,** sem Traceback, sem OOM e sem erro de CUDA. É provavelmente um kill externo, não falha do treino.
+- **Seguem vivas:** e_* (8), l_aug, l_bg0, l_bp10, l_sp100 e o pcts. Sem NaN e sem divergência nas vivas.
+- **Curvas de eggs s1 L4, parciais** (base: mínimo 0,51260 e val − treino −0,00015):
+  - e_bp10 tem o mínimo mais baixo, 0,51247 (−1,3e-5).
+  - e_aug baixa a distância val − treino para −0,00049, o mesmo efeito do aug em larvae.
+  - e_k3 teve early stop, com o best na 105.
+
+## 2026-11-01 17:38 [A4] CORREÇÃO: as 7 famílias g20 paradas às 17:10–17:15 não são anomalia
+- **O A0 pausou 6 de propósito às 17:10** (l_bn, l_w96, p_aug, p_bn, p_bp03, p_w96), por ordem do usuário (teto de 20 GB por GPU). A A6 pausou o l_bp03 às 17:15.
+- Todas estão na fila scratchpad/gpu_queue.txt:
+  - l_bn, l_w96 e l_bp03 voltam com os splits [2, 3], sem refazer o s1;
+  - os 4 de protozoan voltam com [1, 2, 3].
+- **Na vigia a partir de agora:** e_grn, l_grn, e_anc3, l_anc3, e_anc03, l_anc03 (âncora L2-SP no SPiFiL), e_se e l_se. O g20_kappa.py já inclui esses eixos.
+- 18:17 LANÇA g20_e_grn na GPU3. A soma estava em 12,3 GB em 2 checagens seguidas.
+
+## 2026-11-01 18:17 [A6] fila: pausas e lançamentos (continuação)
+- A linha "18:17 LANÇA g20_e_grn" logo acima é do A6. Ela caiu depois do bloco do A0.
+
+## 2026-11-01 18:21 [A4] g20, 1º κ val: l_sp100 (100 superpixels) empata com a base em larvae
+
+| larvae, l_sp100 | s1 / s2 / s3 | média | base bp01w64c1280 | Δ |
+|---|---|---|---|---|
+| gem L4 | 0,914 / 0,908 / 0,887 | **0,903** | 0,910 | −0,007 (empate) |
+| avg L4 | 0,909 / 0,898 / 0,897 | 0,902 | 0,917 | −0,016 (pequena perda, na borda do ruído de 0,015) |
+| avg L3 | 0,915 / 0,882 / 0,893 | 0,897 | 0,900 | −0,003 |
+
+- **Mais sementes SPiFiL (100 superpixels) não melhoram larvae em nenhuma leitura.** A ideia "mais filtros SPiFiL na 1x1 e menos aleatórios" não vira κ. Só a curva tinha um sinal: o early stop disparou mais cedo na L4 do s1 (174) e a distância val − treino era maior (+0,00075).
+- **Lei do eixo n_superpixels (larvae, gem L4):** padrão 0,910 → 100: 0,903. É plano.
+- **Saúde:** 18 estágios rodando, 0 NaN, nenhuma divergência. Novo na vigia: o e_grn (sessão g20_e_grn).
