@@ -255,3 +255,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - L4 1x1×96 flatten, κ val médio, contra a L3 flatten do bp01w64: eggs 0.895 contra 0.906 (−0.011), larvae 0.843 contra 0.845, protozoan 0.858 contra 0.865 (−0.008). Média −0.007, dentro do ruído.
 - Refutada: "o 1x1 recombina os canais sem perder a posição". Junto com o c1280: o 1x1 só ajuda quando a leitura descarta a posição (avg, +0.04). No flatten, não acrescenta. A curva mais limpa de todas não virou κ (a loss não prevê o κ).
 - A escolha por dataset não muda: eggs bp01w64 L3 flat 0.906; larvae L4 1x1×1280 avg 0.912–0.917; protozoan bp01/bp01w64 L3 flat 0.866/0.865.
+
+## 2026-11-01: varredura de porcentagens (lei de escala) com bp01w64c1280
+- Pedido do usuário: passar pelas outras porcentagens e identificar leis.
+- Uma família só, bp01w64c1280, em 1/5/25/75/100% (50% já pronto), 3 datasets × 3 splits = 45 pontos. Ela entrega as duas leituras vencedoras: L3 flatten (eggs, protozoan) e L4 1x1×1280 avg (larvae).
+- Ressalva: o ckpt da L3 é escolhido pelo κ avg. Por isso o SVM flatten da L3 também roda em 50%, para checar contra o bp01w64 (0.906/0.845/0.865).
+- 200 épocas por camada, como em 50% (o corte para 60 não foi validado no κ, e a lei precisa da mesma receita). max_per_gpu 2 nas GPUs 0–2 (L4 ~3 GB).
+- SVM ao fim do treino, sob o flock: primeiro o avg (L3, L4), depois o flatten (L3, incluindo 50%).
