@@ -323,3 +323,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Decisão: os 12 g20 de eggs/protozoan (estavam no L1) foram parados e relançados sobre a base L4 1x1×1280, com κ de treino e SVM em gem (L4) + avg (L3/L4). w96/w128 viram [48,64,96,1280]/[64,96,128,1280]; k3 vira layer_kernels [3,3,3,1]. Os 7 g20 de larvae seguem; o eval gem L4 deles entra na fila quando terminarem. A varredura de porcentagens também ganha eval gem L4 (1–100%).
 - Distância ao I-JEPA (50%): eggs −0.041, larvae −0.026, protozoan +0.011.
 - Crispim: o lejepa dele parou às 13:10 (4 ranks juntos, sem OOM do kernel, folga ≥ 7.7 GB). Causa desconhecida; usuário avisado.
+
+## 2026-11-01: teste pedido pelo usuário; pesquisa de técnicas de convolução
+- O usuário pediu o teste com os melhores modelos. Fila svmq_test, 1 por vez: bp01w64c1280 L4 com GeM e com avg, 3 datasets × 3 splits, eval_set test. A leitura de cada dataset já foi escolhida antes, na validação (eggs/protozoan GeM, larvae avg). O teste não muda essa escolha.
+- Pesquisa (A5): técnicas de convolução compatíveis com SPiFiL + crescimento + decoder (SE, ECA, CBAM, CoordAtt, SimAM, GRN, blocos residuais/invertidos, BlurPool, dilatada/MixConv, GroupNorm...), com init próxima da identidade para não estragar os filtros SPiFiL.
+- Implementação (A7): opção `se_reduction` (squeeze-and-excitation), desligada por padrão e com init quase identidade.
