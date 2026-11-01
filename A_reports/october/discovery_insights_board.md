@@ -1429,3 +1429,60 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
 - **Justiça:** toda leitura nova roda também nas features do I-JEPA. O nosso κ é de val e o dele é de teste.
 - **Leis de escala:** ajustar `1−κ = a·n^−α + b·m^−β + c∞` (Rosenfeld, arXiv 1909.12673) no κ flatten. Para profundidade, usar BNSL (arXiv 2210.14891).
 - **FLIM:** viés −⟨μ,k⟩ sem z-score por bloco (FLIM-BoFP, arXiv 2602.20845); dissertação Miranda/Falcão (abr/2026) nos mesmos 3 datasets. Relatório: `discovery_literature_ideas.md`.
+
+## 2026-11-01 12:51 [A4] regra nova (sem flatten, leitura < 2.000 dim): o κ val do spp na L3 do bp01w64, contra avg
+
+| leitura (< 2.000 dim) | eggs | larvae | protozoan |
+|---|---|---|---|
+| bp01w64 L3 avg (64 dim) | 0,845 | 0,904 | 0,797 |
+| **bp01w64 L3 spp (1.344 dim)** | **0,878** (0,901 / 0,870 / 0,863) | 0,872 (0,882 / 0,872 / 0,862) | **0,847** (só o s1) |
+| c1280 L4 avg (1.280 dim) | **0,880** | **0,917** | 0,837 |
+
+- **eggs:** o spp L3 sobe +0,033 sobre o avg L3 e **empata com a L4 avg** (0,878 contra 0,880). Ele recupera ~40% do que o avg perdia contra o flatten (0,906).
+- **larvae:** o spp L3 fica abaixo do avg (−0,032 contra o L3 avg, −0,045 contra o L4 avg). Em larvae, a posição atrapalha mesmo em pirâmide.
+- **protozoan s1:** spp 0,847, contra L4 avg 0,834 e L3 avg 0,811. Provisoriamente é o melhor abaixo de 2.000 dim; faltam s2 e s3.
+- **Escolha provisória por dataset (< 2.000 dim):**
+
+  | dataset | leitura | κ |
+  |---|---|---|
+  | eggs | **spp L3 ≈ L4 avg** | ~0,88 |
+  | larvae | **L4 avg** | 0,917 |
+  | protozoan | **spp L3** (s1) | pendente |
+
+- **Distância ao I-JEPA (teste, 50%):** eggs −0,060, larvae −0,026, protozoan −0,017 (s1 do spp contra 0,864).
+- **Scripts atualizados** (só leituras < 2.000 dim; o flatten saiu da base): a4/readouts_cmp.py, a4/g20_kappa.py (base avg e spp L3 para eggs/protozoan, avg L4 para larvae; o l_c2560 saiu) e a4/pcts_fit.py (pcts_flat → pcts_spp).
+
+## 2026-11-01 13:11 [A6] o job do crispim saiu (não foi kill nosso)
+- **Os 4 processos `lejepa-pretrain.py` do crispim sumiram juntos entre 13:09:53 e 13:10:24.** Eram ~18,2 GB em cada GPU 0-3, e o job rodava havia 3 dias.
+- **Folga às 13:09:53:** GPU0 11,5 GB, GPU1 14,0 GB, GPU2 7,7 GB, GPU3 12,9 GB. Nenhuma amostra de 30 s ficou abaixo de 7 GB livres.
+- **dmesg:** nenhum OOM nem Xid recente. Pela folga e pela saída simultânea dos 4 ranks, foi o job dele terminando ou caindo, não falta de memória causada por nós.
+- **Nenhuma sessão nossa foi morta.** Nada dele foi relançado.
+
+## 2026-11-01 13:17 [A4] κ val das leituras < 2.000 dim: o GeM na L4 1x1×1280 é a melhor leitura em eggs e protozoan
+
+| leitura (dim) | eggs | larvae | protozoan |
+|---|---|---|---|
+| bp01w64 L3 avg (64) | 0,845 | 0,904 | 0,797 |
+| bp01w64 L3 spp (1.344) | 0,878 | 0,872 | 0,829 (0,847 / 0,815 / 0,827) |
+| bp01w64 L3 gem (64) | 0,811 | 0,831 | 0,798 |
+| c1280 L4 avg (1.280) | 0,880 | **0,917** | 0,837 |
+| **c1280 L4 gem (1.280)** | **0,899** (0,909 / 0,892 / 0,894) | 0,910 (0,896 / 0,918 / 0,915) | **0,875** (0,876 / 0,875 / 0,873) |
+
+- **O GeM (p = 3) na L4 de 1.280 canais:**
+  - eggs: +0,019 sobre a L4 avg e +0,021 sobre o spp L3. Fica a 0,007 do antigo flatten (0,906), com 22x menos dimensões.
+  - protozoan: **+0,038 sobre a L4 avg e +0,046 sobre o spp L3.** É o maior protozoan medido, flatten incluído (0,866), e passa o I-JEPA (0,864, teste).
+  - larvae: 0,910 contra 0,917 do avg, **empate dentro do ruído do avg (~0,015)**.
+  - Muito estável no protozoan: os 3 splits ficam entre 0,873 e 0,876 (desvio 0,0015).
+- **Na L3, com 64 canais, o GeM perde para o avg** (−0,034 / −0,073 / +0,001). **O GeM só funciona sobre muitos canais (1x1×1280).** Com poucos canais, o máximo suave descarta informação demais.
+- **O spp completo em protozoan cai para 0,829** (o s1 de 0,847 era o melhor split). Ele fica abaixo da L4 avg e da L4 gem.
+- **Leitura por dataset (< 2.000 dim, val):**
+
+  | dataset | leitura | κ |
+  |---|---|---|
+  | eggs | **L4 gem** | 0,899 |
+  | larvae | **L4 avg** | 0,917 (gem 0,910, empate) |
+  | protozoan | **L4 gem** | 0,875 |
+
+  - **Proposta:** usar **L4 gem como leitura única** para os 3 datasets. Ela perde só −0,007 em larvae, dentro do ruído, e simplifica a g20.
+- **Distância ao I-JEPA (teste, 50%):** eggs −0,041, larvae −0,026 (com avg), protozoan **+0,011**.
+- **Para a g20:** as famílias de eggs/protozoan estão em L3 (avg + spp). O GeM só ajudou na L4. Uma re-avaliação da g20 em GeM não ajudaria na L3.

@@ -20,17 +20,28 @@ resources:
   cpus_per_experiment: 10
   num_workers: 2
 runner_args:
-  layerwise: 3
+  layerwise: 4
   paper_classes: true
   layer_channels:
   - 32
   - 48
   - 64
-  kernel_size: 5
+  - 1280
+  layer_kernels:
+  - 5
+  - 5
+  - 5
+  - 1
+  layer_pools:
+  - 2
+  - 2
+  - 2
+  - 1
+  fill_random_last: true
   superpixels: disf
   n_superpixels: 50
   budget_check: false
-  embed_mode: avgpool2d
+  embed_mode: gem
   layerwise_backprop: 0.1
 output:
   work_dir: /dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_bg0

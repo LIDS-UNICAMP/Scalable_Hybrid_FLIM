@@ -315,3 +315,11 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - larvae: L4 avg 0.917 segue o melhor. O spp L3 dá 0.872: a posição atrapalha em larvae mesmo em pirâmide. Alvo 0.943 (−0.026).
 - protozoan: spp L3 só no s1 (0.847), acima da L4 avg (0.834) e do avg L3 (0.811). Alvo 0.864. Faltam s2/s3.
 - Sem o flatten, a distância para o I-JEPA cresceu em eggs. A próxima onda tem que atacar a leitura de eggs dentro de < 2000-d. GeM pendente.
+
+## 2026-11-01: GeM na L4 1x1×1280 é a melhor leitura < 2000-d; g20 de eggs/protozoan rebaseados
+- κ val (média de 3 splits), L4 gem (1280-d): eggs 0.899, larvae 0.910, protozoan 0.875 (0.876/0.875/0.873). Contra a L4 avg: 0.880/0.917/0.837; contra o spp L3: 0.878/0.872/0.829.
+- protozoan 0.875 é o maior κ medido ali, acima do antigo flatten (0.866) e do I-JEPA (0.864, teste). eggs fica a 0.007 do antigo flatten com 22x menos dimensões. Na L3 (64 canais) o GeM perde para o avg: ele só funciona sobre muitos canais.
+- Hipótese SPiFiL: a L4 tem 100–400 protótipos SPiFiL + aleatórios. O GeM (p=3) dá peso aos picos, isto é, a "este protótipo apareceu forte em algum lugar", parecido com detectar a presença de uma parte típica do parasita.
+- Decisão: os 12 g20 de eggs/protozoan (estavam no L1) foram parados e relançados sobre a base L4 1x1×1280, com κ de treino e SVM em gem (L4) + avg (L3/L4). w96/w128 viram [48,64,96,1280]/[64,96,128,1280]; k3 vira layer_kernels [3,3,3,1]. Os 7 g20 de larvae seguem; o eval gem L4 deles entra na fila quando terminarem. A varredura de porcentagens também ganha eval gem L4 (1–100%).
+- Distância ao I-JEPA (50%): eggs −0.041, larvae −0.026, protozoan +0.011.
+- Crispim: o lejepa dele parou às 13:10 (4 ranks juntos, sem OOM do kernel, folga ≥ 7.7 GB). Causa desconhecida; usuário avisado.

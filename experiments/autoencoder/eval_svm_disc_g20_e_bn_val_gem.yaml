@@ -1,0 +1,31 @@
+# SVM g20 e_bn GeM L4
+name: svm_disc_g20_e_bn_val_gem
+method: autoencoder
+runner: eval
+grid:
+  datasets:
+  - helminth-eggs
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 50
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: disc_g20_e_bn
+  ckpt_selection: best
+  results_csv: results/svm_disc_g20_e_bn_val_gem.csv
+  embed_mode: gem
+  eval_set: val
+  stages:
+  - L4
+resources:
+  gpu_ids:
+  - 1
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_g20_e_bn_val_gem
+skip: state

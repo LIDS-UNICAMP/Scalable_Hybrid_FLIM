@@ -21,6 +21,7 @@ runner_args:
   eval_set: val
   stages:
   - L3
+  - L4
 resources:
   gpu_ids:
   - 1
