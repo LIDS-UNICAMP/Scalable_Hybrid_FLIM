@@ -229,3 +229,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-01: bp01w64 é a nova base; c1280 L4 sobreajusta em larvae
 - bp01w64 L3 (κ val, média de 3 splits): eggs 0.906 (1º), larvae 0.845 (1º), protozoan 0.865 (empate no 1º; s1 0.888 é recorde). Único candidato no topo dos 3 datasets. Contra o rand: +0.005 / +0.022 / +0.056. Decisão: bp01w64 vira a base.
 - c1280 L4 em larvae: early stop 3/3 (best 96/98/138), distância val − treino +3–4e-4, loss igual à da L3. É a assinatura de sobreajuste do R2. Previsão para o κ avgpool: larvae L4 < L3 nos 3 splits; eggs s2 <, s1 ≈, s3 ≥. O veredito sai no SVM.
+
+## 2026-11-01: L4 1x1x1280 sobe o κ; a leitura (embed) pesa ~0.09
+- c1280 κ val avgpool, L3 → L4 (conferido no CSV): eggs 0.825→0.869, 0.828→0.870, 0.804→0.864 (+0.04 a +0.06); larvae 0.915→0.934, 0.909→0.909, 0.874→0.892 (média L4 0.912). A camada 1x1 ajuda nos 6, mesmo com early stop. Retirada a regra "early stop ⇒ κ cai": ela só vale quando o vetor encolhe (flatten R2).
+- Mesma L3 (pesos = bp01), só trocando a leitura: larvae avgpool ~0.90 contra flatten ~0.82 (+0.09); eggs avgpool ~0.82 contra flatten ~0.90 (−0.08). O larvae L4 avgpool (0.912) passa todo flatten medido (0.864) e fica a ~3 pontos do I-JEPA (0.943, teste). Hipótese: em larvae a posição atrapalha; em eggs a forma no mapa conta.
+- Decisões: (1) a leitura vira um eixo por dataset, escolhido na validação; famílias só se comparam com a mesma leitura. (2) Lançado bp01w64c1280 = bp01w64 + L4 1x1x1280 (a mesma mudança na base nova). (3) SVM avgpool da L3 do bp01w64 (só eval, mesma L3), para separar o efeito da leitura do efeito da camada.

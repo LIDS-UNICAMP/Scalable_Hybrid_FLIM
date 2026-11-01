@@ -1050,3 +1050,177 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
   - **Estabilidade:** o κ do aleatório varia 0,002–0,035 entre seeds (mediana ~0,015); o SPiFiL repetido, ≤0,0003–0,008.
 - **Resposta à regra do usuário ("o SPiFiL tem que contribuir no treino"): contribui.** O efeito é grande em protozoan, existe em parte de larvae e é nulo em eggs, e o SPiFiL é sempre mais reprodutível.
 - Pendentes: rand_s2 em larvae s3 e protozoan s2/s3, para fechar 3 seeds em toda célula.
+
+## 2026-10-31 20:40 [A4] nota curta: larvae s3 L3 com 3 seeds do rand
+- **rand seed 0 / 1 / 2:** 0,791 / 0,840 / **0,869**, média 0,833 ± **0,039**. **SPiFiL (fg01):** 0,838.
+- **Empate na média** (+0,005 para o SPiFiL). A seed 2 do rand passa o SPiFiL (+0,031).
+- **É a célula em que o rand mais oscila** entre seeds: um desvio de 0,039, numa faixa de 0,078 entre a pior e a melhor seed. O SPiFiL dá um valor só, no meio dessa faixa.
+- **Larvae fechado com 3 seeds:**
+
+  | split | resultado |
+  |---|---|
+  | s1 | empate |
+  | s2 | **SPiFiL +0,037** |
+  | s3 | empate |
+
+  - A média dos 3 splits é SPiFiL 0,836 contra rand 0,823 (+0,013). Em larvae, o ganho principal do SPiFiL é **estabilidade**: o desvio entre seeds do rand chega a 0,039.
+- Pendente: o rand_s2 em protozoan s2/s3. Novo na vigia: disc_bp01c1280.
+
+## 2026-10-31 20:46 [A4] RESULTADO FINAL do controle aleatório (L3, κ val, 3 seeds do rand × SPiFiL fg01, 9 células)
+
+| dataset | SPiFiL (média) | rand (média de 3 seeds) | SPiFiL − rand | por split (em desvios entre seeds) | desvio médio entre seeds do rand |
+|---|---|---|---|---|---|
+| eggs | 0,893 | 0,901 | −0,008 | −0,003 (−0,2) / −0,008 (−0,5) / −0,014 (−1,3) | 0,014 |
+| larvae | 0,836 | 0,823 | +0,013 | −0,004 (−0,2) / **+0,037 (5,7)** / +0,005 (0,1) | 0,022 |
+| **protozoan** | **0,855** | 0,809 | **+0,046** | **+0,063 (3,4) / +0,035 (8,8) / +0,040 (3,0)** | 0,012 |
+| geral | | | **+0,017** | | |
+
+- **O SPiFiL contribui como inicializador:**
+  - **protozoan:** vence nos 3 splits, por 3 a 9 desvios entre seeds.
+  - **larvae:** vence 1 de 3 splits, por 5,7 desvios, e empata nos outros 2.
+  - **eggs:** empata nos 3. O rand fica ~0,008 acima, dentro de ~1 desvio.
+  - **Nenhuma célula** tem o rand acima do SPiFiL por mais de 1,3 desvio.
+- **Estabilidade (critério do A0):**
+  - O κ do aleatório varia entre seeds com desvio médio de 0,012–0,022 e chega a 0,039 (larvae s3).
+  - O SPiFiL repetido com o mesmo config varia ≤0,0003 (eggs s2/s3) e até 0,008 (eggs s1).
+  - **O SPiFiL é ~2–50x mais reprodutível.**
+- **Regra:** o ganho do SPiFiL cresce quanto pior o aleatório vai no dataset. Em protozoan, onde o rand fica em ~0,81, ganha +0,046; em eggs, onde o rand fica em ~0,90, empata.
+- **Lembrete para larvae:** é binário, e um treino só varia ±0,05 entre variantes SPiFiL (sp200 de 0,776 a 0,890). A vitória no s2 resiste a 3 seeds, mas não generaliza para toda variante SPiFiL.
+
+## [A4] nota: as L1–L3 do bp01c1280 repetem o bp01
+- O YAML só muda as L1–L3 em `embed_mode avgpool2d`, que só afeta a sonda de κ do treino. A L4 é a única camada nova (1x1, 1280 canais, sem pool, fill_random_last).
+- A curva da L1 confirma: v0 0,990 / 1,377 / 1,095, igual à do fg01/bp01.
+- **São ~9 estágios que repetem o bp01.** Daria para começar da L3 do bp01. A decisão é do A0.
+- A sonda de memória da L4 está armada (a4/gpu_c1280_L4.txt).
+
+## 2026-10-31 22:09 [A4] bp01c1280 L4 (1x1, 1280 canais, 24x24, sem pool): 1ª leitura da curva
+- **Memória (a4/gpu_c1280_L4.txt):** cada processo da L4 usa **~2,7 GB**. As GPUs 0–2 ficam em 25–29 GB de 49 GB, com ~20 GB livres. **Não há risco de OOM.**
+- **Curva da L4 contra a L3 da mesma família, eggs** (mínimo da val | val − treino):
+
+  | split | L3 (final) | L4 (parcial) | ΔL4−L3 |
+  |---|---|---|---|
+  | s1 | 0,51276 \| −0,00045 | 0,51278 \| −0,00046 (época 69) | +2e-5 \| −1e-5 |
+  | s2 | 0,51178 \| −0,00179 | 0,51177 \| −0,00174 (época 78) | −1e-5 \| +5e-5 |
+  | s3 | 0,51225 \| −0,00139 | 0,51260 \| −0,00143 (época 26, cedo) | — |
+
+  - **A L4 1x1 sem pool não mostra a assinatura de sobreajuste da L4 do R2.** No R2 (48 filtros, kernel 5, com pool, 12x12), a loss subia +6,7e-4 e a distância val − treino +0,0005 já na L4. Aqui, as duas ficam iguais às da L3 (±5e-5).
+  - O e3 é 8–12, mais rápido que na L3 (26). Sem sinal de early stop até agora: o best está nas épocas 65 e 74, com a lr ainda alta.
+  - **Leitura provisória:** a camada 1x1 sem pool não piora a reconstrução nem ajusta o treino a mais. Ela parece **neutra para a loss**. Se ajudar, vai aparecer no κ avgpool (L4 contra L3 avgpool). Pela regra "early stop disparou ⇒ κ caiu" (15/15 no R2), o bom sinal até aqui é a ausência de early stop.
+  - **As L1–L3 do bp01c1280 batem com o bp01:** L3 0,51276 / 0,51178 / 0,51225 contra 0,51276 / 0,51177 / 0,51225. Repetição confirmada.
+- **w64fg eggs s1 L3 (1º κ):** 0,914, contra w64 0,913 e fg01 0,894. É um split só; espero s2/s3.
+
+## 2026-10-31 22:15 [A4] nota: c1280 L4 em ~120 épocas; κ val L3 do w64fg
+- **bp01c1280 L4** (mínimo da val, L4 contra L3):
+  - s1: 0,51268 contra 0,51276 (**−8e-5**).
+  - s2: 0,51171 contra 0,51178 (**−7e-5**).
+  - s3: 0,51228 contra 0,51225 (+3e-5, na época 70).
+  - **Pela primeira vez, uma camada além da L3 baixa a loss da val.**
+  - A distância val − treino sobe só +9e-5 / +1,7e-4. No R2 a L4 subia +0,0005.
+  - Ainda sem early stop. **A curva é a melhor possível para uma L4.**
+  - Memória: as GPUs 0–2 ficam em 24–25 GB, estável.
+- **w64fg (32/48/64 + fundo 0,1), κ val L3:**
+
+  | | s1 | s2 | s3 | média | referências |
+  |---|---|---|---|---|---|
+  | eggs | 0,914 | 0,885 | 0,892 | 0,897 | w64 0,896 · fg01 0,893 · bp01 0,902 |
+  | larvae | 0,853 | 0,800 | 0,845 | 0,833 | fg01 0,836 · w64 0,823 |
+  | protozoan | 0,879 | 0,861 | (pendente) | 0,870 (2 splits) | nos mesmos 2 splits: w64 0,864 · bp01 0,868 · fg01 0,857 |
+
+  - **Combinar largura e fundo 0,1 não soma:** em eggs e larvae, o w64fg empata com as partes. Em protozoan, fica no topo junto com bp01 e w64, dentro do ruído.
+
+## 2026-10-31 23:06 [A4] c1280 L4 eggs fechada: a curva e uma previsão de κ registrada antes do SVM
+
+| eggs | L3 → L4: mínimo da val | val − treino | época do best (L4) | early stop |
+|---|---|---|---|---|
+| s1 | 0,51276 → 0,51266 (**−1,0e-4**) | −0,00045 → −0,00026 (+1,9e-4) | 163 | não |
+| s2 | 0,51178 → 0,51169 (**−0,9e-4**) | −0,00179 → −0,00151 (+2,8e-4) | **145** | **sim, na 196** |
+| s3 | 0,51225 → 0,51214 (**−1,1e-4**) | −0,00139 → −0,00118 (+2,1e-4) | 185 | não |
+
+- **Comparação com a L4 do R2:**
+
+  | | R2 (48 filtros, kernel 5, pool) | c1280 (1x1, sem pool) |
+  |---|---|---|
+  | loss | +6,7e-4 | **−1e-4** |
+  | val − treino | +4 a 5e-4 | +2 a 3e-4 |
+  | early stop | 2 de 3 | 1 de 3 |
+  | best | 133–152 | 145–185 |
+
+  - **A camada 1x1 sem pool é a melhor L4 até agora pela curva**, mas ainda mostra um pouco de ajuste ao treino.
+- **Previsão registrada antes do SVM** (regra do R2, "best antes da época ~150 ⇒ κ abaixo da L3", 15 de 15):
+  - **s2: L4 < L3 no κ.**
+  - s1 (best 163): perto de L3, de borda.
+  - **s3 (best 185): L4 ≥ L3.**
+  - Ressalva: a comparação justa é L3 avgpool contra L4 avgpool (o embed do c1280). A regra veio do flatten no R2.
+- **Memória até o fim da L4:** as GPUs 0–2 ficaram em 22–29 GB de 49 GB. Sem problema.
+- **w64fg protozoan s3 = 0,856:** o protozoan do w64fg fecha em 0,879 / 0,861 / 0,856, média **0,865**. Fica empatado com o bp01 (0,866) no topo de protozoan.
+- **bp01w64 L3 em eggs tem a loss mais baixa de todas as variantes:** 0,51263 / 0,51166 / 0,51215, contra o bp01 com 0,51276 / 0,51177 / 0,51225. O κ ainda não saiu.
+
+## 2026-10-31 23:37 [A4] κ val L3: o bp01w64 tem a melhor média em eggs e larvae
+
+| L3, média dos 3 splits | eggs | larvae | protozoan |
+|---|---|---|---|
+| **bp01w64** (bp01 + 32/48/64 + fundo 0,1) | **0,906** (0,929 / 0,892 / 0,897) | **0,845** (0,864 / 0,822 / 0,849) | (pendente) |
+| bp01 | 0,902 | 0,829 | **0,866** |
+| w64fg | 0,897 | 0,833 | 0,865 |
+| fg01 | 0,893 | 0,836 | 0,855 |
+| rand (3 seeds) | 0,901 | 0,823 | 0,809 |
+
+- **O s1 de eggs (0,929) é o maior κ de eggs medido.**
+- Contra o 2º melhor de cada dataset, a diferença é pequena:
+  - eggs: +0,004 sobre o bp01;
+  - larvae: +0,009 sobre o fg01.
+  - **As duas estão dentro do ruído de ~0,012 por split.** O que conta é ser o topo nos dois datasets.
+- **Curva × κ, de novo em eggs:** o bp01w64 também tem a loss de L3 mais baixa em eggs (0,51263 / 0,51166 / 0,51215).
+  - Em eggs, a ordem da loss mínima entre variantes da mesma família (fg01 → bp01 → bp01w64) bate com a ordem do κ (0,893 → 0,902 → 0,906).
+  - Em larvae, não bate (bp01 tem loss mais baixa e κ mais baixo que o fg01). Lá, o grão do κ é grosso.
+- **Larvae com o bp01w64:** o s2 sobe para 0,822 (fg01 0,831, rand 0,794) e o desvio entre splits é 0,021.
+- **c1280:** já passou para larvae/protozoan; o κ de eggs L3/L4 ainda não saiu. Curvas: 0 NaN e nenhum run travado. O protozoan s3 L1 está na época 3, recém-começado.
+
+## 2026-10-31 23:43 [A4] o bp01w64 fecha no topo dos 3 datasets; a L4 do c1280 em larvae ajusta o treino
+- **bp01w64, protozoan L3:** 0,888 / 0,850 / 0,858, média **0,865**. Empata com bp01 (0,866) e w64fg (0,865). O s1 (0,888) é o maior κ de protozoan s1 medido.
+- **Resumo do bp01w64 (média de κ val L3):**
+
+  | dataset | κ | posição |
+  |---|---|---|
+  | eggs | 0,906 | 1º |
+  | larvae | 0,845 | 1º |
+  | protozoan | 0,865 | empate no 1º |
+
+  - **É a melhor candidata de L3 até agora.** As margens sobre o 2º estão dentro do ruído, mas ela é a única que fica no topo em todos os 3.
+  - Contra o rand (3 seeds): +0,005 em eggs, +0,022 em larvae e +0,056 em protozoan.
+- **c1280 L4 em larvae** (L3 → L4: mínimo da val | val − treino | época do best):
+
+  | split | L3 | L4 | early stop |
+  |---|---|---|---|
+  | s1 | 0,49563 \| +0,00009 \| 184 | 0,49562 \| **+0,00042** \| **96** | **sim, na 147** |
+  | s2 | 0,49588 \| −0,00021 \| 175 | 0,49581 \| **+0,00023** \| **98** | **sim, na 149** |
+  | s3 | 0,49601 \| +0,00036 \| 196 | 0,49596 \| **+0,00079** \| 138 | **sim, na 189** |
+
+  - **Em larvae, a L4 1x1 mostra a assinatura de sobreajuste:** early stop 3/3, best antes da época 140 e distância val − treino +3 a 4e-4. A loss fica igual à da L3.
+  - Em eggs, a mesma L4 baixava a loss em 1e-4 e só disparava o early stop em 1/3.
+  - **Previsão registrada para o κ avgpool:** larvae L4 < L3 nos 3 splits. Em eggs: s2 L4 < L3, s1 ≈, s3 L4 ≥ L3.
+- **Saúde:** 0 NaN, nenhum run travado. Agora roda o protozoan L1 do c1280.
+
+## 2026-11-01 01:40 [A4] κ val do c1280 (avgpool): a L4 1x1 sobe o κ, minha previsão errou, e o embed muda o κ em ~0,09 com sinal por dataset
+- **L3 contra L4 do c1280, os dois em avgpool** (dim 48 → 1.280):
+
+  | | s1 | s2 | s3 |
+  |---|---|---|---|
+  | eggs L3 → L4 | 0,825 → **0,869** (+0,043) | 0,828 → **0,870** (+0,042) | 0,804 → **0,864** (+0,060) |
+  | larvae L3 → L4 | 0,915 → **0,934** (+0,020) | 0,909 → 0,909 (−0,001) | (pendente) |
+
+- **A minha previsão errou.** O eggs s2 teve early stop (best na 145) e o κ subiu +0,042. O larvae s1 teve early stop (best na 96) e o κ subiu +0,020.
+  - **A regra "early stop ⇒ κ cai" (15/15 no R2) não vale aqui.** No R2, o flatten encolhia de 27.648 para 5.808–7.744 dimensões. Aqui, o embedding avgpool cresce de 48 para 1.280.
+  - **A regra do R2 media o tamanho do embedding junto com o sobreajuste e não os separava.** Retiro a regra como guia geral: ela só vale quando o embedding encolhe.
+- **Achado maior: só o modo de embed muda o κ da mesma L3 em ~0,09, com sinal oposto por dataset.**
+  - A L3 do c1280 tem os mesmos pesos do bp01: a curva bate até 1e-5 e os YAMLs são iguais até a L3.
+
+  | mesma L3 (bp01) | flatten (27.648 dim) | avgpool (48 dim) | Δ |
+  |---|---|---|---|
+  | eggs | 0,908 / 0,906 / 0,894 | 0,825 / 0,828 / 0,804 | **−0,08** |
+  | larvae | 0,817 / 0,829 / – | 0,915 / 0,909 / – | **+0,09** |
+
+  - **O larvae em avgpool L3 (0,915) e L4 (0,934) passa todos os flatten medidos.** O melhor era o bp01w64 s1 com 0,864.
+  - **Leitura:** em larvae (binário, objeto alongado e de posição variável), a média espacial descarta a posição e ganha. Em eggs, a posição e a forma no mapa importam, e o flatten ganha.
+  - **Consequência:** o modo de embed é um eixo de **~0,09 de κ**, maior que qualquer variante de treino medida (≤0,02). Ele deveria ser escolhido por dataset, e todas as comparações entre famílias só valem dentro do mesmo embed.
+- Pendentes: larvae s3 e protozoan (L3/L4 avgpool).
