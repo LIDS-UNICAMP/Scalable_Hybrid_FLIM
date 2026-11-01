@@ -1224,3 +1224,29 @@ Fontes: results/svm_disc_r1_rand_val.csv (3 linhas), svm_disc_a1_fg01_val.csv e 
   - **Leitura:** em larvae (binário, objeto alongado e de posição variável), a média espacial descarta a posição e ganha. Em eggs, a posição e a forma no mapa importam, e o flatten ganha.
   - **Consequência:** o modo de embed é um eixo de **~0,09 de κ**, maior que qualquer variante de treino medida (≤0,02). Ele deveria ser escolhido por dataset, e todas as comparações entre famílias só valem dentro do mesmo embed.
 - Pendentes: larvae s3 e protozoan (L3/L4 avgpool).
+
+## 2026-11-01 01:46 [A4] modo de embed × camada, κ val (média dos 3 splits; cada célula traz s1/s2/s3)
+Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm_disc_bp01w64_val_avg (só leitura). A L3 do c1280 tem os pesos do bp01.
+
+| dataset | bp01 L3 flatten | bp01 L3 avg | **c1280 L4 avg** (1x1×1280) | bp01w64 L3 flatten | bp01w64 L3 avg |
+|---|---|---|---|---|---|
+| eggs | **0,902** (0,908 / 0,906 / 0,894) | 0,819 | 0,868 | **0,906** (0,929 / 0,892 / 0,897) | 0,845 |
+| larvae | 0,829 | 0,899 | **0,912** (0,934 / 0,909 / 0,892) | 0,845 | 0,904 (0,894 / 0,940 / 0,879) |
+| protozoan | **0,866** (0,882 / 0,854 / 0,860) | 0,750 | 0,828 | **0,865** | 0,796 (2 splits) |
+
+- **O efeito do embed se repete na outra família (bp01w64)**, com o mesmo sinal por dataset:
+  - eggs: −0,061 com avg;
+  - larvae: **+0,059** com avg;
+  - protozoan: −0,069 com avg.
+  - **Não é coisa do c1280.**
+- **A L4 1x1 ajuda dentro do avgpool nos 3 datasets:** +0,049 em eggs, +0,013 em larvae e +0,078 em protozoan, contra a L3 avg da mesma família. **Mas ela só supera a L3 flatten em larvae.** Em eggs fica −0,034 e em protozoan −0,038.
+- **Embed por dataset (pela val):**
+
+  | dataset | embed | melhor configuração | κ |
+  |---|---|---|---|
+  | eggs | **flatten na L3** | bp01w64 | 0,906 |
+  | larvae | **avgpool** | c1280 L4 avg | 0,912 (bp01w64 L3 avg: 0,904) |
+  | protozoan | **flatten na L3** | bp01 | 0,866 (bp01w64: 0,865) |
+
+- **Leitura:** a média espacial ajuda onde a posição do objeto não importa (larvae: objeto alongado e de posição variável, binário). Ela atrapalha onde a forma no mapa carrega a classe (eggs e protozoan: forma e textura localizadas). A L4 de 1.280 canais compensa só parte da informação espacial perdida pelo avgpool.
+- **O que medir em seguida:** o bp01w64c1280 L4 avg em larvae (bp01w64 + 1x1). É o candidato mais provável a passar 0,912 em larvae. Curvas na vigia.

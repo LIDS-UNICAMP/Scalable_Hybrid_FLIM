@@ -234,3 +234,13 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - c1280 κ val avgpool, L3 → L4 (conferido no CSV): eggs 0.825→0.869, 0.828→0.870, 0.804→0.864 (+0.04 a +0.06); larvae 0.915→0.934, 0.909→0.909, 0.874→0.892 (média L4 0.912). A camada 1x1 ajuda nos 6, mesmo com early stop. Retirada a regra "early stop ⇒ κ cai": ela só vale quando o vetor encolhe (flatten R2).
 - Mesma L3 (pesos = bp01), só trocando a leitura: larvae avgpool ~0.90 contra flatten ~0.82 (+0.09); eggs avgpool ~0.82 contra flatten ~0.90 (−0.08). O larvae L4 avgpool (0.912) passa todo flatten medido (0.864) e fica a ~3 pontos do I-JEPA (0.943, teste). Hipótese: em larvae a posição atrapalha; em eggs a forma no mapa conta.
 - Decisões: (1) a leitura vira um eixo por dataset, escolhido na validação; famílias só se comparam com a mesma leitura. (2) Lançado bp01w64c1280 = bp01w64 + L4 1x1x1280 (a mesma mudança na base nova). (3) SVM avgpool da L3 do bp01w64 (só eval, mesma L3), para separar o efeito da leitura do efeito da camada.
+
+## 2026-11-01: tabela leitura × camada (κ val, média dos 3 splits)
+| dataset | bp01 L3 flat | bp01 L3 avg | c1280 L4 avg | bp01w64 L3 flat | bp01w64 L3 avg |
+|---|---|---|---|---|---|
+| eggs | 0.902 | 0.819 | 0.868 | 0.906 | 0.845 |
+| larvae | 0.829 | 0.899 | 0.912 | 0.845 | 0.904 |
+| protozoan | 0.866 | 0.750 | 0.828 | 0.865 | 0.796 (2 splits) |
+- O efeito da leitura se repete no bp01w64 (avg: eggs −0.061, larvae +0.059, protozoan −0.069); não é coisa do c1280.
+- A L4 1x1 ajuda dentro do avg (+0.05 / +0.01 / +0.08), mas só passa a L3 flat em larvae.
+- Escolha por dataset (validação): eggs = L3 flat (bp01w64 0.906); larvae = L4 avg (c1280 0.912); protozoan = L3 flat (bp01 0.866). Próximo: bp01w64c1280 L4 avg em larvae.
