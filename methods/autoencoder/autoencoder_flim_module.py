@@ -252,6 +252,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
                             gargalo ``max(C // r, 4)``. 0 = off (default).
         grn:                Global Response Normalization (ConvNeXt V2) so no ultimo bloco do
                             encoder, depois da ativacao. Nasce identidade. Off por default.
+        spifil_anchor:      lambda do L2-SP (Li et al. 2018): soma, nas convs do encoder, de
+                            ``||W - W0||^2 / ||W0||^2``, com W0 o encoder logo apos o
+                            ``init_ckpt``. 0 = off (default).
         mask_ratio:         fracao de patches ``mask_patch``x``mask_patch`` escondidos (media da
                             imagem) na entrada; a BCE so conta nos pixels escondidos. 0 = recon
                             plena (default, comportamento de hoje).
@@ -286,6 +289,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         batch_norm: bool = False,
         se_reduction: int = 0,
         grn: bool = False,
+        spifil_anchor: float = 0.0,
         mask_ratio: float = 0.0,
         mask_patch: int = 20,
         recon_bg_weight: float = 1.0,
@@ -479,6 +483,12 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self._best_delta: Optional[float] = None
 
         self._load_init_ckpt(init_ckpt)
+        if spifil_anchor:
+            # L2-SP: ancora = encoder DEPOIS do init_ckpt (o _flim_ref e de antes dele).
+            # Buffer nao persistente: segue o device e nao entra no state_dict.
+            for n in range(1, self.model.encoder.n_layers + 1):
+                w = self.model.encoder.blocks[f"conv{n}"][0].weight
+                self.register_buffer(f"_anchor{n}", w.detach().clone(), persistent=False)
 
     # ── Backbone da rodada anterior ────────────────────────────────────────
 
@@ -683,7 +693,18 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self.log(f"{self._stage_prefix}/"
                  f"{'train_ce_loss' if self.head is not None else 'train_recon_loss'}",
                  loss, prog_bar=True, on_step=True, on_epoch=True)
+        if self.hparams.spifil_anchor:
+            anchor = self._anchor_loss()
+            self.log(f"{self._stage_prefix}/spifil_anchor_loss", anchor,
+                     on_step=True, on_epoch=True)
+            loss = loss + self.hparams.spifil_anchor * anchor
         return loss
+
+    def _anchor_loss(self) -> Tensor:
+        """L2-SP: por conv do encoder, ``||W - W0||^2 / ||W0||^2`` (so pesos), somado."""
+        enc = self.model.encoder
+        return sum((enc.blocks[f"conv{n}"][0].weight - a).pow(2).sum() / a.pow(2).sum()
+                   for n in range(1, enc.n_layers + 1) for a in [getattr(self, f"_anchor{n}")])
 
     def on_validation_epoch_start(self) -> None:
         self._val_emb = []
