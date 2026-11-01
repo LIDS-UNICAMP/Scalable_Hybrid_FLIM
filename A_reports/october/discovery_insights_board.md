@@ -1581,3 +1581,24 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
 - **Sobre a curva:** o geo_aug zerou a assinatura de sobreajuste da L4 (val − treino ~0 contra +0,00046 da base), e o gem subiu. A curva e o κ apontam para o mesmo lado, mas o efeito é pequeno.
 - **Distância ao I-JEPA em larvae (teste, 50%):** −0,024 com o l_aug em gem.
 - **Para o eixo aug nos outros datasets:** o e_aug também baixa a distância val − treino em eggs. O κ de eggs dirá se o padrão se repete.
+- 19:19 LANÇA g20_e_anc3 na GPU1. A soma estava em 13,2 GB em 2 checagens seguidas, com oscilação de até 16,3 GB por causa do disc_pcts.
+
+## 2026-11-01 19:20 [A4] CONFUNDIDOR NA SELEÇÃO DO CKPT: o best_kappa.ckpt é escolhido pela leitura da sonda de treino
+- **Fato:** configs/model/autoencoder/flim/helminth-larvae/split_1.yaml:57-61 tem `ModelCheckpoint(monitor: probe/svm_kappa, mode: max, filename: best_kappa)`. O ckpt avaliado é a época de maior κ **da sonda de treino**, e a sonda usa a leitura do `embed_mode` do run.
+  - Base bp01w64c1280: sonda **avg**.
+  - g20 (relançadas): sonda **gem**.
+- **Sintoma, larvae L4** (κ val, g20 − base):
+
+  | variante | gem | avg |
+  |---|---|---|
+  | l_aug | +0,010 | −0,016 |
+  | l_bp10 | +0,004 | −0,018 |
+  | l_sp100 | −0,007 | −0,016 |
+
+  - **As 3 variantes perdem a mesma coisa no avg (−0,016 a −0,018) e ficam iguais ou acima no gem.** É o que se espera se o ckpt favorece a leitura da própria sonda, com um efeito de seleção de ~0,016.
+- **Consequências:**
+  1. **Comparar g20 (sonda gem) com a base (sonda avg) puxa o gem da g20 para cima e o avg para baixo.** O +0,010 do l_aug no gem não pode ser atribuído ao aug.
+  2. **Entre famílias g20 a comparação é justa** (todas com sonda gem). Larvae em gem L4: **aug 0,919 > bp10 0,914 > sp100 0,903.**
+  3. O achado "o GeM é a melhor leitura" (c1280 base) foi medido em ckpt escolhido por sonda **avg**. Ou seja, o viés era contra o GeM, e **a vantagem dele está subestimada.**
+  4. **Também há escolha na própria val:** a sonda usa a val, e o κ que reportamos é a mesma val. Isso infla um pouco todos os números de val, mas não o teste.
+- **Correção sugerida:** uma base com sonda gem (bp01w64c1280 com `embed_mode: gem`, só os 3 datasets em 50%). Ou então comparar só g20 contra g20.

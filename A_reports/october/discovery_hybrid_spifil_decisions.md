@@ -372,3 +372,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - κ val gem L4: 0.924/0.919/0.915 (0.919) contra a base 0.910 (+0.010, ≥ base nos 3 splits, mas dentro do ruído ~0.012). Passa o avg L4 da base (0.917). O avg L4 do mesmo modelo cai para 0.901 (−0.016): o aug favorece o GeM e prejudica o avg.
 - O geo_aug zera a distância val − treino na L4: a camada 1x1 não decora mais. Distância ao I-JEPA em larvae: −0.024 (val contra teste).
 - Hipótese SPiFiL: o SPiFiL dá filtros de uma orientação (1 imagem por classe). A rotação/espelho força o treino a tornar os protótipos invariantes, e o GeM capta "a parte apareceu, em qualquer orientação". Aguardando e_aug para ver se o padrão se repete em eggs.
+
+## 2026-11-01: confundidor da sonda de treino (A4), conferido
+- O best_kappa.ckpt é escolhido pela sonda de treino na leitura do run. Conferido nos config.yaml: larvae g20 e a base usam avgpool2d, então em larvae NÃO há confundidor. A queda comum de −0.016 no avg dos 3 l_* contra a base indica que o 0.917 da base foi um sorteio alto (ruído do avg ~0.018 na média de 3 splits).
+- Em eggs/protozoan há confundidor: os e_*/p_* usam sonda gem e a base usou avg. Criados e_base e p_base (bp01w64c1280 sem mudança, sonda gem) no topo da fila, como referência justa. Até lá, eggs/protozoan só se comparam g20 × g20.
+- Larvae, gem L4 (g20 × g20, justo): aug 0.919 > bp10 0.914 > sp100 0.903.
