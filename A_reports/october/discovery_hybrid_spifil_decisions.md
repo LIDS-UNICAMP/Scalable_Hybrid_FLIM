@@ -405,3 +405,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - gem L4 κ val. eggs: bp 0.1 → 0.3 → 1.0 dá 0.899 → 0.905 → 0.908 (e_bp10 0.923/0.900/0.903). larvae: 0.1 → 1.0 dá 0.910 → 0.914. Avg L4 do e_bp10 0.883, igual à base.
 - Lei: sobe de forma monotônica, mas fraca (+0.010 eggs, +0.004 larvae no total), e cada passo fica dentro do ruído. O ganho só aparece no gem.
 - Hipótese SPiFiL: o SPiFiL vale como inicializador; soltar o encoder inteiro não apaga o que ele deu e ajuda um pouco. Junto com o A8 (mais backprop = mais drift), mostra que o drift dos mapas não custa κ.
+
+## 2026-11-01: eggs, bn e bg0 neutros (6 eixos)
+- gem L4 κ val, g20 × g20: bp10 0.908, bp03 0.905, aug 0.903, bn 0.897, bg0 0.892, k3 0.875. Fora o k3 (−0.026), os 5 eixos ficam numa faixa de 0.016, dentro da variação do pipeline.
+- Hipóteses SPiFiL: BN estabiliza a escala dos filtros SPiFiL (não muda nada); fundo fora da reconstrução foca o ovo (não muda nada). 0 NaN, nenhuma divergência.
