@@ -1,4 +1,4 @@
-# g20 l_w96: base mais larga sob a 1x1
+# g20 l_w96: base mais larga sob a 1x1  | split 1 ja pronto (pausado 17:10, cap 20 GB)
 name: spifil_growth_disc_g20_l_w96
 method: autoencoder
 runner: growth
@@ -8,7 +8,6 @@ grid:
   datasets:
   - helminth-larvae
   splits:
-  - 1
   - 2
   - 3
   percentages:

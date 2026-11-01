@@ -335,3 +335,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Regra para todos: init exatamente identidade. Uma porta sigmoid em 0.5, ou mesmo 0.95 acumulada, desloca a calibração dos próximos filtros SPiFiL.
 - Feito: leitura `gem_dense` (GeM da penúltima + da última camada, 1344-d < 2000) em eval/svm.py. Eval na fila depois do teste.
 - A7: SE (`se_reduction`) implementado, desligado por padrão. Pedido o ajuste para identidade exata (2·σ, fc2 = 0) e depois o GRN (`grn`) na última camada.
+
+## 2026-11-01 17:10: teto de 20 GB por GPU (ordem do usuário) e fila de espera
+- Medido antes: GPU0 28.0, GPU1 20.9, GPU2 25.6, GPU3 20.5 GB, tudo nosso (o crispim saiu às 13:10). Parte disso são workers Ray ociosos (~0.26 GB cada, ~20 na GPU0).
+- Pausados os 6 menos prioritários: p_aug, p_bp03, p_w96, p_bn (o protozoan já passa o I-JEPA na val) e l_bn, l_w96 (mais pesados; o BN caiu no artigo do ConvNeXt V2). O split 1 de l_bn/l_w96 estava pronto, então eles voltam com splits [2,3]. Depois: 15.6 / 16.2 / 18.0 / 17.2 GB.
+- Fila em scratchpad/gpu_queue.txt (ordem: l_bn, l_w96, p_aug, p_bp03, p_w96, p_bn). O A6 virou o guardião do teto (alvo ≤19 GB): lança da fila quando sobra ≥4 GB, pausa e re-enfileira o menos prioritário se passar de 19.5 GB.
+- Nova investigação (pedido do usuário, A8): o quanto o backprop muda os mapas de ativação em relação ao SPiFiL cru, dentro × fora da máscara, nos modelos top (bp01w64c1280, bp01w64) e no controle aleatório. Resultados em artifacts/.../<ponto>/act_drift/, mais a lei "drift × escala do backprop × κ". Roda em CPU, sem GPU.
