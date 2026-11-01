@@ -400,3 +400,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_aug (flip H/V + rotação 90): gem L4 0.903, avg L4 0.881, contra a base 0.899/0.880. Empate. Não repete o "gem sobe, avg cai" de larvae.
 - Hipótese SPiFiL: invariância a rotação/flip sobre os filtros SPiFiL. Em eggs não muda nada, porque os ovos já são ~isotrópicos.
 - Placar dos 7 eixos com κ (larvae: aug, bg0, bp10, sp100; eggs: bp03, aug, k3): só o k3 passa do ruído, e para pior (−0.029). O platô é ~0.90 em eggs e ~0.91 em larvae (val). Treino de 1 knob não fecha o gap com o I-JEPA em eggs; as apostas restantes são a leitura (gem_dense) e as mudanças de representação (âncora, GRN, SE, k7).
+
+## 2026-11-01: lei do backprop fechada (eggs 3 pontos, larvae 2)
+- gem L4 κ val. eggs: bp 0.1 → 0.3 → 1.0 dá 0.899 → 0.905 → 0.908 (e_bp10 0.923/0.900/0.903). larvae: 0.1 → 1.0 dá 0.910 → 0.914. Avg L4 do e_bp10 0.883, igual à base.
+- Lei: sobe de forma monotônica, mas fraca (+0.010 eggs, +0.004 larvae no total), e cada passo fica dentro do ruído. O ganho só aparece no gem.
+- Hipótese SPiFiL: o SPiFiL vale como inicializador; soltar o encoder inteiro não apaga o que ele deu e ajuda um pouco. Junto com o A8 (mais backprop = mais drift), mostra que o drift dos mapas não custa κ.
