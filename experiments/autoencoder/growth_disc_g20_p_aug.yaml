@@ -30,7 +30,7 @@ runner_args:
   superpixels: disf
   n_superpixels: 50
   budget_check: false
-  embed_mode: flatten
+  embed_mode: avgpool2d
   layerwise_backprop: 0.1
 output:
   work_dir: /dados/home/moliveira/artifacts/spifil_growth/disc_g20_p_aug

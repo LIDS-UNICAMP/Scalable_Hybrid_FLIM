@@ -302,3 +302,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Fila svmq_readouts, 1 por vez: bp01w64 L3 (spp, gem, l2flat) e bp01w64c1280 L4 (spp, gem), sem treino novo.
 - Ressalva: o I-JEPA é ViT (tokens), então essas leituras não se aplicam 1:1 a ele. A comparação continua contra o κ de teste dele, e a escolha da leitura sai só da validação.
 - Próximas apostas de treino (A5): autoencoder mascarado (loss só no tapado, SparK) e SIGReg (core/losses/real_sigreg.py já existe). Só depois das leituras.
+
+## 2026-11-01: regra do usuário, nada de flatten e leitura < 2000-d
+- Pedido: "evite avaliar com flatten. so avalie se a camada for menor que 2000". Vale para o SVM e para o κ de treino (escolha do ckpt).
+- Parados e relançados os 12 g20 de eggs/protozoan (estavam no L1, com κ de treino flatten): agora o κ de treino é avg. O SVM é avg (L3) e, onde 64×21 < 2000, também spp (1344-d). w96/w128 ficam só em avg/gem (spp daria 2016/2688).
+- Abandonado: l_c2560 (L4 de 2560-d não pode ser avaliado). Também cortados da fila de leituras o l2flat (37k-d) e o spp da L4 1280 (26.880-d). O eval "pcts_flat" virou spp (mesmo arquivo, nome/CSV _pcts_spp).
+- Primeiro dado do spp (bp01w64 L3 eggs): 0.901/0.870, contra flatten 0.929/0.892 e avg ~0.845. O spp fica entre os dois e é a melhor leitura < 2000-d até agora em eggs.
+- Nova referência: as comparações passam a ser feitas só entre leituras < 2000-d (avg, gem, spp). O flatten antigo fica como histórico.

@@ -17,7 +17,7 @@ runner_args:
   family: disc_g20_e_w128
   ckpt_selection: best
   results_csv: results/svm_disc_g20_e_w128_val.csv
-  embed_mode: flatten
+  embed_mode: avgpool2d
   eval_set: val
   stages:
   - L3

@@ -1,5 +1,5 @@
 # SVM de checagem sobre cada camada da growth_disc_bp01w64c1280.
-name:   svm_disc_bp01w64c1280_pcts_flat
+name:   svm_disc_bp01w64c1280_pcts_spp
 method: autoencoder
 runner: eval
 
@@ -13,8 +13,8 @@ runner_args:
   source:         growth_stages
   family:         disc_bp01w64c1280
   ckpt_selection: best
-  results_csv:    results/svm_disc_bp01w64c1280_pcts_flat.csv
-  embed_mode:     flatten   # leitura de eggs e protozoan
+  results_csv:    results/svm_disc_bp01w64c1280_pcts_spp.csv
+  embed_mode:     spp   # usuario: nada de flatten; piramide 64x21 = 1344-d (< 2000)
   eval_set:       val
   stages:         [L3]
 
@@ -24,6 +24,6 @@ resources:
   cpus_per_experiment: 8
 
 output:
-  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_bp01w64c1280_pcts_flat
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_bp01w64c1280_pcts_spp
 
 skip: state
