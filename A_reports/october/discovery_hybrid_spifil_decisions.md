@@ -309,3 +309,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Abandonado: l_c2560 (L4 de 2560-d não pode ser avaliado). Também cortados da fila de leituras o l2flat (37k-d) e o spp da L4 1280 (26.880-d). O eval "pcts_flat" virou spp (mesmo arquivo, nome/CSV _pcts_spp).
 - Primeiro dado do spp (bp01w64 L3 eggs): 0.901/0.870, contra flatten 0.929/0.892 e avg ~0.845. O spp fica entre os dois e é a melhor leitura < 2000-d até agora em eggs.
 - Nova referência: as comparações passam a ser feitas só entre leituras < 2000-d (avg, gem, spp). O flatten antigo fica como histórico.
+
+## 2026-11-01: melhores leituras < 2000-d (κ val, média de 3 splits)
+- eggs: spp L3 0.878 ≈ L4 avg 0.880; ambos acima do avg L3 0.845 (+0.033). Alvo I-JEPA 0.940 (−0.06).
+- larvae: L4 avg 0.917 segue o melhor. O spp L3 dá 0.872: a posição atrapalha em larvae mesmo em pirâmide. Alvo 0.943 (−0.026).
+- protozoan: spp L3 só no s1 (0.847), acima da L4 avg (0.834) e do avg L3 (0.811). Alvo 0.864. Faltam s2/s3.
+- Sem o flatten, a distância para o I-JEPA cresceu em eggs. A próxima onda tem que atacar a leitura de eggs dentro de < 2000-d. GeM pendente.
