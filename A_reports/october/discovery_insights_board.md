@@ -1360,3 +1360,60 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
     - **Repetições evitáveis:** L1–L3 refeitas no R2, no bp01 (L1), no c1280 e no bp01w64c1280, e relançamentos que retreinaram pontos prontos.
     - **O SVM encadeado no fim do growth atrasou o κ das seeds em ~3–4 h.**
     - A memória da L4 de 1.280 canais é ~2,7 GB por processo: sem risco.
+
+## 2026-11-01 07:45 [A4] bp01w64c96: a L4 1x1×96 (flatten 55k dimensões) em eggs é a L4 mais limpa até agora
+- **Custo da sonda de κ:** L3 a 5,8–6,3 s/época e L4 a 5,9–6,5 s/época. **O flatten de 55.296 dimensões não encarece o treino.** O risco do precedente da g5_random_in_feature não se repetiu.
+- **Memória:** ~2,9 GB por processo da L4 (c1280: 2,7 GB); as GPUs 0–2 ficam em 22 GB. Sem risco.
+- **Curva L3 → L4, eggs, na época ~190** (mínimo da val | val − treino):
+
+  | split | L3 | L4 |
+  |---|---|---|
+  | s1 | 0,51263 \| −0,00037 | 0,51260 \| −0,00034 (**+3e-5**) |
+  | s2 | 0,51166 \| −0,00171 | 0,51161 \| −0,00164 (**+7e-5**) |
+  | s3 | 0,51214 \| −0,00132 | 0,51210 \| −0,00123 (**+9e-5**) |
+
+  - **Comparação entre as L4 1x1 testadas:**
+
+    | | c1280 | bp01w64c1280 | **c96** |
+    |---|---|---|---|
+    | aumento de val − treino | +2–3e-4 | +2–3e-4 | **+3–9e-5** |
+    | early stop | 1/3 | 2/3 | **nenhum** até a ~190 |
+
+  - **A L4 de 96 canais quase não ajusta o treino a mais.** Ela é pequena (64 → 96, 6.240 parâmetros na conv), e o ganho de loss é pequeno (−3 a −5e-5).
+  - O κ flatten decide contra 0,906 (eggs). A hipótese do A0 (o 1x1 recombina canais sem perder posição) prevê L4 ≥ L3 flatten.
+- **As L1–L3 repetem o bp01w64** (curvas iguais até 1e-5), como nas famílias c1280.
+
+## 2026-11-01 08:41 [A4] nota curta: c96 L4
+- **eggs:** as 200 épocas fecharam nos 3 splits, **sem early stop**. O mínimo fica −3 a −5e-5 abaixo da L3; a distância val − treino sobe +4 a 1e-4.
+- **larvae (épocas 108–162):**
+  - Sem early stop até aqui. O bp01w64c1280 tinha parado nas épocas 117 / 130 / 157.
+  - val − treino, contra a L3 do bp01w64: +1,4e-4 / +0,9e-4 / −0,2e-4. Mínimo: −5e-5 / −3e-5 / +4e-5.
+- **A L4 1x1×96 segue sem a assinatura de sobreajuste nos 2 datasets.** O SVM (L4 flatten) sai no fim do growth.
+
+## 2026-11-01 09:37 [A4] nota curta: c96 L4 em larvae fechou
+- **Early stop nos 3 splits,** na época 166 / 182 / 182. Mesmo assim, é mais tarde que no bp01w64c1280 (117 / 130 / 157).
+- **val − treino:** +0,00041 / +0,00016 / +0,00068, ou seja, +1,5 a 3e-4 sobre a L3 do bp01w64. **O mínimo da val fica igual ao da L3.**
+- **Leitura:** em larvae, toda L4 testada ajusta o treino (1280 ou 96 canais), e a de 96 é a mais branda. Em eggs, a c96 não ajustou. O κ ainda está pendente: larvae L4 flatten contra 0,845 (flatten) e 0,917 (avg).
+- **Protozoan** está na L2. 0 NaN, nenhum run travado.
+
+## 2026-11-01 11:22 [A4] κ val do bp01w64c96: a L4 1x1×96 em flatten empata com a L3 flatten (não ajuda)
+
+| flatten | bp01w64 L3 (36.864 dim) | **c96 L4** (55.296 dim) | Δ |
+|---|---|---|---|
+| eggs | 0,929 / 0,892 / 0,897 (**0,906**) | 0,898 / 0,896 / 0,891 (**0,895**) | −0,011 |
+| larvae | 0,864 / 0,822 / 0,849 (0,845) | 0,851 / 0,809 / 0,872 (0,843) | −0,002 |
+| protozoan | 0,888 / 0,850 / 0,858 (0,865) | 0,870 / 0,846 / 0,857 (0,858) | −0,008 |
+
+- **A L4 1x1 de 96 canais lida em flatten não supera a L3 flatten em nenhum dataset.** A média é −0,007, dentro do ruído (~0,01).
+  - A hipótese "o 1x1 recombina os canais em protótipos sem jogar a posição fora" **não se confirma no κ**.
+  - Junto com o resultado do avgpool: **a L4 1x1 só ajuda quando a leitura joga a posição fora (avg).** Ali ela recupera ~0,04 do que o avg perde. No flatten, que já guarda a posição, ela não acrescenta nada.
+- **Mais um caso de "a loss não prevê o κ":** a curva da L4 c96 era a mais limpa de todas (loss −3 a −5e-5, val − treino ≤ +1e-4 em eggs, sem early stop em eggs) e o κ não subiu.
+- **A escolha por dataset fica igual:**
+
+  | dataset | configuração | κ |
+  |---|---|---|
+  | eggs | bp01w64 L3 flatten | 0,906 |
+  | larvae | L4 1x1×1280 avg | 0,912–0,917 |
+  | protozoan | bp01 / bp01w64 L3 flatten | 0,866 / 0,865 |
+
+- **Custo da c96:** a L4 roda a 5,9–6,5 s/época, igual à L3, e usa 2,9 GB por processo. As L1–L3 repetiram o bp01w64.

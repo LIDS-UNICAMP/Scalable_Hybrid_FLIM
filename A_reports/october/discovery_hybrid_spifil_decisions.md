@@ -250,3 +250,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - bp01w64c1280 L4 avg: eggs 0.880, larvae 0.917, protozoan 0.837. Contra o c1280: +0.012/+0.005/+0.009, dentro do ruído. A L4 1x1 sobe ~0.04 sobre a L3 avg nas duas famílias.
 - Melhor por dataset (val): eggs bp01w64 L3 flat 0.906; larvae L4 1x1×1280 avg 0.912–0.917; protozoan bp01/bp01w64 L3 flat 0.866/0.865.
 - Lançado bp01w64c96 = bp01w64 + L4 1x1×96 lida achatada (55k-d). Hipótese: a 1x1 recombina os 64 canais em protótipos SPiFiL sem descartar a posição, que é o que eggs e protozoan usam. Uma mudança contra o bp01w64 (L3 flat) e contra o c1280 (largura 96, leitura flat).
+
+## 2026-11-01: bp01w64c96 não ajuda (hipótese refutada)
+- L4 1x1×96 flatten, κ val médio, contra a L3 flatten do bp01w64: eggs 0.895 contra 0.906 (−0.011), larvae 0.843 contra 0.845, protozoan 0.858 contra 0.865 (−0.008). Média −0.007, dentro do ruído.
+- Refutada: "o 1x1 recombina os canais sem perder a posição". Junto com o c1280: o 1x1 só ajuda quando a leitura descarta a posição (avg, +0.04). No flatten, não acrescenta. A curva mais limpa de todas não virou κ (a loss não prevê o κ).
+- A escolha por dataset não muda: eggs bp01w64 L3 flat 0.906; larvae L4 1x1×1280 avg 0.912–0.917; protozoan bp01/bp01w64 L3 flat 0.866/0.865.
