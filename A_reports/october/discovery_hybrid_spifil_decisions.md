@@ -377,3 +377,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - O best_kappa.ckpt é escolhido pela sonda de treino na leitura do run. Conferido nos config.yaml: larvae g20 e a base usam avgpool2d, então em larvae NÃO há confundidor. A queda comum de −0.016 no avg dos 3 l_* contra a base indica que o 0.917 da base foi um sorteio alto (ruído do avg ~0.018 na média de 3 splits).
 - Em eggs/protozoan há confundidor: os e_*/p_* usam sonda gem e a base usou avg. Criados e_base e p_base (bp01w64c1280 sem mudança, sonda gem) no topo da fila, como referência justa. Até lá, eggs/protozoan só se comparam g20 × g20.
 - Larvae, gem L4 (g20 × g20, justo): aug 0.919 > bp10 0.914 > sp100 0.903.
+
+## 2026-11-01: a base de larvae (0.917 avg) foi um sorteio alto; o pipeline não é bit-reprodutível
+- Avg L4 larvae, por split: base 0.935/0.913/0.904; média das 3 g20 0.898/0.902/0.902. Excesso concentrado no s1 (+0.037). A referência realista do avg L4 em larvae é ~0.90.
+- Setup conferido: os config.yaml da base e da g20 são idênticos, fora o próprio knob. Mas o pipeline não repete bit a bit: o L3 best de larvae s1 cai na época 154 na base e 184 no l_bp10, com pesos diferentes. Como os kernels SPiFiL da L4 são estimados sobre features diferentes, saem diferentes (max|Δ| ~0.9–1.07).
+- Regra: a variação do pipeline inteiro por split (não determinismo da GPU + escolha da melhor época, propagados pelo SPiFiL) é maior que o ruído do SVM. Comparar contra a média do grupo, ou contra referências repetidas (e_base/p_base), nunca contra um único sorteio da base.

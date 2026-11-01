@@ -1602,3 +1602,24 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
   3. O achado "o GeM é a melhor leitura" (c1280 base) foi medido em ckpt escolhido por sonda **avg**. Ou seja, o viés era contra o GeM, e **a vantagem dele está subestimada.**
   4. **Também há escolha na própria val:** a sonda usa a val, e o κ que reportamos é a mesma val. Isso infla um pouco todos os números de val, mas não o teste.
 - **Correção sugerida:** uma base com sonda gem (bp01w64c1280 com `embed_mode: gem`, só os 3 datasets em 50%). Ou então comparar só g20 contra g20.
+
+## 2026-11-01 19:21 [A4] CORREÇÃO da nota do confundidor: em larvae ele não existe
+- **Conferi os configs:** disc_g20_l_aug e disc_bp01w64c1280 (larvae s1 L4) têm `embed_mode: avgpool2d`. **Todos os larvae da g20 usaram sonda avg, igual à base.** Só os e_*/p_* relançados às 14:00 usam sonda **gem** (disc_g20_e_aug: `embed_mode: gem`).
+  - Retiro o confundidor para larvae.
+  - **Para eggs/protozoan ele vale:** compare g20 com g20, ou contra uma base retreinada com sonda gem.
+- **A base avg L4 de larvae (0,917) é um sorteio alto, e o excesso está no s1:**
+
+  | avg L4 | s1 | s2 | s3 | média |
+  |---|---|---|---|---|
+  | base bp01w64c1280 | **0,935** | 0,913 | 0,904 | 0,917 |
+  | c1280 (32/48) | **0,934** | 0,909 | 0,892 | 0,912 |
+  | média de l_aug, l_bp10 e l_sp100 | 0,898 | 0,902 | 0,902 | **0,901** |
+
+  - O excesso da base sobre o grupo g20 é +0,037 no s1, +0,011 no s2 e +0,002 no s3.
+  - **Use ~0,90 como referência realista do avg L4 em larvae.** As 3 variantes g20 ficam em 0,900–0,902, e o ruído da média de 3 splits é ~0,018.
+  - **Ressalva:** as **duas** bases antigas têm s1 em 0,934–0,935, e nenhuma das 3 g20 passa de 0,909 no s1. Só por acaso, isso seria pouco provável. Pode haver uma diferença de setup entre as runs antigas e a g20 (versão do código, frequência da sonda, etc.). Vale conferir se der.
+- **Com isso, a comparação gem em larvae volta a ser justa contra a base** (as duas com sonda avg):
+  - l_aug: **0,919 contra 0,910** (+0,010, dentro do ruído);
+  - l_bp10: 0,914 (+0,004);
+  - l_sp100: 0,903 (−0,007).
+  - **Nenhum eixo de larvae passa do ruído até agora.** O aug tem a maior média.
