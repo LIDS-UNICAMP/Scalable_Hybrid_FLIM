@@ -341,3 +341,12 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Pausados os 6 menos prioritários: p_aug, p_bp03, p_w96, p_bn (o protozoan já passa o I-JEPA na val) e l_bn, l_w96 (mais pesados; o BN caiu no artigo do ConvNeXt V2). O split 1 de l_bn/l_w96 estava pronto, então eles voltam com splits [2,3]. Depois: 15.6 / 16.2 / 18.0 / 17.2 GB.
 - Fila em scratchpad/gpu_queue.txt (ordem: l_bn, l_w96, p_aug, p_bp03, p_w96, p_bn). O A6 virou o guardião do teto (alvo ≤19 GB): lança da fila quando sobra ≥4 GB, pausa e re-enfileira o menos prioritário se passar de 19.5 GB.
 - Nova investigação (pedido do usuário, A8): o quanto o backprop muda os mapas de ativação em relação ao SPiFiL cru, dentro × fora da máscara, nos modelos top (bp01w64c1280, bp01w64) e no controle aleatório. Resultados em artifacts/.../<ponto>/act_drift/, mais a lei "drift × escala do backprop × κ". Roda em CPU, sem GPU.
+
+## 2026-11-01: TESTE dos melhores modelos (bp01w64c1280 L4, pedido do usuário)
+| κ teste (média de 3 splits) | eggs | larvae | protozoan |
+|---|---|---|---|
+| L4 GeM | 0.891 (0.913/0.893/0.868) | 0.939 (0.951/0.929/0.936) | 0.886 (0.876/0.898/0.884) |
+| L4 avg | 0.880 (0.895/0.869/0.876) | 0.928 (0.938/0.902/0.943) | s2 refeito (o A7 quebrou o arquivo por 5 s) |
+| I-JEPA (teste, 50%) | 0.940 | 0.943 | 0.864 |
+- Leitura escolhida na validação: eggs/protozoan GeM, larvae avg. No teste: eggs −0.049, larvae −0.015, protozoan +0.022, ou seja, protozoan passa o I-JEPA também no teste. Em larvae, o GeM dá 0.939 no teste (−0.004), mas a escolha da val foi avg; não troco a leitura olhando o teste.
+- SE e GRN (A7, commit e288dd0) entram na frente da fila: e_grn, l_grn, e_se, l_se (base bp01w64c1280, 1 mudança cada).
