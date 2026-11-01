@@ -358,3 +358,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Mais backprop = mais deriva (g20 s1: eggs 0.40/0.43/0.56; larvae 0.79/0.79/0.92 para bp 0.1/0.3/1.0). A lei com κ fica para quando saírem os SVMs do g20.
 - Máscara sem rótulo = máscara do dataset (fundo constante); o objeto ocupa só 2–4% da imagem. Artefatos em artifacts/spifil_growth/<fam>/<ponto>/act_drift/ (metrics.csv, act_maps.png).
 - Próxima hipótese: ancorar o treino no SPiFiL (L2-SP: penalizar a distância dos kernels ao valor SPiFiL) para preservar o contraste e ver se o κ sobe.
+
+## 2026-11-01: âncora L2-SP no SPiFiL (A7) e 4 candidatos na fila
+- `spifil_anchor` (λ): soma `λ·Σ ||W_k − W0_k||²/||W0_k||²` à loss. W0 = pesos no início do run, ou seja, o kernel SPiFiL cru (L<k>_grow) para a camada nova e o ckpt anterior para as antigas. Começa em 0; desligado, nada muda.
+- Escolha de λ: o A7 calibrou na L4 (drift 0.033, λ 1.8/8.8/17.6 para 10/50/100% da BCE). Mas o A8 mostra drift relativo ~1 nas L2/L3 sem âncora, onde o contraste some. Lá, λ 0.3 já vale ~50% da BCE, e λ 3 trava forte. Grade: λ ∈ {0.3, 3} em eggs e larvae (e_anc03, e_anc3, l_anc03, l_anc3), base bp01w64c1280.
+- Hipótese (do usuário): o SPiFiL traz conhecimento a priori (contraste objeto/fundo). Prender os kernels perto dele preserva esse contraste e sobe o κ. Na fila logo depois dos GRN.
