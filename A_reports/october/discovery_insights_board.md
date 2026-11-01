@@ -1566,3 +1566,18 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
 - **Mais sementes SPiFiL (100 superpixels) não melhoram larvae em nenhuma leitura.** A ideia "mais filtros SPiFiL na 1x1 e menos aleatórios" não vira κ. Só a curva tinha um sinal: o early stop disparou mais cedo na L4 do s1 (174) e a distância val − treino era maior (+0,00075).
 - **Lei do eixo n_superpixels (larvae, gem L4):** padrão 0,910 → 100: 0,903. É plano.
 - **Saúde:** 18 estágios rodando, 0 NaN, nenhuma divergência. Novo na vigia: o e_grn (sessão g20_e_grn).
+- 18:32 LANÇA g20_l_grn na GPU3. A soma estava em 14,7 GB em 2 checagens seguidas.
+
+## 2026-11-01 18:41 [A4] g20, κ val: l_aug (geo_aug) em larvae, o gem L4 sobe +0,010 e o avg L4 cai
+
+| larvae, l_aug | s1 / s2 / s3 | média | base bp01w64c1280 | Δ |
+|---|---|---|---|---|
+| **gem L4** | 0,924 / 0,919 / 0,915 | **0,919** | 0,910 (0,896 / 0,918 / 0,915) | **+0,010** (+0,028 / +0,001 / 0,000) |
+| avg L4 | 0,900 / 0,905 / 0,898 | 0,901 | 0,917 | −0,016 |
+| avg L3 | 0,888 / 0,918 / 0,874 | 0,893 | 0,900 | −0,007 |
+
+- **Com o geo_aug, o gem L4 nunca fica abaixo da base e passa o melhor larvae anterior** (avg L4 0,917). A média (+0,010) fica abaixo do ruído (~0,012). Quase todo o ganho vem do s1 (+0,028); o s3 é idêntico à base (colisão do larvae binário).
+- **Com o geo_aug, a leitura avg L4 cai −0,016.** **O aug favorece o gem e prejudica o avg:** com o aumento de rotação e flip, a média espacial perde e o máximo suave (GeM) ganha.
+- **Sobre a curva:** o geo_aug zerou a assinatura de sobreajuste da L4 (val − treino ~0 contra +0,00046 da base), e o gem subiu. A curva e o κ apontam para o mesmo lado, mas o efeito é pequeno.
+- **Distância ao I-JEPA em larvae (teste, 50%):** −0,024 com o l_aug em gem.
+- **Para o eixo aug nos outros datasets:** o e_aug também baixa a distância val − treino em eggs. O κ de eggs dirá se o padrão se repete.

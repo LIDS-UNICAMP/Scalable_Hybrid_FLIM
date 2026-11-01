@@ -367,3 +367,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-01: 1º κ da g20, l_sp100 (100 superpixels) empata
 - larvae κ val: gem L4 0.914/0.908/0.887 (0.903, contra 0.910 da base), avg L4 0.902 (contra 0.917, −0.016, na borda do ruído), avg L3 0.897 (contra 0.900).
 - Lei das sementes SPiFiL (50 → 100): plana em larvae. Ter mais filtros SPiFiL e menos aleatórios na 1x1 não ajuda.
+
+## 2026-11-01: l_aug (geo_aug) é o melhor larvae medido
+- κ val gem L4: 0.924/0.919/0.915 (0.919) contra a base 0.910 (+0.010, ≥ base nos 3 splits, mas dentro do ruído ~0.012). Passa o avg L4 da base (0.917). O avg L4 do mesmo modelo cai para 0.901 (−0.016): o aug favorece o GeM e prejudica o avg.
+- O geo_aug zera a distância val − treino na L4: a camada 1x1 não decora mais. Distância ao I-JEPA em larvae: −0.024 (val contra teste).
+- Hipótese SPiFiL: o SPiFiL dá filtros de uma orientação (1 imagem por classe). A rotação/espelho força o treino a tornar os protótipos invariantes, e o GeM capta "a parte apareceu, em qualquer orientação". Aguardando e_aug para ver se o padrão se repete em eggs.
