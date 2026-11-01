@@ -8,7 +8,6 @@ grid:
   datasets:
   - helminth-larvae
   splits:
-  - 1
   - 2
   - 3
   percentages:

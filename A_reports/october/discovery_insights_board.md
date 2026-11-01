@@ -1515,3 +1515,18 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
 - **Fora:** depthwise, MobileNetV2 e bloco ConvNeXt (`groups≠1` é recusado, `flim/progressive.py:63`); WS (reescreve o kernel SPiFiL); GN/LN não começam como identidade.
 - **Onde entra:** módulo após a conv, como o BN do `e26349c` (`blocks[f"conv{n}"].insert`), ou tipo novo de pool em `build_encoder_from_arch` (`flim/arch.py:79`).
 - **GeM em 1 linha:** eleva ao cubo, tira a média e a raiz cúbica; o forte fala mais alto, mas todos votam. Relatório: `discovery_conv_techniques.md`.
+
+## 2026-11-01 17:15 [A6] teto de 20 GB por GPU (meta 19 GB): fila e pausas
+- 17:15 PAUSA g20_l_bp03 (GPU0). O moliveira somava 20,3 GB na GPU0 (14,6 GB de train.py + 6,1 GB de workers ray::run_growth). A família era larvae e não havia protozoan na GPU0. O split1 já tinha L4 best_kappa, então saiu do grid.splits, que ficou [2,3]. A família voltou ao fim da fila. A gemq_g20_l_bp03 não foi tocada.
+
+## 2026-11-01 17:30 [A8] deriva de ativação: SPiFiL cru → treinado, dentro × fora do objeto
+- **Resposta:** o backprop mexe pouco nas pontas (L1 kernel cos 1,00; L4 1×1 cos 0,97) e muito no meio (L2/L3 kernel cos ~0,55).
+- **O que ele muda:** apaga o contraste objeto × fundo do SPiFiL. Energia dentro/fora na L3: 2,9 → 1,0 (c1280 e w64); na L2: 2,0 → 1,2.
+- **"Ativação vai para o fundo"?** Em energia relativa, sim. Em mudança relativa, a L3 muda mais fora (0,90) que dentro (0,74); L1/L2 mudam mais dentro.
+- **L4 1×1×1280:** canais SPiFiL perdem mais o objeto (E in/out 0,84 → 0,42) que os aleatórios (0,94 → 0,73); os kernels andam igual (rel 0,24).
+- **SPiFiL × aleatório (r1 × r1_rand):** o SPiFiL anda **mais** nos kernels (rel 1,1–1,2 contra 0,55–0,59) e perde mais contraste (L3 2,3 → 0,8 contra 2,1 → 1,4).
+- **Deriva × κ val:** sem lei. Spearman de todos os pontos (n=36) ρ=−0,21 (p 0,21); o sinal troca por família e dataset.
+- **Eixo bp (g20, eggs s1):** rel 0,40 / 0,43 / 0,56 para bp 0,1 / 0,3 / 1,0. Falta o κ dos g20.
+- **Máscara sem rótulo = máscara GT, pixel a pixel:** as imagens já vêm com fundo constante; o objeto ocupa só 2–4 % da imagem.
+- **FINAL:** com bp 0,1 as camadas velhas ainda andam ~+10–20 % (L2 rel 0,49 → 0,58).
+- Saídas: `act_drift/` em 40 pontos (4 famílias × 9 + 4 g20). Relatório: `discovery_act_drift.md`.

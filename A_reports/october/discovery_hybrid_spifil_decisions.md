@@ -350,3 +350,11 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 | I-JEPA (teste, 50%) | 0.940 | 0.943 | 0.864 |
 - Leitura escolhida na validação: eggs/protozoan GeM, larvae avg. No teste: eggs −0.049, larvae −0.015, protozoan +0.022, ou seja, protozoan passa o I-JEPA também no teste. Em larvae, o GeM dá 0.939 no teste (−0.004), mas a escolha da val foi avg; não troco a leitura olhando o teste.
 - SE e GRN (A7, commit e288dd0) entram na frente da fila: e_grn, l_grn, e_se, l_se (base bp01w64c1280, 1 mudança cada).
+
+## 2026-11-01: quanto o backprop muda os mapas do SPiFiL (A8, A_reports/october/discovery_act_drift.md)
+- A mudança é pequena nas pontas e grande no meio. Cosseno dos kernels: L1 ~1.00, L4 1x1 0.97, L2/L3 ~0.55. Mudança relativa da ativação (c1280): L1 0.19, L2 0.49, L3 0.89, L4 0.41.
+- Achado principal: o treino APAGA o contraste objeto × fundo que o SPiFiL trazia. Energia dentro/fora da máscara: L2 2.0 → 1.2, L3 2.9 → 1.0. Na L4, os canais SPiFiL perdem mais (0.84 → 0.42) que os aleatórios (0.94 → 0.73). Isso confirma, com números, o achado do usuário de que "os gradientes aprendem errado".
+- Nos kernels, o SPiFiL anda ~2x MAIS que o aleatório (rel L2/L3 1.07/1.22 contra 0.55/0.59). Não há lei "mais deriva = mais κ": o sinal troca por família e dataset (ρ geral −0.21, p 0.21).
+- Mais backprop = mais deriva (g20 s1: eggs 0.40/0.43/0.56; larvae 0.79/0.79/0.92 para bp 0.1/0.3/1.0). A lei com κ fica para quando saírem os SVMs do g20.
+- Máscara sem rótulo = máscara do dataset (fundo constante); o objeto ocupa só 2–4% da imagem. Artefatos em artifacts/spifil_growth/<fam>/<ponto>/act_drift/ (metrics.csv, act_maps.png).
+- Próxima hipótese: ancorar o treino no SPiFiL (L2-SP: penalizar a distância dos kernels ao valor SPiFiL) para preservar o contraste e ver se o κ sobe.
