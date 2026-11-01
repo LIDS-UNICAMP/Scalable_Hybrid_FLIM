@@ -1623,3 +1623,34 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
   - l_bp10: 0,914 (+0,004);
   - l_sp100: 0,903 (−0,007).
   - **Nenhum eixo de larvae passa do ruído até agora.** O aug tem a maior média.
+
+## 2026-11-01 19:22 [A4] REGRA (do A0): a variação do pipeline inteiro por split é maior que o ruído da avaliação
+- **O que o A0 verificou:** os config.yaml da base e da g20 são idênticos, fora o próprio eixo. Mesmo assim, o pipeline **não se reproduz bit a bit**.
+  - A L3 de larvae s1 tem o best na época 154 na base e na 184 no l_bp10, e o conv3 fica diferente (soma −6,39 contra −8,12).
+  - **Por isso os kernels SPiFiL da L4 saem completamente diferentes** (max |diff| 0,9–1,07), porque são estimados sobre outras features da L3.
+- **Regra:** o κ de um split é **um sorteio do pipeline inteiro**, somando o não determinismo da GPU, a escolha do best e o SPiFiL estimado sobre features diferentes.
+  - Exemplo: 0,935 contra ~0,90 no larvae s1.
+  - **Isso é maior que o ruído de re-avaliar o mesmo ckpt.**
+  - **Não use um sorteio único da base como referência.** Compare contra a média do grupo g20 do mesmo dataset e leitura, ou contra bases repetidas (e_base / p_base).
+- **O g20_kappa.py agora reporta as duas referências:** `delta_base` (base única) e `vs_grupo` (média das outras g20 do mesmo dataset e leitura, sem a própria família).
+
+## 2026-11-01 20:02 [A4] g20 larvae, κ val (4 eixos prontos): nenhum se separa do grupo
+
+| larvae, L4 | gem | Δ vs grupo (sem a própria) | avg | Δ vs grupo |
+|---|---|---|---|---|
+| l_aug (geo_aug) | **0,919** | +0,008 | 0,901 | +0,002 |
+| **l_bg0 (sem o fundo na loss)** | 0,917 | +0,005 | 0,895 | −0,005 |
+| l_bp10 (backprop 1,0) | 0,914 | +0,000 | 0,900 | +0,000 |
+| l_sp100 (100 superpixels) | 0,903 | **−0,014** | 0,902 | +0,003 |
+| média do grupo | **0,913** | | **0,899** | |
+
+- **Pela regra nova (comparar contra o grupo, não contra uma base única),** nenhum eixo de larvae passa do ruído (~0,012 no gem, ~0,015 no avg).
+  - O único que se afasta um pouco é o **sp100, para baixo no gem** (−0,014).
+  - O aug e o bg0 ficam no topo do gem, dentro do ruído.
+- **Eixos de larvae até aqui:**
+  - backprop: 0,1 → 1,0 dá 0,910 → 0,914 (plano);
+  - fundo: 0,1 → 0 dá 0,910 → 0,917 (plano);
+  - superpixels: padrão → 100 dá 0,910 → 0,903 (plano, levemente pior);
+  - aug: 0,919, o maior, mas dentro do ruído.
+- **Leitura:** em larvae, os botões de treino mexem menos que a variação do pipeline inteiro (~0,018 na média de 3 splits). **O gem L4 do larvae está num platô de ~0,91–0,92.** O I-JEPA tem 0,943 (teste).
+- **Faltam:** l_bn, l_bp03 e l_w96 (pausados, voltam pela fila), e os e/p, que estão na L4 do s1–s2.

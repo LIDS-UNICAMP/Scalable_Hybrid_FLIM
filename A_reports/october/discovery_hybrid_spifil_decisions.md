@@ -382,3 +382,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Avg L4 larvae, por split: base 0.935/0.913/0.904; média das 3 g20 0.898/0.902/0.902. Excesso concentrado no s1 (+0.037). A referência realista do avg L4 em larvae é ~0.90.
 - Setup conferido: os config.yaml da base e da g20 são idênticos, fora o próprio knob. Mas o pipeline não repete bit a bit: o L3 best de larvae s1 cai na época 154 na base e 184 no l_bp10, com pesos diferentes. Como os kernels SPiFiL da L4 são estimados sobre features diferentes, saem diferentes (max|Δ| ~0.9–1.07).
 - Regra: a variação do pipeline inteiro por split (não determinismo da GPU + escolha da melhor época, propagados pelo SPiFiL) é maior que o ruído do SVM. Comparar contra a média do grupo, ou contra referências repetidas (e_base/p_base), nunca contra um único sorteio da base.
+
+## 2026-11-01: larvae g20 num platô (4 eixos prontos)
+- gem L4 κ val contra a média do grupo (0.913): aug 0.919 (+0.008), bg0 0.917 (+0.005), bp10 0.914 (0.000), sp100 0.903 (−0.014). Avg L4: todos entre 0.895 e 0.902 (±0.005).
+- Nenhum eixo passa do ruído. Em larvae, os botões de treino mexem menos que a variação do pipeline inteiro: platô de ~0.91–0.92 (val). O teste da base deu 0.939 com gem, contra o I-JEPA 0.943.
+- Leitura: o que falta em larvae não vem de treino de 1 knob. As próximas apostas são a leitura (gem_dense, na fila de SVM) e as técnicas que mudam a representação (âncora, GRN, SE).
