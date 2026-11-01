@@ -328,3 +328,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - O usuário pediu o teste com os melhores modelos. Fila svmq_test, 1 por vez: bp01w64c1280 L4 com GeM e com avg, 3 datasets × 3 splits, eval_set test. A leitura de cada dataset já foi escolhida antes, na validação (eggs/protozoan GeM, larvae avg). O teste não muda essa escolha.
 - Pesquisa (A5): técnicas de convolução compatíveis com SPiFiL + crescimento + decoder (SE, ECA, CBAM, CoordAtt, SimAM, GRN, blocos residuais/invertidos, BlurPool, dilatada/MixConv, GroupNorm...), com init próxima da identidade para não estragar os filtros SPiFiL.
 - Implementação (A7): opção `se_reduction` (squeeze-and-excitation), desligada por padrão e com init quase identidade.
+
+## 2026-11-01: técnicas de convolução (A5) → GRN, leitura densa, SE
+- Ranking do A5 (A_reports/october/discovery_conv_techniques.md): 1) GRN do ConvNeXt V2 depois da L4 1x1, feito para MAE em CNN, que começa como identidade e custa 2·C params (no artigo, 83.7→84.6, acima de SE e CBAM); 2) ECA; 3) leitura densa GeM L3+L4; 4–5) BlurPool/SoftPool (exigem recrescer do L1); 6) CoordAtt; 7) GCNet; 8) SimAM.
+- Descartados por incompatibilidade com o SPiFiL (um banco de filtros cheio por camada): depthwise/MobileNetV2/ConvNeXt block, SKNet/ASPP/Inception/MixConv, Weight Standardization. GroupNorm/LayerNorm não começam como identidade.
+- Regra para todos: init exatamente identidade. Uma porta sigmoid em 0.5, ou mesmo 0.95 acumulada, desloca a calibração dos próximos filtros SPiFiL.
+- Feito: leitura `gem_dense` (GeM da penúltima + da última camada, 1344-d < 2000) em eval/svm.py. Eval na fila depois do teste.
+- A7: SE (`se_reduction`) implementado, desligado por padrão. Pedido o ajuste para identidade exata (2·σ, fc2 = 0) e depois o GRN (`grn`) na última camada.

@@ -302,7 +302,8 @@ EMBED_MODE = DEFAULT_EMBED_MODE
 
 # Leituras so de eval (A5, literatura): "spp" piramide avg 1x1+2x2+4x4 (C*21-d), "l2flat"
 # L2 por pixel + raiz com sinal antes do flatten, "gem" GeM p=3 no lugar do avg.
-EMBED_MODES = ("avgpool2d", "flatten", "spp", "l2flat", "gem")
+# "gem_dense": GeM da penultima + da ultima camada concatenados (leitura densa, A5).
+EMBED_MODES = ("avgpool2d", "flatten", "spp", "l2flat", "gem", "gem_dense")
 
 
 def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torch.Tensor:
@@ -324,7 +325,10 @@ def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torc
         )
     out = inputs
     for n in range(1, getattr(model, "n_layers", 3) + 1):
-        out = getattr(model, f"conv{n}")(out)
+        prev, out = out, getattr(model, f"conv{n}")(out)
+    if mode == "gem_dense":
+        return torch.cat([F.adaptive_avg_pool2d(z.clamp(min=1e-6).pow(3), 1).pow(1 / 3).flatten(1)
+                          for z in (prev, out)], dim=1).detach().cpu()
     if mode == "flatten":
         return out.flatten(start_dim=1).detach().cpu()
     if mode == "spp":

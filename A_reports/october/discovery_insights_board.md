@@ -1486,3 +1486,32 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
   - **Proposta:** usar **L4 gem como leitura única** para os 3 datasets. Ela perde só −0,007 em larvae, dentro do ruído, e simplifica a g20.
 - **Distância ao I-JEPA (teste, 50%):** eggs −0,041, larvae −0,026 (com avg), protozoan **+0,011**.
 - **Para a g20:** as famílias de eggs/protozoan estão em L3 (avg + spp). O GeM só ajudou na L4. Uma re-avaliação da g20 em GeM não ajudaria na L3.
+
+## 2026-11-01 14:58 [A4] g20, curvas, larvae s1 L4 (sem κ ainda; cada família roda s1 → s2 → s3 em fila)
+- **Base:** bp01w64c1280 larvae s1 L4, com val − treino +0,00046 e early stop na 117.
+
+  | variante | estado | val − treino | mínimo da val |
+  |---|---|---|---|
+  | **l_aug (geo_aug)** | 200 épocas, **sem early stop** | **−0,00004** | 0,49532 (−3e-5 da base) |
+  | l_sp100 | early stop na 174 | +0,00075 | — |
+  | l_bp10 | em treino, época 152 | +0,00042 | — |
+  | l_bp03 | em treino, época 85 | +0,00026 | — |
+  | l_bn | em treino, época 74 | +0,00011 | — |
+
+  - **O geo_aug tira a assinatura de sobreajuste da L4 1x1 em larvae.** A distância val − treino fica em ~0 (a base dá +0,00046) e o early stop não dispara.
+  - Faz sentido: com o treino mais difícil, a camada nova não decora. Se isso vira κ, o gem/avg L4 do l_aug vai dizer.
+  - Lembrete: em larvae, nenhuma regra de curva previu o κ de forma confiável.
+- **eggs e protozoan (base L4 nova, recomeçada às 14:00):** na L1–L3 do s1. Nada anômalo; o e_bg0 está na escala própria (~0,67).
+- **Saúde:** 25 estágios rodando, 0 NaN, nenhuma divergência, nenhum run travado.
+
+## 2026-11-01 13:05 [A5] técnicas de convolução: GRN na L4 1×1×1280 é a primeira da fila
+- **Resposta:** GRN (ConvNeXt V2) logo após a ReLU da L4. Feito para MAE em conv; o colapso aparece justo na camada de expansão; começa como identidade (γ=β=0, `+x`); +2.560 params.
+- **Ganho na fonte:** FCMAE 83,7 → 84,6, acima do SE (84,4) e do CBAM (84,5), que custam +20M params. No mesmo teste o BN caiu para 80,5.
+- **2º, ECA:** o SE sem MLP, +2,28 no ResNet-50 com ~80 params. Sai como variante barata do SE do A7.
+- **3º, leitura densa:** GeM L3 (64) + GeM L4 (1280) = 1.344 dim < 2.000. Sem atalho a última camada piora no probe (Kolesnikov 1901.09005).
+- **4º–5º, BlurPool / SoftPool** no lugar do max-pool: 0 params, ~+0,5–1,5 no ImageNet. Exigem recrescer do L1.
+- **6º–8º:** Coordinate Attention (+2,0 vs +1,2 do SE no MobileNetV2), GCNet (+0,8), SimAM (0 params, mas não começa como identidade).
+- **Regra de init:** porta `sigmoid` em zero corta a ativação pela metade e desloca o viés FLIM (lembrar −0,33 κ do imagenet_norm). Usar `2σ(z)` ou peso 0 com atalho.
+- **Fora:** depthwise, MobileNetV2 e bloco ConvNeXt (`groups≠1` é recusado, `flim/progressive.py:63`); WS (reescreve o kernel SPiFiL); GN/LN não começam como identidade.
+- **Onde entra:** módulo após a conv, como o BN do `e26349c` (`blocks[f"conv{n}"].insert`), ou tipo novo de pool em `build_encoder_from_arch` (`flim/arch.py:79`).
+- **GeM em 1 linha:** eleva ao cubo, tira a média e a raiz cúbica; o forte fala mais alto, mas todos votam. Relatório: `discovery_conv_techniques.md`.
