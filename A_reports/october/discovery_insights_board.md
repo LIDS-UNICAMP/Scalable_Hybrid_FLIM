@@ -1417,3 +1417,15 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
   | protozoan | bp01 / bp01w64 L3 flatten | 0,866 / 0,865 |
 
 - **Custo da c96:** a L4 roda a 5,9–6,5 s/época, igual à L3, e usa 2,9 GB por processo. As L1–L3 repetiram o bp01w64.
+
+## 2026-11-01 12:30 [A5] literatura: a alavanca barata é a leitura, não o treino
+- **Resposta:** antes de treinar algo novo, testar leituras só de eval. A literatura dá +2 a +6 pts para elas, e aqui a leitura já mexe ~0,09 no κ.
+- **Top 1, pirâmide espacial:** avg 1×1+2×2+4×4 do L3, 1.344 dim (meio-termo entre o flatten de 36.864 e o avg de 64). Deep Spatial Pyramid, arXiv 1504.05277: +2 a +6.
+- **Top 2, L2 por pixel + raiz com sinal** antes do flatten: +0,4 a +3,6 (mesma fonte). PCA piorou lá.
+- **Top 3, GeM p=3** no lugar do avg (larvae): +5–6 mAP sobre avg/max em retrieval (arXiv 1711.02512).
+- **Top 4–6:** concatenar L2+L3 (VGG sem atalho piora no fim, arXiv 1901.09005); covariância com raiz de matriz (+2,7 a +3,8, arXiv 1707.06772); `class_weight` e scaler como parâmetro do `fit_svm` (evidência mista).
+- **Top 7, treino:** AE mascarado (média LAB, loss só no tapado). Reconstrução pura aprende o que não serve; mascarar ajuda e ruído gaussiano não (arXiv 2402.11337, SparK 2301.03580).
+- **Top 8, treino:** SIGReg (já existe em `core/losses/real_sigreg.py`). LeJEPA: ResNet-34 in-domain 78,2 vs DINOv2 67,6 com probe congelado, e loss↔probe Spearman 85–99%.
+- **Justiça:** toda leitura nova roda também nas features do I-JEPA. O nosso κ é de val e o dele é de teste.
+- **Leis de escala:** ajustar `1−κ = a·n^−α + b·m^−β + c∞` (Rosenfeld, arXiv 1909.12673) no κ flatten. Para profundidade, usar BNSL (arXiv 2210.14891).
+- **FLIM:** viés −⟨μ,k⟩ sem z-score por bloco (FLIM-BoFP, arXiv 2602.20845); dissertação Miranda/Falcão (abr/2026) nos mesmos 3 datasets. Relatório: `discovery_literature_ideas.md`.

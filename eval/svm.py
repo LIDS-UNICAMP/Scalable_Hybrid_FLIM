@@ -300,7 +300,9 @@ DEFAULT_EMBED_MODE = "avgpool2d"
 # processos separados — o parâmetro explícito não tem nenhum dos dois problemas.
 EMBED_MODE = DEFAULT_EMBED_MODE
 
-EMBED_MODES = ("avgpool2d", "flatten")
+# Leituras so de eval (A5, literatura): "spp" piramide avg 1x1+2x2+4x4 (C*21-d), "l2flat"
+# L2 por pixel + raiz com sinal antes do flatten, "gem" GeM p=3 no lugar do avg.
+EMBED_MODES = ("avgpool2d", "flatten", "spp", "l2flat", "gem")
 
 
 def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torch.Tensor:
@@ -325,6 +327,15 @@ def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torc
         out = getattr(model, f"conv{n}")(out)
     if mode == "flatten":
         return out.flatten(start_dim=1).detach().cpu()
+    if mode == "spp":
+        return torch.cat([F.adaptive_avg_pool2d(out, s).flatten(start_dim=1)
+                          for s in (1, 2, 4)], dim=1).detach().cpu()
+    if mode == "l2flat":
+        out = F.normalize(out, dim=1)
+        return (out.sign() * out.abs().sqrt()).flatten(start_dim=1).detach().cpu()
+    if mode == "gem":
+        return F.adaptive_avg_pool2d(out.clamp(min=1e-6).pow(3), 1).pow(1 / 3).flatten(
+            start_dim=1).detach().cpu()
     return F.adaptive_avg_pool2d(out, 1).flatten(start_dim=1).detach().cpu()
 
 

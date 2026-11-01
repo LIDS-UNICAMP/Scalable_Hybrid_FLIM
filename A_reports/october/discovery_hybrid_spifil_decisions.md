@@ -293,3 +293,12 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 | p_w96 | protozoan-cysts | flat | {'layer_channels': [48, 64, 96]} | GPU 1 | largura ajudou protozoan (w64) |
 | p_aug | protozoan-cysts | flat | {'data.init_args.geo_aug': True} | GPU 2 | invariancia a rotacao/flip sobre o SPiFiL |
 | p_bn | protozoan-cysts | flat | {'model.init_args.batch_norm': True} | GPU 3 | BN estabiliza a escala dos filtros SPiFiL |
+
+## 2026-11-01: leituras novas só de eval (sugestão do A5, literatura)
+- O A5 (relatório em A_reports/october/discovery_literature_ideas.md) aponta que o ganho mais barato está na leitura, coerente com o achado de ~0.09. Novos modos em `_encode_pooled` (eval/svm.py), um só SVM:
+  - `spp`: pirâmide avg 1x1+2x2+4x4 (C×21-d). Guarda posição grossa sem achatar tudo (DSP, arXiv 1504.05277: +2 a +6).
+  - `l2flat`: L2 por pixel + raiz com sinal antes do flatten. Tira a escala de ativação de cada pixel (DSP Tab. 2: +0.4 a +3.6).
+  - `gem`: GeM p=3, entre avg e max (arXiv 1711.02512).
+- Fila svmq_readouts, 1 por vez: bp01w64 L3 (spp, gem, l2flat) e bp01w64c1280 L4 (spp, gem), sem treino novo.
+- Ressalva: o I-JEPA é ViT (tokens), então essas leituras não se aplicam 1:1 a ele. A comparação continua contra o κ de teste dele, e a escolha da leitura sai só da validação.
+- Próximas apostas de treino (A5): autoencoder mascarado (loss só no tapado, SparK) e SIGReg (core/losses/real_sigreg.py já existe). Só depois das leituras.
