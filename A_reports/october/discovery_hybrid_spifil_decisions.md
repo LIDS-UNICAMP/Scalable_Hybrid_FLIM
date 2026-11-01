@@ -395,3 +395,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-01: eggs, backprop 0.3 empata
 - e_bp03 (layerwise_backprop 0.3): gem L4 0.914/0.920/0.881 (0.905) contra 0.899 da base (+0.006, dentro do ruído; parte pode ser o viés da sonda gem). Contra o e_k3, na mesma rodada g20, fica +0.030.
 - Hipótese SPiFiL: com mais backprop, as camadas antigas acompanham melhor o filtro SPiFiL novo. Em eggs, a lei do backprop é plana de 0.1 a 0.3; falta o ponto bp 1.0 (e_bp10).
+
+## 2026-11-01: eggs, aug neutro; platô em 7 eixos
+- e_aug (flip H/V + rotação 90): gem L4 0.903, avg L4 0.881, contra a base 0.899/0.880. Empate. Não repete o "gem sobe, avg cai" de larvae.
+- Hipótese SPiFiL: invariância a rotação/flip sobre os filtros SPiFiL. Em eggs não muda nada, porque os ovos já são ~isotrópicos.
+- Placar dos 7 eixos com κ (larvae: aug, bg0, bp10, sp100; eggs: bp03, aug, k3): só o k3 passa do ruído, e para pior (−0.029). O platô é ~0.90 em eggs e ~0.91 em larvae (val). Treino de 1 knob não fecha o gap com o I-JEPA em eggs; as apostas restantes são a leitura (gem_dense) e as mudanças de representação (âncora, GRN, SE, k7).

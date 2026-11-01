@@ -1670,3 +1670,31 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
 - **Lei do eixo kernel (eggs, gem L4):** kernel 5 dá 0,899 e kernel 3 dá 0,875. **O patch SPiFiL menor e mais local perde em eggs.** Bate com a curva: o e_k3 tinha early stop cedo (best na 105 no s1).
 - É o 1º eixo da g20 com efeito acima do ruído. Ainda não há grupo eggs para comparar (só o e_k3 fechou).
 - **Saúde:** 18 estágios rodando, 0 NaN, nenhuma divergência.
+- 21:45 LANÇA g20_e_k7 na GPU3 a pedido do A0. A soma estava em 15,5 GB. Regra nova: lançar se soma + 4 GB ≤ 20 GB.
+- 22:12 LANÇA g20_l_anc3 na GPU0. A soma estava em 13,5 GB em 2 checagens seguidas.
+
+## 2026-11-01 22:13 [A4] g20 eggs, κ val: e_bp03 (backprop 0,3) empata com a base no gem L4
+- **e_bp03, gem L4:** 0,914 / 0,920 / 0,881, média **0,905**, contra 0,899 da base (+0,006, empate).
+  - O s2 (0,920) é o maior eggs em gem.
+  - O avg L4 ainda está pendente (s1 0,896).
+- **Lei do backprop em eggs (gem L4):** 0,1 → 0,3 dá 0,899 → 0,905. Plano, ou levemente acima.
+  - Falta o bp 1,0 (e_bp10).
+  - Lembrete: a sonda do e_bp03 é gem e a da base era avg. Então o +0,006 pode ser parte do viés de seleção (≤ ~0,016).
+- **Grupo eggs com 2 pontos:** e_bp03 0,905 e e_k3 0,875. Os dois têm sonda gem, então a comparação é justa: **o kernel 3 perde ~0,030 para o backprop 0,3.**
+
+## 2026-11-01 22:23 [A4] g20 eggs, κ val com 3 eixos (todos com sonda gem, então g20 × g20 é justo)
+
+| eggs, L4 | gem | avg |
+|---|---|---|
+| e_bp03 (backprop 0,3) | **0,905** | 0,882 |
+| e_aug (geo_aug) | 0,903 | 0,881 |
+| e_k3 (kernel 3) | **0,875** | 0,861 |
+| base bp01w64c1280 (sonda avg) | 0,899 | 0,880 |
+
+- **bp03 e aug empatam entre si e com a base. O k3 fica −0,029 abaixo do grupo** no gem e −0,021 no avg. É o único eixo de eggs acima do ruído até agora.
+- **O aug em eggs não repete o padrão de larvae** ("o gem sobe e o avg cai"): os dois ficam iguais à base. O aug é neutro em eggs.
+- **Leis de eggs em gem L4 até aqui:**
+  - backprop 0,1 → 0,3: 0,899 → 0,905 (plano);
+  - kernel 5 → 3: 0,899 → 0,875 (**perde**);
+  - aug: 0,903 (plano).
+- **Junto com larvae (4 eixos planos):** dos 7 eixos com κ, **só o kernel 3 muda o κ além do ruído, e para pior.** O platô de ~0,90 em eggs e ~0,91 em larvae continua.
