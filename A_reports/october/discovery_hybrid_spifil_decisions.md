@@ -620,3 +620,12 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: o _pw sem shrinkage colapsou; refeito com shrinkage
 - gem_tta_pw (PCA(whiten=True) puro): eggs κ 0.343/0.239/0.444, larvae ~0 (prevê uma classe). Com ~n_treino componentes, branquear as direções de variância ~0 amplifica ruído. Resultado inválido; os CSVs _pw ficam como histórico.
 - Correção: escala 1/sqrt(var + 0.1·mean(var)) (shrinkage, o mesmo eps relativo do ZCA do SPiFiL). Relançado como _pwr nas 4 leituras.
+
+## 2026-11-02: whitening do vetor (com shrinkage) é o maior ganho isolado em eggs
+- gem_tta_pwr (gem_tta + PCA-whitening com shrinkage + L2, PCA fitado no treino), bp01w64c1280, κ val L4:
+  - eggs 0.946/0.942/0.938 (0.942), +0.030 sobre gem_tta; 1º eggs da val acima do I-JEPA (0.940, teste).
+  - larvae 0.958/0.944/0.980 (0.961), +0.015.
+  - protozoan pendente.
+- Só pela leitura, com o mesmo encoder: eggs 0.880 (avg) → 0.891 (gem) → 0.912 (tta) → 0.942 (tta + whitening).
+- Hipótese: os 1280 canais (400 SPiFiL + 880 aleatórios) são muito correlacionados, e o SVM linear via só as direções de maior variância. O whitening iguala as direções, e as raras (as que separam ovo × impureza) passam a contar.
+- Enfileirado: o teste do bp01w64c1280, o e_bp10 (val e teste), e o e_aug/l_aug (teste) com gem_tta_pwr.
