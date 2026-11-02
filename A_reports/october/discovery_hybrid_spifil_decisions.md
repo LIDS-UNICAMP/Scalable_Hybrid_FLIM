@@ -665,3 +665,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: lei do backprop em larvae tem pico em 0.3
 - l_bp03 (200 ép.): gem L4 κ val 0.939/0.928/0.934 (0.933), +0.023 sobre a base, o maior larvae com gem e acima da variação do pipeline. Lei em larvae: bp 0.1 0.910 → 0.3 0.933 → 1.0 0.914 (pico em 0.3); em eggs sobe até 1.0.
 - Enfileirado gem_tta_pw (val e teste) do l_bp03 e do p_bp03_e60.
+
+## 2026-11-02: gate das 60 épocas com a leitura final: só larvae aceita
+- base_e60 gem_tta_pw κ val: larvae 0.956 contra 0.961 (−0.005, ACEITA); protozoan 0.914/0.906/0.902 (0.907) contra 0.926 (−0.019, REJEITA na borda); eggs pendente (com gem já rejeitava).
+- Regra: 60 épocas só em larvae. Os pontos _e60 da lei de escala de protozoan valem para a FORMA da lei (comparados com base_e60 no mesmo orçamento), não para o nível absoluto.
