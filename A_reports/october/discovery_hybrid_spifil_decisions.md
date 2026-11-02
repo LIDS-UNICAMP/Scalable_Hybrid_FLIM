@@ -564,3 +564,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_bp10 (backprop 1.0) + gem_tta: κ val L4 0.935/0.920/0.918 (0.925). Contra a base com gem_tta (0.912): +0.012. Contra e_aug + TTA (0.920): +0.005. É o mais estável de eggs; fica a −0.016 do I-JEPA (teste).
 - Leitura: com o gem, o bp10 ficava no ruído (+0.009). Com o TTA, a vantagem dele aparece. Soltar o encoder inteiro deixa as vistas mais ricas.
 - Lançado disc_g20_e_bp10_aug (bp 1.0 + geo_aug, eggs, 200 ép.; uma mudança contra e_aug e contra e_bp10), no topo da fila, com eval gem e gem_tta. Hipótese SPiFiL: SPiFiL como partida, rede inteira livre e treinada nas 8 poses dá o resumo mais invariante.
+
+## 2026-11-02: lei da profundidade fechada em eggs (cai); o ganho do bp10 + TTA é real
+- e_base + gem_tta (a base repetida): κ val 0.928/0.916/0.881 (0.908), contra 0.912 da base original. Referência com TTA ~0.910. O e_bp10 + TTA (0.925) fica +0.015 acima, mais que a variação de repetição: ganho real.
+- e_d6_e60 (6 camadas, gem na L6): 0.843/0.845/0.865 (0.851), contra base_e60 0.875 (−0.024). Lei da profundidade em eggs (60 ép.): 4 camadas 0.875 → 5 0.857 → 6 0.851. Cai a cada camada. Ressalva: a 60 ép., o mais fundo treina menos por camada.
+- Síntese para eggs: ajudam o backprop livre e a invariância a rotação (TTA + aug). Não ajudam profundidade, resolução, campo receptivo (kernel > 5, dilation), largura, sementes, âncora, SE, GRN, BN.
