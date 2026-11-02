@@ -484,3 +484,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_anc3 (L2-SP λ=3 nos kernels SPiFiL, eggs): gem L4 κ val 0.851/0.824/0.812 (0.829). Fica −0.069 contra o grupo eggs, nos 3 splits; é a maior perda da g20 (~4x a variação do pipeline).
 - Com o l_anc3 (−0.048), a âncora forte perde nos 2 datasets. Lei combinada: quanto mais o treino pode se afastar do SPiFiL, melhor (âncora λ=3 −0.05 a −0.07; bp 0.1 → 1.0 +0.004 a +0.010). Regra da receita: SPiFiL é ponto de partida, não alvo; nada de âncora.
 - Falta o λ=0.3 (e_anc03, l_anc03_e60), para ver se a perda cresce com λ.
+
+## 2026-11-02: gate das 60 épocas: rejeitado em eggs, aceito em larvae; semente de impureza não ajuda
+- base_e60 gem L4 κ val: eggs 0.893/0.873/0.859 (0.875), contra 0.899 com 200 ep: −0.024, passa do limite de 0.018. REJEITA. Larvae 0.904/0.902/0.904 (0.903) contra 0.910: −0.007. ACEITA. Protozoan pendente.
+- Leitura: em eggs o treino longo importa, porque o detalhe fino (ovo × impureza) é aprendido no fim do cosine. Em larvae, 60 épocas bastam.
+- e_imp_e60 contra base_e60 (mesmo orçamento): 0.847 contra 0.875 (−0.028). Na confusão val, impureza → ovo foi de 137 a 190. A semente de impureza piora. Hipótese: 1 imagem não representa a impureza, que é heterogênea (575–1.862 px, todas as texturas), e os filtros dela confundem mais do que separam. Fica fora da receita.
+- Consequência: as famílias e60 de eggs (res49, d5, dil2, sp100, sp25, se, d6) se comparam com 0.875, não com 0.899. Quem ganhar a 60 é confirmado a 200.
+- Lançado no topo: e_base_e100 (eggs, 100 épocas), o ponto do meio da lei do orçamento em eggs (60 → 0.875, 200 → 0.899).
