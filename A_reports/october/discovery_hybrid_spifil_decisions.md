@@ -491,3 +491,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_imp_e60 contra base_e60 (mesmo orçamento): 0.847 contra 0.875 (−0.028). Na confusão val, impureza → ovo foi de 137 a 190. A semente de impureza piora. Hipótese: 1 imagem não representa a impureza, que é heterogênea (575–1.862 px, todas as texturas), e os filtros dela confundem mais do que separam. Fica fora da receita.
 - Consequência: as famílias e60 de eggs (res49, d5, dil2, sp100, sp25, se, d6) se comparam com 0.875, não com 0.899. Quem ganhar a 60 é confirmado a 200.
 - Lançado no topo: e_base_e100 (eggs, 100 épocas), o ponto do meio da lei do orçamento em eggs (60 → 0.875, 200 → 0.899).
+
+## 2026-11-02: e_dil2 empata (campo receptivo por dilation não ajuda eggs)
+- e_dil2_e60 (L3 com dilation 2, +16 px de RF): gem L4 κ val 0.877/0.854/0.871 (0.868), contra base_e60 de eggs 0.875 (mesmas 60 épocas): −0.007, empate.
+- Hipótese SPiFiL: com um RF maior, o filtro SPiFiL da L3 enxergaria o ovo inteiro. Não confirmada por dilation. Faltam a profundidade (e_d5, e_d6) e a resolução (e_res49) para fechar a pergunta do RF/resolução.
