@@ -695,7 +695,7 @@ def _run_svm_job(config: str) -> str:
             # LAB[0,1], que e o que os bracos viram no treino.
             imagenet_norm = False
             mode = job.get("embed_mode", "flatten")
-            # sufixo "_pw": PCA-whitening + L2 do vetor (Jegou & Chum 2012), fitado no treino
+            # sufixo "_pw": PCA-whitening (shrinkage) + L2 do vetor (Jegou & Chum 2012), fitado no treino
             pw, mode = mode.endswith("_pw"), mode.removesuffix("_pw")
             def _feats(loader):
                 return extract_features(encoder, loader, mode)
@@ -733,8 +733,11 @@ def _run_svm_job(config: str) -> str:
         if source == "growth_stages" and pw:
             from sklearn.decomposition import PCA  # noqa: PLC0415
             from sklearn.preprocessing import normalize  # noqa: PLC0415
-            pca = PCA(whiten=True).fit(X_train)
-            X_train, feats = normalize(pca.transform(X_train)), normalize(pca.transform(feats))
+            # whitening com shrinkage: sem o eps, os componentes de variancia ~0 viram ruido
+            # amplificado e o SVM colapsa numa classe (kappa ~0 em larvae, 02/11)
+            pca = PCA().fit(X_train)
+            s = (pca.explained_variance_ + 0.1 * pca.explained_variance_.mean()) ** -0.5
+            X_train, feats = (normalize(pca.transform(z) * s) for z in (X_train, feats))
         clf = fit_svm(X_train, y_train, tag=row["method"])
 
         y_pred = clf.predict(feats)

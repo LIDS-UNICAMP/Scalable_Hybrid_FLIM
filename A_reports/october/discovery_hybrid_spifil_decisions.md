@@ -616,3 +616,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_aug_knn (`knn_smooth: 5`): cada candidato vira a média dos seus 5 vizinhos da mesma classe (kmeans-lite). Hipótese: um centroide local é menos ruidoso que um patch só.
 - e_aug_ipc3 (`images_per_class: 3`): 3 imagens por classe (a do artigo + 2 sorteadas). Hipótese: mais candidatos para o Fisher, e N sai de 400 para 1200, acima de D na L2 (800) e igual a D na L3 (1200). Hoje N fica abaixo de D nas duas.
 - Evals: só val_gem, val_gemtta e test_gemtta (fila de SVM cheia).
+
+## 2026-11-02: o _pw sem shrinkage colapsou; refeito com shrinkage
+- gem_tta_pw (PCA(whiten=True) puro): eggs κ 0.343/0.239/0.444, larvae ~0 (prevê uma classe). Com ~n_treino componentes, branquear as direções de variância ~0 amplifica ruído. Resultado inválido; os CSVs _pw ficam como histórico.
+- Correção: escala 1/sqrt(var + 0.1·mean(var)) (shrinkage, o mesmo eps relativo do ZCA do SPiFiL). Relançado como _pwr nas 4 leituras.
