@@ -510,3 +510,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_anc03 (L2-SP λ=0.3, eggs, 200 ép.): gem L4 κ val 0.839/0.817/0.783 (0.813). Lei em eggs: λ=0 0.899; λ=0.3 0.813; λ=3 0.829. Larvae λ=3 −0.048.
 - Não é dose-resposta: qualquer âncora tira ~0.07–0.09 em eggs. É a regra mais forte da g20: o SPiFiL é inicialização, não restrição. Segurar o contraste objeto × fundo do SPiFiL (A8) não vira κ.
 - l_anc03_e60 sai da fila: a lei já está decidida, e a GPU vai para eixos que ainda podem ganhar.
+
+## 2026-11-02: eggs num platô de construção; aposta no orçamento de treino
+- 60 ép., gem L4 κ val contra base_e60 0.875: e_res49 (L4 a 49×49) 0.859/0.826/0.856 (0.847, −0.028); e_sp100 0.883/0.877/0.844 (0.868, −0.007, empate).
+- Placar das 5 hipóteses de construção em eggs: nenhuma ganha. Empatam sp100 e dil2; perdem d5 (−0.018), res49 (−0.028) e imp (−0.028). Somando os 8 eixos a 200 ép., o erro ovo ↔ impureza não sai por resolução, campo receptivo, profundidade, largura, sementes nem âncora.
+- O único botão que mexeu em eggs foi o orçamento: 60 ép. 0.875 → 200 ép. 0.899 (+0.024). E o best das L1–L3 cai no fim do cosine (época ~195/200), ou seja, ainda subindo. Lançado e_base_e400 (eggs, 400 ép.) no topo da fila; com o e_base_e100 já rodando, a lei do orçamento fica com 4 pontos (60/100/200/400).
+- Hipótese SPiFiL: o SPiFiL entrega bons filtros de partida, mas o detalhe fino ovo × impureza é aprendido devagar pelo backprop. Mais orçamento, mais detalhe.
