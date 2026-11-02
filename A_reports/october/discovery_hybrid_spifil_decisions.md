@@ -686,3 +686,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - disc_final_rep: bp01w64c1280 repetido (2º sorteio do pipeline), 3 datasets, 200 ép., eval gem e gem_tta_pw (val e teste). Mede se o resultado de teste (0.933/0.968/0.928) se repete.
 - disc_final_nobg: receita sem fundo completa (impurities true + paper_classes false + recon_bg_weight 1.0), 3 datasets, 200 ép. As 3 mudanças só tinham sido medidas sozinhas (todas empatam a 60 ép.).
 - Rodam em Jaci (max_per_gpu 2, ~7 GB cada), junto com a lei de escala (disc_sl_*).
+
+## 2026-11-02: branqueamento dos mapas no treino (disc_nd_e200, Athena)
+- Mudança: `feat_whiten: true` sobre bp01w64c1280, 3 datasets, 200 ép. ZCA de canal (Network Deconvolution, Ye et al. 2020, só canal, sem im2col; DBN, Huang et al. 2018) no fim de cada bloco = entrada da conv seguinte. A entrada da conv1 (LAB) fica crua: no layerwise o SPiFiL da conv1 recorta o LAB cru. W sem gradiente (backward do eigh explode).
+- Hipótese SPiFiL: descorrelacionar os canais antes de cada conv faz a seleção SPiFiL e o backprop verem features não redundantes, o que o whitening do vetor final fazia na leitura.
+- Base de referência 200 ép.: gem 0.899/0.910/0.875, gem_tta_pw 0.942/0.961/0.926.

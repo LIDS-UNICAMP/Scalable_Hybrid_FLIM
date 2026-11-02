@@ -179,6 +179,40 @@ class _TwoSigmoid(nn.Sigmoid):
         return 2 * super().forward(x)
 
 
+class _ChannelZCA(nn.Module):
+    """ZCA por canal: x -> W (x - mu), W = (Sigma + eps I)^(-1/2) sobre (batch, H, W).
+
+    So a parte de canal da Network Deconvolution (Ye et al. 2020), a variante rapida:
+    sem im2col espacial. Treino usa a estatistica do lote e anda a media movel
+    (momentum 0.1); eval usa a media movel. Buffers persistentes: o grow e o eval
+    recarregam o checkpoint e precisam do mesmo W que o treino viu.
+    """
+
+    def __init__(self, c: int, momentum: float = 0.1) -> None:
+        super().__init__()
+        self.momentum = momentum
+        self.register_buffer("running_mean", torch.zeros(c))
+        self.register_buffer("running_w", torch.eye(c))
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.training:
+            # W sem gradiente: o backward do eigh explode com autovalores quase iguais
+            xf = x.detach().transpose(0, 1).flatten(1).double()
+            mu = xf.mean(1)
+            xc = xf - mu[:, None]
+            cov = xc @ xc.T / xc.shape[1]
+            cov = cov + 1e-3 * cov.trace() / cov.shape[0] * torch.eye(cov.shape[0], dtype=cov.dtype, device=cov.device)
+            e, v = torch.linalg.eigh(cov)
+            w = ((v * e.rsqrt()) @ v.T).to(x.dtype)
+            mu = x.mean((0, 2, 3))
+            with torch.no_grad():
+                self.running_mean.lerp_(mu, self.momentum)
+                self.running_w.lerp_(w, self.momentum)
+        else:
+            mu, w = self.running_mean, self.running_w
+        return torch.einsum("ij,bjhw->bihw", w, x - mu.view(1, -1, 1, 1))
+
+
 class Head(nn.Module):
     """Cabeca de classificacao sobre o ultimo mapa do encoder.
 
@@ -252,6 +286,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
                             gargalo ``max(C // r, 4)``. 0 = off (default).
         grn:                Global Response Normalization (ConvNeXt V2) so no ultimo bloco do
                             encoder, depois da ativacao. Nasce identidade. Off por default.
+        feat_whiten:        ZCA de canal (Network Deconvolution, so canal) no fim de cada bloco
+                            do encoder, i.e. na entrada da conv seguinte e da leitura. Off.
         spifil_anchor:      lambda do L2-SP (Li et al. 2018): soma, nas convs do encoder, de
                             ``||W - W0||^2 / ||W0||^2``, com W0 o encoder logo apos o
                             ``init_ckpt``. 0 = off (default).
@@ -289,6 +325,7 @@ class AutoEncoderFlimModule(pl.LightningModule):
         batch_norm: bool = False,
         se_reduction: int = 0,
         grn: bool = False,
+        feat_whiten: bool = False,
         spifil_anchor: float = 0.0,
         mask_ratio: float = 0.0,
         mask_patch: int = 20,
@@ -381,6 +418,12 @@ class AutoEncoderFlimModule(pl.LightningModule):
             pool = [i for i, m in enumerate(block) if isinstance(m, nn.MaxPool2d)]
             block.insert(pool[0] if pool else len(block),
                          GlobalResponseNorm(channels[n], channels_last=False))
+        if feat_whiten:
+            # ZCA no FIM do bloco n = entrada da conv n+1. O grow recorta a SAIDA do encoder,
+            # entao a camada nova nasce no espaco branqueado que vai ver. A entrada da conv1
+            # (LAB) NAO e branqueada: no layerwise o grow da conv1 recorta o LAB cru.
+            for n in range(1, _arch["nlayers"] + 1):
+                self.model.encoder.blocks[f"conv{n}"].append(_ChannelZCA(channels[n]))
         if fresh_decoder:
             # `old_layers` > 0: conv1..conv{old_layers} treinam com lr * old_layer_lr_scale
             if not old_layers:
