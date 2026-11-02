@@ -1,0 +1,32 @@
+# gate do e60 adiantado: eggs/larvae da base_e60 ja terminaram (protozoan ainda treina); separa o efeito das 60 epocas do e_imp
+name: svm_disc_g20_base_e60_val_gem_el
+method: autoencoder
+runner: eval
+grid:
+  datasets:
+  - helminth-eggs
+  - helminth-larvae
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 50
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: disc_g20_base_e60
+  ckpt_selection: best
+  results_csv: results/svm_disc_g20_base_e60_val_gem_el.csv
+  embed_mode: gem
+  eval_set: val
+  stages:
+  - L4
+resources:
+  gpu_ids:
+  - 1
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_g20_base_e60_val_gem_el
+skip: state
