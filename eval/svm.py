@@ -695,6 +695,8 @@ def _run_svm_job(config: str) -> str:
             # LAB[0,1], que e o que os bracos viram no treino.
             imagenet_norm = False
             mode = job.get("embed_mode", "flatten")
+            # sufixo "_pw": PCA-whitening + L2 do vetor (Jegou & Chum 2012), fitado no treino
+            pw, mode = mode.endswith("_pw"), mode.removesuffix("_pw")
             def _feats(loader):
                 return extract_features(encoder, loader, mode)
         elif source == "distillation":
@@ -727,9 +729,14 @@ def _run_svm_job(config: str) -> str:
             )
 
         X_train, y_train = _feats(_loader("train"))
+        feats, y_true = _feats(_loader("validation" if eval_set == "val" else "test"))
+        if source == "growth_stages" and pw:
+            from sklearn.decomposition import PCA  # noqa: PLC0415
+            from sklearn.preprocessing import normalize  # noqa: PLC0415
+            pca = PCA(whiten=True).fit(X_train)
+            X_train, feats = normalize(pca.transform(X_train)), normalize(pca.transform(feats))
         clf = fit_svm(X_train, y_train, tag=row["method"])
 
-        feats, y_true = _feats(_loader("validation" if eval_set == "val" else "test"))
         y_pred = clf.predict(feats)
 
         metrics = compute_metrics(y_true=y_true, y_pred=y_pred,

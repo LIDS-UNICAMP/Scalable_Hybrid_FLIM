@@ -595,3 +595,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Mudança: opção `whiten` no `grow` (default off). Com ela, os patches candidatos passam por ZCA, W = U diag(1/sqrt(S+eps)) U^T com eps = 1e-2·mean(S), fitada nos próprios patches de treino (Coates & Ng 2011; Thiry et al., ICLR 2021). O ranking de Fisher, a alocação e a seleção rodam no espaço branco, e o filtro gravado é W·f, que dá a mesma resposta no espaço original.
 - Hipótese: o whitening tira a correlação entre pixels vizinhos. Assim o Fisher escolhe filtros de forma e borda, e não de brilho médio, o que pode separar ovo de impureza.
 - Experimento: growth_disc_g20_e_aug_wh = e_aug + `whiten: true` (uma mudança só). Referência: e_aug com gem_tta, κ val 0.920.
+
+## 2026-11-02: PCA-whitening do vetor final antes do SVM (só eval)
+- Sufixo `_pw` no embed_mode (eval/svm.py): PCA(whiten=True) fitada nas features de TREINO, e depois L2, nos 2 lados, antes do fit_svm único (Jégou & Chum, ECCV 2012; par clássico do GeM em retrieval).
+- Rodando (val): bp01w64c1280 gem_pw e gem_tta_pw; e_aug e l_aug gem_tta_pw. Referências: gem 0.899/0.910/0.875; gem_tta 0.912/0.946/0.917; e_aug+tta 0.920; l_aug+tta 0.953.
+- Hipótese: os 1280 canais (400 SPiFiL + 880 aleatórios) são correlacionados; descorrelacionar e igualar a escala deixa o SVM linear usar as direções raras que separam ovo × impureza.
