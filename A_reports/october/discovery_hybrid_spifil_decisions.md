@@ -453,3 +453,13 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
   - L4: 400/100/300 filtros SPiFiL (eggs/larvae/protozoan), o resto aleatório. Encoder com 200.944 params (188.468 em protozoan).
 - Receita sem fundo recomendada (a medir): base_e60 + impurities: true + paper_classes: false + recon_bg_weight 1.0 + leitura gem. bg1 já empatou na L3; nomask_e60 e bg1_e60 estão na fila.
 - Hipótese nova para eggs (aguarda a confusão do A4): a impureza é a maior classe (3.344 imagens) e é a única sem filtro SPiFiL.
+
+## 2026-11-02: eggs erra ovo × impureza, e a impureza não tem semente SPiFiL
+- Diagnóstico do A4 (A_reports/october/discovery_eggs_diag.md, val, bp01w64c1280): 218 de 220 erros do gem L4 são ovo ↔ impureza; só 2 são ovo ↔ ovo. Impureza → ovo: 137 (Ascaris 33, H.nana 25, Taenia 18). Ovo → impureza: 81. Na L3 avg o padrão é o mesmo, e mais forte (327/332).
+- A impureza cobre toda a faixa de tamanho dos ovos (575–1.862 px), e a textura e o contraste médios dela ficam no meio dos ovos. O que separa é forma fina e detalhe interno.
+- Causa provável: `paper_classes: true` tira a impureza das sementes do SPiFiL em eggs (classe 9) e em protozoan (classe 7) (flim/spifil.py:466). Larvae mantém a impureza, e larvae é o dataset que já empata com o I-JEPA. Conferido: com paper_classes false, eggs pega 9 imagens/9 classes e protozoan 7/7.
+- Lançado (uma mudança cada, contra a base_e60), no topo da fila:
+  - e_imp_e60 (paper_classes false): a impureza ganha semente SPiFiL. Ressalva: as 2 imagens do artigo viram sorteio.
+  - e_res49_e60 (layer_pools [2,2,1,1]): L3/L4 a 49×49, para o detalhe interno.
+  - p_imp_e60: o mesmo teste em protozoan.
+- Teto aproximado (A4): cortar metade das 137 impurezas tomadas por ovo leva eggs de ~0.90 a ~0.93.
