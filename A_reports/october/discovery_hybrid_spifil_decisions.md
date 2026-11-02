@@ -409,3 +409,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-01: eggs, bn e bg0 neutros (6 eixos)
 - gem L4 κ val, g20 × g20: bp10 0.908, bp03 0.905, aug 0.903, bn 0.897, bg0 0.892, k3 0.875. Fora o k3 (−0.026), os 5 eixos ficam numa faixa de 0.016, dentro da variação do pipeline.
 - Hipóteses SPiFiL: BN estabiliza a escala dos filtros SPiFiL (não muda nada); fundo fora da reconstrução foca o ovo (não muda nada). 0 NaN, nenhuma divergência.
+
+## 2026-11-02: orçamento de 60 épocas (pedido do usuário: treino muito lento)
+- Premissa corrigida pelo A4: nas disc_*/g20 o svm_probe está desligado, então o ckpt e o EarlyStopping olham probe/val_recon_loss (patience 50, max 200). Não existe κ por época; o "confundidor da sonda gem" não existe.
+- Simulação em 752 estágios (A_reports/october/discovery_early_stop.md): nas L1–L3 o best cai na época 193–198, porque o cosine ainda baixa a loss no fim. Patience 20 poupa só 4%; max_epochs 60 poupa ~69%.
+- Decisão: max_epochs 60 (model e trainer, cosine reescalado) para tudo o que ainda não começou. Referência nova: disc_g20_base_e60 (bp01w64c1280, 3 datasets), no topo da fila. Os eixos da fila sem split pronto viraram *_e60 (e_se, l_se, p_aug, p_bp03, p_w96, p_bn) e são comparados contra base_e60. l_bn, l_w96, l_bp03 e l_grn ficam em 200, porque já têm splits prontos.
+- Critério de aceite do e60: gem L4 a ≤0.018 da base de 200 (0.899/0.910/0.875). Se passar, vira o padrão. Hipótese SPiFiL: o SPiFiL já entrega filtros bons na partida, então o backprop precisa de poucas épocas para refinar.
+- Ideias da literatura (rodada 2, A_reports/october/discovery_literature_round2.md): RankMe por camada como parada sem rótulo (calibrar contra κ antes de usar); successive halving nas fronteiras de camada para a grade; TTA e FixRes no SVM (só eval); EMA/SWA; whitening ZCA e k-means dos patches antes do SPiFiL; PCA para parte dos filtros; ortogonalidade; loss local por camada.

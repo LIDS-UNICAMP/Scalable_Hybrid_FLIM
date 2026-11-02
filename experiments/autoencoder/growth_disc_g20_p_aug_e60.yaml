@@ -1,0 +1,59 @@
+# e60: max_epochs 200 -> 60 (cosine reescalado); A4 viu o best das L1-L3 na epoca ~195 de 200, entao so encurtar o orcamento corta tempo
+# g20 p_aug: invariancia a rotacao/flip sobre o SPiFiL
+name: spifil_growth_disc_g20_p_aug_e60
+method: autoencoder
+runner: growth
+grid:
+  init:
+  - flim
+  datasets:
+  - protozoan-cysts
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 50
+resources:
+  gpu_ids:
+  - 0
+  max_per_gpu: 1
+  cpus_per_experiment: 10
+  num_workers: 2
+runner_args:
+  layerwise: 4
+  paper_classes: true
+  layer_channels:
+  - 32
+  - 48
+  - 64
+  - 1280
+  layer_kernels:
+  - 5
+  - 5
+  - 5
+  - 1
+  layer_pools:
+  - 2
+  - 2
+  - 2
+  - 1
+  fill_random_last: true
+  superpixels: disf
+  n_superpixels: 50
+  budget_check: false
+  embed_mode: gem
+  layerwise_backprop: 0.1
+output:
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/disc_g20_p_aug_e60
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+skip: state
+evaluate:
+  SVM: false
+overrides:
+  model.init_args.max_epochs: 60
+  trainer.max_epochs: 60
+  model.init_args.recon_bg_weight: 0.1
+  data.init_args.geo_aug: true
