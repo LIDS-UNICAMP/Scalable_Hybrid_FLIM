@@ -473,3 +473,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - gem L4 κ val: 32/48/64 0.899; 48/64/96 0.901 (0.907/0.910/0.887); 64/96/128 0.900 (0.914/0.901/0.884). Plana.
 - Hipótese SPiFiL: mais protótipos SPiFiL por classe dariam mais nuance. Não deram, e isso é coerente com o diagnóstico: o erro é ovo × impureza, e a impureza não tem semente nenhuma, qualquer que seja a largura.
 - Placar com 13 eixos (eggs + larvae): só o k3 passa do ruído, e para baixo. Os botões de treino e de largura estão esgotados. Apostas abertas: semente de impureza (e_imp), resolução (e_res49), campo receptivo (k7, d5, d6, dil2).
+
+## 2026-11-02: prender os pesos no SPiFiL piora (l_anc3); e_grn empata
+- l_anc3 (âncora L2-SP com λ=3 nos kernels SPiFiL, larvae): gem L4 κ val 0.893/0.865/0.836 (0.865). Fica −0.048 contra o grupo larvae, nos 3 splits; é a maior perda da g20 (~3x o ruído).
+- Hipótese testada (do usuário, via A8): segurar os kernels perto do SPiFiL preserva o contraste objeto/fundo e sobe o κ. Refutada para λ forte. Junto com a lei do backprop (mais liberdade, κ um pouco maior), o SPiFiL vale como ponto de partida, não como restrição. O drift dos mapas é o treino melhorando, não estragando.
+- Falta o λ=0.3 (e_anc03, l_anc03_e60) para fechar a lei da âncora.
+- e_grn (eggs): gem L4 0.898, empate. O GRN é neutro nos dois datasets.
