@@ -583,3 +583,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_base_e100 (eggs, 100 ép.): gem L4 κ val 0.890/0.871/0.858 (0.873). Lei: 60 ép. 0.875; 100 ép. 0.873; 200 ép. ~0.900 (base 0.899, e_base 0.902). De 60 a 100 não muda; o ganho (+0.027) aparece só entre 100 e 200.
 - Hipótese (A4): o que conta não é o número de épocas, e sim quanto tempo o cosine passa na cauda de lr baixa (ajuste fino). O e400 (rodando) dá o próximo ponto. Se a hipótese se sustentar, o teste barato é cosine de 100 ép. + 50 ép. em eta_min (precisa de uma opção nova no scheduler; não implementado ainda).
 - Para eggs, 100 épocas não economizam nada: ficam as 200.
+
+## 2026-11-02: o que soma com o TTA depende do dataset
+- l_bp10 + gem_tta: κ val 0.915/0.917/0.948 (0.927), contra a base com TTA 0.946 (−0.019; dentro do ruído de larvae, mas sem ganho).
+- Com TTA, eggs ganha com bp10 (+0.012 a +0.015) e com aug (+0.008); larvae ganha só com aug (+0.007, o mais estável).
+- Receita comum: geo_aug + gem_tta. O bp10 é específico de eggs.
+- Candidatos por dataset: eggs bp10 + aug + TTA (e_bp10_aug rodando); larvae aug + TTA (l_aug, 0.953); protozoan, falta o p_aug200 + TTA.
+- O l_bp10_aug segue rodando: ele mostra se uma receita única nos 3 datasets custa algo em larvae.
