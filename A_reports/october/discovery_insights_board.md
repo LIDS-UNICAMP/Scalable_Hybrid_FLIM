@@ -2240,3 +2240,47 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
   - eggs: 0,892 / 0,861 / 0,865, média **0,873**, contra o base_e60 (0,875, fundo 0,1): empate;
   - larvae: s1 0,920 (pendente).
   - **O peso do fundo (0,1 contra 1) não importa em eggs,** como o bg0 já indicava.
+
+## 2026-11-02 19:55 [A4] bg1_e60 e nomask_e60: empate nos 3 datasets (gem L4, contra o base_e60)
+
+| 60 épocas, gem L4 | eggs (ref 0,875) | larvae (ref 0,903) | protozoan (ref 0,861) |
+|---|---|---|---|
+| **bg1** (fundo com peso 1, BCE uniforme) | 0,873 | 0,900 (0,920 / 0,875 / 0,904) | 0,856 (0,862 / 0,851 / 0,855) |
+| **nomask** (SPiFiL sem a máscara de objeto) | 0,882 (0,874 / 0,879 / 0,892) | 0,903 (0,954 / 0,855 / 0,898) | pendente |
+
+- **O peso do fundo não importa:** com 0, 0,1 ou 1, o κ empata nos 3 datasets.
+  - O achado de out/30 ("o backprop puxa a L2 para o fundo") não se traduz em κ, como já tinha mostrado a razão dentro/fora.
+- **A máscara de objeto do SPiFiL também não importa:** as sementes só dentro do objeto ou em qualquer lugar dão o mesmo κ.
+  - O larvae do nomask oscila muito (de 0,855 a 0,954), mas a média fica igual.
+- **Conclusão:** **os dois mecanismos "focar no objeto" (na loss e nas sementes) são neutros para o κ.**
+- (adendo 20:06) **nomask_e60 protozoan:** 0,860 / 0,864 / 0,832, média 0,852, contra 0,861: empate. **O nomask empata nos 3 datasets.**
+
+## 2026-11-02 21:13 [A4] mask50_e60 (reconstrução mascarada a 50%): empata em eggs e larvae, perde no limite em protozoan
+
+| 60 épocas, gem L4 | eggs | larvae | protozoan |
+|---|---|---|---|
+| base_e60 | 0,875 | 0,903 | 0,861 |
+| **mask50_e60** | 0,875 (0,869 / 0,888 / 0,867) | 0,903 (0,909 / 0,897 / 0,901) | **0,842** (0,859 / 0,827 / 0,839) |
+| Δ | 0,000 | 0,000 | **−0,019** |
+
+- **Esconder 50% dos patches não ajuda.** Fica igual em eggs e larvae e perde em protozoan, onde o objeto pequeno some com a máscara.
+- Lembrete: o ckpt foi escolhido pela val ruidosa da máscara sorteada (nota de 07:31). A seleção é parte do ruído.
+- Com isso, os objetivos de pretexto testados (BCE com fundo 0 / 0,1 / 1 e o mask50) dão o mesmo κ. **O objetivo de treino não é o gargalo; a leitura é.**
+
+## 2026-11-02 21:23 [A4] nova grade de lei de escala (disc_sl_*), agora na vigia; 1º ponto
+- **Famílias:**
+  - largura total: w0125 / w025 / w050 (×1/8, ×1/4, ×1/2);
+  - largura da 1x1: c160 / c320 / c640;
+  - profundidade: d3;
+  - cada uma em 60 e/ou 200 épocas.
+- **1º κ: sl_w0125_e60 (canais 4 / 6 / 8 / 160, N ≈ 3,6k parâmetros), larvae gem L4:** 0,863 / 0,849 / 0,848, média **0,853**.
+  - Contra o base_e60 (0,903): **−0,050**. Com 1/8 da largura, larvae perde 0,05.
+  - **Isso dá o 1º ponto da lei de escala:** a base (largura 1) dá 0,903, e a ×1/8 dá 0,853.
+- Monto a curva κ × N (parâmetros) por dataset quando entrarem w025 / w050 / c160–c640.
+- p_bp03 + tta_pwr: só o s1 (0,916, contra 0,935 da base pwr no s1).
+- (adendo 21:45) **p_bp03_e60 + gem_tta_pwr (protozoan):** 0,916 / 0,916 / 0,910, média 0,914.
+  - Contra o base_e60 com pwr (0,907): +0,007, empate puxando para cima.
+  - Contra a base de 200 épocas com pwr (0,926): −0,012.
+  - É o mesmo padrão de eggs e larvae: com pwr, o bp só soma pouco.
+- 21:49 LANÇA g20_nd_e200 na GPU1 (~4,5 estimado, sem medida). Pico previsto ~18,4 GB. Medido: sl_d3 ~4,85 GB, não 2,5.
+- 21:50 RELANÇA g20_nd_e200 na GPU1 com gpu_ids [1]. O YAML dele usa gpu_ids inline e o 1º lançamento foi parar na GPU0; matei antes de alocar.
