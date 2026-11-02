@@ -479,3 +479,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Hipótese testada (do usuário, via A8): segurar os kernels perto do SPiFiL preserva o contraste objeto/fundo e sobe o κ. Refutada para λ forte. Junto com a lei do backprop (mais liberdade, κ um pouco maior), o SPiFiL vale como ponto de partida, não como restrição. O drift dos mapas é o treino melhorando, não estragando.
 - Falta o λ=0.3 (e_anc03, l_anc03_e60) para fechar a lei da âncora.
 - e_grn (eggs): gem L4 0.898, empate. O GRN é neutro nos dois datasets.
+
+## 2026-11-02: a âncora forte perde também em eggs (lei da âncora)
+- e_anc3 (L2-SP λ=3 nos kernels SPiFiL, eggs): gem L4 κ val 0.851/0.824/0.812 (0.829). Fica −0.069 contra o grupo eggs, nos 3 splits; é a maior perda da g20 (~4x a variação do pipeline).
+- Com o l_anc3 (−0.048), a âncora forte perde nos 2 datasets. Lei combinada: quanto mais o treino pode se afastar do SPiFiL, melhor (âncora λ=3 −0.05 a −0.07; bp 0.1 → 1.0 +0.004 a +0.010). Regra da receita: SPiFiL é ponto de partida, não alvo; nada de âncora.
+- Falta o λ=0.3 (e_anc03, l_anc03_e60), para ver se a perda cresce com λ.
