@@ -559,3 +559,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 
 ## 2026-11-02: SE neutro nos 2 datasets
 - l_se_e60 (SE, larvae, 60 ép.): gem L4 κ val 0.915/0.922/0.890 (0.909), contra base_e60 de larvae 0.903: +0.006, empate. Com e_se_e60 (0.871 contra 0.875), o SE é neutro em eggs e em larvae; fica fora da receita.
+
+## 2026-11-02: e_bp10 + TTA é o maior eggs; lançado bp10 + aug
+- e_bp10 (backprop 1.0) + gem_tta: κ val L4 0.935/0.920/0.918 (0.925). Contra a base com gem_tta (0.912): +0.012. Contra e_aug + TTA (0.920): +0.005. É o mais estável de eggs; fica a −0.016 do I-JEPA (teste).
+- Leitura: com o gem, o bp10 ficava no ruído (+0.009). Com o TTA, a vantagem dele aparece. Soltar o encoder inteiro deixa as vistas mais ricas.
+- Lançado disc_g20_e_bp10_aug (bp 1.0 + geo_aug, eggs, 200 ép.; uma mudança contra e_aug e contra e_bp10), no topo da fila, com eval gem e gem_tta. Hipótese SPiFiL: SPiFiL como partida, rede inteira livre e treinada nas 8 poses dá o resumo mais invariante.
