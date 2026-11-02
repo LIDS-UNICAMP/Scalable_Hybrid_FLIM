@@ -680,3 +680,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
   - bg1 (fundo peso 1): 0.873/0.900/0.856, empate nos 3;
   - nomask (SPiFiL sem máscara, impurities true): eggs 0.882, larvae 0.903 (muito variável), empate; protozoan pendente.
 - Leitura: o peso do fundo (0/0.1/1) e a máscara de objeto do SPiFiL não mudam o κ. A receita roda em dataset sem fundo/sem máscara sem custo medido. Receita sem fundo: impurities true + paper_classes false + recon_bg_weight 1.0 + gem_tta_pw (a combinação ainda não foi medida junta).
+
+## 2026-11-02: validação do backbone nos 3 datasets (Jaci)
+- Pedido do usuário: validar as leis e se o backbone principal funciona nos 3 datasets.
+- disc_final_rep: bp01w64c1280 repetido (2º sorteio do pipeline), 3 datasets, 200 ép., eval gem e gem_tta_pw (val e teste). Mede se o resultado de teste (0.933/0.968/0.928) se repete.
+- disc_final_nobg: receita sem fundo completa (impurities true + paper_classes false + recon_bg_weight 1.0), 3 datasets, 200 ép. As 3 mudanças só tinham sido medidas sozinhas (todas empatam a 60 ép.).
+- Rodam em Jaci (max_per_gpu 2, ~7 GB cada), junto com a lei de escala (disc_sl_*).
