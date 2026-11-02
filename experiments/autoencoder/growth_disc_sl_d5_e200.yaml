@@ -1,0 +1,66 @@
+# lei de escala (d5): [32, 48, 64, 96, 1280], sem aug, 200 ep; N esperado 395600
+name: spifil_growth_disc_sl_d5_e200
+method: autoencoder
+runner: growth
+grid:
+  init:
+  - flim
+  datasets:
+  - helminth-eggs
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 50
+resources:
+  gpu_ids:
+  - 2
+  max_per_gpu: 1
+  cpus_per_experiment: 10
+  num_workers: 2
+runner_args:
+  layerwise: 5
+  paper_classes: true
+  layer_channels:
+  - 32
+  - 48
+  - 64
+  - 96
+  - 1280
+  layer_kernels:
+  - 5
+  - 5
+  - 5
+  - 5
+  - 1
+  layer_pools:
+  - 2
+  - 2
+  - 2
+  - 1
+  - 1
+  fill_random_last: true
+  superpixels: disf
+  n_superpixels: 50
+  budget_check: false
+  embed_mode: avgpool2d
+  layerwise_backprop: 0.1
+  layer_dilations:
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+output:
+  work_dir: /dados/home/moliveira/artifacts/spifil_growth/disc_sl_d5_e200
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+skip: state
+evaluate:
+  SVM: false
+overrides:
+  model.init_args.max_epochs: 200
+  trainer.max_epochs: 200
+  model.init_args.recon_bg_weight: 0.1

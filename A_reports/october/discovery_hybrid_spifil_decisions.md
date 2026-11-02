@@ -633,3 +633,26 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: whitening e TTA são aditivos e cobrem erros diferentes
 - Ganho sobre gem, κ val (pwr / TTA / os dois): eggs +0.029/+0.013/+0.043; larvae +0.010/+0.036/+0.051; protozoan ~+0.008/+0.043/+0.052 (s3 do pwr pendente). gem_pwr de eggs sozinho dá 0.928.
 - Leitura: em eggs o whitening domina (detalhe fino ovo × impureza); em larvae/protozoan domina o TTA (objetos sem orientação canônica). Receita de leitura: gem + TTA + whitening com shrinkage.
+
+## 2026-11-02: lei de escala lançada (autorizada pelo usuário)
+- Backbone: disc_bp01w64c1280 sem aug. Orçamento (gate e60): eggs 200 ép. (ref m=1 = disc_bp01w64c1280); larvae+protozoan 60 ép. (ref m=1 = disc_g20_base_e60). YAMLs separados: `growth_disc_sl_<eixo><valor>_{e200,e60}.yaml`.
+- Leitura: gem_tta_pw (gem + TTA 8 vistas + PCA-whitening com shrinkage), na última camada. Por família: val gem, val gemttapwr, test gemttapwr (teste só reporta). Ref e60 ganhou val/test gemttapwr.
+- Eixos, na ordem da fila: largura m ∈ {1/2, 1/4, 1/8, 2}; largura da 1x1 ∈ {160, 320, 640, 1920}; profundidade d3 (2 SPiFiL + 1x1, pools 2/2/1; e200 e e60) e d5 (4 SPiFiL + 1x1, só e200; e60 já é e_d5_e60).
+- m=2 daria 1x1 2560 > 2000-d: limitada a 1920 (anotado).
+- N esperado (convs com bias, entrada 3 canais; a conferir no architecture.json); fração SPiFiL da 1x1 em eggs (400 sementes):
+
+| família | larguras | N | SPiFiL 1x1 eggs |
+|---|---|---|---|
+| w0125 | 4/6/8/160 | 3 558 | 100% |
+| w025 | 8/12/16/320 | 13 276 | 100% |
+| w050 | 16/24/32/640 | 51 192 | 62% |
+| ref m=1 | 32/48/64/1280 | 200 944 | 31% |
+| w200 | 64/96/128/1920 | 713 568 | 21% |
+| c160 | 32/48/64/160 | 128 144 | 100% |
+| c320 | 32/48/64/320 | 138 544 | 100% |
+| c640 | 32/48/64/640 | 159 344 | 62% |
+| c1920 | 32/48/64/1920 | 242 544 | 21% |
+| d3 | 32/48/1280 | 103 600 | 31% |
+| d5 | 32/48/64/96/1280 | 395 600 | 31% |
+
+- Hipótese SPiFiL: a fração SPiFiL cresce quando o modelo encolhe; os modelos pequenos são "mais SPiFiL". Se o κ cair pouco nos pequenos, parte disso é o SPiFiL ocupando a 1x1 inteira, não só o N; reportar e controlar pela fração.
