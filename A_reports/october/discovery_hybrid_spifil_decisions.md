@@ -600,3 +600,6 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Sufixo `_pw` no embed_mode (eval/svm.py): PCA(whiten=True) fitada nas features de TREINO, e depois L2, nos 2 lados, antes do fit_svm único (Jégou & Chum, ECCV 2012; par clássico do GeM em retrieval).
 - Rodando (val): bp01w64c1280 gem_pw e gem_tta_pw; e_aug e l_aug gem_tta_pw. Referências: gem 0.899/0.910/0.875; gem_tta 0.912/0.946/0.917; e_aug+tta 0.920; l_aug+tta 0.953.
 - Hipótese: os 1280 canais (400 SPiFiL + 880 aleatórios) são correlacionados; descorrelacionar e igualar a escala deixa o SVM linear usar as direções raras que separam ovo × impureza.
+
+## 2026-11-02: semente de impureza também não ajuda protozoan
+- p_imp_e60: gem L4 κ val 0.872/0.847/0.857 (0.859), contra base_e60 de protozoan 0.861 (empate). Nos 2 datasets: eggs −0.028, protozoan −0.002. A semente de impureza (paper_classes false) não ajuda; para datasets novos, paper_classes false é neutro ou um custo pequeno.
