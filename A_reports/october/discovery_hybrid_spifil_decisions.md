@@ -530,3 +530,11 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Confusão val de eggs com gem_tta (A4; κ 0.941/0.911/0.890): erros 220 → 185 (−16%). Impureza → ovo 137 → 111, o maior corte; ovo → impureza 81 → 73; recall da impureza 0.945 → 0.956. Ancylostoma 0.883 → 0.928; Schistosoma 0.903 → 0.925; Enterobius parado em 0.849.
 - Leitura: uma impureza que parece ovo numa pose deixa de parecer nas outras 7; a média sobre as orientações separa ovo × impureza melhor que qualquer botão de construção (~25 eixos sem ganho).
 - Lançado (só eval): gem_tta sobre e_aug, l_aug (aug no treino + TTA, redundantes?), e_bp10 (melhor eggs pela val) e e_base (a referência repetida).
+
+## 2026-11-02: TTA confirmado no teste: larvae e protozoan passam o I-JEPA
+- gem_tta val (A4): eggs 0.912 (+0.014), larvae 0.946 (+0.036), protozoan 0.917 (+0.043); sobe em 8 de 9 splits. O ganho cresce quanto menos o objeto tem orientação canônica (protozoan é o que mais ganha).
+- Teste (só reporte; a leitura foi escolhida pela val), bp01w64c1280 L4:
+  - gem → gem_tta: eggs 0.891 → 0.908 (0.929/0.900/0.894); larvae 0.939 → 0.952 (0.958/0.945/0.954); protozoan 0.886 → 0.921 (0.913/0.933/0.919).
+  - Contra o I-JEPA (teste 50%): eggs −0.032, larvae +0.009, protozoan +0.058.
+- Ressalva de justiça: o I-JEPA foi medido com uma vista só. Para comparar de igual para igual, o I-JEPA também deveria ser avaliado com TTA.
+- e_se_e60 (SE, eggs): gem L4 0.871, contra 0.875 do base_e60. Empate.
