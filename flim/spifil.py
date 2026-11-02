@@ -218,6 +218,7 @@ Uso
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import random
 import shutil
@@ -236,6 +237,7 @@ from spifil import ArchSpec, LayerSpec, Learner, SpifilDataset
 from spifil import preparation
 from spifil.color import LabNorm
 from spifil.learner import LayerState
+from spifil.scoring import per_class_ranks
 from spifil.superpixels.centers import Medoids
 from spifil.superpixels.slic import SLIC
 from spifil.superpixels.disf import DISF
@@ -297,9 +299,11 @@ class GrowOneLayer:
     biblioteca.
     """
 
-    def __init__(self, budget_check: bool = True) -> None:
+    def __init__(self, budget_check: bool = True, whiten: bool = False) -> None:
         # False = como o SPiFiL original, que fita mesmo com N <= D (shrinkage).
         self.budget_check = budget_check
+        self.whiten = whiten
+        self.zca = None
 
     def run(self, learn: Learner) -> None:
         layer = learn.n_layers
@@ -312,6 +316,18 @@ class GrowOneLayer:
                 f"shrinkage a mantem inversivel, nao informativa — acrescente "
                 f"imagens (n_images) ou pare de crescer."
             )
+        if self.whiten:
+            # ZCA (Coates & Ng 2011): W = U diag(1/sqrt(S+eps)) U^T fitada nos proprios
+            # patches; ranking de Fisher, alocacao e selecao passam a ver o espaco branco.
+            state = learn.state[layer - 1]
+            x = patches.feats
+            s, u = torch.linalg.eigh(torch.cov(x.T))
+            s = s.clamp_min(0)
+            self.zca = u @ torch.diag(1 / torch.sqrt(s + 1e-2 * s.mean())) @ u.T
+            state.patches = patches = dataclasses.replace(patches, feats=x @ self.zca)
+            state.scores = learn.component_for(layer, "scorer")(
+                patches, learn.component_for(layer, "metric"))
+            state.ranks = per_class_ranks(state.scores, patches.labels)
         learn.fit_layer(layer)
 
 
@@ -726,6 +742,7 @@ def grow(
     paper_classes: bool = False,
     superpixels: str = "slic",
     budget_check: bool = True,
+    whiten: bool = False,
     device: str | None = None,
     seed: int = 42,
 ) -> int:
@@ -818,7 +835,7 @@ def grow(
             pool_type="max" if pool_stride > 1 else "none",
             pool_stride=pool_stride,
         )]),
-        color=trunk, strategy=GrowOneLayer(budget_check), device=device,
+        color=trunk, strategy=(strategy := GrowOneLayer(budget_check, whiten)), device=device,
     )
     learn.state[0] = build_layer0(
         data, trunk, samples, n_superpixels, image_size,
@@ -837,6 +854,13 @@ def grow(
     got = int(block.out_channels)
     if got != out_channels:
         print(f"[grow] {out_channels} pedidos -> {got} filtros (resto do allocator)")
+
+    if strategy.zca is not None:
+        # O filtro f vive no espaco branco: <W x, f> = <x, W f> (W simetrica), entao a conv
+        # no espaco ORIGINAL leva W f. O bias -(f . W media) ja e -(W f . media): fica.
+        with torch.no_grad():
+            w = block.conv.weight
+            w.copy_((w.flatten(1) @ strategy.zca.to(w)).view_as(w))
 
     if random_layer:
         # Troca so os VALORES, no ultimo instante: shape, largura do allocator e

@@ -152,7 +152,7 @@ GROW_KNOBS: tuple[str, ...] = (
     "out_channels", "kernel_size", "pool_stride", "n_superpixels", "n_images",
     "image_size", "imagenet_norm", "spifil_in_image", "spifil_in_feature",
     "impurities", "one_per_class", "random_layer", "random_layer_classic",
-    "seed", "paper_classes", "superpixels", "budget_check",
+    "seed", "paper_classes", "superpixels", "budget_check", "whiten",
 )
 
 

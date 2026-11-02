@@ -71,7 +71,7 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         # sementes so das classes do artigo (sem impureza no eggs e no protozoan)
         "paper_classes",
         # superpixel do grow (slic | disf), trava N <= D e largura de cada camada
-        "superpixels", "budget_check", "layer_channels",
+        "superpixels", "budget_check", "whiten", "layer_channels",
         # kernel de cada camada do layerwise; L1..L<n> do FLIM de partida, sem grow
         "layer_kernels", "layerwise_from_flim",
         # dilation da conv e stride do max-pool (1 = sem pooling) de cada camada

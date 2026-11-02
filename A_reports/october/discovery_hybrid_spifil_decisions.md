@@ -590,3 +590,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Receita comum: geo_aug + gem_tta. O bp10 é específico de eggs.
 - Candidatos por dataset: eggs bp10 + aug + TTA (e_bp10_aug rodando); larvae aug + TTA (l_aug, 0.953); protozoan, falta o p_aug200 + TTA.
 - O l_bp10_aug segue rodando: ele mostra se uma receita única nos 3 datasets custa algo em larvae.
+
+## 2026-11-02: e_aug_wh: ZCA nos patches antes do SPiFiL
+- Mudança: opção `whiten` no `grow` (default off). Com ela, os patches candidatos passam por ZCA, W = U diag(1/sqrt(S+eps)) U^T com eps = 1e-2·mean(S), fitada nos próprios patches de treino (Coates & Ng 2011; Thiry et al., ICLR 2021). O ranking de Fisher, a alocação e a seleção rodam no espaço branco, e o filtro gravado é W·f, que dá a mesma resposta no espaço original.
+- Hipótese: o whitening tira a correlação entre pixels vizinhos. Assim o Fisher escolhe filtros de forma e borda, e não de brilho médio, o que pode separar ovo de impureza.
+- Experimento: growth_disc_g20_e_aug_wh = e_aug + `whiten: true` (uma mudança só). Referência: e_aug com gem_tta, κ val 0.920.
