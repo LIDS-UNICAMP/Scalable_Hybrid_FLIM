@@ -573,3 +573,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: receita bp10 + aug + TTA nos 3 datasets
 - Para fechar a receita nos 3 datasets com a mesma configuração: lançados disc_g20_l_bp10_aug e disc_g20_p_bp10_aug (bp 1.0 + geo_aug, 200 ép.), no topo da fila, cada um com eval gem/gem_tta em val e teste. O e_bp10_aug (eggs) já treina.
 - Eval só: gem_tta sobre o l_bp10 (larvae, 200 ép., já treinado).
+
+## 2026-11-02: gate das 60 épocas fechado nos 3 datasets
+- base_e60 gem L4 κ val: eggs 0.875 contra 0.899 (−0.024, REJEITA); larvae 0.903 contra 0.910 (−0.007, ACEITA); protozoan 0.874/0.859/0.852 (0.861) contra 0.875 (−0.014, ACEITA na borda).
+- Regra da busca: triar com 60 ép. em larvae e protozoan (~69% menos tempo) e confirmar os melhores com 200; em eggs, usar 200, ou comparar as e60 só entre si. O orçamento necessário segue a dificuldade do erro restante: eggs > protozoan > larvae.
+- A receita final (bp10 + aug + TTA) está a 200 ép. nos 3, para ficar comparável ao melhor de cada dataset.
