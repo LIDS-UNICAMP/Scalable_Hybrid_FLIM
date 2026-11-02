@@ -525,3 +525,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Leitura: o encoder não é invariante a rotação (o aug no treino não mudou o κ), mas o resumo médio das 8 vistas é. O ovo/larva vem em qualquer orientação, e o SVM ganha com um vetor que não depende disso. Entra na receita como leitura padrão (custo: 8× a inferência).
 - O teste do gem_tta está na fila (só para o relatório). A confusão ovo ↔ impureza com gem_tta está rodando (A4).
 - Anomalia leve (A4): no mask50_e60, a val loss oscila porque a máscara é sorteada a cada avaliação, então o ckpt é escolhido por uma máscara de sorte. Não corrigi no meio da família; o κ do mask50 deve ser lido com essa ressalva.
+
+## 2026-11-02: o gem_tta corta justamente as impurezas tomadas por ovo
+- Confusão val de eggs com gem_tta (A4; κ 0.941/0.911/0.890): erros 220 → 185 (−16%). Impureza → ovo 137 → 111, o maior corte; ovo → impureza 81 → 73; recall da impureza 0.945 → 0.956. Ancylostoma 0.883 → 0.928; Schistosoma 0.903 → 0.925; Enterobius parado em 0.849.
+- Leitura: uma impureza que parece ovo numa pose deixa de parecer nas outras 7; a média sobre as orientações separa ovo × impureza melhor que qualquer botão de construção (~25 eixos sem ganho).
+- Lançado (só eval): gem_tta sobre e_aug, l_aug (aug no treino + TTA, redundantes?), e_bp10 (melhor eggs pela val) e e_base (a referência repetida).
