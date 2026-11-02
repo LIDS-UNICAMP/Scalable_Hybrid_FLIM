@@ -569,3 +569,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_base + gem_tta (a base repetida): κ val 0.928/0.916/0.881 (0.908), contra 0.912 da base original. Referência com TTA ~0.910. O e_bp10 + TTA (0.925) fica +0.015 acima, mais que a variação de repetição: ganho real.
 - e_d6_e60 (6 camadas, gem na L6): 0.843/0.845/0.865 (0.851), contra base_e60 0.875 (−0.024). Lei da profundidade em eggs (60 ép.): 4 camadas 0.875 → 5 0.857 → 6 0.851. Cai a cada camada. Ressalva: a 60 ép., o mais fundo treina menos por camada.
 - Síntese para eggs: ajudam o backprop livre e a invariância a rotação (TTA + aug). Não ajudam profundidade, resolução, campo receptivo (kernel > 5, dilation), largura, sementes, âncora, SE, GRN, BN.
+
+## 2026-11-02: receita bp10 + aug + TTA nos 3 datasets
+- Para fechar a receita nos 3 datasets com a mesma configuração: lançados disc_g20_l_bp10_aug e disc_g20_p_bp10_aug (bp 1.0 + geo_aug, 200 ép.), no topo da fila, cada um com eval gem/gem_tta em val e teste. O e_bp10_aug (eggs) já treina.
+- Eval só: gem_tta sobre o l_bp10 (larvae, 200 ép., já treinado).
