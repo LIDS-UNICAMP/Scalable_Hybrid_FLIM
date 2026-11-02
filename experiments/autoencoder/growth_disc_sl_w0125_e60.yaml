@@ -16,7 +16,7 @@ grid:
   - 50
 resources:
   gpu_ids:
-  - 2
+  - 3
   max_per_gpu: 1
   cpus_per_experiment: 10
   num_workers: 2

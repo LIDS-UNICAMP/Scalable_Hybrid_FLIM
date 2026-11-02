@@ -1,3 +1,4 @@
+# Jaci (02/11): 1 GPU 96 GB, teto 70%; 10 runs x 8 CPUs = 80 de 128 (62%)
 # lei de escala (c640): [32, 48, 64, 640], sem aug, 200 ep; N esperado 159344
 name: spifil_growth_disc_sl_c640_e200
 method: autoencoder
@@ -15,9 +16,9 @@ grid:
   - 50
 resources:
   gpu_ids:
-  - 2
+  - 0
   max_per_gpu: 1
-  cpus_per_experiment: 10
+  cpus_per_experiment: 8
   num_workers: 2
 runner_args:
   layerwise: 4

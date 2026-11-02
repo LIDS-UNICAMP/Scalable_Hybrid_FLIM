@@ -1698,3 +1698,545 @@ Fontes: svm_disc_a2_bp01_val, svm_disc_bp01c1280_val, svm_disc_bp01w64_val e svm
   - kernel 5 → 3: 0,899 → 0,875 (**perde**);
   - aug: 0,903 (plano).
 - **Junto com larvae (4 eixos planos):** dos 7 eixos com κ, **só o kernel 3 muda o κ além do ruído, e para pior.** O platô de ~0,90 em eggs e ~0,91 em larvae continua.
+- 22:28 LANÇA g20_e_anc03 na GPU0. A soma estava em 13,1 GB em 2 checagens seguidas.
+- 22:41 PAUSA g20_e_base (GPU2). O moliveira somava 19,6 GB na GPU2, acima de 19,5. Só havia eggs na GPU2, e esta era a mais nova (L4 desde 22:38, nenhum split pronto, splits seguem [1,2,3]). A família voltou ao fim da fila. Obs.: o crispim voltou ~21:25 com um lejepa vit_s16 (5 GB em cada GPU 1-3), que não entra na soma.
+- 22:54 RELANÇA g20_e_base (referência) na GPU1, splits [1,2,3]. A soma estava em 11,0–13,9 GB em 2 checagens seguidas.
+
+## 2026-11-01 22:58 [A4] g20 eggs: lei do backprop (gem L4) é monotônica e pequena
+
+| backprop nas camadas antigas | eggs gem L4 (s1 / s2 / s3) | média | larvae gem L4 (média) |
+|---|---|---|---|
+| 0,1 (base) | 0,909 / 0,892 / 0,894 | 0,899 | 0,910 |
+| 0,3 (e_bp03) | 0,914 / 0,920 / 0,881 | 0,905 | (pausado, volta pela fila) |
+| **1,0 (e_bp10, encoder todo livre)** | **0,923** / 0,900 / 0,903 | **0,908** | 0,914 |
+
+- **Lei:** o κ sobe de forma monotônica com o backprop, em eggs 0,899 → 0,905 → 0,908 e em larvae 0,910 → 0,914.
+  - O efeito total é **+0,010 em eggs e +0,004 em larvae**, ou seja, cada passo fica dentro do ruído.
+  - O s1 do e_bp10 (0,923) é o maior eggs em gem.
+- **Leitura:** **deixar o encoder inteiro livre (SPiFiL só como init) não estraga o κ e ajuda um pouco.** Isso bate com o controle aleatório, que mostrou o SPiFiL como inicializador: o treino pode mexer em tudo sem perder o benefício.
+- **Ressalva:** o avg L4 do e_bp10 é 0,883, empate com a base (0,880). O ganho só aparece no gem.
+- **Grupo eggs (gem L4, 4 eixos):** bp10 0,908, bp03 0,905, aug 0,903, k3 0,875. **Só o k3 sai do grupo.**
+- 23:06 PAUSA g20_l_grn (GPU3). O moliveira somava 19,8 GB na GPU3. Era a única larvae ali e não é referência. Os splits 1 e 2 já tinham L4 best_kappa, então grid.splits ficou [3]. A família voltou ao fim da fila.
+
+## 2026-11-01 23:29 [A4] g20 eggs, 6 eixos com κ val (gem L4; g20 × g20, todos com sonda gem)
+
+| eggs gem L4 | κ | Δ vs grupo (sem a própria) |
+|---|---|---|
+| e_bp10 (backprop 1,0) | **0,908** | +0,014 |
+| e_bp03 (backprop 0,3) | 0,905 | +0,010 |
+| e_aug (geo_aug) | 0,903 | +0,008 |
+| e_bn (batch_norm) | 0,897 | +0,000 |
+| e_bg0 (sem o fundo na loss) | 0,892 | −0,006 |
+| **e_k3 (kernel 3)** | **0,875** | **−0,026** |
+| base bp01w64c1280 (sonda avg) | 0,899 | — |
+
+- **Só o k3 sai do grupo (−0,026).** O resto fica numa faixa de 0,892–0,908 (largura 0,016), menor que a variação do pipeline na média de 3 splits (~0,018).
+- **Ordem de cima para baixo:** o backprop alto puxa para cima (bp10 > bp03 > base), e o bg0 e o bn ficam um pouco para baixo. Nenhum passa do ruído, exceto o k3.
+- **O BN não muda nada em eggs** (0,897), e o bg0 (fundo fora da loss) também não (0,892). **Reconstruir o fundo com peso 0,1 ou com peso 0 dá o mesmo κ.**
+- **Faltam em eggs:** w96 e w128 (largura) e os eixos novos da A6 (grn, anc3, anc03, se).
+- **Saúde:** 15 estágios rodando, 0 NaN, nenhuma divergência.
+- 23:35 LANÇA g20_l_anc03 na GPU2. O e_bg0 terminou e a soma caiu para 8,3–8,5 GB; o pico previsto é ~17,4 GB com ela.
+- 23:47 RELANÇA g20_l_grn na GPU1, só o split3 (a eval lê [1,2,3]). A soma estava em 12,6 GB; o pico previsto é ~18,5 GB.
+
+## 2026-11-02 00:36 [A4] CORREÇÃO GERAL: com svm_probe=false, o ckpt e o early stop seguem a val recon loss, não o κ
+- **Todos os runs disc_* e g20 têm `svm_probe: false`.** O `monitor_spec()` (methods/autoencoder/autoencoder_flim_module.py:587-590) troca o ModelCheckpoint e o EarlyStopping para `probe/val_recon_loss` (min). O `probe/svm_kappa` do yaml nunca é logado.
+- **Retiro o "confundidor da sonda"** (nota do A4 de 01/11, ~19:20). O embed_mode **não** escolhe o ckpt em nenhum dataset; o ckpt é sempre o mínimo da val loss. **Todas as comparações g20 × base são justas** em relação à seleção. Continua valendo a variação do pipeline inteiro (~0,018 na média de 3 splits).
+- **A sonda SVM nunca rodou durante o treino** (custo zero).
+- **Análise de parada antecipada:** A_reports/october/discovery_early_stop.md.
+  - Patience 20 é segura, mas poupa 4% (19% na L4).
+  - A alavanca real é max_epochs 60 com cosine (~69%), que pede um run de validação no κ.
+- 00:41 PAUSA g20_l_anc03 (GPU2), a pedido do A0, para abrir espaço ao base_e60. Nenhum split estava pronto. Volta como l_anc03_e60, em 2º na fila.
+- 00:41 LANÇA g20_base_e60 (referência e60, 9 pontos) na GPU2. A soma estava em 11,7 GB; o pico previsto é ~17,2 GB.
+- 02:24 LANÇA g20_e_d5_e60 na GPU1, no lugar do l_grn, que terminou. O pico previsto é ~19,2 GB. A cadeia svmq roda val_gem, val, test_gem e test.
+- 02:44 LANÇA g20_e_imp_e60 na GPU3, no lugar do e_w128, que terminou. A soma estava em 10,0 GB; o pico previsto é ~15,3 GB. A cadeia svmq roda val e depois test.
+- 02:58 LANÇA g20_e_dil2_e60 na GPU3 como backfill: o e_res49 não cabe em nenhuma GPU. Pico previsto ~18,9 GB. O e_res49 segue no topo; este é o pulo 1 de 2.
+
+## 2026-11-02 03:05 [A4] g20 larvae, κ val: l_grn (GRN na L4 1x1) empata
+- **gem L4 = 0,911**, contra 0,913 do grupo larvae (−0,002) e 0,910 da base (+0,001). **Empate.**
+- **Larvae com 5 eixos (gem L4):** aug 0,919, bg0 0,917, bp10 0,914, **grn 0,911**, sp100 0,903. Faixa de 0,016, toda dentro do ruído. O platô de larvae continua (~0,91).
+- Sem anomalias (17 rodando).
+- 03:35 LANÇA g20_e_res49_e60 na GPU2, onde o e_w96 terminou. Soma em 9,8 GB; pico previsto ~18,5 GB com o res49 a ~7,5. Vou medir o pico.
+
+## 2026-11-02 03:36 [A4] g20 eggs, κ val: a lei de largura (gem L4) é plana
+
+| largura L1–L3 (+ 1x1×1280) | s1 / s2 / s3 | média |
+|---|---|---|
+| 32/48/64 (base bp01w64c1280) | 0,909 / 0,892 / 0,894 | 0,899 |
+| 48/64/96 (e_w96) | 0,907 / 0,910 / 0,887 | **0,901** |
+| 64/96/128 (e_w128) | 0,914 / 0,901 / 0,884 | 0,900 |
+
+- **Largura 64 → 96 → 128 dá 0,899 → 0,901 → 0,900: plano.** Mais filtros SPiFiL por camada não mudam eggs.
+  - É coerente com o diagnóstico de eggs (99% do erro é ovo ↔ impureza, por detalhe fino): ter mais protótipos do mesmo tamanho de patch não muda a resolução.
+- **Grupo eggs em gem L4, 8 eixos:** bp10 0,908, bp03 0,905, aug 0,903, w96 0,901, w128 0,900, bn 0,897, bg0 0,892, **k3 0,875**. Só o kernel 3 sai do grupo.
+- **Dos 13 eixos com κ (eggs + larvae), só o kernel 3 passa do ruído, e para baixo.** Os botões de treino e de largura estão esgotados. **O próximo ganho em eggs tem que vir de resolução ou campo receptivo** (k7, d5/d6, L4 sem pool), como indica o diagnóstico.
+
+## 2026-11-02 04:12 [A4] g20, κ val: a âncora ao SPiFiL (l_anc3) derruba larvae; e_grn empata
+- **l_anc3 (larvae, âncora L2-SP no SPiFiL), gem L4:** 0,893 / 0,865 / 0,836, média **0,865**.
+  - Fica **−0,048 abaixo do grupo larvae** (0,913) e −0,045 abaixo da base.
+  - **É a maior perda da g20, cerca de 3x o ruído,** e cai em todos os splits.
+  - **Prender os pesos ao SPiFiL piora larvae.** Isso bate com a regra anterior: o SPiFiL ajuda como inicializador, e deixar o treino mover os pesos (bp10 0,914) é melhor que segurá-los.
+- **e_grn (eggs, GRN na L4), gem L4:** 0,908 / 0,897 / 0,888, média 0,898. Empate com o grupo (+0,000). O GRN é neutro em eggs e larvae.
+- **Prioridades na vigia agora:** e_imp_e60, e_res49_e60, e_k7, e_d5_e60, e_dil2_e60, base_e60 (gate das 60 épocas) e e/l_anc03.
+- 04:12 LANÇA g20_e_sp100_e60 na GPU0, onde o l_anc3 terminou. Soma em 13,2 GB; pico previsto ~18,0 GB.
+- 04:12 LANÇA g20_e_se_e60 na GPU3 (regra nova do usuário: encher até ~19,5 de pico). Soma em 12,8 GB; pico previsto ~19,0 GB.
+
+## 2026-11-02 05:09 [A4] g20, κ val: a âncora ao SPiFiL (anc3) derruba eggs também, ainda mais forte
+- **e_anc3 (eggs, âncora L2-SP no SPiFiL), gem L4:** 0,851 / 0,824 / 0,812, média **0,829**.
+  - Fica **−0,069 abaixo do grupo eggs** (0,898), a maior perda de toda a g20, cerca de 4x a variação do pipeline. Cai nos 3 splits.
+- **Com o l_anc3 (−0,048 em larvae):** a âncora L2-SP no SPiFiL perde nos 2 datasets testados.
+- **Regra:** **segurar os pesos perto do SPiFiL piora o κ, e soltar ajuda** (backprop 0,1 → 1,0 sobe +0,010 em eggs).
+  - O SPiFiL vale como **ponto de partida**, não como alvo a manter.
+  - Isso fecha com o controle aleatório (o SPiFiL ganha como inicializador) e com a deriva medida pela A8 (o treino move muito as L2/L3).
+- **Previsão para o anc03 (âncora mais fraca):** perda menor que a do anc3. Se o padrão for monotônico, nenhum valor de âncora ganha da ausência de âncora.
+- 05:53 LANÇA g20_e_sp25_e60 na GPU3, onde o e_imp_e60 terminou. Pico previsto ~19,0 GB. É backfill: o e_d6 (~5,5) não cabe.
+
+## 2026-11-02 06:06 [A4] g20, κ val: e_imp_e60 cai (−0,052), mas mistura dois efeitos
+- **e_imp_e60 (semente SPiFiL para a impureza + 60 épocas), gem L4:** 0,860 / 0,848 / 0,832, média **0,847**.
+  - Contra a base de 200 épocas (0,899): −0,052. Contra o grupo: −0,044.
+  - O ckpt fica nas épocas 58–59, ou seja, o best está no fim do cosine de 60.
+- **Mistura dois efeitos:** a semente de impureza e o corte para 60 épocas.
+  - Para separar, preciso do **base_e60 de eggs**, que ainda não tem κ (o growth está no protozoan).
+  - Se o base_e60 de eggs também cair ~0,05, a culpa é das 60 épocas, e **o gate das 60 épocas falha.**
+  - Se o base_e60 ficar perto de 0,899, a culpa é da semente de impureza.
+- **A confusão ovo ↔ impureza do e_imp (val) está rodando** (CPU, flock). Ela vai dizer se as 137 impurezas → ovo caem.
+- O l_anc03 não é anomalia: a A6 o pausou às 00:41 para o base_e60, e ele volta como l_anc03_e60.
+- 06:16 LANÇA g20_nomask_e60 na GPU3, onde o e_dil2_e60 terminou. Pico previsto ~19,4 GB. É backfill: o e_d6 (~5,5) não cabe.
+
+## 2026-11-02 06:18 [A4] confusão val do e_imp_e60: a semente de impureza não reduz o impureza → ovo (sobe)
+
+| eggs gem L4, soma de 3 splits | erros | impureza → ovo | ovo → impureza | ovo ↔ ovo | recall da impureza |
+|---|---|---|---|---|---|
+| base bp01w64c1280 (200 épocas) | 220 | **137** | 81 | 2 | 0,945 |
+| **e_imp_e60** (semente de impureza + 60 épocas) | 329 | **190** | 131 | 8 | 0,924 |
+
+- **Impureza → ovo** por classe (base → e_imp):
+  - nana 25 → 41, diminuta 10 → 17, ancy 8 → 17, entero 17 → 28;
+  - ascaris 33 → 39, trichu 17 → 11, schisto 9 → 14, taenia 18 → 23.
+- **A hipótese "mais sementes de impureza cortam os falsos positivos" não se confirma nesta run.** O impureza → ovo sobe (+53), e o ovo → impureza também (+50).
+  - O padrão de erro é o mesmo: 98% ovo ↔ impureza, e as mesmas classes no topo (Enterobius, Schistosoma, Ancylostoma).
+  - O erro cresce por igual, como numa degradação geral, e não como troca de um tipo de erro por outro.
+- **A queda uniforme aponta mais para as 60 épocas do que para a semente.** Uma semente de impureza que funcionasse baixaria o impureza → ovo, mesmo à custa de outro erro. **O base_e60 de eggs decide.**
+
+## 2026-11-02 06:29 [A4] GATE das 60 épocas (base_e60, gem L4, val): falha em eggs e passa em larvae
+
+| dataset | base_e60 (s1 / s2 / s3) | média | base de 200 épocas | Δ | gate (≥ ref − 0,018) |
+|---|---|---|---|---|---|
+| **eggs** | 0,893 / 0,873 / 0,859 | **0,875** | 0,899 | **−0,024** | **REJEITA** |
+| larvae | 0,904 / 0,902 / 0,904 | 0,903 | 0,910 | −0,007 | **ACEITA** |
+| protozoan | — | pendente | 0,875 | — | — |
+
+- **Encurtar o cosine para 60 épocas custa ~0,024 de κ em eggs**, acima da variação do pipeline. Em larvae fica dentro do ruído.
+  - É coerente com o diagnóstico de eggs: ali o erro é de detalhe fino (ovo ↔ impureza), e o detalhe fino precisa de treino longo.
+- **Separação do e_imp_e60:** contra o base_e60 de eggs (mesmas 60 épocas), ele dá 0,847 contra 0,875, ou seja, **−0,028**.
+  - **A semente de impureza também piora eggs**, além do efeito das 60 épocas. São dois efeitos negativos de tamanho parecido.
+  - Junto com a confusão (impureza → ovo 137 → 190), **a semente extra de impureza não ajuda.**
+- **Consequência para as famílias e60 de eggs** (e_res49, e_d5, e_dil2, e_imp):
+  - **Elas devem ser comparadas com o base_e60 (0,875), não com 0,899.**
+  - O g20_kappa.py já mostra o gate. Para eggs, uso 0,875 como referência das e60.
+- 06:32 LANÇA g20_e_base_e100 na GPU1, onde o e_d5_e60 terminou. Pico previsto ~14,9 GB.
+- 06:41 LANÇA g20_bg1_e60 na GPU1 como backfill (o e_d6 não cabe). Pico previsto ~18,8 GB.
+
+## 2026-11-02 06:43 [A4] g20 eggs, κ val: e_dil2_e60 (dilation 2 na L3, +16 px de campo receptivo) empata com o base_e60
+- **e_dil2_e60, gem L4:** 0,877 / 0,854 / 0,871, média **0,868**.
+  - **Contra a referência certa, o base_e60 de eggs (0,875, mesmas 60 épocas): −0,007, empate.**
+  - Contra a base de 200 épocas (0,899): −0,031, mas isso é sobretudo o efeito das 60 épocas.
+- **Lei do campo receptivo (parte 1):** +16 px de campo receptivo na L3 por dilation, sem parâmetros novos, **não muda eggs**.
+  - Não confirma a hipótese 2 do diagnóstico (campo receptivo). **Resolução (res49) e profundidade (d5) ainda faltam.**
+- **Placar das e60 de eggs contra o base_e60 (0,875):** dil2 −0,007 (empate); imp −0,028 (perda).
+- 06:48 LANÇA g20_p_imp_e60 na GPU0, onde o e_anc03 terminou. Pico previsto ~18,1 GB. É backfill: o e_d6 daria ~19,7.
+- 06:49 PAUSA g20_p_imp_e60 (GPU0), lançada 2 min antes e sem split pronto, para abrir espaço ao e_d6 (eggs vem antes de protozoan). Volta em 1º na fila.
+- 06:49 LANÇA g20_e_d6_e60 na GPU0 (opção b do A0). Pico previsto ~19,7 GB.
+
+## 2026-11-02 06:54 [A4] g20 eggs, κ val: e_d5_e60 (profundidade 5) perde no limite contra o base_e60
+- **e_d5_e60 (uma conv a mais antes da 1x1; leitura gem na L5), gem:** 0,881 / 0,847 / 0,842, média **0,857**.
+  - **Contra o base_e60 (0,875): −0,018**, exatamente na borda da variação do pipeline, para baixo.
+- **Lei do campo receptivo e da profundidade (eggs, todas com 60 épocas, contra o base_e60 de 0,875):**
+  - dil2 (+16 px por dilation): 0,868 (−0,007);
+  - **d5 (+1 camada conv): 0,857 (−0,018)**.
+  - **Nenhum dos dois ganha.** A hipótese do campo receptivo/profundidade não se sustenta em eggs. O e_k3 (campo menor) perdia, mas aumentar o campo não ganha. **O campo atual já parece suficiente.**
+- **Resta a hipótese 1 (resolução da L4):** o e_res49_e60 ainda não tem κ. Também falta o e_k7 (200 épocas).
+- O g20_kappa.py agora lê a camada de topo de cada família (L4/L5/L6).
+- 06:58 RELANÇA g20_p_imp_e60 na GPU2, onde o e_res49_e60 terminou. Pico previsto ~15,0 GB.
+- 07:02 LANÇA g20_mask50_e60 na GPU2, junto com o p_imp. Pico previsto ~18,9 GB.
+
+## 2026-11-02 07:05 [A4] g20 eggs, κ val: lei da âncora L2-SP no SPiFiL. Qualquer âncora derruba ~0,07–0,09
+
+| λ da âncora (eggs, 200 épocas) | gem L4 (s1 / s2 / s3) | média | Δ vs base |
+|---|---|---|---|
+| 0 (base bp01w64c1280) | 0,909 / 0,892 / 0,894 | 0,899 | — |
+| **0,3 (e_anc03)** | 0,839 / 0,817 / 0,783 | **0,813** | **−0,086** |
+| **3,0 (e_anc3)** | 0,851 / 0,824 / 0,812 | **0,829** | **−0,070** |
+
+- **Corrijo a minha previsão:** a âncora fraca (0,3) **não** perde menos que a forte (3,0). As duas caem ~0,07–0,09, e a diferença entre elas (0,016) está dentro do ruído.
+  - **A lei não é dose-resposta. Qualquer termo L2-SP no SPiFiL estraga eggs.**
+  - O avg L4 do anc3 cai ainda mais: 0,701 contra 0,880.
+- **Os ckpts do e_anc03 saem em épocas 139 / 89 / 182,** com o best antes do fim. A âncora deixa a val loss parar de melhorar cedo.
+- **Junto com o larvae (l_anc3 −0,048):** é a regra mais forte da g20. **O SPiFiL serve de inicialização, não de restrição.**
+  - **A ideia da A8** (segurar o contraste objeto × fundo do SPiFiL que o backprop apaga) **não vira κ**: o contraste que o treino apaga não é o que o SVM usa.
+
+## 2026-11-02 07:22 [A4] g20 eggs, κ val: res49 (L4 a 49×49) perde e sp100 empata. Nenhuma hipótese de construção ganha em eggs
+
+| eggs, 60 épocas, gem L4 | s1 / s2 / s3 | média | Δ vs base_e60 (0,875) |
+|---|---|---|---|
+| **e_res49_e60 (L4 a 49×49, sem um pool)** | 0,859 / 0,826 / 0,856 | **0,847** | **−0,028** |
+| e_sp100_e60 (100 superpixels) | 0,883 / 0,877 / 0,844 | 0,868 | −0,007 |
+| e_dil2_e60 (dilation 2) | 0,877 / 0,854 / 0,871 | 0,868 | −0,007 |
+| e_d5_e60 (profundidade 5) | 0,881 / 0,847 / 0,842 | 0,857 | −0,018 |
+| e_imp_e60 (semente de impureza) | 0,860 / 0,848 / 0,832 | 0,847 | −0,028 |
+
+- **A hipótese 1 do diagnóstico (mais resolução na L4 resolve o detalhe fino ovo ↔ impureza) não se confirma:** −0,028.
+  - Ressalva: o embedding gem continua com 1.280 dimensões, mas cada canal agora resume um mapa de 49×49, que é mais ruidoso. E com 60 épocas a L4 de 49×49 talvez não convirja.
+- **Placar das 5 hipóteses de construção em eggs (60 épocas):** 0 ganham, 2 empatam (sp100, dil2) e 3 perdem (d5, res49, imp).
+  - **Junto com os 8 eixos de treino e de largura (200 épocas), em que só o k3 se mexe, e para baixo,** eggs está num platô de ~0,90 (200 épocas) / ~0,875 (60 épocas).
+  - **O erro ovo ↔ impureza não é resolvido por resolução, campo receptivo, profundidade, largura, sementes ou âncora.**
+- **O que sobra testar:** a leitura (gem_tta, já na fila), e talvez a informação de **forma explícita** (a máscara de forma/área do SPiFiL como feature adicional) ou mais dados (o pcts mostra a inclinação).
+- 07:42 LANÇA g20_e_base_e400 na GPU3, onde o e_se_e60 terminou. Pico previsto ~19,6 GB.
+- 07:46 LANÇA g20_l_se_e60 na GPU0, onde o e_sp100_e60 terminou. Pico previsto ~19,6 GB.
+- 08:11 RELANÇA g20_l_bn (splits [2,3], 200 épocas) na GPU3, onde o e_k7 terminou. Pico previsto ~19,6 GB.
+- 08:46 LANÇA g20_p_aug_e60 na GPU1, onde o e_base terminou. Pico previsto ~19,3 GB. É backfill: o l_w96 (~5,6) não cabe.
+
+## 2026-11-02 08:54 [A4] gem_tta (8 rotações/flips na avaliação): o 1º ganho acima do ruído em eggs, e larvae passa o I-JEPA
+
+| bp01w64c1280 L4, κ val | gem (s1 / s2 / s3) | **gem_tta** (s1 / s2 / s3) | média gem → gem_tta | Δ |
+|---|---|---|---|---|
+| eggs | 0,909 / 0,892 / 0,894 | **0,943 / 0,906 / 0,887** | 0,899 → **0,912** | **+0,014** |
+| larvae | 0,896 / 0,918 / 0,915 | **0,959 / 0,923 / 0,955** | 0,910 → **0,946** | **+0,036** |
+| protozoan | 0,876 / 0,875 / 0,873 | pendente | 0,875 → ? | |
+
+- **larvae em gem_tta (0,946) passa o I-JEPA** (0,943, teste). Eggs fica a −0,028.
+- **Confusão em eggs, val, soma de 3 splits** (rodei com fit_svm/compute_metrics, CPU, flock; κ 0,941 / 0,911 / 0,890, que bate com o CSV dentro de ~0,003):
+
+  | | erros | impureza → ovo | ovo → impureza | ovo ↔ ovo | recall da impureza |
+  |---|---|---|---|---|---|
+  | gem | 220 | 137 | 81 | 2 | 0,945 |
+  | **gem_tta** | **185** | **111** | 73 | 1 | **0,956** |
+
+  - Por classe (gem → gem_tta): Ancylostoma 0,883 → **0,928**, Schistosoma 0,903 → **0,925** e H. nana 0,958 → 0,966. O Enterobius fica em 0,849.
+  - **O gem_tta corta sobretudo os falsos positivos de impureza (−26, −19%)**, o maior bloco de erro do diagnóstico. A média sobre orientações deixa o descritor do ovo invariante à rotação, e a impureza parecida com ovo numa orientação deixa de parecer nas outras.
+- **Leitura:** dos ~25 eixos de construção e treino testados, **o único ganho de eggs acima do ruído veio da leitura** (avg → gem → gem_tta). É o mesmo padrão do achado "a leitura é o maior eixo".
+- **Próximo passo natural:** juntar o geo_aug do treino (l_aug teve o maior gem em larvae) com o gem_tta da avaliação. Como as duas coisas buscam invariância a rotação, podem ser redundantes. Vale um teste.
+- 09:16 LANÇA g20_p_bp03_e60 na GPU3, onde o e_sp25_e60 terminou. Pico previsto ~19,6 GB. É backfill: o l_w96 (~5,6) não cabe.
+
+## 2026-11-02 09:33 [A4] gem_tta fecha nos 3 datasets: +0,014 / +0,036 / +0,043; e_se_e60 empata
+
+| bp01w64c1280 L4, κ val | gem | **gem_tta** (s1 / s2 / s3) | Δ | I-JEPA (teste, 50%) |
+|---|---|---|---|---|
+| eggs | 0,899 | **0,912** (0,943 / 0,906 / 0,887) | +0,014 | 0,940 |
+| larvae | 0,910 | **0,946** (0,959 / 0,923 / 0,955) | +0,036 | 0,943 |
+| **protozoan** | 0,875 | **0,917** (0,925 / 0,915 / 0,912) | **+0,043** | 0,864 |
+
+- **O gem_tta sobe nos 3 datasets e em 8 de 9 splits** (a exceção é eggs s3, −0,007). **É o maior ganho isolado medido desde a leitura avg → gem.**
+- **Contra o I-JEPA (o nosso é val, o dele é teste):** larvae +0,003, protozoan **+0,053**, eggs −0,028.
+- O ganho cresce com o dataset: eggs < larvae < protozoan. Protozoan (cistos, sem orientação canônica) é o que mais ganha com invariância a rotação.
+- **e_se_e60 (squeeze-excitation, 60 épocas), gem L4:** 0,880 / 0,866 / 0,868, média 0,871. Contra o base_e60 (0,875): −0,004, empate. O SE é neutro.
+- **O test_gemtta já existe no CSV do A0:** é o reporte final, e eu não leio.
+
+## 2026-11-02 09:50 [A4] eggs: 1ª base repetida (e_base) e e_k7 (kernel 7) empata
+
+| eggs gem L4, 200 épocas | s1 / s2 / s3 | média |
+|---|---|---|
+| base bp01w64c1280 (original) | 0,909 / 0,892 / 0,894 | 0,899 |
+| **e_base (o mesmo pipeline, retreinado)** | 0,907 / 0,915 / 0,884 | **0,902** |
+| e_k7 (kernel 7) | 0,914 / 0,905 / 0,886 | **0,902** |
+
+- **Variação do pipeline inteiro, medida direto** (base × e_base):
+  - por split: −0,002 / **+0,022** / −0,010 (desvio ~0,016);
+  - **na média de 3 splits: +0,003.**
+  - Bate com a regra do A0: um split sozinho varia ~0,02, e a média de 3 é bem mais estável.
+  - **Nova referência de eggs em 200 épocas: ~0,900** (média das duas bases).
+- **e_k7 = 0,902, empate exato com o e_base.**
+- **Lei do kernel em eggs:** k3 0,875 → k5 ~0,900 → k7 0,902. **Do 3 para o 5 ganha, do 5 para o 7 fica plano.** Junto com dil2 e d5, **o campo receptivo do kernel 5 já é suficiente**, e o k3 perdia por ser pequeno demais.
+- O "+0,025 contra o grupo" que o g20_kappa mostra para o e_k7 engana: o grupo de eggs agora inclui as famílias de 60 épocas, que ficam ~0,025 mais baixas. **Comparo as famílias de 200 épocas com o e_base e as de 60 com o base_e60.**
+
+## 2026-11-02 10:02 [A4] eggs: geo_aug (treino) + gem_tta (avaliação) = 0,920, o maior eggs em val
+
+| eggs L4, κ val (200 épocas) | s1 / s2 / s3 | média |
+|---|---|---|
+| base, gem | 0,909 / 0,892 / 0,894 | 0,899 |
+| e_aug, gem | 0,923 / 0,900 / 0,886 | 0,903 |
+| base, gem_tta | 0,943 / 0,906 / 0,887 | 0,912 |
+| **e_aug, gem_tta** | **0,938 / 0,916 / 0,906** | **0,920** |
+
+- **O aug e o TTA não são redundantes.**
+  - TTA sobre o aug: +0,017.
+  - Aug sobre o TTA: +0,008, que vem do s2 (+0,010) e do s3 (+0,019); o s1 fica em −0,005.
+  - O aug no treino ensina a rede a ver o objeto em várias orientações, e o TTA na avaliação faz a média sobre elas. As duas coisas se somam, mesmo que pouco.
+- **Distância ao I-JEPA em eggs (teste, 50%): −0,020** (era −0,041 com gem e −0,028 com gem_tta).
+- **e_sp25_e60 (25 superpixels, 60 épocas), gem L4:** 0,899 / 0,864 / 0,881, média 0,881. Contra o base_e60 (0,875): +0,006, empate.
+  - **Lei das sementes em eggs (60 épocas):** sp25 0,881, padrão 0,875, sp100 0,868. Plana: a diferença total (0,013) está dentro do ruído.
+- 10:08 LANÇA g20_p_bn_e60 na GPU0, onde o l_se_e60 terminou. Pico previsto ~19,1 GB. É backfill: l_w96 e p_w96 (~5,6) não cabem.
+
+## 2026-11-02 10:50 [A4] larvae: geo_aug + gem_tta = 0,953, estável nos 3 splits
+
+| larvae L4, κ val | s1 / s2 / s3 | média |
+|---|---|---|
+| base, gem | 0,896 / 0,918 / 0,915 | 0,910 |
+| l_aug, gem | 0,924 / 0,919 / 0,915 | 0,919 |
+| base, gem_tta | 0,959 / 0,923 / 0,955 | 0,946 |
+| **l_aug, gem_tta** | **0,949 / 0,954 / 0,955** | **0,953** |
+
+- **Aug + TTA dá o maior larvae em val (0,953), +0,010 acima do I-JEPA** (0,943, teste).
+- **É o mais estável medido:** desvio de 0,003 entre splits. A base com gem_tta tinha o s2 em 0,923.
+  - O aug dá pouco na média (+0,007 sobre a base com TTA), mas **tira a oscilação entre splits**.
+- **O mesmo padrão em eggs** (aug + TTA 0,920 contra 0,912 do TTA sozinho): **o aug no treino e o TTA na avaliação somam nos 2 datasets.** A combinação candidata para os 3 é bp01w64c1280 + geo_aug + gem_tta.
+- Falta o p_aug com gem_tta (protozoan: o TTA sozinho já dá 0,917).
+
+## 2026-11-02 11:07 [A4] nota curta: l_se_e60 empata
+- **l_se_e60 (squeeze-excitation, larvae, 60 épocas), gem L4:** 0,915 / 0,922 / 0,890, média 0,909.
+  - Contra o base_e60 de larvae (0,903): +0,006, empate.
+- **O SE é neutro nos 2 datasets** (e_se_e60 −0,004).
+- 11:23 LANÇA g20_p_aug200 na GPU0, onde o e_d6_e60 terminou. Pico previsto ~16,7 GB. A cadeia svmq roda val_gem, val, val_gemtta, test_gem, test e test_gemtta, tudo sob flock + nice.
+
+## 2026-11-02 11:24 [A4] eggs: bp10 (encoder todo livre) + gem_tta = 0,925, o novo maior eggs em val
+
+| eggs L4, gem_tta, κ val | s1 / s2 / s3 | média | Δ vs base TTA |
+|---|---|---|---|
+| base bp01w64c1280 | 0,943 / 0,906 / 0,887 | 0,912 | — |
+| e_aug | 0,938 / 0,916 / 0,906 | 0,920 | +0,008 |
+| **e_bp10 (backprop 1,0)** | **0,935 / 0,920 / 0,918** | **0,925** | **+0,012** |
+
+- **Com TTA, o efeito do bp10 aumenta:** +0,010 sem TTA (gem 0,908 contra 0,899) e +0,012 com TTA.
+- **O e_bp10 com TTA é o mais estável em eggs:** os 3 splits ficam entre 0,918 e 0,935. Na base com TTA, o s3 ficava em 0,887.
+- **Distância ao I-JEPA em eggs (teste, 50%): −0,016.**
+- **Candidata para eggs:** bp10 + geo_aug + gem_tta. Como o bp10 e o aug somaram cada um separadamente com o TTA (+0,012 e +0,008), os dois juntos podem chegar a ~0,93. Vale treinar e_bp10_aug.
+- 11:42 LANÇA g20_e_bp10_aug na GPU2, onde o base_e60 terminou. Pico previsto ~19,35 GB. A cadeia svmq tem 6 evals, sob flock + nice.
+
+## 2026-11-02 12:05 [A4] eggs: e_base com TTA confirma o bp10; a profundidade cai de forma monotônica (d6)
+- **e_base + gem_tta (repetição da base):** 0,928 / 0,916 / 0,881, média **0,908**, contra 0,912 da base original (−0,004).
+  - **Referência de eggs com TTA: ~0,910** (média das duas bases).
+  - **e_bp10 + TTA = 0,925, ou seja, +0,015 sobre essa referência.** É mais que a variação de repetição (0,004 na média), então **o ganho do bp10 com TTA é real.**
+- **e_d6_e60 (profundidade 6; gem na L6):** 0,843 / 0,845 / 0,865, média **0,851**. Contra o base_e60 (0,875): **−0,024**.
+  - **Lei de profundidade em eggs (60 épocas, gem):** L4 (base) 0,875 → d5 0,857 → d6 0,851. **Cai a cada camada.** Coerente com o R2 de out/30 (kernel 5 + pool: o κ máximo era na L3–L4).
+- **Ranking de eggs com TTA (200 épocas):**
+
+  | configuração | κ |
+  |---|---|
+  | bp10 | 0,925 |
+  | aug | 0,920 |
+  | base (2 repetições) | 0,910 |
+
+  - Para eggs, os ganhos estão no **backprop livre + invariância a rotação**. Profundidade, resolução e campo receptivo não ajudam.
+- 12:20 RELANÇA g20_l_bp03 (splits [2,3], 200 épocas) na GPU1, onde o e_base_e100 terminou. Pico previsto ~19,5 GB.
+
+## 2026-11-02 12:32 [A4] GATE das 60 épocas FECHADO (base_e60, gem L4, κ val)
+
+| dataset | base_e60 (s1 / s2 / s3) | média | 200 épocas | Δ | gate (≥ ref − 0,018) |
+|---|---|---|---|---|---|
+| eggs | 0,893 / 0,873 / 0,859 | 0,875 | 0,899 | −0,024 | **REJEITA** |
+| larvae | 0,904 / 0,902 / 0,904 | 0,903 | 0,910 | −0,007 | **ACEITA** |
+| protozoan | 0,874 / 0,859 / 0,852 | 0,861 | 0,875 | −0,014 | **ACEITA** (na borda) |
+
+- **Regra:** 60 épocas bastam para **larvae** e (na borda) para **protozoan**, e economizam ~69% do tempo. **Eggs precisa das 200 épocas** (o detalhe fino ovo ↔ impureza demora a ser aprendido).
+- **Ordem do custo de cortar épocas:** eggs (−0,024) > protozoan (−0,014) > larvae (−0,007). É a mesma ordem da dificuldade do erro restante.
+- **Para a busca:** dá para triar eixos com 60 épocas em larvae e protozoan e confirmar os melhores com 200. Em eggs, as famílias e60 são comparáveis entre si (contra o base_e60), mas **não** contra as de 200 épocas.
+
+## 2026-11-02 12:59 [A4] eggs: 100 épocas = 60 épocas. O ganho das 200 épocas aparece só no fim
+
+| eggs, base bp01w64c1280, gem L4, κ val | s1 / s2 / s3 | média |
+|---|---|---|
+| 60 épocas (base_e60) | 0,893 / 0,873 / 0,859 | 0,875 |
+| **100 épocas (e_base_e100)** | 0,890 / 0,871 / 0,858 | **0,873** |
+| 200 épocas (base + e_base) | 0,909 / 0,892 / 0,894 · 0,907 / 0,915 / 0,884 | **~0,900** |
+
+- **Em eggs, a lei das épocas não é suave:** 60 → 100 não muda nada (−0,002), e 100 → 200 sobe +0,027.
+  - Com o cosine reescalado, a parte final de lr baixa da run de 200 épocas dura mais que a de 60 ou 100. **Hipótese:** o ganho vem de um treino longo com lr baixa (ajuste fino), não do número de épocas em si.
+  - **Teste barato:** 100 épocas com cosine + uma cauda longa de lr baixa (por exemplo, 50 épocas a eta_min), ou 200 épocas com warm restart.
+- **Com 100 épocas não dá para economizar em eggs:** fica igual ao de 60 (0,873) e perde −0,027 para o de 200. **Para eggs, 200 épocas continuam necessárias.**
+- l_bp10 + gem_tta: 2 de 3 splits (0,915 / 0,917). Espero o 3º.
+- 13:00 LANÇA g20_l_bp10_aug na GPU2, onde o p_imp_e60 terminou. Pico previsto ~19,8 GB. A cadeia svmq tem 6 evals.
+
+## 2026-11-02 13:10 [A4] larvae: bp10 + gem_tta (0,927) fica abaixo da base com TTA (0,946). O bp10 não soma em larvae
+
+| larvae L4, gem_tta, κ val | s1 / s2 / s3 | média |
+|---|---|---|
+| base bp01w64c1280 | 0,959 / 0,923 / 0,955 | 0,946 |
+| **l_aug** | 0,949 / 0,954 / 0,955 | **0,953** |
+| l_bp10 | 0,915 / 0,917 / 0,948 | 0,927 (−0,019) |
+
+- **Em larvae, o bp10 com TTA perde −0,019 para a base com TTA,** mesmo tendo empatado no gem sem TTA (0,914 contra 0,910). Os s1/s2 ficam baixos.
+  - Lembrete: o larvae é binário, e um treino sozinho varia ±0,05 entre variantes. O −0,019 está dentro do grão de larvae, mas **não há ganho**.
+- **Por dataset, o eixo que soma com o TTA:**
+  - **eggs:** bp10 (+0,012–0,015) e aug (+0,008);
+  - **larvae:** **só o aug** (+0,007, e é o mais estável). O bp10 não soma.
+  - **A receita comum aos 2 é geo_aug + gem_tta.** O bp10 só vale para eggs.
+- 13:25 LANÇA g20_p_bp10_aug na GPU3, onde o l_bn terminou. Pico previsto ~19,7 GB. A cadeia svmq tem 6 evals.
+
+## 2026-11-02 13:46 [A4] nota curta: p_imp_e60 empata
+- **p_imp_e60 (semente de impureza, protozoan, 60 épocas), gem L4:** 0,872 / 0,847 / 0,857, média 0,859.
+  - Contra o base_e60 de protozoan (0,861): −0,002, empate.
+- **A semente de impureza não ajuda em nenhum dataset:** eggs −0,028 e protozoan −0,002.
+- 13:54 LANÇA g20_e_aug_wh na GPU3, onde o p_base terminou. Pico previsto ~18,3 GB, pelos picos medidos de ~3,6 por família. A cadeia svmq tem 6 evals.
+
+## 2026-11-02 14:02 [A4] g20 larvae, κ val: l_bn (batch_norm) perde
+- **l_bn, gem L4:** 0,894 / 0,894 / 0,873, média **0,887**.
+  - Contra a base (0,910): −0,023. Contra o grupo larvae (~0,913): −0,026.
+  - É uma perda acima da variação do pipeline (~0,018), e acontece nos 3 splits.
+  - O s1 vem do run anterior à pausa das 17:10 (o split 1 foi mantido); s2 e s3 são do relançamento.
+- **O BN é neutro em eggs** (e_bn 0,897, empate) **e perde em larvae** (−0,023). **Não use BN.**
+- **Placar de larvae (gem L4, 200 épocas):** aug 0,919, bg0 0,917, bp10 0,914, grn 0,911, sp100 0,903, **bn 0,887**, **anc3 0,865**.
+
+## 2026-11-02 14:24 [A4] ANOMALIA: a leitura gem_tta_pw (PCA-whitening + L2) colapsa
+- **svm_disc_bp01w64c1280_val_gemttapw.csv:**
+  - eggs κ 0,343 / 0,239 / 0,444;
+  - larvae κ 0,000 / 0,015, com acc balanceada 0,50 (uma classe só).
+- **Causa provável:** o dim é 1.276 (eggs) e 878 (larvae), ou seja, o PCA (eval/svm.py:698) fica com ~n_treino componentes. Branquear os componentes de variância ~0 amplifica ruído.
+- **Correção sugerida:** limitar os componentes (256 ou 95% da variância) e/ou somar um eps antes de branquear. **O gem_tta sem pw continua válido.**
+- 14:41 LANÇA g20_e_aug_pn na GPU1, onde o p_aug_e60 terminou. Pico previsto ~18,6 GB. A cadeia svmq tem 3 evals.
+
+## 2026-11-02 15:00 [A4] nota curta: p_base (base de protozoan repetida)
+- **p_base, gem L4:** 0,887 / 0,887 / 0,869, média 0,881, contra 0,875 da base original.
+  - Variação de repetição na média: +0,006.
+- **Referência de protozoan em gem: ~0,878.** Com as duas repetições, a variação da média de 3 splits é 0,003 (eggs) e 0,006 (protozoan).
+- O gemttapw de larvae s3 também deu κ 0,000. O colapso está confirmado nos 5 splits medidos.
+- 15:08 LANÇA g20_e_aug_div na GPU3, onde o p_bp03_e60 terminou. Pico previsto ~18,3 GB. A cadeia svmq tem 3 evals.
+
+## 2026-11-02 15:16 [A4] gem_tta_pwr (PCA-whitening regularizado + L2): eggs 0,942, o 1º eggs em val acima do I-JEPA
+
+| bp01w64c1280 L4, κ val | gem | gem_tta | **gem_tta_pwr** (s1 / s2 / s3) | Δ vs tta | I-JEPA (teste) |
+|---|---|---|---|---|---|
+| eggs | 0,899 | 0,912 | **0,946 / 0,942 / 0,938, média 0,942** | **+0,030** | 0,940 |
+| larvae | 0,910 | 0,946 | **0,958 / 0,944 / 0,980, média 0,961** | +0,015 | 0,943 |
+| protozoan | 0,875 | 0,917 | pendente | | 0,864 |
+
+- **O whitening regularizado consertou o colapso do pw** e ganha +0,030 em eggs, o maior ganho isolado em eggs medido até agora.
+- **Eggs também fica mais estável:** os splits vão de 0,938 a 0,946 (antes, de 0,887 a 0,943).
+- **Ganho acumulado de eggs só pela leitura:** avg 0,880 → gem 0,899 → gem_tta 0,912 → gem_tta_pwr 0,942 (**+0,062**, com o mesmo encoder).
+- **Ressalva:** o PCA é ajustado no **treino**, então não há vazamento da val. Mesmo assim, o dim (1.276 / 878) cresce com o n_treino. Vale confirmar no teste, como o A0 já faz.
+- **Próximo:** combinar com o melhor treino (e_bp10 / e_aug) + gem_tta_pwr.
+
+## 2026-11-02 15:26 [A4] gem_tta_pwr fecha nos 3 datasets: os 3 ficam acima do I-JEPA em val
+
+| bp01w64c1280 L4, κ val | gem | gem_tta | **gem_tta_pwr** | I-JEPA (teste) |
+|---|---|---|---|---|
+| eggs | 0,899 | 0,912 | **0,942** | 0,940 |
+| larvae | 0,910 | 0,946 | **0,961** | 0,943 |
+| protozoan | 0,875 | 0,917 | **0,926** (0,935 / 0,921 / 0,922) | 0,864 |
+
+- **O pwr sobe nos 3 datasets:** +0,030 / +0,015 / +0,009 sobre o gem_tta.
+- **É a 1ª vez que o mesmo encoder (bp01w64c1280 L4) passa o I-JEPA nos 3 datasets em val.** Ressalva: o I-JEPA é teste e o nosso é val, e é a val que usamos para selecionar. **O teste do A0 decide.**
+- **Ganho total só pela leitura,** com o mesmo encoder, de avg a gem_tta_pwr: eggs +0,062, larvae +0,044, protozoan +0,089 (avg L4 0,837).
+- 15:29 LANÇA g20_e_aug_ipc3 na GPU0, onde o p_bn_e60 terminou. Pico previsto ~15,9 GB. A cadeia svmq tem 3 evals.
+- 15:30 LANÇA g20_e_aug_knn na GPU2. O disc_pcts está acabando (42/45, fila vazia), o que abriu espaço.
+- 15:30 LANÇA g20_l_w96 na GPU1. O disc_pcts está acabando (42/45, fila vazia), o que abriu espaço.
+
+## 2026-11-02 15:38 [A4] nota curta: p_aug_e60 empata (gem, sem TTA)
+- **p_aug_e60 (geo_aug, protozoan, 60 épocas), gem L4:** 0,869 / 0,860 / 0,823, média 0,851.
+  - Contra o base_e60 de protozoan (0,861): −0,010, empate. O s3 fica baixo.
+- **Como em eggs e larvae, o aug sozinho no gem quase não muda nada.** O ganho do aug apareceu **junto com o TTA**. Vale avaliar o p_aug_e60 com gem_tta / gem_tta_pwr.
+
+## 2026-11-02 15:49 [A4] nota curta: p_bp03_e60
+- **p_bp03_e60 (backprop 0,3, protozoan, 60 épocas), gem L4:** 0,886 / 0,863 / 0,867, média 0,872.
+  - Contra o base_e60 de protozoan (0,861): +0,011, empate, puxando para cima.
+- **Mesma direção de eggs** (bp 0,1 → 0,3 → 1,0 monotônico para cima).
+
+## 2026-11-02 16:21 [A4] decomposição da leitura: o whitening (pwr) e o TTA somam de forma quase aditiva
+
+| bp01w64c1280 L4, κ val | gem | gem_pwr | gem_tta | gem_tta_pwr |
+|---|---|---|---|---|
+| eggs | 0,899 | **0,928** (0,937 / 0,932 / 0,916) | 0,912 | **0,942** |
+| larvae | 0,910 | 0,920 (0,933 / 0,900 / 0,928) | 0,946 | **0,961** |
+| protozoan | 0,875 | ~0,883 (s1 / s2 0,884 / 0,883; s3 pendente) | 0,917 | **0,926** |
+
+- **Ganho de cada parte sobre o gem:**
+
+  | | pwr | TTA | soma das partes | os dois juntos |
+  |---|---|---|---|---|
+  | eggs | +0,029 | +0,013 | 0,042 | **+0,043** |
+  | larvae | +0,010 | +0,036 | 0,046 | **+0,051** |
+  | protozoan | ~+0,008 | +0,043 | ~0,051 | **+0,052** |
+
+  - **Os efeitos são aditivos:** o combinado ≈ a soma das partes.
+- **O que mais ajuda depende do dataset:**
+  - **eggs: o whitening** (+0,029). Ele separa direções de baixa variância (detalhe fino ovo ↔ impureza) que o SVM linear não via com a escala original.
+  - **larvae e protozoan: o TTA** (+0,036 e +0,043). Sem orientação canônica, a média sobre rotações conta mais.
+  - É coerente com o diagnóstico de eggs (o erro é de detalhe fino, não de orientação).
+
+## 2026-11-02 16:42 [A4] nota curta: p_bn_e60 perde; o gem_pwr de protozoan fecha
+- **p_bn_e60 (batch_norm, protozoan, 60 épocas), gem L4:** 0,839 / 0,855 / 0,836, média **0,843**.
+  - Contra o base_e60 (0,861): **−0,018**, perda no limite.
+- **O BN perde em larvae (−0,023) e protozoan (−0,018) e empata em eggs. Não usar BN.**
+- **gem_pwr de protozoan:** 0,884 / 0,883 / 0,889, média **0,885**, ou seja, +0,010 sobre o gem. A decomposição de protozoan fica: pwr +0,010, TTA +0,043, os dois +0,052.
+- 16:50 LANÇA g20_p_w96_e60 na GPU1, onde o l_bp03 terminou. Pico previsto ~19,6 GB. A fila esvaziou.
+- 17:02 Evals de referência base_e60 gemttapwr (val e depois test) enfileiradas no flock, na sessão svmq_base_e60_pwr.
+- 17:02 LANÇA g20_sl_w050_e200 na GPU0, a 1ª da lei de escala (largura 0,5x). Pico previsto ~18,9 GB.
+- 17:03 LANÇA g20_sl_w025_e200 na GPU1 (pedido do usuário: chegar a ~19,5).
+- 17:03 LANÇA g20_sl_w025_e60 na GPU2 (pedido do usuário: chegar a ~19,5).
+- 17:03 LANÇA g20_sl_w0125_e200 na GPU3 (pedido do usuário: chegar a ~19,5).
+- 17:08 LANÇA g20_sl_w050_e60 na GPU0. Medido: w050 ~1,8 GB e w025 ~1,3 GB. Pico previsto ~19,4 GB.
+
+## 2026-11-02 17:23 [A4] eggs: bp10 + gem_tta_pwr = 0,949, o maior eggs em val e o mais estável
+
+| eggs L4, κ val | gem | gem_tta | gem_tta_pwr (s1 / s2 / s3) |
+|---|---|---|---|
+| base | 0,899 | 0,912 | 0,942 (0,946 / 0,942 / 0,938) |
+| **e_bp10** | 0,908 | 0,925 | **0,949 (0,951 / 0,948 / 0,947)** |
+
+- **O bp10 soma com todas as leituras:** +0,009 (gem), +0,013 (tta) e +0,007 (tta_pwr).
+- **Eggs em 0,949, +0,009 sobre o I-JEPA** (0,940, teste). **Desvio entre splits de 0,002, o mais estável medido.**
+- **Melhor por dataset até aqui (val):**
+
+  | dataset | configuração | κ |
+  |---|---|---|
+  | eggs | bp10 + gem_tta_pwr | 0,949 |
+  | larvae | base + gem_tta_pwr (o l_aug ainda sem pwr) | 0,961 |
+  | protozoan | base + gem_tta_pwr | 0,926 |
+
+- **Próximo:** l_aug e p_bp03 com gem_tta_pwr.
+
+## 2026-11-02 17:35 [A4] nota curta: e_aug + gem_tta_pwr = 0,937. Com o whitening, o aug deixa de somar em eggs
+- **e_aug + gem_tta_pwr:** 0,938 / 0,939 / 0,936, média 0,937.
+  - Contra a base com pwr (0,942): −0,005, empate. Contra o e_bp10 com pwr (0,949): −0,012.
+- **Em eggs, o ganho do aug some com o pwr** (com tta sem pwr, ele dava +0,008).
+  - **O whitening parece cobrir o que o aug fazia.** Para eggs, a receita fica **bp10 + gem_tta_pwr (0,949)**, sem aug.
+- 17:44 PAUSA g20_p_w96_e60 (GPU1). A soma medida passou de 19,8 em 2 checagens (19,84 e 19,93). Era a protozoan mais nova; nenhum split estava pronto. Volta ao fim da fila.
+- 17:44 LANÇA g20_sl_w0125_e60 na GPU3 (~1,2 GB).
+- 17:45 LANÇA g20_sl_c160_e200 na GPU1 como backfill (~2,5 GB; as w200 ainda não têm medida). Pico previsto ~17,9 GB.
+
+## 2026-11-02 17:51 [A4] g20 larvae, κ val: l_bp03 (backprop 0,3) é o maior larvae em gem: 0,933
+- **l_bp03, gem L4:** 0,939 / 0,928 / 0,934, média **0,933**.
+  - Contra a base (0,910): **+0,023**. Contra o grupo de larvae (~0,913): +0,020.
+  - Acima da variação do pipeline, e **todos os splits ficam acima de 0,928**.
+  - Lembrete: o l_bp03 só retreinou os s2/s3 depois da pausa; o s1 é do run anterior.
+- **Lei do backprop em larvae (gem L4):** 0,1 → 0,3 → 1,0 dá 0,910 → **0,933** → 0,914. **Não é monotônico:** tem pico em 0,3.
+  - Em eggs, o bp subia de forma monotônica (0,899 → 0,905 → 0,908).
+- **Próximo:** l_bp03 com gem_tta_pwr. A base com tta_pwr dá 0,961. Se o bp03 somar como o bp10 somou em eggs, pode chegar a ~0,97.
+- 17:54 LANÇA g20_sl_c160_e60 na GPU0. O disc_pcts saiu da GPU0 e o bg1_e60 terminou na GPU1.
+- 17:54 LANÇA g20_sl_c320_e200 na GPU0. O disc_pcts saiu da GPU0 e o bg1_e60 terminou na GPU1.
+- 17:54 LANÇA g20_sl_c320_e60 na GPU1. O disc_pcts saiu da GPU0 e o bg1_e60 terminou na GPU1.
+- 18:15 LANÇA g20_sl_c640_e200 na GPU3, onde o nomask_e60 terminou. Pico previsto ~19,3 GB.
+
+## 2026-11-02 18:27 [A4] nota curta: gate das 60 épocas na melhor leitura (gem_tta_pwr), parcial
+- **base_e60 + gem_tta_pwr, larvae:** 0,969 / 0,949 / 0,949, média **0,956**, contra 0,961 com 200 épocas: −0,005.
+  - **Com a melhor leitura, 60 épocas também bastam em larvae.**
+- **protozoan s1:** 0,914, contra 0,935 com 200 épocas (−0,021 no s1). Espero o s2/s3. Eggs ainda pendente.
+- Rodando: 11. 0 NaN, nenhum travado.
+
+## 2026-11-02 18:43 [A4] gate das 60 épocas com gem_tta_pwr: larvae passa, protozoan rejeita na borda
+
+| base_e60 + gem_tta_pwr | s1 / s2 / s3 | média | 200 épocas | Δ | gate (≥ −0,018) |
+|---|---|---|---|---|---|
+| larvae | 0,969 / 0,949 / 0,949 | 0,956 | 0,961 | −0,005 | **ACEITA** |
+| protozoan | 0,914 / 0,906 / 0,902 | 0,907 | 0,926 | −0,019 | **REJEITA (na borda)** |
+| eggs | — | pendente | 0,942 | | |
+
+- **Com a melhor leitura, o custo das 60 épocas em protozoan aumenta:** −0,014 com gem, −0,019 com tta_pwr. **Os ganhos das leituras finas também aparecem melhor com o treino longo.**
+- **Regra atualizada:** 60 épocas só para **larvae**. Eggs e protozoan usam 200 (ou 60 só para triagem, comparando entre e60).
+- 18:46 PAUSA g20_sl_c160_e60 (GPU0) na hora: a medida chegou a 20,03 GB. Era larvae+protozoan, a não-eggs mais nova; nenhum split pronto. Volta ao fim da fila.
+- 18:47 PAUSA PREVENTIVA g20_sl_c640_e200 (GPU3). Com a estimativa corrigida das c* (~3,6), o pico previsto da GPU3 dava ~19,9. Estava só na L1, então perdeu pouco. Volta ao fim da fila.
+
+## 2026-11-02 19:14 [A4] nota curta: l_aug + gem_tta_pwr = 0,957 (empate com a base pwr, 0,961)
+- **l_aug + gem_tta_pwr:** 0,964 / 0,949 / 0,959, média 0,957.
+- **Como em eggs (e_aug pwr 0,937 contra 0,942), o geo_aug deixa de somar com o whitening.** Regra: **com gem_tta_pwr, o aug é desnecessário nos 2 datasets.**
+- Próximo em larvae: l_bp03 + gem_tta_pwr (o bp03 é o único eixo de larvae acima do ruído no gem).
+- 19:26 LANÇA g20_sl_d3_e200 na GPU3 (estimativa ~2,5, ainda sem medida). Pico previsto ~18,8 GB.
+- 19:43 As 10 famílias que restavam na fila foram para a Jaci (decisão do A0). A fila em Athena ficou vazia; a A6 só vigia o teto até as famílias que rodam terminarem.
+
+## 2026-11-02 19:45 [A4] l_bp03 + tta_pwr empata; bg1_e60 (fundo com peso 1) empata em eggs
+- **l_bp03 + gem_tta_pwr:** 0,958 / 0,925 / 0,969, média **0,951**, contra 0,961 da base com pwr (−0,010, empate).
+  - **O ganho do bp03 no gem (+0,023) some com o whitening.**
+  - **Regra geral (eggs e larvae):** com gem_tta_pwr, os eixos de treino que ganhavam na leitura simples (aug, bp03) passam a empatar. O único que sobrevive é o **bp10 em eggs** (+0,007).
+  - **A leitura forte absorve a maior parte do que o treino ajustava.**
+- **bg1_e60 (BCE com fundo de peso 1, 60 épocas), gem L4:**
+  - eggs: 0,892 / 0,861 / 0,865, média **0,873**, contra o base_e60 (0,875, fundo 0,1): empate;
+  - larvae: s1 0,920 (pendente).
+  - **O peso do fundo (0,1 contra 1) não importa em eggs,** como o bg0 já indicava.

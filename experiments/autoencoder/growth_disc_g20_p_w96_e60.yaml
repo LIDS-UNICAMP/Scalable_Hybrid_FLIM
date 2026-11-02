@@ -1,3 +1,4 @@
+# Jaci (02/11): 1 GPU 96 GB, teto 70%; 10 runs x 8 CPUs = 80 de 128 (62%)
 # e60: max_epochs 200 -> 60 (cosine reescalado); A4 viu o best das L1-L3 na epoca ~195 de 200, entao so encurtar o orcamento corta tempo
 # g20 p_w96: largura ajudou protozoan (w64)
 name: spifil_growth_disc_g20_p_w96_e60
@@ -18,7 +19,7 @@ resources:
   gpu_ids:
   - 0
   max_per_gpu: 1
-  cpus_per_experiment: 10
+  cpus_per_experiment: 8
   num_workers: 2
 runner_args:
   layerwise: 4
