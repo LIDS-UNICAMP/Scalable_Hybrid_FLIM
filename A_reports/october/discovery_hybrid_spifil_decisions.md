@@ -607,3 +607,12 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: BN perde em larvae
 - l_bn (batch_norm, 200 ép.): gem L4 κ val 0.894/0.894/0.873 (0.887), contra a base 0.910: −0.023 nos 3 splits, acima da variação do pipeline. Em eggs é neutro (0.897). Fica fora da receita.
 - Placar larvae (gem): aug 0.919, bg0 0.917, bp10 0.914, grn 0.911, sp100 0.903, bn 0.887, anc3 0.865.
+
+## 2026-11-02: 4 opções parecidas com o whitening na seleção do SPiFiL (eggs)
+- Diagnóstico: 99% dos erros de eggs são ovo ↔ impureza (detalhe fino). Hipótese geral: o problema está em como o SPiFiL escolhe os filtros. Cada família abaixo é e_aug + UMA opção (default off; desligada, o caminho é bit a bit o de antes). Referência: e_aug com gem_tta, κ val 0.920 (test 0.917).
+- Como no `whiten`, as opções valem para TODAS as camadas crescidas (L1..L4), não só para a L1.
+- e_aug_pn (`patch_norm: true`, Coates & Ng 2011): cada patch menos a sua média e dividido pelo seu desvio, antes do Fisher. Hipótese: sem o brilho e o contraste de cada patch, o Fisher escolhe pela forma. Na conv, o filtro é P·f / desvio médio (P = I − 11ᵀ/D).
+- e_aug_div (`select_diverse: 0.9`): NMS de filtros. Na ordem do Fisher, um candidato com |cos| > 0.9 com outro melhor da mesma classe vai para o fim do rank. Hipótese: o SPiFiL gasta filtros em quase duplicatas. No smoke (L1, split 1), 71 de 400 candidatos são quase duplicatas.
+- e_aug_knn (`knn_smooth: 5`): cada candidato vira a média dos seus 5 vizinhos da mesma classe (kmeans-lite). Hipótese: um centroide local é menos ruidoso que um patch só.
+- e_aug_ipc3 (`images_per_class: 3`): 3 imagens por classe (a do artigo + 2 sorteadas). Hipótese: mais candidatos para o Fisher, e N sai de 400 para 1200, acima de D na L2 (800) e igual a D na L3 (1200). Hoje N fica abaixo de D nas duas.
+- Evals: só val_gem, val_gemtta e test_gemtta (fila de SVM cheia).

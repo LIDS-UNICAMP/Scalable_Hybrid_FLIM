@@ -299,11 +299,17 @@ class GrowOneLayer:
     biblioteca.
     """
 
-    def __init__(self, budget_check: bool = True, whiten: bool = False) -> None:
+    def __init__(self, budget_check: bool = True, whiten: bool = False,
+                 patch_norm: bool = False, select_diverse: float = 0.0,
+                 knn_smooth: int = 0) -> None:
         # False = como o SPiFiL original, que fita mesmo com N <= D (shrinkage).
         self.budget_check = budget_check
         self.whiten = whiten
+        self.patch_norm = patch_norm
+        self.select_diverse = select_diverse
+        self.knn_smooth = knn_smooth
         self.zca = None
+        self.scale = None
 
     def run(self, learn: Learner) -> None:
         layer = learn.n_layers
@@ -316,18 +322,53 @@ class GrowOneLayer:
                 f"shrinkage a mantem inversivel, nao informativa — acrescente "
                 f"imagens (n_images) ou pare de crescer."
             )
+        state = learn.state[layer - 1]
+        x = patches.feats
+        if self.patch_norm:
+            # Coates & Ng 2011: cada patch menos a sua media (nas D dims), dividido pelo seu
+            # desvio (eps relativo, como no ZCA), ANTES do ZCA. Na conv so cabe a parte
+            # linear: P f (P = I - 11^T/D) com o desvio MEDIO no lugar do de cada patch.
+            x = x - x.mean(1, keepdim=True)
+            sd = torch.sqrt(x.var(1, keepdim=True) + 1e-2 * x.var(1).mean())
+            self.scale = float(sd.mean())
+            x = x / sd
         if self.whiten:
             # ZCA (Coates & Ng 2011): W = U diag(1/sqrt(S+eps)) U^T fitada nos proprios
             # patches; ranking de Fisher, alocacao e selecao passam a ver o espaco branco.
-            state = learn.state[layer - 1]
-            x = patches.feats
             s, u = torch.linalg.eigh(torch.cov(x.T))
             s = s.clamp_min(0)
             self.zca = u @ torch.diag(1 / torch.sqrt(s + 1e-2 * s.mean())) @ u.T
-            state.patches = patches = dataclasses.replace(patches, feats=x @ self.zca)
+            x = x @ self.zca
+        if self.knn_smooth:
+            # kmeans-lite: cada candidato vira a media dos seus k vizinhos (ele incluso) da
+            # MESMA classe, entao o filtro escolhido e um centroide local, nao um patch so.
+            d = torch.cdist(x, x).masked_fill(
+                patches.labels[:, None] != patches.labels[None], float("inf"))
+            x = x[d.topk(self.knn_smooth, largest=False).indices].mean(1)
+        if x is not patches.feats:
+            state.patches = patches = dataclasses.replace(patches, feats=x)
             state.scores = learn.component_for(layer, "scorer")(
                 patches, learn.component_for(layer, "metric"))
             state.ranks = per_class_ranks(state.scores, patches.labels)
+        if self.select_diverse:
+            # NMS de filtros: na ordem do Fisher, quem tem |cos| > tau com um melhor da mesma
+            # classe desce para o fim (cos nos patches centrados na media global).
+            f = torch.nn.functional.normalize(x - x.mean(0), dim=1)
+            ranks, n_dup = state.ranks.clone(), 0
+            for c in patches.labels.unique():
+                (i,) = (patches.labels == c).nonzero(as_tuple=True)
+                i = i[state.ranks[i].argsort()]
+                cos = (f[i] @ f[i].T).abs() > self.select_diverse
+                dup = torch.zeros(len(i), dtype=torch.bool, device=x.device)
+                for j in range(len(i)):
+                    if not dup[j]:
+                        dup[j + 1:] |= cos[j, j + 1:]
+                ranks[torch.cat([i[~dup], i[dup]])] = torch.arange(
+                    1, len(i) + 1, device=x.device)
+                n_dup += int(dup.sum())
+            print(f"[grow] select_diverse {self.select_diverse}: {n_dup}/{n} quase duplicados "
+                  f"descem para o fim do rank")
+            state.ranks = ranks
         learn.fit_layer(layer)
 
 
@@ -442,7 +483,8 @@ def rescale(seeds: Seeds, grid: tuple[int, int]) -> Seeds:
 
 
 def train_samples(dataset: str, split: int, percentage: int, n_images: int,
-                  *, one_per_class: bool, seed: int, paper_classes: bool = False):
+                  *, one_per_class: bool, seed: int, paper_classes: bool = False,
+                  images_per_class: int = 1):
     """Amostras do split de TREINO: uma por classe, ou a fatia de passo uniforme.
 
     So treino em qualquer um dos dois modos: recortar filtro de imagem de
@@ -488,9 +530,14 @@ def train_samples(dataset: str, split: int, percentage: int, n_images: int,
         origin = "artigo"
         if sample is None:
             sample, origin = rng.choice(same), "sorteio"
-        picked.append(sample)
-        print(f"[grow] classe {label}: {sample.name} ({origin})")
-    print(f"[grow] one_per_class: {len(picked)} imagens para {len(picked)} classes")
+        # `images_per_class` > 1: a do artigo (ou a sorteada) + k-1 sorteadas pelo MESMO rng;
+        # com k=1 o sample(.., 0) nao consome o rng e o sorteio fica o de antes
+        rest = [s for s in same if s is not sample]
+        extra = rng.sample(rest, min(images_per_class - 1, len(rest)))
+        picked += [sample, *extra]
+        print(f"[grow] classe {label}: {sample.name} ({origin})"
+              + "".join(f", {s.name} (sorteio)" for s in extra))
+    print(f"[grow] one_per_class: {len(picked)} imagens para {len(labels)} classes")
     return picked
 
 
@@ -743,6 +790,10 @@ def grow(
     superpixels: str = "slic",
     budget_check: bool = True,
     whiten: bool = False,
+    patch_norm: bool = False,
+    select_diverse: float = 0.0,
+    knn_smooth: int = 0,
+    images_per_class: int = 1,
     device: str | None = None,
     seed: int = 42,
 ) -> int:
@@ -824,7 +875,7 @@ def grow(
 
     samples = train_samples(dataset, split, percentage, n_images,
                             one_per_class=one_per_class, seed=seed,
-                            paper_classes=paper_classes)
+                            paper_classes=paper_classes, images_per_class=images_per_class)
 
     data = Cropped(samples, image_size, use_mask=not impurities)
 
@@ -835,7 +886,8 @@ def grow(
             pool_type="max" if pool_stride > 1 else "none",
             pool_stride=pool_stride,
         )]),
-        color=trunk, strategy=(strategy := GrowOneLayer(budget_check, whiten)), device=device,
+        color=trunk, device=device, strategy=(strategy := GrowOneLayer(
+            budget_check, whiten, patch_norm, select_diverse, knn_smooth)),
     )
     learn.state[0] = build_layer0(
         data, trunk, samples, n_superpixels, image_size,
@@ -861,6 +913,13 @@ def grow(
         with torch.no_grad():
             w = block.conv.weight
             w.copy_((w.flatten(1) @ strategy.zca.to(w)).view_as(w))
+
+    if strategy.scale is not None:
+        # patch_norm: P (W f) / desvio medio, P = I - 11^T/D simetrica, aplicada depois do
+        # W porque a normalizacao veio antes do ZCA. O bias fica, pelo mesmo motivo do ZCA.
+        with torch.no_grad():
+            w = block.conv.weight
+            w.copy_((w - w.mean((1, 2, 3), keepdim=True)) / strategy.scale)
 
     if random_layer:
         # Troca so os VALORES, no ultimo instante: shape, largura do allocator e

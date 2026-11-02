@@ -72,6 +72,9 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         "paper_classes",
         # superpixel do grow (slic | disf), trava N <= D e largura de cada camada
         "superpixels", "budget_check", "whiten", "layer_channels",
+        # mais opcoes de selecao do grow (flim/spifil.py GrowOneLayer): normaliza o
+        # patch, NMS por |cos|, media dos k vizinhos da classe, k imagens por classe
+        "patch_norm", "select_diverse", "knn_smooth", "images_per_class",
         # kernel de cada camada do layerwise; L1..L<n> do FLIM de partida, sem grow
         "layer_kernels", "layerwise_from_flim",
         # dilation da conv e stride do max-pool (1 = sem pooling) de cada camada
