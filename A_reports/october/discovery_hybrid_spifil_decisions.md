@@ -603,3 +603,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 
 ## 2026-11-02: semente de impureza também não ajuda protozoan
 - p_imp_e60: gem L4 κ val 0.872/0.847/0.857 (0.859), contra base_e60 de protozoan 0.861 (empate). Nos 2 datasets: eggs −0.028, protozoan −0.002. A semente de impureza (paper_classes false) não ajuda; para datasets novos, paper_classes false é neutro ou um custo pequeno.
+
+## 2026-11-02: BN perde em larvae
+- l_bn (batch_norm, 200 ép.): gem L4 κ val 0.894/0.894/0.873 (0.887), contra a base 0.910: −0.023 nos 3 splits, acima da variação do pipeline. Em eggs é neutro (0.897). Fica fora da receita.
+- Placar larvae (gem): aug 0.919, bg0 0.917, bp10 0.914, grn 0.911, sp100 0.903, bn 0.887, anc3 0.865.
