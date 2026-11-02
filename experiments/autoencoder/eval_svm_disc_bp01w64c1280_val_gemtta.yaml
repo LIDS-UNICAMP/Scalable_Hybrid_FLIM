@@ -1,0 +1,33 @@
+# TTA: gem medio nas 8 rotacoes/flips (eval so, sem treino) val
+grid:
+  datasets:
+  - helminth-eggs
+  - helminth-larvae
+  - protozoan-cysts
+  percentages:
+  - 50
+  splits:
+  - 1
+  - 2
+  - 3
+method: autoencoder
+name: svm_disc_bp01w64c1280_val_gemtta
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_bp01w64c1280_val_gemtta
+resources:
+  cpus_per_experiment: 8
+  gpu_ids:
+  - 1
+  max_per_gpu: 1
+runner: eval
+runner_args:
+  ckpt_selection: best
+  embed_mode: gem_tta
+  eval_set: val
+  family: disc_bp01w64c1280
+  probe: svm
+  results_csv: results/svm_disc_bp01w64c1280_val_gemtta.csv
+  source: growth_stages
+  stages:
+  - L4
+skip: state

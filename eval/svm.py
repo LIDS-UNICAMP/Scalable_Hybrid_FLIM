@@ -304,7 +304,9 @@ EMBED_MODE = DEFAULT_EMBED_MODE
 # L2 por pixel + raiz com sinal antes do flatten, "gem" GeM p=3 no lugar do avg.
 # "gem_dense": GeM da penultima + da ultima camada concatenados (leitura densa, A5).
 # "avgpool2d_fg" / "gem_fg": o mesmo pooling, mas so nas celulas do mapa que tocam o objeto.
-EMBED_MODES = ("avgpool2d", "flatten", "spp", "l2flat", "gem", "gem_dense", "avgpool2d_fg", "gem_fg")
+# "gem_tta": media do gem nas 8 rotacoes/flips da imagem (TTA, Shanmugam et al. 2021).
+EMBED_MODES = ("avgpool2d", "flatten", "spp", "l2flat", "gem", "gem_dense", "avgpool2d_fg", "gem_fg",
+               "gem_tta")
 
 
 def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torch.Tensor:
@@ -324,6 +326,9 @@ def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torc
         raise ValueError(
             f"embed mode inválido: {mode!r}; use um de {EMBED_MODES}"
         )
+    if mode == "gem_tta":
+        return torch.stack([_encode_pooled(model, torch.rot90(x, k, (2, 3)), "gem")
+                            for x in (inputs, inputs.flip(3)) for k in range(4)]).mean(0)
     out = inputs
     for n in range(1, getattr(model, "n_layers", 3) + 1):
         prev, out = out, getattr(model, f"conv{n}")(out)

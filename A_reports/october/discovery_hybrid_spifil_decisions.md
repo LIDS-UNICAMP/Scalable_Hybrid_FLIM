@@ -501,3 +501,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Campo receptivo em eggs a 60 ép.: k3 perde (a 200 ép.), dil2 −0.007, d5 −0.018. Diminuir o campo perde, aumentar não ganha: o campo atual (~40 px) já basta.
 - Ressalva: a 60 épocas, quem é mais fundo é penalizado (mais camadas treinadas com orçamento curto, e o gate mostrou que eggs precisa de treino longo). O d6 fecha a curva; se d5/d6 ficarem abaixo, a profundidade fica fora da receita de eggs.
 - Restam a resolução (e_res49) e o kernel 7 (e_k7, a 200 ép.).
+
+## 2026-11-02: TTA no SVM (só eval)
+- A fila de eggs acabou. Para eggs andar sem GPU, a 1ª ideia da literatura r2: `gem_tta` (eval/svm.py) tira a média do gem L4 nas 8 rotações/flips da imagem (Shanmugam et al., ICCV 2021). Mudança única na leitura; o treino é o mesmo.
+- Hipótese: o ovo × impureza depende de detalhe fino e orientação; a média sobre as 8 vistas tira o ruído de orientação do resumo. Rodando no bp01w64c1280 (val e teste), sob flock.
