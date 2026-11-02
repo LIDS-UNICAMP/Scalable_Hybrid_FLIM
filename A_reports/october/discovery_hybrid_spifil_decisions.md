@@ -544,3 +544,10 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_k7 (kernel 7 em L1–L3): 0.914/0.905/0.886 (0.902). Empata.
 - Lei do kernel em eggs: k3 0.875 → k5 ~0.900 → k7 0.902. Do 3 para o 5 ganha, depois satura. Junto com dil2 e d5: o RF do k5 (~40 px) basta. Receita: k5.
 - Correção de método (A4): famílias de 200 ép. se comparam com o e_base; as de 60 ép., com o base_e60.
+
+## 2026-11-02: aug no treino + TTA na leitura somam: maior eggs medido
+- e_aug (flip/rot90 no treino) + gem_tta: κ val L4 0.938/0.916/0.906 (0.920). Contra e_aug com gem (0.903): +0.017. Contra a base com gem_tta (0.912): +0.008 (s1 −0.005, s2 +0.010, s3 +0.019).
+- Leitura: o aug sozinho não mexia o κ (gem), mas junto do TTA soma. Treinar com as 8 poses deixa as 8 vistas do TTA mais coerentes entre si. Eggs val a −0.020 do I-JEPA (teste), contra −0.041 com gem.
+- Receita candidata: geo_aug no treino + gem_tta na leitura. Confirmar com l_aug (na fila) e com p_aug_e60 (treinando).
+- e_sp25_e60: 0.881, contra 0.875 do base_e60 (empate). Lei das sementes plana: sp25 0.881, sp50 0.875, sp100 0.868.
+- Teste do e_aug/l_aug com gem_tta (só reporte) enfileirado depois do svmq_tta2.
