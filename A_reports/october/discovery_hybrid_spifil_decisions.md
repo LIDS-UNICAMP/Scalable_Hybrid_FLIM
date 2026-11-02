@@ -669,3 +669,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: gate das 60 épocas com a leitura final: só larvae aceita
 - base_e60 gem_tta_pw κ val: larvae 0.956 contra 0.961 (−0.005, ACEITA); protozoan 0.914/0.906/0.902 (0.907) contra 0.926 (−0.019, REJEITA na borda); eggs pendente (com gem já rejeitava).
 - Regra: 60 épocas só em larvae. Os pontos _e60 da lei de escala de protozoan valem para a FORMA da lei (comparados com base_e60 no mesmo orçamento), não para o nível absoluto.
+
+## 2026-11-02: a leitura final absorve os ganhos de treino
+- l_bp03 + gem_tta_pwr: κ val 0.958/0.925/0.969 (0.951), contra a base com pwr 0.961 (empate). O +0.023 do bp03 no gem some com o whitening.
+- Com gem_tta_pw, aug (eggs/larvae) e bp03 (larvae) empatam; só o bp10 em eggs sobrevive (+0.007). A leitura forte absorve o que o treino ajustava. Receita final: base bp01w64c1280 + gem_tta_pw nos 3; em eggs, bp 1.0.
+- bg1_e60 (fundo peso 1): eggs gem 0.873 contra base_e60 0.875 (empate). A receita sem o fg do fundo não perde em eggs; faltam larvae (s1 0.920) e protozoan.
