@@ -825,6 +825,25 @@ def _normalize_flim_backprop_stage2() -> pd.DataFrame | None:
     return result
 
 
+def _normalize_spifil_hybrid() -> pd.DataFrame | None:
+    """discovery (02/11): bp01w64c1280 + gem_tta_pw, teste. SVM_SPiFiL_Hybrid = encoder treinado
+    no proprio pct; SVM_SPiFiL_Hybrid_SSL100 = encoder de 100% sem rotulo, SVM com 1/5% dos rotulos
+    (o pct da curva e o do SVM, lido do nome do arquivo)."""
+    curve = _RESULTS / "svm_disc_bp01w64c1280_pcts_test_gemttapwr.csv"
+    if not curve.exists():
+        print(f"[SKIP] {curve.name} nao encontrado")
+        return None
+    df = pd.read_csv(curve).assign(method="SVM_SPiFiL_Hybrid")
+    for s in (1, 5):
+        p = _RESULTS / f"svm_disc_bp01w64c1280_ssl100_svm{s}_test_gemttapwr.csv"
+        if p.exists():
+            df = pd.concat([df, pd.read_csv(p).assign(method="SVM_SPiFiL_Hybrid_SSL100", percentage=s)])
+    df = df[(df["status"] == "ok") & df["kappa"].notna()].copy()
+    result = _agg_splits(df)
+    print(f"[NORM] SPiFiL hybrid: {len(result)} rows")
+    return result
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def _safe(fn, partial: bool):
@@ -879,6 +898,7 @@ def main() -> None:
     flim_residual_df  = _safe(_normalize_flim_residual, partial)
     layerwise_df      = _safe(_normalize_layerwise, partial)
     stage2_df         = _safe(_normalize_flim_backprop_stage2, partial)
+    hybrid_df         = _safe(_normalize_spifil_hybrid, partial)
 
     # ── Save normalized FLIM SVM aggregated (if available) ────────────────────
     if flim_df is not None:
@@ -916,6 +936,8 @@ def main() -> None:
         dfs.append(layerwise_df)
     if stage2_df is not None:
         dfs.append(stage2_df)
+    if hybrid_df is not None:
+        dfs.append(hybrid_df)
 
     if not dfs:
         print("[ERROR] No data sources available. Nothing to save.")

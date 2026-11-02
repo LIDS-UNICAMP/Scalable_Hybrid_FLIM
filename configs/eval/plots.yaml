@@ -24,6 +24,10 @@ plots:
     - {name: "lejepa_view_trunc_normal",                 color: "#9467BD", ls: "-.", marker: "P", zorder: 8, label: "LeJEPA (59.504)"}
     # results/ijepa_svm_aggregated.csv
     - {name: "SVM_IJEPA",                                color: "#E69F00", ls: "-.", marker: "*", zorder: 9, label: "I-JEPA (632M)"}
+    # results/svm_disc_bp01w64c1280_pcts_test_gemttapwr.csv (discovery 02/11, gem_tta_pw)
+    - {name: "SVM_SPiFiL_Hybrid",                        color: "#D62728", ls: "-",  marker: "o", zorder: 24, label: "SPiFiL hibrido (201K)"}
+    # results/svm_disc_bp01w64c1280_ssl100_svm{1,5}_test_gemttapwr.csv (encoder 100% sem rotulo)
+    - {name: "SVM_SPiFiL_Hybrid_SSL100",                 color: "#D62728", ls: "None", marker: "s", zorder: 25, label: "SPiFiL hibrido, SSL 100% (201K)"}
     # results/svm_proj1280_1x1_BN2d_results.csv (trunc_normal)
     # - {name: "SVM_Distill_1x1BN",                        color: "#17BECF", ls: "-",  marker: "s", zorder: 12, label: "Distill 1 (123K)"}
     # results/svm_proj1280_2l_1x1_BN2d_256_1280_results.csv

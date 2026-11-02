@@ -211,6 +211,8 @@ def _filter(unified: pd.DataFrame) -> pd.DataFrame:
     mask = (
         (unified["method"] == "SVM_FLIM") |                       # data/reports_felipe/svm/report_svm_*.csv
         (unified["method"] == "SVM_IJEPA") |                      # results/ijepa_svm_aggregated.csv
+        (unified["method"] == "SVM_SPiFiL_Hybrid") |              # results/svm_disc_bp01w64c1280_pcts_test_gemttapwr.csv
+        (unified["method"] == "SVM_SPiFiL_Hybrid_SSL100") |       # results/svm_disc_bp01w64c1280_ssl100_svm{1,5}_test_gemttapwr.csv
         (unified["method"] == "SVM_Distill_Proj1280") |           # results/svm_distill_proj1280_results.csv
         (unified["method"] == "SVM_Distill_3x3BN") |              # results/svm_proj1280_3x3_BN2d_results.csv (trunc_normal)
         (unified["method"] == "SVM_Distill_1x1BN") |              # results/svm_proj1280_1x1_BN2d_results.csv (trunc_normal)
