@@ -551,3 +551,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Receita candidata: geo_aug no treino + gem_tta na leitura. Confirmar com l_aug (na fila) e com p_aug_e60 (treinando).
 - e_sp25_e60: 0.881, contra 0.875 do base_e60 (empate). Lei das sementes plana: sp25 0.881, sp50 0.875, sp100 0.868.
 - Teste do e_aug/l_aug com gem_tta (só reporte) enfileirado depois do svmq_tta2.
+
+## 2026-11-02: aug + TTA somam também em larvae; receita candidata para os 3
+- l_aug + gem_tta: κ val L4 0.949/0.954/0.955 (0.953). Contra a base com gem_tta (0.946): +0.007. Contra l_aug com gem (0.919): +0.033. É o mais estável medido (desvio 0.003); o aug tira a oscilação do s2. Fica 0.010 acima do I-JEPA (teste).
+- Receita candidata para os 3 datasets: bp01w64c1280 + geo_aug (treino) + gem_tta (leitura), 200 épocas.
+- Falta protozoan a 200 ép.: o g20_p_aug original foi pausado sem split pronto. Lançado disc_g20_p_aug200 (o mesmo YAML, família nova para não misturar com os parciais), no topo da fila, com eval gem e gem_tta.
