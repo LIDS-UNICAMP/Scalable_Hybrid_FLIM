@@ -505,3 +505,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: TTA no SVM (só eval)
 - A fila de eggs acabou. Para eggs andar sem GPU, a 1ª ideia da literatura r2: `gem_tta` (eval/svm.py) tira a média do gem L4 nas 8 rotações/flips da imagem (Shanmugam et al., ICCV 2021). Mudança única na leitura; o treino é o mesmo.
 - Hipótese: o ovo × impureza depende de detalhe fino e orientação; a média sobre as 8 vistas tira o ruído de orientação do resumo. Rodando no bp01w64c1280 (val e teste), sob flock.
+
+## 2026-11-02: lei da âncora fechada em eggs: qualquer âncora derruba
+- e_anc03 (L2-SP λ=0.3, eggs, 200 ép.): gem L4 κ val 0.839/0.817/0.783 (0.813). Lei em eggs: λ=0 0.899; λ=0.3 0.813; λ=3 0.829. Larvae λ=3 −0.048.
+- Não é dose-resposta: qualquer âncora tira ~0.07–0.09 em eggs. É a regra mais forte da g20: o SPiFiL é inicialização, não restrição. Segurar o contraste objeto × fundo do SPiFiL (A8) não vira κ.
+- l_anc03_e60 sai da fila: a lei já está decidida, e a GPU vai para eixos que ainda podem ganhar.
