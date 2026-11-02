@@ -11,19 +11,26 @@ Artefatos: `/dados/home/moliveira/artifacts/spifil_growth/disc_bp01w64c1280/<ds>
 
 ## 1. Resumo em 5 linhas
 
+*Atualizado em 2026-11-02, 17h: entrou a leitura final (GeM + TTA + whitening).*
+
 1. **O que é:** uma CNN pequena de 4 camadas (32/48/64/1280 filtros, ~200 mil parâmetros) que
    aprende sozinha a redesenhar a imagem (autoencoder). Cada camada nasce de filtros recortados
-   pelo SPiFiL e depois é ajustada por backprop.
-2. **Como se lê:** a última camada vira um vetor de 1280 números (GeM p=3), e um SVM linear
-   decide a classe.
-3. **Resultado (κ de teste, 50%, média de 3 splits):** eggs **0.891**, larvae **0.939**,
-   protozoan **0.886**. O I-JEPA dá 0.940 / 0.943 / 0.864. Protozoan passa o I-JEPA, larvae fica
-   a 0.004 e eggs a 0.049.
-4. **Em aberto:** o orçamento de 60 épocas (`disc_g20_base_e60`, só eggs s1 tem as 4 camadas) e
-   as duas versões sem fundo (`disc_g20_nomask_e60`, `disc_g20_bg1_e60`), que ainda estão **na
-   fila** e não têm nenhum ponto em disco.
-5. **O que ainda falta entender:** eggs. Os eixos de treino de 1 knob dão empate; a hipótese
-   atual é que falta campo receptivo.
+   pelo SPiFiL e depois é ajustada por backprop. **O encoder não mudou**; o que mudou foi a leitura.
+2. **Como se lê (leitura final, `embed_mode: gem_tta_pw`):** GeM p=3 na L4 → média nas 8
+   rotações/flips da imagem (TTA) → PCA-whitening com shrinkage, fitado no treino → L2 → o SVM
+   linear de sempre. Seção 2.7.
+3. **Resultado (κ de teste, 50%, média de 3 splits):** eggs **0.933**, larvae **0.968**,
+   protozoan **0.928** (média 0.943). O I-JEPA dá 0.940 / 0.943 / 0.864 (média 0.916). Larvae
+   +0.025, protozoan +0.064, eggs −0.007 (empate dentro do ruído). O I-JEPA foi medido com uma
+   vista só, sem TTA.
+4. **Em aberto:**
+   - geo_aug (treino) + leitura final, já melhor na val em eggs/larvae;
+   - bp 1.0 + aug (eggs);
+   - 5 ideias de escolha de filtros no SPiFiL (whiten, patch_norm, select_diverse, images_per_class, knn_smooth);
+   - as versões sem fundo (nomask_e60, bg1_e60);
+   - a lei de escala do backbone (disc_sl_*), na fila desde 02/11 17h.
+5. **O que aprendemos:** quase todo o ganho veio da leitura (eggs 0.880 → 0.933 no teste, mesmo
+   encoder). Profundidade, largura, kernel > 5, resolução, âncora, BN, SE e GRN não ajudam.
 
 ---
 
@@ -192,17 +199,37 @@ praticamente nunca dispara.
 
 ### 2.7 Leitura e SVM
 
-- **Leitura:** o encoder roda conv1→conv4 e aplica **GeM p=3** no mapa 1280×24×24:
-  `(média(max(x, 1e-6)³))^(1/3)` por canal → **1280-d** (`eval/svm.py:310-330`, `:353-355`). Em
-  palavras simples: é uma média que dá mais peso aos picos, como perguntar "este carimbo apareceu
-  forte em algum lugar?".
-- **SVM** (`core/svm.py:143-185`): `sklearn.svm.SVC(kernel="linear", C=100, decision_function_shape="ovo", max_iter=-1, gamma="auto")`,
-  **sem StandardScaler**, **sem grid search**. É ajustado no **train** do pct50 (as mesmas imagens
-  do autoencoder, agora com rótulo) e prevê na **validation** (para escolher) ou no **test** (só
-  para reportar) (`eval/svm.py:714-731`).
+A leitura final é `embed_mode: gem_tta_pw` (eval/svm.py). Em 4 passos:
+
+1. **GeM p=3** no mapa 1280×24×24 da L4: `(média(max(x, 1e-6)³))^(1/3)` por canal → 1280-d
+   (`eval/svm.py`, `_encode_pooled`). É uma média que dá mais peso aos picos, como perguntar
+   "este carimbo apareceu forte em algum lugar?".
+2. **TTA** (`gem_tta`): o passo 1 é feito na imagem em 8 posições (4 rotações de 90°, com e sem
+   espelho), e o vetor é a média das 8 (Shanmugam et al., ICCV 2021). Custa 8× a inferência.
+3. **PCA-whitening com shrinkage** (sufixo `_pw`): `PCA()` fitado nas features de **treino**. Cada
+   componente é dividido por `sqrt(var + 0.1·média(var))`, e depois o vetor passa por L2 (Jégou &
+   Chum, ECCV 2012). Sem o shrinkage (`PCA(whiten=True)` puro), os componentes de variância ~0
+   amplificam ruído e o SVM colapsa: κ ~0 em larvae em 02/11, CSVs `_gemttapw` (sem o r) inválidos.
+4. **SVM** (`core/svm.py:143-185`): `sklearn.svm.SVC(kernel="linear", C=100, decision_function_shape="ovo", max_iter=-1, gamma="auto")`,
+   **sem StandardScaler**, **sem grid search**. É ajustado no **train** do pct50 (as mesmas imagens
+   do autoencoder, agora com rótulo) e prevê na **validation** (para escolher) ou no **test** (só
+   para reportar).
+
 - **Métrica:** Cohen κ multiclasse do torchmetrics, mais acurácia balanceada e F1 macro
   (`core/metrics.py:46-76`).
 - **Checkpoint avaliado:** `L4/checkpoints/best_kappa.ckpt` (`ckpt_selection: best`, `stages: [L4]`).
+- **Decomposição do ganho** (κ val sobre gem; whitening / TTA / os dois): eggs +0.029/+0.013/+0.043;
+  larvae +0.010/+0.036/+0.051; protozoan +0.010/+0.043/+0.052. Os dois são aditivos. Em eggs o
+  whitening domina (detalhe fino ovo × impureza); em larvae/protozoan domina o TTA (objetos sem
+  orientação canônica).
+
+| κ teste 50% (mesmo encoder) | eggs | larvae | protozoan |
+|---|---|---|---|
+| avgpool2d | 0.880 | 0.928 | 0.845 |
+| gem | 0.891 | 0.939 | 0.886 |
+| gem_tta | 0.908 | 0.952 | 0.921 |
+| **gem_tta_pw (final)** | **0.933** | **0.968** | **0.928** |
+| I-JEPA | 0.940 | 0.943 | 0.864 |
 
 ### 2.8 Comandos exatos
 
@@ -214,11 +241,11 @@ cd /dados/home/moliveira/Scalable_Hybrid_FLIM_discovery && export LD_LIBRARY_PAT
 ```
 
 ```
-cd /dados/home/moliveira/Scalable_Hybrid_FLIM_discovery && export LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0 && /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m experiments.ray.launch experiments/autoencoder/eval_svm_disc_bp01w64c1280_val_gem.yaml && /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m experiments.ray.launch experiments/autoencoder/eval_svm_disc_bp01w64c1280_test_gem.yaml
+cd /dados/home/moliveira/Scalable_Hybrid_FLIM_discovery && export LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0 && /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m experiments.ray.launch experiments/autoencoder/eval_svm_disc_bp01w64c1280_val_gemttapwr.yaml && /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m experiments.ray.launch experiments/autoencoder/eval_svm_disc_bp01w64c1280_test_gemttapwr.yaml
 ```
 
-Para o novo padrão de 60 épocas, troque os YAMLs por `growth_disc_g20_base_e60.yaml` e
-`eval_svm_disc_g20_base_e60_{val,test}_gem.yaml`.
+Orçamento: **200 épocas em eggs** (60 épocas perde −0.024; 100 também não basta). Larvae e
+protozoan aceitam 60 (`growth_disc_g20_base_e60.yaml`, −0.007/−0.014), útil para triagem.
 
 - **`LD_LIBRARY_PATH`:** sem ele o import do PIL morre em `GLIBCXX_3.4.29` (`README.md:248-249`).
 - **`RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0`:** o `grow` roda dentro do worker Ray, que não tem
@@ -293,8 +320,8 @@ splits**, do log de decisões (`A_reports/october/discovery_hybrid_spifil_decisi
 - `disc_g20_bg1_e60` = `base_e60` + `recon_bg_weight: 1.0`
   (`experiments/autoencoder/growth_disc_g20_bg1_e60.yaml`).
 - Os dois rodam nos 3 datasets × 3 splits, e o eval é `eval_svm_disc_g20_{nomask,bg1}_e60_{val,test}_gem.yaml`.
-- **Estado em 02/11:** os dois estão **na fila de GPU**, em 7º e 8º lugar, e ainda não existe
-  nenhuma pasta de saída. A própria `base_e60` só tem eggs s1 com L4 pronta.
+- **Estado em 02/11 17h:** os dois treinando, ainda sem κ. A `base_e60` fechou: gem val
+  0.875/0.903/0.861.
 
 ### 4.3 Receita sem fundo recomendada (até sair o resultado)
 
@@ -311,7 +338,7 @@ overrides:
 
 - Acrescente `"<ds>": {}` em `scripts/spifil_paper_seeds.json` e registre o dataset (linha 7 da
   tabela 4.1).
-- No eval use `embed_mode: gem` (nunca `gem_fg`), na L4.
+- No eval use `embed_mode: gem_tta_pw` (leitura final; não depende de fundo), na L4. Nunca `gem_fg`.
 - **Risco:** o `recon_bg_weight: 1.0` e o `gem` sem fg já têm medida de empate. O `impurities: true`
   **não tem**. A combinação dos dois também não foi medida.
 - Se o `nomask` perder muito κ, o plano B é fornecer uma máscara grosseira do objeto. Não existe
@@ -341,9 +368,20 @@ dos 3 splits.**
 | **Sementes 50 → 100: plano** | larvae 0.903 contra 0.910 | log:367-369 |
 | **geo_aug** | larvae +0.010 (ruído); eggs neutro | log:371-374, :399-402 |
 | **Platô de 1 knob** | eggs ~0.90, larvae ~0.91 (val) | log:386-390, :399-402 |
-| **Teste final** | 0.891 / 0.939 / 0.886 contra o I-JEPA 0.940 / 0.943 / 0.864 | log:345-349; `discovery_ranking_test.md:5-7` |
+| Teste com gem (histórico) | 0.891 / 0.939 / 0.886 contra o I-JEPA 0.940 / 0.943 / 0.864 | `discovery_ranking_test.md` |
 | **Melhor de cada dataset pela val** (ainda sem teste) | eggs `g20_e_bp10` 0.908; larvae `g20_l_aug` 0.919; protozoan bp01w64c1280 0.875 | `discovery_ranking_test.md:5-7` |
-| **Hipótese aberta para eggs** | campo receptivo das L1–L3 ~40 px ≤ tamanho do ovo; leis d5/d6/dil2/sp25/sp100 na fila | log:431-441 |
+| ~~Hipótese do campo receptivo em eggs~~ **refutada** | dil2 −0.007, d5 −0.018, d6 −0.024, res49 −0.028, k7 = k5 (60/200 ép.) | log 02/11 |
+| **Erro de eggs é ovo × impureza** | 218 de 220 erros (val); gem_tta corta impureza → ovo 137 → 111 | `discovery_eggs_diag.md` |
+| **Semente de impureza não ajuda** | eggs −0.028, protozoan −0.002 | log 02/11 |
+| **Âncora no SPiFiL sempre perde** | eggs λ=0.3 −0.086, λ=3 −0.070; larvae λ=3 −0.048 | log 02/11 |
+| **BN perde** | larvae −0.023, protozoan −0.018, eggs = | log 02/11 |
+| **SE e GRN neutros** | ±0.006 | log 02/11 |
+| **Sementes 25/50/100 planas** | eggs 0.881/0.875/0.868 (60 ép.) | log 02/11 |
+| **Orçamento** | eggs 60 0.875 ≈ 100 0.873 < 200 0.900; larvae/protozoan aceitam 60 | log 02/11 |
+| **Ruído do pipeline (re-run da base)** | média de 3 splits: eggs ±0.003, protozoan ±0.006 | log 02/11 |
+| **TTA + whitening (leitura final)** | teste 0.933/0.968/0.928 | seção 2.7 |
+| **aug + TTA somam** | val eggs 0.920, larvae 0.953 (gem_tta) | log 02/11 |
+| **bp10 + TTA em eggs** | val 0.925 (+0.015 sobre a base repetida); em larvae não soma | log 02/11 |
 
 ---
 
