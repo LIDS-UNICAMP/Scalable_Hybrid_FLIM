@@ -1,0 +1,24 @@
+# disc_ld_ipc, leitura gem_tta_pw, val
+name: svm_disc_ld_ipc_val_gemttapwr
+method: autoencoder
+runner: eval
+grid:
+  datasets: [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits: [1, 2, 3]
+  percentages: [1, 5]
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: disc_ld_ipc
+  ckpt_selection: best
+  results_csv: results/svm_disc_ld_ipc_val_gemttapwr.csv
+  embed_mode: gem_tta_pw
+  eval_set: val
+  stages: [L4]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_ld_ipc_val_gemttapwr
+skip: state

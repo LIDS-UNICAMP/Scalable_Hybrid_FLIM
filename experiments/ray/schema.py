@@ -91,7 +91,7 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
     "eval": (
         "probe", "freeze", "ckpt_selection",
         "source", "artifacts_dir", "run_filter", "family", "stages",
-        "require_status_ok", "results_csv", "embed_mode", "eval_set",
+        "require_status_ok", "results_csv", "embed_mode", "eval_set", "svm_train_pct",
     ),
 }
 

@@ -701,3 +701,26 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: eggs empata com o I-JEPA no teste (e_bp10 + leitura final)
 - e_bp10 (bp 1.0) + gem_tta_pw, teste 50% (Jaci): 0.9434/0.9396/0.9401 (0.941) contra I-JEPA 0.940. Empate (+0.001). Val era 0.949.
 - Com isso, no teste a 50%: eggs 0.941 (empate), larvae 0.968 (+0.025), protozoan 0.928 (+0.064). O objetivo original (κ >= I-JEPA nos 3 a 50%) está atingido.
+
+## 2026-11-02 — baixo dado (1% / 5%): fechar o gap com o I-JEPA (A19)
+
+Achado que muda a comparacao: o I-JEPA e ImageNet-1k congelado; o pct so escolhe os rotulos do SVM.
+O nosso autoencoder via so 17-46 imagens em 1%. Por isso a fila abre com o protocolo justo.
+
+Fila (prioridade), todas uma mudanca contra `growth_disc_bp01w64c1280_pcts`, pcts [1, 5]:
+
+| # | familia / eval | mudanca | hipotese SPiFiL |
+|---|---|---|---|
+| 0 | `eval_svm_disc_bp01w64c1280_ssl100_svm{1,5}_{val,test}_gemttapwr` | encoder do pct 100 (SSL sem rotulo), SVM so com os rotulos de 1/5% (`svm_train_pct`) | o SPiFiL ve todos os pixels representativos do dominio, como o I-JEPA ve o ImageNet |
+| 1 | `disc_ld_ipc` | `images_per_class` = todas (capado no que existe) | mais imagens por classe = kernels de mais pixels representativos do shift |
+| 2 | `disc_ld_c400` | L4 400 filtros, `fill_random_last: false` | em 1% os 880 aleatorios sao ruido; 1x1 100% SPiFiL. N <= D possivel: `budget_check: false` ja e o default |
+| 3 | `disc_ld_sp200` | `n_superpixels: 200` | mais candidatos por imagem para o SPiFiL escolher |
+| 4 | `disc_ld_saug` | `strong_aug` (A18: rotacao livre com reflexo, LAB L*[0.9,1.1]+-5 / ab+-4 p=.8, blur .1-1.2 p=.3, ruido <=.02 p=.3; sem escala) | o backprop nao desmancha os filtros SPiFiL decorando 24 imagens |
+| 5 | `disc_ld_bp003` | `layerwise_backprop: 0.03` | antigas mais lentas protegem o SPiFiL sem desligar o backprop |
+| 6 | evals `_gemttapwaug8`, `_gemttapwlw` (familia disc_bp01w64c1280) | SVM com 8 views por imagem; whitening Ledoit-Wolf | so leitura: 8x amostras rotuladas; LW guarda as 1280 direcoes com n~25 |
+| 7 | `disc_ld_e1000` | 1000 epocas | em 1% 200 epocas sao poucos passos |
+| 8 | `disc_ld_noback` (CONTROLE) | 1 epoca com lr 0 (o runner nao tem knob "sem treino"; warmup 0.01*0 = 0, salva o ckpt) | mede quanto o backprop custa/ajuda; nao entra na receita (o modelo tem backprop sempre) |
+
+Notas: 1% e 5% sao subconjuntos do 100% nos 9 pontos. As imagens do artigo (1 por classe) quase nunca
+estao no 1% (eggs s1 1/8, protozoan s2 1/6, resto 0): no protocolo ssl100 e um vazamento pequeno de rotulo
+(<=8 imagens). Memoria estimada: ~3 GB por run em 1% e 5% (o L4 1280x24x24 domina; batch e o mesmo).

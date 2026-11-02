@@ -52,6 +52,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms import v2
 from tqdm import tqdm
 
 from core.constants import DATASET_NUM_CLASSES, IMAGE_SIZE, PROJECT_ROOT
@@ -696,7 +697,11 @@ def _run_svm_job(config: str) -> str:
             imagenet_norm = False
             mode = job.get("embed_mode", "flatten")
             # sufixo "_pw": PCA-whitening (shrinkage) + L2 do vetor (Jegou & Chum 2012), fitado no treino
-            pw, mode = mode.endswith("_pw"), mode.removesuffix("_pw")
+            # sufixo "_aug8": treino do SVM com as 8 views (rot90 x flip) de cada imagem, mesmo rotulo
+            aug8, mode = mode.endswith("_aug8"), mode.removesuffix("_aug8")
+            # sufixo "_pwlw": o mesmo _pw, mas covariancia Ledoit-Wolf (guarda as C direcoes com n << C)
+            lw, mode = mode.endswith("_pwlw"), mode.removesuffix("_pwlw")
+            pw, mode = lw or mode.endswith("_pw"), mode.removesuffix("_pw")
             def _feats(loader):
                 return extract_features(encoder, loader, mode)
         elif source == "distillation":
@@ -707,6 +712,7 @@ def _run_svm_job(config: str) -> str:
             student = _load_student_from_ckpt(ckpt_path, DEVICE)
             epoch = _ckpt_epoch(ckpt_path)
             imagenet_norm = True
+            aug8 = False
             def _feats(loader):
                 return extract_features_encode(student, loader)
         else:
@@ -718,26 +724,40 @@ def _run_svm_job(config: str) -> str:
         row["ckpt_epoch"] = epoch
         transform = build_test(IMAGE_SIZE, imagenet_norm=imagenet_norm)
 
-        def _loader(set_name: str) -> DataLoader:
+        def _loader(set_name: str, tf=transform) -> DataLoader:
+            # `svm_train_pct`: encoder do pct da grade, SVM treinado so com os rotulos deste pct
+            pct = job.get("svm_train_pct", percentage) if set_name == "train" else percentage
             return DataLoader(
                 ParasiteDataset(
-                    set_name=set_name, split=split, percentage=percentage,
-                    transform=transform, loader="ift_lab",
+                    set_name=set_name, split=split, percentage=pct,
+                    transform=tf, loader="ift_lab",
                     path_dataset=dataset_name,
                 ),
                 batch_size=32, shuffle=False, num_workers=4, pin_memory=True,
             )
 
-        X_train, y_train = _feats(_loader("train"))
+        if aug8:
+            views = [extract_features(encoder, _loader("train", v2.Compose([transform, v2.Lambda(
+                lambda x, k=k, f=f: torch.rot90(x.flip(-1) if f else x, k, (-2, -1)))])),
+                mode.removesuffix("_tta")) for f in (0, 1) for k in range(4)]
+            X_train, y_train = np.concatenate([x for x, _ in views]), np.concatenate([y for _, y in views])
+        else:
+            X_train, y_train = _feats(_loader("train"))
         feats, y_true = _feats(_loader("validation" if eval_set == "val" else "test"))
         if source == "growth_stages" and pw:
             from sklearn.decomposition import PCA  # noqa: PLC0415
             from sklearn.preprocessing import normalize  # noqa: PLC0415
             # whitening com shrinkage: sem o eps, os componentes de variancia ~0 viram ruido
             # amplificado e o SVM colapsa numa classe (kappa ~0 em larvae, 02/11)
-            pca = PCA().fit(X_train)
-            s = (pca.explained_variance_ + 0.1 * pca.explained_variance_.mean()) ** -0.5
-            X_train, feats = (normalize(pca.transform(z) * s) for z in (X_train, feats))
+            if lw:
+                from sklearn.covariance import LedoitWolf  # noqa: PLC0415
+                cov = LedoitWolf().fit(X_train)
+                ev, U = np.linalg.eigh(cov.covariance_)
+                X_train, feats = (normalize((z - cov.location_) @ U / np.sqrt(ev)) for z in (X_train, feats))
+            else:
+                pca = PCA().fit(X_train)
+                s = (pca.explained_variance_ + 0.1 * pca.explained_variance_.mean()) ** -0.5
+                X_train, feats = (normalize(pca.transform(z) * s) for z in (X_train, feats))
         clf = fit_svm(X_train, y_train, tag=row["method"])
 
         y_pred = clf.predict(feats)

@@ -1,0 +1,24 @@
+# whitening com covariancia Ledoit-Wolf (n~25 em 1%: PCA guarda n-1 direcoes, LW guarda as 1280)
+name: svm_disc_bp01w64c1280_pcts_val_gemttapwlw
+method: autoencoder
+runner: eval
+grid:
+  datasets: [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits: [1, 2, 3]
+  percentages: [1, 5]
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: disc_bp01w64c1280
+  ckpt_selection: best
+  results_csv: results/svm_disc_bp01w64c1280_pcts_val_gemttapwlw.csv
+  embed_mode: gem_tta_pwlw
+  eval_set: val
+  stages: [L4]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_bp01w64c1280_pcts_val_gemttapwlw
+skip: state

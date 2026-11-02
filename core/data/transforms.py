@@ -47,7 +47,27 @@ def _rot90(img: torch.Tensor) -> torch.Tensor:
     return torch.rot90(img, int(torch.randint(4, ())), dims=(-2, -1))
 
 
-def build_test(image_size: int, imagenet_norm: bool = True, geo_aug: bool = False) -> v2.Compose:
+def _strong(img: torch.Tensor) -> torch.Tensor:
+    """Rotacao livre com borda refletida + jitter LAB + blur/ruido leves (A18). Sem escala/cutout.
+    LAB[0,1]: L/100, a/b/256 -> L*[0.9,1.1]+-5 vira +-0.05, a/b +-4 vira +-4/256."""
+    h, w = img.shape[-2:]
+    pad = (h + 3) // 4  # > (sqrt2-1)/2 do lado: os cantos da rotacao caem dentro do reflexo
+    big = torch.nn.functional.pad(img[None], (pad,) * 4, mode="reflect")[0]
+    img = v2.functional.center_crop(v2.functional.rotate(big, float(torch.rand(()) * 360),
+                                    v2.InterpolationMode.BILINEAR), [h, w])
+    if torch.rand(()) < 0.8:
+        u = lambda lo, hi: float(torch.empty(()).uniform_(lo, hi))  # noqa: E731
+        img = torch.stack([img[0] * u(0.9, 1.1) + u(-0.05, 0.05),
+                           img[1] + u(-4, 4) / 256, img[2] + u(-4, 4) / 256])
+    if torch.rand(()) < 0.3:
+        img = v2.functional.gaussian_blur(img, [5, 5], [float(torch.empty(()).uniform_(0.1, 1.2))])
+    if torch.rand(()) < 0.3:
+        img = img + float(torch.rand(())) * 0.02 * torch.randn_like(img)
+    return img.clamp(0, 1)
+
+
+def build_test(image_size: int, imagenet_norm: bool = True, geo_aug: bool = False,
+               strong_aug: bool = False) -> v2.Compose:
     steps = [
         v2.ToImage(),
         v2.ToDtype(torch.uint8, scale=True),  # Convert to uint8 for consistency
@@ -59,6 +79,8 @@ def build_test(image_size: int, imagenet_norm: bool = True, geo_aug: bool = Fals
     # Nada de cor, blur, crop ou distorcao: cor, textura e morfologia sao a classe.
     if geo_aug:
         steps += [v2.RandomHorizontalFlip(), v2.RandomVerticalFlip(), v2.Lambda(_rot90)]
+    if strong_aug:
+        steps.append(v2.Lambda(_strong))
     if imagenet_norm:
         steps.append(v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
     return v2.Compose(steps)
