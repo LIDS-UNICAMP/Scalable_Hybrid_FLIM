@@ -427,3 +427,15 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Mudança única, só na eval: `avgpool2d_fg` e `gem_fg` (eval/svm.py) fazem o mesmo pooling, mas só nas células do mapa que tocam o objeto. O fg é sem rótulo, o mesmo do recon_bg_weight: pixel a mais de 0.04 da mediana da borda. Smoke test em eggs: o objeto ocupa 1.4–7% dos pixels e o vetor muda 25–40%.
 - Leitura do resultado: fg > todo, o fundo atrapalha o SVM; fg < todo, o contraste com o fundo é informação; empate, o fundo é indiferente.
 - Rodando no bp01w64c1280 (val e teste; L3/L4 avg_fg e L4 gem_fg), em fila sob flock, um por vez.
+
+## 2026-11-02: foco em eggs (pedido do usuário)
+- Teste 50% (gem L4): larvae 0.939 vs I-JEPA 0.943 (−0.004); protozoan 0.886 vs 0.864 (+0.022); eggs 0.891 vs 0.940 (−0.049). Eggs é o único longe.
+- Ressalva da escolha da leitura: em larvae, a val não separa gem de avg (0.910 vs 0.917, dentro do ruído). Regra única daqui em diante: gem L4 nos 3 datasets.
+- O que já sabemos de eggs: bp, aug, bn e bg0 são neutros; k3 é pior (−0.026); SPiFiL empata com aleatório na L3. Ou seja, em eggs o SPiFiL ainda não está dando vantagem. São 8 classes, 400 sementes SPiFiL (50 por imagem, 1 imagem por classe), e o ovo ocupa 1.4–7% da imagem (~25–50 px).
+- Hipótese principal: falta campo receptivo. O RF das L1–L3 (5x5, pool 2) é ~40 px, menor ou igual ao ovo, então os filtros SPiFiL não enxergam o ovo inteiro (casca + interior).
+- Leis lançadas (eggs, 3 splits, e60, contra a base_e60; uma mudança cada):
+  - profundidade: e_d5 (+L 96), e_d6 (+L 96, 128);
+  - campo receptivo sem parâmetro: e_dil2 (L3 com dilation 2);
+  - sementes SPiFiL: e_sp25, e_sp100.
+  - Já em curso: kernel (k3 pronto, k7 rodando), largura (w96, w128), âncora, GRN, SE e leitura só no objeto (fg).
+- Fila reordenada: eggs primeiro, larvae/protozoan depois. A4 diagnostica o erro de eggs por classe (confusão, tamanho e textura) na val.
