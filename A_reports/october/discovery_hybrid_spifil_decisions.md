@@ -724,3 +724,7 @@ Fila (prioridade), todas uma mudanca contra `growth_disc_bp01w64c1280_pcts`, pct
 Notas: 1% e 5% sao subconjuntos do 100% nos 9 pontos. As imagens do artigo (1 por classe) quase nunca
 estao no 1% (eggs s1 1/8, protozoan s2 1/6, resto 0): no protocolo ssl100 e um vazamento pequeno de rotulo
 (<=8 imagens). Memoria estimada: ~3 GB por run em 1% e 5% (o L4 1280x24x24 domina; batch e o mesmo).
+
+## 2026-11-02: protocolo justo (SSL em 100% sem rótulo, SVM com 1% dos rótulos)
+- ssl100_svm1, gem_tta_pw, teste: eggs 0.393, larvae 0.775, protozoan 0.542 (2 splits). Contra pct1 (encoder só com 1%): +0.125 / +0.169 / +0.056. I-JEPA 1%: 0.661 / 0.822 / 0.586.
+- Pré-treinar o autoencoder em todas as imagens sem rótulo fecha boa parte do buraco, mas não todo. O whitening segue preso em n−1 dims (24/17/46); enfileirado ssl100 com gem_tta_pwlw (Ledoit–Wolf) e gem_tta.

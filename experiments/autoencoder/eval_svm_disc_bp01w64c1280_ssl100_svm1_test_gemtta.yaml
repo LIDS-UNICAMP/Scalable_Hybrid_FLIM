@@ -1,0 +1,34 @@
+# ssl100 + SVM 1% com gem_tta: o pw comum fica preso em n-1 dims
+grid:
+  datasets:
+  - helminth-eggs
+  - helminth-larvae
+  - protozoan-cysts
+  percentages:
+  - 100
+  splits:
+  - 1
+  - 2
+  - 3
+method: autoencoder
+name: svm_disc_bp01w64c1280_ssl100_svm1_test_gemtta
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_bp01w64c1280_ssl100_svm1_test_gemtta
+resources:
+  cpus_per_experiment: 8
+  gpu_ids:
+  - 0
+  max_per_gpu: 1
+runner: eval
+runner_args:
+  ckpt_selection: best
+  embed_mode: gem_tta
+  eval_set: test
+  family: disc_bp01w64c1280
+  probe: svm
+  results_csv: results/svm_disc_bp01w64c1280_ssl100_svm1_test_gemtta.csv
+  source: growth_stages
+  stages:
+  - L4
+  svm_train_pct: 1
+skip: state
