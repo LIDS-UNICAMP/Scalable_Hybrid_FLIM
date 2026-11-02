@@ -473,4 +473,9 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
 def run_growth(exp: Experiment, point: dict, gpu_id: int,
                cpus: int = DEFAULT_CPUS_PER_EXPERIMENT) -> dict:
     """Roda o braco inteiro na `gpu_id`. Uma task = um braco = uma GPU, sem migracao."""
+    import torch
+    # o worker ve todas as GPUs (sem CUDA_VISIBLE_DEVICES); sem isto, toda chamada no
+    # device corrente abre um contexto fantasma de ~262 MiB no cuda:0
+    if torch.cuda.is_available():
+        torch.cuda.set_device(gpu_id)
     return run_arm(exp, point, gpu_id, cpus)
