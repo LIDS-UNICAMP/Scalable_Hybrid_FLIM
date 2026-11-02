@@ -468,3 +468,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - l_grn (GRN na L4 1x1): gem L4 κ val 0.911, contra 0.910 da base e 0.913 do grupo. Empate.
 - Hipótese SPiFiL: o GRN faz os 1280 canais (400 SPiFiL + 880 aleatórios) competirem e realça os raros. Em larvae, não muda nada.
 - Larvae, 5 eixos: aug 0.919, bg0 0.917, bp10 0.914, grn 0.911, sp100 0.903. Faixa de 0.016, platô em ~0.91 (val). No teste, larvae já está a −0.004 do I-JEPA.
+
+## 2026-11-02: lei da largura em eggs é plana
+- gem L4 κ val: 32/48/64 0.899; 48/64/96 0.901 (0.907/0.910/0.887); 64/96/128 0.900 (0.914/0.901/0.884). Plana.
+- Hipótese SPiFiL: mais protótipos SPiFiL por classe dariam mais nuance. Não deram, e isso é coerente com o diagnóstico: o erro é ovo × impureza, e a impureza não tem semente nenhuma, qualquer que seja a largura.
+- Placar com 13 eixos (eggs + larvae): só o k3 passa do ruído, e para baixo. Os botões de treino e de largura estão esgotados. Apostas abertas: semente de impureza (e_imp), resolução (e_res49), campo receptivo (k7, d5, d6, dil2).
