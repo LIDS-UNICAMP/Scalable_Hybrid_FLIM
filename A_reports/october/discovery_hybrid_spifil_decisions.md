@@ -439,3 +439,17 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
   - sementes SPiFiL: e_sp25, e_sp100.
   - Já em curso: kernel (k3 pronto, k7 rodando), largura (w96, w128), âncora, GRN, SE e leitura só no objeto (fg).
 - Fila reordenada: eggs primeiro, larvae/protozoan depois. A4 diagnostica o erro de eggs por classe (confusão, tamanho e textura) na val.
+
+## 2026-11-02: o SVM não precisa do fundo (gem_fg empata) + auditoria da receita (A12)
+- gem_fg (pooling só no objeto) L4 κ val: 0.899/0.900/0.871, contra gem 0.899/0.910/0.875. Empate. O SVM não precisa "ver" o fundo; o resumo da imagem inteira e o do objeto carregam a mesma informação. Junto com o fundo 1.0/0.1/0 empatando no treino, o fundo é indiferente nos dois lados.
+- Auditoria da receita (A_reports/october/discovery_recipe.md):
+  - O pacote SPiFiL não mudou; o que é novo mora no wrapper flim/spifil.py e no runner.
+  - A L1 não fica congelada: com fresh_decoder, só a camada nova treina, e na L1 essa camada é a conv1 (muda 11% em eggs s1).
+  - best_val_svm_kappa no run_metadata.json guarda a val recon loss, não um κ.
+  - Dataset novo dá KeyError em flim/spifil.py:461 (lê json[dataset] sem .get). Precisa da entrada no scripts/spifil_paper_seeds.json e de paper_classes: false.
+  - O SPiFiL usa rótulo (Fisher + filtros por classe), e nenhuma chave desliga isso fora o random_layer_classic.
+  - A val loss também pesa o fundo pela borda, então o fundo entra na escolha do ckpt.
+  - A classe impureza não ganha filtro SPiFiL, mas o SVM classifica as 9 classes.
+  - L4: 400/100/300 filtros SPiFiL (eggs/larvae/protozoan), o resto aleatório. Encoder com 200.944 params (188.468 em protozoan).
+- Receita sem fundo recomendada (a medir): base_e60 + impurities: true + paper_classes: false + recon_bg_weight 1.0 + leitura gem. bg1 já empatou na L3; nomask_e60 e bg1_e60 estão na fila.
+- Hipótese nova para eggs (aguarda a confusão do A4): a impureza é a maior classe (3.344 imagens) e é a única sem filtro SPiFiL.
