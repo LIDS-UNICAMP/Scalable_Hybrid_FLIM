@@ -516,3 +516,12 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Placar das 5 hipóteses de construção em eggs: nenhuma ganha. Empatam sp100 e dil2; perdem d5 (−0.018), res49 (−0.028) e imp (−0.028). Somando os 8 eixos a 200 ép., o erro ovo ↔ impureza não sai por resolução, campo receptivo, profundidade, largura, sementes nem âncora.
 - O único botão que mexeu em eggs foi o orçamento: 60 ép. 0.875 → 200 ép. 0.899 (+0.024). E o best das L1–L3 cai no fim do cosine (época ~195/200), ou seja, ainda subindo. Lançado e_base_e400 (eggs, 400 ép.) no topo da fila; com o e_base_e100 já rodando, a lei do orçamento fica com 4 pontos (60/100/200/400).
 - Hipótese SPiFiL: o SPiFiL entrega bons filtros de partida, mas o detalhe fino ovo × impureza é aprendido devagar pelo backprop. Mais orçamento, mais detalhe.
+
+## 2026-11-02: TTA na leitura é o primeiro ganho acima do ruído em eggs desde o GeM
+- gem_tta (média do gem L4 nas 8 rotações/flips; mesmo modelo bp01w64c1280, sem treino novo), κ val:
+  - eggs 0.899 → 0.912 (+0.014; splits 0.909→0.943, 0.892→0.906, 0.894→0.887);
+  - larvae 0.910 → 0.946 (+0.036; splits 0.896→0.959, 0.918→0.923, 0.915→0.955);
+  - protozoan pendente.
+- Leitura: o encoder não é invariante a rotação (o aug no treino não mudou o κ), mas o resumo médio das 8 vistas é. O ovo/larva vem em qualquer orientação, e o SVM ganha com um vetor que não depende disso. Entra na receita como leitura padrão (custo: 8× a inferência).
+- O teste do gem_tta está na fila (só para o relatório). A confusão ovo ↔ impureza com gem_tta está rodando (A4).
+- Anomalia leve (A4): no mask50_e60, a val loss oscila porque a máscara é sorteada a cada avaliação, então o ckpt é escolhido por uma máscara de sorte. Não corrigi no meio da família; o κ do mask50 deve ser lido com essa ressalva.
