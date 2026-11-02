@@ -656,3 +656,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 | d5 | 32/48/64/96/1280 | 395 600 | 31% |
 
 - Hipótese SPiFiL: a fração SPiFiL cresce quando o modelo encolhe; os modelos pequenos são "mais SPiFiL". Se o κ cair pouco nos pequenos, parte disso é o SPiFiL ocupando a 1x1 inteira, não só o N; reportar e controlar pela fração.
+
+## 2026-11-02: com whitening, o aug para de somar em eggs; receita de eggs = bp10 + gem_tta_pw
+- e_bp10 + gem_tta_pwr: κ val 0.951/0.948/0.947 (0.949), +0.007 sobre a base com pwr; o mais estável.
+- e_aug + gem_tta_pwr: 0.938/0.939/0.936 (0.937), contra a base com pwr 0.942 (empate). Com o whitening, o aug deixa de somar (no gem_tta ele dava +0.008).
+- Receita de eggs: bp 1.0 + leitura final, sem aug. O e_bp10_aug segue rodando para confirmar.
