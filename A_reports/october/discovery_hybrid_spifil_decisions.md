@@ -629,3 +629,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Só pela leitura, com o mesmo encoder: eggs 0.880 (avg) → 0.891 (gem) → 0.912 (tta) → 0.942 (tta + whitening).
 - Hipótese: os 1280 canais (400 SPiFiL + 880 aleatórios) são muito correlacionados, e o SVM linear via só as direções de maior variância. O whitening iguala as direções, e as raras (as que separam ovo × impureza) passam a contar.
 - Enfileirado: o teste do bp01w64c1280, o e_bp10 (val e teste), e o e_aug/l_aug (teste) com gem_tta_pwr.
+
+## 2026-11-02: whitening e TTA são aditivos e cobrem erros diferentes
+- Ganho sobre gem, κ val (pwr / TTA / os dois): eggs +0.029/+0.013/+0.043; larvae +0.010/+0.036/+0.051; protozoan ~+0.008/+0.043/+0.052 (s3 do pwr pendente). gem_pwr de eggs sozinho dá 0.928.
+- Leitura: em eggs o whitening domina (detalhe fino ovo × impureza); em larvae/protozoan domina o TTA (objetos sem orientação canônica). Receita de leitura: gem + TTA + whitening com shrinkage.
