@@ -538,3 +538,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
   - Contra o I-JEPA (teste 50%): eggs −0.032, larvae +0.009, protozoan +0.058.
 - Ressalva de justiça: o I-JEPA foi medido com uma vista só. Para comparar de igual para igual, o I-JEPA também deveria ser avaliado com TTA.
 - e_se_e60 (SE, eggs): gem L4 0.871, contra 0.875 do base_e60. Empate.
+
+## 2026-11-02: lei do kernel fechada em eggs; ruído do pipeline medido
+- e_base (o mesmo pipeline da base, retreinado): gem L4 κ val 0.907/0.915/0.884 (0.902), contra 0.899 da base original. Por split: −0.002/+0.022/−0.010; na média, +0.003. É a 1ª medida direta da variação do pipeline (por split até ±0.02, na média de 3 splits ~0.003). Referência de eggs a 200 ép.: ~0.900.
+- e_k7 (kernel 7 em L1–L3): 0.914/0.905/0.886 (0.902). Empata.
+- Lei do kernel em eggs: k3 0.875 → k5 ~0.900 → k7 0.902. Do 3 para o 5 ganha, depois satura. Junto com dil2 e d5: o RF do k5 (~40 px) basta. Receita: k5.
+- Correção de método (A4): famílias de 200 ép. se comparam com o e_base; as de 60 ép., com o base_e60.
