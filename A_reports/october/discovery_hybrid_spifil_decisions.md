@@ -495,3 +495,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 ## 2026-11-02: e_dil2 empata (campo receptivo por dilation não ajuda eggs)
 - e_dil2_e60 (L3 com dilation 2, +16 px de RF): gem L4 κ val 0.877/0.854/0.871 (0.868), contra base_e60 de eggs 0.875 (mesmas 60 épocas): −0.007, empate.
 - Hipótese SPiFiL: com um RF maior, o filtro SPiFiL da L3 enxergaria o ovo inteiro. Não confirmada por dilation. Faltam a profundidade (e_d5, e_d6) e a resolução (e_res49) para fechar a pergunta do RF/resolução.
+
+## 2026-11-02: e_d5 não ganha em eggs (profundidade)
+- e_d5_e60 (+1 camada SPiFiL 5x5 de 96 antes da 1x1, gem na L5): κ val 0.881/0.847/0.842 (0.857), contra base_e60 de eggs 0.875: −0.018, na borda do ruído, para baixo.
+- Campo receptivo em eggs a 60 ép.: k3 perde (a 200 ép.), dil2 −0.007, d5 −0.018. Diminuir o campo perde, aumentar não ganha: o campo atual (~40 px) já basta.
+- Ressalva: a 60 épocas, quem é mais fundo é penalizado (mais camadas treinadas com orçamento curto, e o gate mostrou que eggs precisa de treino longo). O d6 fecha a curva; se d5/d6 ficarem abaixo, a profundidade fica fora da receita de eggs.
+- Restam a resolução (e_res49) e o kernel 7 (e_k7, a 200 ép.).
