@@ -1,0 +1,30 @@
+# SVM g20 l_c2560
+name: svm_disc_g20_l_c2560_test
+method: autoencoder
+runner: eval
+grid:
+  datasets:
+  - helminth-larvae
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 50
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: disc_g20_l_c2560
+  ckpt_selection: best
+  results_csv: results/svm_disc_g20_l_c2560_test.csv
+  embed_mode: avgpool2d
+  eval_set:       test   # twin de teste: so relatorio; selecao fica na val
+  stages:         [L3]   # L4 tem 2560 canais (>= 2000-d): fora
+resources:
+  gpu_ids:
+  - 1
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_g20_l_c2560_test
+skip: state

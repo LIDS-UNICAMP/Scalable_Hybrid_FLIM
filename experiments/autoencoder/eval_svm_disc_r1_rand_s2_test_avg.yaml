@@ -1,0 +1,29 @@
+# SVM de checagem sobre cada camada da growth_disc_r1_rand_s2.
+name:   svm_disc_r1_rand_s2_test_avg
+method: autoencoder
+runner: eval
+
+grid:
+  datasets:    [helminth-eggs, helminth-larvae, protozoan-cysts]
+  splits:      [1, 2, 3]   # regra: 3 splits sempre (split 1 ja pronto, skip:state)
+  percentages: [50]
+
+runner_args:
+  probe:          svm
+  source:         growth_stages
+  family:         disc_r1_rand_s2
+  ckpt_selection: best
+  results_csv:    results/svm_disc_r1_rand_s2_test_avg.csv
+  embed_mode:     avgpool2d   # twin de teste: nada de flatten, leitura < 2000-d
+  eval_set:       test   # twin de teste: so relatorio; selecao fica na val
+  stages:         [L3]   # so a camada de decisao: 9 jobs em vez de 27 (CPU)
+
+resources:
+  gpu_ids:             [1]   # SVM: 1 por vez na maquina
+  max_per_gpu:         1
+  cpus_per_experiment: 8
+
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_r1_rand_s2_test_avg
+
+skip: state
