@@ -463,3 +463,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
   - e_res49_e60 (layer_pools [2,2,1,1]): L3/L4 a 49×49, para o detalhe interno.
   - p_imp_e60: o mesmo teste em protozoan.
 - Teto aproximado (A4): cortar metade das 137 impurezas tomadas por ovo leva eggs de ~0.90 a ~0.93.
+
+## 2026-11-02: l_grn empata em larvae
+- l_grn (GRN na L4 1x1): gem L4 κ val 0.911, contra 0.910 da base e 0.913 do grupo. Empate.
+- Hipótese SPiFiL: o GRN faz os 1280 canais (400 SPiFiL + 880 aleatórios) competirem e realça os raros. Em larvae, não muda nada.
+- Larvae, 5 eixos: aug 0.919, bg0 0.917, bp10 0.914, grn 0.911, sp100 0.903. Faixa de 0.016, platô em ~0.91 (val). No teste, larvae já está a −0.004 do I-JEPA.
