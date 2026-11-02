@@ -661,3 +661,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - e_bp10 + gem_tta_pwr: κ val 0.951/0.948/0.947 (0.949), +0.007 sobre a base com pwr; o mais estável.
 - e_aug + gem_tta_pwr: 0.938/0.939/0.936 (0.937), contra a base com pwr 0.942 (empate). Com o whitening, o aug deixa de somar (no gem_tta ele dava +0.008).
 - Receita de eggs: bp 1.0 + leitura final, sem aug. O e_bp10_aug segue rodando para confirmar.
+
+## 2026-11-02: lei do backprop em larvae tem pico em 0.3
+- l_bp03 (200 ép.): gem L4 κ val 0.939/0.928/0.934 (0.933), +0.023 sobre a base, o maior larvae com gem e acima da variação do pipeline. Lei em larvae: bp 0.1 0.910 → 0.3 0.933 → 1.0 0.914 (pico em 0.3); em eggs sobe até 1.0.
+- Enfileirado gem_tta_pw (val e teste) do l_bp03 e do p_bp03_e60.
