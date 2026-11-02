@@ -674,3 +674,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - l_bp03 + gem_tta_pwr: κ val 0.958/0.925/0.969 (0.951), contra a base com pwr 0.961 (empate). O +0.023 do bp03 no gem some com o whitening.
 - Com gem_tta_pw, aug (eggs/larvae) e bp03 (larvae) empatam; só o bp10 em eggs sobrevive (+0.007). A leitura forte absorve o que o treino ajustava. Receita final: base bp01w64c1280 + gem_tta_pw nos 3; em eggs, bp 1.0.
 - bg1_e60 (fundo peso 1): eggs gem 0.873 contra base_e60 0.875 (empate). A receita sem o fg do fundo não perde em eggs; faltam larvae (s1 0.920) e protozoan.
+
+## 2026-11-02: a receita sem fundo empata (bg1 e nomask)
+- 60 ép., gem L4 κ val contra base_e60 (0.875/0.903/0.861):
+  - bg1 (fundo peso 1): 0.873/0.900/0.856, empate nos 3;
+  - nomask (SPiFiL sem máscara, impurities true): eggs 0.882, larvae 0.903 (muito variável), empate; protozoan pendente.
+- Leitura: o peso do fundo (0/0.1/1) e a máscara de objeto do SPiFiL não mudam o κ. A receita roda em dataset sem fundo/sem máscara sem custo medido. Receita sem fundo: impurities true + paper_classes false + recon_bg_weight 1.0 + gem_tta_pw (a combinação ainda não foi medida junta).
