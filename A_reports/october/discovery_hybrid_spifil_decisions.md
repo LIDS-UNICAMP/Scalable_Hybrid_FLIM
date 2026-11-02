@@ -416,3 +416,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Decisão: max_epochs 60 (model e trainer, cosine reescalado) para tudo o que ainda não começou. Referência nova: disc_g20_base_e60 (bp01w64c1280, 3 datasets), no topo da fila. Os eixos da fila sem split pronto viraram *_e60 (e_se, l_se, p_aug, p_bp03, p_w96, p_bn) e são comparados contra base_e60. l_bn, l_w96, l_bp03 e l_grn ficam em 200, porque já têm splits prontos.
 - Critério de aceite do e60: gem L4 a ≤0.018 da base de 200 (0.899/0.910/0.875). Se passar, vira o padrão. Hipótese SPiFiL: o SPiFiL já entrega filtros bons na partida, então o backprop precisa de poucas épocas para refinar.
 - Ideias da literatura (rodada 2, A_reports/october/discovery_literature_round2.md): RankMe por camada como parada sem rótulo (calibrar contra κ antes de usar); successive halving nas fronteiras de camada para a grade; TTA e FixRes no SVM (só eval); EMA/SWA; whitening ZCA e k-means dos patches antes do SPiFiL; PCA para parte dos filtros; ortogonalidade; loss local por camada.
+
+## 2026-11-02: gem_dense empata; máscara no treino não sobe κ
+- gem_dense (GeM da L3 + L4 juntas, 1344-d) L4 κ val: eggs 0.905, larvae 0.904, protozoan 0.871, contra gem L4 0.899/0.910/0.875. Empate dentro do ruído: juntar a camada anterior na leitura não ajuda.
+- Peso do fundo na recon (máscara do dataset): 1.0 (R1) → 0.1 (fg01) → 0 (bg0), todos empatam (L3 e L4). O A8 mostrou que, mesmo com o fundo a 0.1, o treino apaga o contraste objeto/fundo do SPiFiL. Pesar a loss pela máscara não segura esse contraste. A aposta para isso é a âncora L2-SP.
+- Lançado: SVM avg das L1/L2 do bp01w64c1280 (eval_svm_disc_bp01w64c1280_val_l12.yaml), para a curva por camada.
