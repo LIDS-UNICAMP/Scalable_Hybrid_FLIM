@@ -421,3 +421,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - gem_dense (GeM da L3 + L4 juntas, 1344-d) L4 κ val: eggs 0.905, larvae 0.904, protozoan 0.871, contra gem L4 0.899/0.910/0.875. Empate dentro do ruído: juntar a camada anterior na leitura não ajuda.
 - Peso do fundo na recon (máscara do dataset): 1.0 (R1) → 0.1 (fg01) → 0 (bg0), todos empatam (L3 e L4). O A8 mostrou que, mesmo com o fundo a 0.1, o treino apaga o contraste objeto/fundo do SPiFiL. Pesar a loss pela máscara não segura esse contraste. A aposta para isso é a âncora L2-SP.
 - Lançado: SVM avg das L1/L2 do bp01w64c1280 (eval_svm_disc_bp01w64c1280_val_l12.yaml), para a curva por camada.
+
+## 2026-11-02: o SVM precisa do fundo? leitura só no objeto (pedido do usuário)
+- Pergunta do usuário: ao treinar com fundo preto, os kernels aprendem o fundo. Será que o SVM precisa "saber" que a convolução está passando por fundo?
+- Mudança única, só na eval: `avgpool2d_fg` e `gem_fg` (eval/svm.py) fazem o mesmo pooling, mas só nas células do mapa que tocam o objeto. O fg é sem rótulo, o mesmo do recon_bg_weight: pixel a mais de 0.04 da mediana da borda. Smoke test em eggs: o objeto ocupa 1.4–7% dos pixels e o vetor muda 25–40%.
+- Leitura do resultado: fg > todo, o fundo atrapalha o SVM; fg < todo, o contraste com o fundo é informação; empate, o fundo é indiferente.
+- Rodando no bp01w64c1280 (val e teste; L3/L4 avg_fg e L4 gem_fg), em fila sob flock, um por vez.

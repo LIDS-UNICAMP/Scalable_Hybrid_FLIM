@@ -303,7 +303,8 @@ EMBED_MODE = DEFAULT_EMBED_MODE
 # Leituras so de eval (A5, literatura): "spp" piramide avg 1x1+2x2+4x4 (C*21-d), "l2flat"
 # L2 por pixel + raiz com sinal antes do flatten, "gem" GeM p=3 no lugar do avg.
 # "gem_dense": GeM da penultima + da ultima camada concatenados (leitura densa, A5).
-EMBED_MODES = ("avgpool2d", "flatten", "spp", "l2flat", "gem", "gem_dense")
+# "avgpool2d_fg" / "gem_fg": o mesmo pooling, mas so nas celulas do mapa que tocam o objeto.
+EMBED_MODES = ("avgpool2d", "flatten", "spp", "l2flat", "gem", "gem_dense", "avgpool2d_fg", "gem_fg")
 
 
 def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torch.Tensor:
@@ -329,6 +330,18 @@ def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torc
     if mode == "gem_dense":
         return torch.cat([F.adaptive_avg_pool2d(z.clamp(min=1e-6).pow(3), 1).pow(1 / 3).flatten(1)
                           for z in (prev, out)], dim=1).detach().cpu()
+    if mode in ("avgpool2d_fg", "gem_fg"):
+        # fg sem rotulo, o mesmo do recon_bg_weight (autoencoder_flim_module._recon_loss):
+        # pixel a mais de 0.04 da mediana da borda; entrada e LAB [0,1] (imagenet_norm off)
+        t = inputs.clamp(0, 1)
+        edge = torch.cat([t[..., :4, :].flatten(2), t[..., -4:, :].flatten(2),
+                          t[..., :4].flatten(2), t[..., -4:].flatten(2)], 2)
+        fg = ((t - edge.median(2).values[..., None, None]).norm(dim=1, keepdim=True) > 0.04).float()
+        w = F.adaptive_max_pool2d(fg, out.shape[-2:])
+        w = torch.where(w.sum((2, 3), keepdim=True) > 0, w, torch.ones_like(w))  # sem objeto: mapa todo
+        p = 3 if mode == "gem_fg" else 1
+        z = out.clamp(min=1e-6).pow(p) if p > 1 else out
+        return ((z * w).sum((2, 3)) / w.sum((2, 3))).pow(1 / p).detach().cpu()
     if mode == "flatten":
         return out.flatten(start_dim=1).detach().cpu()
     if mode == "spp":
