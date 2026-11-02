@@ -578,3 +578,8 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - base_e60 gem L4 κ val: eggs 0.875 contra 0.899 (−0.024, REJEITA); larvae 0.903 contra 0.910 (−0.007, ACEITA); protozoan 0.874/0.859/0.852 (0.861) contra 0.875 (−0.014, ACEITA na borda).
 - Regra da busca: triar com 60 ép. em larvae e protozoan (~69% menos tempo) e confirmar os melhores com 200; em eggs, usar 200, ou comparar as e60 só entre si. O orçamento necessário segue a dificuldade do erro restante: eggs > protozoan > larvae.
 - A receita final (bp10 + aug + TTA) está a 200 ép. nos 3, para ficar comparável ao melhor de cada dataset.
+
+## 2026-11-02: lei do orçamento em eggs: 60 ≈ 100 < 200
+- e_base_e100 (eggs, 100 ép.): gem L4 κ val 0.890/0.871/0.858 (0.873). Lei: 60 ép. 0.875; 100 ép. 0.873; 200 ép. ~0.900 (base 0.899, e_base 0.902). De 60 a 100 não muda; o ganho (+0.027) aparece só entre 100 e 200.
+- Hipótese (A4): o que conta não é o número de épocas, e sim quanto tempo o cosine passa na cauda de lr baixa (ajuste fino). O e400 (rodando) dá o próximo ponto. Se a hipótese se sustentar, o teste barato é cosine de 100 ép. + 50 ép. em eta_min (precisa de uma opção nova no scheduler; não implementado ainda).
+- Para eggs, 100 épocas não economizam nada: ficam as 200.
