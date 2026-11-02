@@ -691,3 +691,9 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - Mudança: `feat_whiten: true` sobre bp01w64c1280, 3 datasets, 200 ép. ZCA de canal (Network Deconvolution, Ye et al. 2020, só canal, sem im2col; DBN, Huang et al. 2018) no fim de cada bloco = entrada da conv seguinte. A entrada da conv1 (LAB) fica crua: no layerwise o SPiFiL da conv1 recorta o LAB cru. W sem gradiente (backward do eigh explode).
 - Hipótese SPiFiL: descorrelacionar os canais antes de cada conv faz a seleção SPiFiL e o backprop verem features não redundantes, o que o whitening do vetor final fazia na leitura.
 - Base de referência 200 ép.: gem 0.899/0.910/0.875, gem_tta_pw 0.942/0.961/0.926.
+
+## 2026-11-02: curva 1-100% (teste, leitura final) e a hipótese do whitening refutada
+- gem_tta_pw (teste, média dos splits): eggs 0.268/0.676/0.889/0.933/0.960/0.967; larvae 0.606/0.821/0.930/0.968/0.979/0.981; protozoan 0.486/0.728/0.898/0.928/0.942/0.954 (pct 1/5/25/50/75/100; protozoan 100% sem o s3).
+- I-JEPA (teste): eggs 0.661/0.864/0.917/0.940/0.945/0.957; larvae 0.822/0.881/0.919/0.943/0.941/0.950; protozoan 0.586/0.725/0.831/0.864/0.882/0.892.
+- Passamos o I-JEPA com >=25% em larvae/protozoan e com >=75% em eggs; perdemos com 1-5%.
+- Hipótese "o whitening colapsa com poucas amostras e causa a perda em 1%": REFUTADA. gem_tta sem whitening é pior em todos os pontos (Δ −0.004 a −0.082; parcial, protozoan com 2 splits). A perda em 1-5% vem do encoder com poucos dados, não da leitura.
