@@ -1,18 +1,155 @@
 # Ranking de teste da discovery (com rastreabilidade)
 
-> Gerado por `ranking.py` — não edite à mão; rode o script de novo. Dados até 2026-11-02 01:25 (CSV mais novo em `results/`).
+## Resumo
+
+- **eggs**: melhor teste bp01w64c1280 L4 · gem · 1280-d = 0.8912; I-JEPA 0.9397; Δ -0.0486; referência pela val: g20_e_bp10 L4 gem.
+- **larvae**: melhor teste bp01w64c1280 L4 · gem · 1280-d = 0.9389; I-JEPA 0.9433; Δ -0.0045; referência pela val: g20_l_aug L4 gem.
+- **protozoan**: melhor teste bp01w64c1280 L4 · gem · 1280-d = 0.8860; I-JEPA 0.8636; Δ +0.0225; referência pela val: bp01w64c1280 L4 gem.
+- **Testes pendentes**: eggs 39/40 famílias, larvae 33/34 famílias, protozoan 28/29 famílias sem nenhum teste.
+- **Base**: 64 famílias `growth_disc_*`, 46 CSVs de SVM; seleção só na val, teste só reporta.
+
+> Gerado por `ranking.py` — não edite à mão; rode o script de novo. Dados até 2026-11-02 02:07 (CSV mais novo em `results/`).
 
 **Em poucas palavras.** Cada modelo aprendeu a "ver" as imagens sozinho; depois um SVM (um juiz simples) tenta acertar a classe olhando o que o modelo viu. O κ (kappa) é a nota do juiz: 1 é perfeito, 0 é chute. O I-JEPA fica sempre no topo como régua: quem tem Δ positivo passou dele. A escolha do melhor é feita só na validação; o teste aparece aqui só para reportar.
 
+## Evolução (ordem do 1º commit do YAML de growth)
+
+Cada linha é uma família na ordem em que nasceu. "Nova referência" = passou a melhor leitura < 2000-d na **val** das famílias anteriores (o teste nunca escolhe). κ gem / avg = leitura GeM e média por canal na camada final.
+
+### eggs
+
+| 1º commit | família | mudança (vs base) | camada final | κ val gem / avg | κ teste gem / avg | nova referência? |
+|---|---|---|---|---|---|---|
+| 2026-10-29 21:58 | r1 | referência (R1) | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-29 21:58 | r2 | vs r1: layer_channels: 24/32/48→24/32/48/48/64/64/64/64; layer_dilations: —→1/1/1/1/2/2/4/4; layer_kernels: —→5/5/5/5/3/3/3/3; layer_pools: —→2/2/2/2/1/1/1/1; layerwise: 3→8; recon_bg_weight: —→0.1 | L8 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:25 | a1_mask50 | vs r1: mask_patch: —→20; mask_ratio: —→0.5 | — | pendente | pendente | pendente |
+| 2026-10-30 01:25 | a2_w64 | vs r1: layer_channels: 24/32/48→32/48/64 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:34 | a3_popz | vs r1: grow_impl: —→a3 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→42 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand_s1 | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand_s2 | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→2 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 02:08 | a2_bp01 | vs r1: layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 03:54 | a1_fg01 | vs r1: recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 04:04 | a3_sp200 | vs r1: n_superpixels: 50→200; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-31 14:24 | w64fg | vs r1: layer_channels: 24/32/48→32/48/64; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-31 16:21 | bp01w64 | vs r1: layer_channels: 24/32/48→32/48/64; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L3 | 0.8111 / 0.8449 | pendente | **sim** (val 0.8782, L3 spp) |
+| 2026-10-31 20:39 | bp01c1280 | vs r1: embed_mode: flatten→avgpool2d; fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→24/32/48/1280; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | — / 0.8676 | pendente | não |
+| 2026-11-01 01:42 | bp01w64c1280 | vs r1: embed_mode: flatten→avgpool2d; fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→32/48/64/1280; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | 0.8985 / 0.8797 | 0.8912 / 0.8799 | **sim** (val 0.9052, L4 gem_dense) |
+| 2026-11-01 06:22 | bp01w64c96 | vs r1: fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→32/48/64/96; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-11-01 12:25 | g20_e_aug | vs bp01w64c1280: embed_mode: avgpool2d→gem; geo_aug: —→True | L4 | 0.9030 / 0.8814 | pendente | não |
+| 2026-11-01 12:25 | g20_e_bg0 | vs bp01w64c1280: embed_mode: avgpool2d→gem; recon_bg_weight: 0.1→0.0 | L4 | 0.8918 / 0.8828 | pendente | não |
+| 2026-11-01 12:25 | g20_e_bn | vs bp01w64c1280: batch_norm: —→True; embed_mode: avgpool2d→gem | L4 | 0.8970 / 0.8651 | pendente | não |
+| 2026-11-01 12:25 | g20_e_bp03 | vs bp01w64c1280: embed_mode: avgpool2d→gem; layerwise_backprop: 0.1→0.3 | L4 | 0.9047 / 0.8823 | pendente | não |
+| 2026-11-01 12:25 | g20_e_bp10 | vs bp01w64c1280: embed_mode: avgpool2d→gem; layerwise_backprop: 0.1→1.0 | L4 | 0.9084 / 0.8829 | pendente | **sim** (val 0.9084, L4 gem) |
+| 2026-11-01 12:25 | g20_e_k3 | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_kernels: 5/5/5/1→3/3/3/1 | L4 | 0.8750 / 0.8609 | pendente | não |
+| 2026-11-01 12:25 | g20_e_w128 | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_channels: 32/48/64/1280→64/96/128/1280 | — | pendente | pendente | pendente |
+| 2026-11-01 12:25 | g20_e_w96 | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_channels: 32/48/64/1280→48/64/96/1280 | — | pendente | pendente | pendente |
+| 2026-11-01 17:13 | g20_e_grn | vs bp01w64c1280: embed_mode: avgpool2d→gem; grn: —→True | — | pendente | pendente | pendente |
+| 2026-11-01 17:13 | g20_e_se | vs bp01w64c1280: embed_mode: avgpool2d→gem; se_reduction: —→16 | — | pendente | pendente | pendente |
+| 2026-11-01 17:34 | g20_e_anc03 | vs bp01w64c1280: embed_mode: avgpool2d→gem; spifil_anchor: —→0.3 | — | pendente | pendente | pendente |
+| 2026-11-01 17:34 | g20_e_anc3 | vs bp01w64c1280: embed_mode: avgpool2d→gem; spifil_anchor: —→3.0 | — | pendente | pendente | pendente |
+| 2026-11-01 19:21 | g20_e_base | vs bp01w64c1280: embed_mode: avgpool2d→gem | — | pendente | pendente | pendente |
+| 2026-11-01 20:47 | g20_e_k7 | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_kernels: 5/5/5/1→7/7/7/1 | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_base_e60 | vs bp01w64c1280: max_epochs: 200→60 | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_e_se_e60 | vs g20_base_e60: embed_mode: avgpool2d→gem; se_reduction: —→16 | — | pendente | pendente | pendente |
+| 2026-11-02 01:16 | g20_mask50_e60 | vs g20_base_e60: mask_patch: —→20; mask_ratio: —→0.5 | — | pendente | pendente | pendente |
+| 2026-11-02 02:01 | g20_e_d5_e60 | vs g20_base_e60: layer_channels: 32/48/64/1280→32/48/64/96/1280; layer_dilations: —→1/1/1/1/1; layer_kernels: 5/5/5/1→5/5/5/5/1; layer_pools: 2/2/2/1→2/2/2/1/1; layerwise: 4→5 | — | pendente | pendente | pendente |
+| 2026-11-02 02:01 | g20_e_d6_e60 | vs g20_base_e60: layer_channels: 32/48/64/1280→32/48/64/96/128/1280; layer_dilations: —→1/1/1/1/1/1; layer_kernels: 5/5/5/1→5/5/5/5/5/1; layer_pools: 2/2/2/1→2/2/2/1/1/1; layerwise: 4→6 | — | pendente | pendente | pendente |
+| 2026-11-02 02:01 | g20_e_dil2_e60 | vs g20_base_e60: layer_dilations: —→1/1/2/1 | — | pendente | pendente | pendente |
+| 2026-11-02 02:01 | g20_e_sp100_e60 | vs g20_base_e60: n_superpixels: 50→100 | — | pendente | pendente | pendente |
+| 2026-11-02 02:01 | g20_e_sp25_e60 | vs g20_base_e60: n_superpixels: 50→25 | — | pendente | pendente | pendente |
+| 2026-11-02 02:06 | g20_bg1_e60 | vs g20_base_e60: recon_bg_weight: 0.1→1.0 | — | pendente | pendente | pendente |
+| 2026-11-02 02:06 | g20_nomask_e60 | vs g20_base_e60: impurities: —→True | — | pendente | pendente | pendente |
+
+**Melhor até agora (escolhido na val):** g20_e_bp10 L4 gem — val 0.9084, teste —, Δ vs I-JEPA (0.9397) = pendente.
+
+### larvae
+
+| 1º commit | família | mudança (vs base) | camada final | κ val gem / avg | κ teste gem / avg | nova referência? |
+|---|---|---|---|---|---|---|
+| 2026-10-29 21:58 | r1 | referência (R1) | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-29 21:58 | r2 | vs r1: layer_channels: 24/32/48→24/32/48/48/64/64/64/64; layer_dilations: —→1/1/1/1/2/2/4/4; layer_kernels: —→5/5/5/5/3/3/3/3; layer_pools: —→2/2/2/2/1/1/1/1; layerwise: 3→8; recon_bg_weight: —→0.1 | — | pendente | pendente | pendente |
+| 2026-10-30 01:25 | a1_mask50 | vs r1: mask_patch: —→20; mask_ratio: —→0.5 | — | pendente | pendente | pendente |
+| 2026-10-30 01:25 | a2_w64 | vs r1: layer_channels: 24/32/48→32/48/64 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:34 | a3_popz | vs r1: grow_impl: —→a3 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→42 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand_s1 | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand_s2 | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→2 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 02:08 | a2_bp01 | vs r1: layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 03:54 | a1_fg01 | vs r1: recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 04:04 | a3_sp200 | vs r1: n_superpixels: 50→200; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-31 14:24 | w64fg | vs r1: layer_channels: 24/32/48→32/48/64; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-31 16:21 | bp01w64 | vs r1: layer_channels: 24/32/48→32/48/64; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L3 | 0.8311 / 0.9041 | pendente | **sim** (val 0.9041, L3 avgpool2d) |
+| 2026-10-31 20:39 | bp01c1280 | vs r1: embed_mode: flatten→avgpool2d; fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→24/32/48/1280; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | — / 0.9117 | pendente | **sim** (val 0.9117, L4 avgpool2d) |
+| 2026-11-01 01:42 | bp01w64c1280 | vs r1: embed_mode: flatten→avgpool2d; fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→32/48/64/1280; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | 0.9096 / 0.9173 | 0.9389 / 0.9279 | **sim** (val 0.9173, L4 avgpool2d) |
+| 2026-11-01 06:22 | bp01w64c96 | vs r1: fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→32/48/64/96; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-11-01 12:25 | g20_l_aug | vs bp01w64c1280: geo_aug: —→True | L4 | 0.9194 / 0.9010 | pendente | **sim** (val 0.9194, L4 gem) |
+| 2026-11-01 12:25 | g20_l_bg0 | vs bp01w64c1280: recon_bg_weight: 0.1→0.0 | L4 | 0.9173 / 0.8953 | pendente | não |
+| 2026-11-01 12:25 | g20_l_bn | vs bp01w64c1280: batch_norm: —→True | — | pendente | pendente | pendente |
+| 2026-11-01 12:25 | g20_l_bp03 | vs bp01w64c1280: layerwise_backprop: 0.1→0.3 | — | pendente | pendente | pendente |
+| 2026-11-01 12:25 | g20_l_bp10 | vs bp01w64c1280: layerwise_backprop: 0.1→1.0 | L4 | 0.9136 / 0.8996 | pendente | não |
+| 2026-11-01 12:25 | g20_l_c2560 | vs bp01w64c1280: layer_channels: 32/48/64/1280→32/48/64/2560 | — | pendente | pendente | pendente |
+| 2026-11-01 12:25 | g20_l_sp100 | vs bp01w64c1280: n_superpixels: 50→100 | L4 | 0.9030 / 0.9015 | pendente | não |
+| 2026-11-01 12:25 | g20_l_w96 | vs bp01w64c1280: layer_channels: 32/48/64/1280→48/64/96/1280 | — | pendente | pendente | pendente |
+| 2026-11-01 17:13 | g20_l_grn | vs bp01w64c1280: grn: —→True | — | pendente | pendente | pendente |
+| 2026-11-01 17:13 | g20_l_se | vs bp01w64c1280: se_reduction: —→16 | — | pendente | pendente | pendente |
+| 2026-11-01 17:34 | g20_l_anc03 | vs bp01w64c1280: spifil_anchor: —→0.3 | — | pendente | pendente | pendente |
+| 2026-11-01 17:34 | g20_l_anc3 | vs bp01w64c1280: spifil_anchor: —→3.0 | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_base_e60 | vs bp01w64c1280: max_epochs: 200→60 | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_l_se_e60 | vs g20_base_e60: se_reduction: —→16 | — | pendente | pendente | pendente |
+| 2026-11-02 00:41 | g20_l_anc03_e60 | vs g20_base_e60: spifil_anchor: —→0.3 | — | pendente | pendente | pendente |
+| 2026-11-02 01:16 | g20_mask50_e60 | vs g20_base_e60: mask_patch: —→20; mask_ratio: —→0.5 | — | pendente | pendente | pendente |
+| 2026-11-02 02:06 | g20_bg1_e60 | vs g20_base_e60: recon_bg_weight: 0.1→1.0 | — | pendente | pendente | pendente |
+| 2026-11-02 02:06 | g20_nomask_e60 | vs g20_base_e60: impurities: —→True | — | pendente | pendente | pendente |
+
+**Melhor até agora (escolhido na val):** g20_l_aug L4 gem — val 0.9194, teste —, Δ vs I-JEPA (0.9433) = pendente.
+
+### protozoan
+
+| 1º commit | família | mudança (vs base) | camada final | κ val gem / avg | κ teste gem / avg | nova referência? |
+|---|---|---|---|---|---|---|
+| 2026-10-29 21:58 | r1 | referência (R1) | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-29 21:58 | r2 | vs r1: layer_channels: 24/32/48→24/32/48/48/64/64/64/64; layer_dilations: —→1/1/1/1/2/2/4/4; layer_kernels: —→5/5/5/5/3/3/3/3; layer_pools: —→2/2/2/2/1/1/1/1; layerwise: 3→8; recon_bg_weight: —→0.1 | — | pendente | pendente | pendente |
+| 2026-10-30 01:25 | a1_mask50 | vs r1: mask_patch: —→20; mask_ratio: —→0.5 | — | pendente | pendente | pendente |
+| 2026-10-30 01:25 | a2_w64 | vs r1: layer_channels: 24/32/48→32/48/64 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:34 | a3_popz | vs r1: grow_impl: —→a3 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→42 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand_s1 | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 01:54 | r1_rand_s2 | vs r1: random_layer: —→True; recon_bg_weight: —→0.1; seed: —→2 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 02:08 | a2_bp01 | vs r1: layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 03:54 | a1_fg01 | vs r1: recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-30 04:04 | a3_sp200 | vs r1: n_superpixels: 50→200; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-31 14:24 | w64fg | vs r1: layer_channels: 24/32/48→32/48/64; recon_bg_weight: —→0.1 | L3 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-10-31 16:21 | bp01w64 | vs r1: layer_channels: 24/32/48→32/48/64; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L3 | 0.7976 / 0.7970 | pendente | **sim** (val 0.8295, L3 spp) |
+| 2026-10-31 20:39 | bp01c1280 | vs r1: embed_mode: flatten→avgpool2d; fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→24/32/48/1280; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | — / 0.8283 | pendente | não |
+| 2026-11-01 01:42 | bp01w64c1280 | vs r1: embed_mode: flatten→avgpool2d; fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→32/48/64/1280; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | 0.8746 / 0.8370 | 0.8860 / 0.8448 | **sim** (val 0.8746, L4 gem) |
+| 2026-11-01 06:22 | bp01w64c96 | vs r1: fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→32/48/64/96; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | L4 | pendente | pendente | — (sem leitura < 2000-d na val) |
+| 2026-11-01 12:25 | g20_p_aug | vs bp01w64c1280: embed_mode: avgpool2d→gem; geo_aug: —→True | — | pendente | pendente | pendente |
+| 2026-11-01 12:25 | g20_p_bn | vs bp01w64c1280: batch_norm: —→True; embed_mode: avgpool2d→gem | — | pendente | pendente | pendente |
+| 2026-11-01 12:25 | g20_p_bp03 | vs bp01w64c1280: embed_mode: avgpool2d→gem; layerwise_backprop: 0.1→0.3 | — | pendente | pendente | pendente |
+| 2026-11-01 12:25 | g20_p_w96 | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_channels: 32/48/64/1280→48/64/96/1280 | — | pendente | pendente | pendente |
+| 2026-11-01 19:21 | g20_p_base | vs bp01w64c1280: embed_mode: avgpool2d→gem | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_base_e60 | vs bp01w64c1280: max_epochs: 200→60 | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_p_aug_e60 | vs g20_base_e60: embed_mode: avgpool2d→gem; geo_aug: —→True | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_p_bn_e60 | vs g20_base_e60: batch_norm: —→True; embed_mode: avgpool2d→gem | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_p_bp03_e60 | vs g20_base_e60: embed_mode: avgpool2d→gem; layerwise_backprop: 0.1→0.3 | — | pendente | pendente | pendente |
+| 2026-11-02 00:37 | g20_p_w96_e60 | vs g20_base_e60: embed_mode: avgpool2d→gem; layer_channels: 32/48/64/1280→48/64/96/1280 | — | pendente | pendente | pendente |
+| 2026-11-02 01:16 | g20_mask50_e60 | vs g20_base_e60: mask_patch: —→20; mask_ratio: —→0.5 | — | pendente | pendente | pendente |
+| 2026-11-02 02:06 | g20_bg1_e60 | vs g20_base_e60: recon_bg_weight: 0.1→1.0 | — | pendente | pendente | pendente |
+| 2026-11-02 02:06 | g20_nomask_e60 | vs g20_base_e60: impurities: —→True | — | pendente | pendente | pendente |
+
+**Melhor até agora (escolhido na val):** bp01w64c1280 L4 gem — val 0.8746, teste 0.8860, Δ vs I-JEPA (0.8636) = +0.0225.
+
 ## eggs — 50% dos dados
 
-2 leitura(s) com teste, 66 pendente(s).
+3 leitura(s) com teste, 74 pendente(s).
 
 | # | família | leitura (camada · embed · dim) | κ teste média ± dp (n) | κ val média | Δ vs I-JEPA (teste) | links |
 |---|---|---|---|---|---|---|
 | ref | **I-JEPA** | ijepa | **0.9397 ± 0.0081 (3)** | — | 0 | [ijepa_svm_aggregated](../../../Scalable_Hybrid_FLIM/results/ijepa_svm_aggregated.csv) |
 | 1 | bp01w64c1280 | L4 · gem · 1280-d | 0.8912 ± 0.0225 (3) | 0.8985 | -0.0486 | [disc_bp01w64c1280_test_gem](../../results/svm_disc_bp01w64c1280_test_gem.csv) · [disc_bp01w64c1280_val_gem](../../results/svm_disc_bp01w64c1280_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
-| 2 | bp01w64c1280 | L4 · avgpool2d · 1280-d | 0.8799 ± 0.0132 (3) | 0.8797 | -0.0599 | [disc_bp01w64c1280_test_avg](../../results/svm_disc_bp01w64c1280_test_avg.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| 2 | bp01w64c1280 | L4 · avgpool2d · 1280-d | 0.8799 ± 0.0132 (3) | 0.8797 | -0.0599 | [disc_bp01w64c1280_test](../../results/svm_disc_bp01w64c1280_test.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| 3 | bp01w64c1280 | L3 · avgpool2d · 64-d | 0.8431 ± 0.0192 (3) | 0.8417 | -0.0967 | [disc_bp01w64c1280_test](../../results/svm_disc_bp01w64c1280_test.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | r1_rand_s1 | L3 · flatten · 27648-d | pendente | 0.9088 | pendente | [disc_r1_rand_s1_val](../../results/svm_disc_r1_rand_s1_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r1_rand_s1.yaml) |
 | — | r1_rand | L3 · flatten · 27648-d | pendente | 0.9086 | pendente | [disc_r1_rand_val](../../results/svm_disc_r1_rand_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r1_rand.yaml) |
 | — | g20_e_bp10 | L4 · gem · 1280-d | pendente | 0.9084 | pendente | [disc_g20_e_bp10_val_gem](../../results/svm_disc_g20_e_bp10_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_bp10.yaml) |
@@ -21,7 +158,7 @@
 | — | g20_e_bp03 | L4 · gem · 1280-d | pendente | 0.9047 | pendente | [disc_g20_e_bp03_val_gem](../../results/svm_disc_g20_e_bp03_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_bp03.yaml) |
 | — | g20_e_aug | L4 · gem · 1280-d | pendente | 0.9030 | pendente | [disc_g20_e_aug_val_gem](../../results/svm_disc_g20_e_aug_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_aug.yaml) |
 | — | a2_bp01 | L3 · flatten · 27648-d | pendente | 0.9024 | pendente | [disc_a2_bp01_val](../../results/svm_disc_a2_bp01_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_a2_bp01.yaml) |
-| — | bp01w64c1280 | L4 · gem_fg · 1280-d | pendente | 0.9018 | pendente | [disc_bp01w64c1280_val_gemfg](../../results/svm_disc_bp01w64c1280_val_gemfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| — | bp01w64c1280 | L4 · gem_fg · 1280-d | pendente | 0.8991 | pendente | [disc_bp01w64c1280_val_gemfg](../../results/svm_disc_bp01w64c1280_val_gemfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | r2 | L2 · flatten · 76832-d | pendente | 0.8973 | pendente | [disc_r2_val](../../results/svm_disc_r2_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r2.yaml) |
 | — | w64fg | L3 · flatten · 36864-d | pendente | 0.8973 | pendente | [disc_w64fg_val](../../results/svm_disc_w64fg_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_w64fg.yaml) |
 | — | r1 | L3 · flatten · 27648-d | pendente | 0.8971 | pendente | [disc_r1_val](../../results/svm_disc_r1_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r1.yaml) |
@@ -41,6 +178,7 @@
 | — | r2 | L1 · flatten · 235224-d | pendente | 0.8875 | pendente | [disc_r2_val](../../results/svm_disc_r2_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r2.yaml) |
 | — | a3_popz | L3 · flatten · 27648-d | pendente | 0.8866 | pendente | [disc_a3_popz_val](../../results/svm_disc_a3_popz_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_a3_popz.yaml) |
 | — | r1_rand_s2 | L3 · flatten · 27648-d | pendente | 0.8863 | pendente | [disc_r1_rand_s2_val](../../results/svm_disc_r1_rand_s2_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r1_rand_s2.yaml) |
+| — | bp01w64c1280 | L4 · avgpool2d_fg · 1280-d | pendente | 0.8838 | pendente | [disc_bp01w64c1280_val_avgfg](../../results/svm_disc_bp01w64c1280_val_avgfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | g20_e_bp10 | L4 · avgpool2d · 1280-d | pendente | 0.8829 | pendente | [disc_g20_e_bp10_val](../../results/svm_disc_g20_e_bp10_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_bp10.yaml) |
 | — | g20_e_bg0 | L4 · avgpool2d · 1280-d | pendente | 0.8828 | pendente | [disc_g20_e_bg0_val](../../results/svm_disc_g20_e_bg0_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_bg0.yaml) |
 | — | g20_e_bp03 | L4 · avgpool2d · 1280-d | pendente | 0.8823 | pendente | [disc_g20_e_bp03_val](../../results/svm_disc_g20_e_bp03_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_bp03.yaml) |
@@ -55,10 +193,10 @@
 | — | g20_e_aug | L3 · avgpool2d · 64-d | pendente | 0.8540 | pendente | [disc_g20_e_aug_val](../../results/svm_disc_g20_e_aug_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_aug.yaml) |
 | — | r2 | L6 · flatten · 7744-d | pendente | 0.8536 | pendente | [disc_r2_val](../../results/svm_disc_r2_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r2.yaml) |
 | — | bp01w64 | L3 · avgpool2d · 64-d | pendente | 0.8449 | pendente | [disc_bp01w64_val_avg](../../results/svm_disc_bp01w64_val_avg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64.yaml) |
-| — | bp01w64c1280 | L3 · avgpool2d · 64-d | pendente | 0.8417 | pendente | [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | g20_e_bg0 | L3 · avgpool2d · 64-d | pendente | 0.8401 | pendente | [disc_g20_e_bg0_val](../../results/svm_disc_g20_e_bg0_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_bg0.yaml) |
 | — | r2 | L7 · flatten · 7744-d | pendente | 0.8376 | pendente | [disc_r2_val](../../results/svm_disc_r2_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r2.yaml) |
 | — | g20_e_bp10 | L3 · avgpool2d · 64-d | pendente | 0.8375 | pendente | [disc_g20_e_bp10_val](../../results/svm_disc_g20_e_bp10_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_bp10.yaml) |
+| — | bp01w64c1280 | L3 · avgpool2d_fg · 64-d | pendente | 0.8313 | pendente | [disc_bp01w64c1280_val_avgfg](../../results/svm_disc_bp01w64c1280_val_avgfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | g20_e_k3 | L3 · avgpool2d · 64-d | pendente | 0.8271 | pendente | [disc_g20_e_k3_val](../../results/svm_disc_g20_e_k3_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_k3.yaml) |
 | — | bp01c1280 | L3 · avgpool2d · 48-d | pendente | 0.8190 | pendente | [disc_bp01c1280_val](../../results/svm_disc_bp01c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01c1280.yaml) |
 | — | g20_e_bp03 | L3 · avgpool2d · 64-d | pendente | 0.8183 | pendente | [disc_g20_e_bp03_val](../../results/svm_disc_g20_e_bp03_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_e_bp03.yaml) |
@@ -69,45 +207,55 @@
 | — | bp01w64c1280 | L1 · avgpool2d · 32-d | pendente | 0.1608 | pendente | [disc_bp01w64c1280_val_l12](../../results/svm_disc_bp01w64c1280_val_l12.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | a1_mask50 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_a1_mask50.yaml) |
 | — | g20_base_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_base_e60.yaml) |
+| — | g20_bg1_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_bg1_e60.yaml) |
 | — | g20_e_anc03 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_anc03.yaml) |
 | — | g20_e_anc3 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_anc3.yaml) |
 | — | g20_e_base | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_base.yaml) |
+| — | g20_e_d5_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_d5_e60.yaml) |
+| — | g20_e_d6_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_d6_e60.yaml) |
+| — | g20_e_dil2_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_dil2_e60.yaml) |
 | — | g20_e_grn | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_grn.yaml) |
 | — | g20_e_k7 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_k7.yaml) |
 | — | g20_e_se | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_se.yaml) |
 | — | g20_e_se_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_se_e60.yaml) |
+| — | g20_e_sp100_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_sp100_e60.yaml) |
+| — | g20_e_sp25_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_sp25_e60.yaml) |
 | — | g20_e_w128 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_w128.yaml) |
 | — | g20_e_w96 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_e_w96.yaml) |
 | — | g20_mask50_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_mask50_e60.yaml) |
+| — | g20_nomask_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_nomask_e60.yaml) |
 
 ## larvae — 50% dos dados
 
-2 leitura(s) com teste, 51 pendente(s).
+3 leitura(s) com teste, 55 pendente(s).
 
 | # | família | leitura (camada · embed · dim) | κ teste média ± dp (n) | κ val média | Δ vs I-JEPA (teste) | links |
 |---|---|---|---|---|---|---|
 | ref | **I-JEPA** | ijepa | **0.9433 ± 0.0115 (3)** | — | 0 | [ijepa_svm_aggregated](../../../Scalable_Hybrid_FLIM/results/ijepa_svm_aggregated.csv) |
 | 1 | bp01w64c1280 | L4 · gem · 1280-d | 0.9389 ± 0.0114 (3) | 0.9096 | -0.0045 | [disc_bp01w64c1280_test_gem](../../results/svm_disc_bp01w64c1280_test_gem.csv) · [disc_bp01w64c1280_val_gem](../../results/svm_disc_bp01w64c1280_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
-| 2 | bp01w64c1280 | L4 · avgpool2d · 1280-d | 0.9279 ± 0.0226 (3) | 0.9173 | -0.0155 | [disc_bp01w64c1280_test_avg](../../results/svm_disc_bp01w64c1280_test_avg.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| 2 | bp01w64c1280 | L4 · avgpool2d · 1280-d | 0.9279 ± 0.0226 (3) | 0.9173 | -0.0155 | [disc_bp01w64c1280_test](../../results/svm_disc_bp01w64c1280_test.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| 3 | bp01w64c1280 | L3 · avgpool2d · 64-d | 0.9136 ± 0.0176 (3) | 0.8998 | -0.0297 | [disc_bp01w64c1280_test](../../results/svm_disc_bp01w64c1280_test.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | g20_l_aug | L4 · gem · 1280-d | pendente | 0.9194 | pendente | [disc_g20_l_aug_val_gem](../../results/svm_disc_g20_l_aug_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_aug.yaml) |
 | — | g20_l_bg0 | L4 · gem · 1280-d | pendente | 0.9173 | pendente | [disc_g20_l_bg0_val_gem](../../results/svm_disc_g20_l_bg0_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_bg0.yaml) |
 | — | g20_l_bp10 | L4 · gem · 1280-d | pendente | 0.9136 | pendente | [disc_g20_l_bp10_val_gem](../../results/svm_disc_g20_l_bp10_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_bp10.yaml) |
 | — | bp01c1280 | L4 · avgpool2d · 1280-d | pendente | 0.9117 | pendente | [disc_bp01c1280_val](../../results/svm_disc_bp01c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01c1280.yaml) |
 | — | bp01w64 | L3 · avgpool2d · 64-d | pendente | 0.9041 | pendente | [disc_bp01w64_val_avg](../../results/svm_disc_bp01w64_val_avg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64.yaml) |
+| — | bp01w64c1280 | L4 · avgpool2d_fg · 1280-d | pendente | 0.9037 | pendente | [disc_bp01w64c1280_val_avgfg](../../results/svm_disc_bp01w64c1280_val_avgfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | bp01w64c1280 | L4 · gem_dense · 1344-d | pendente | 0.9037 | pendente | [disc_bp01w64c1280_val_gemdense](../../results/svm_disc_bp01w64c1280_val_gemdense.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | g20_l_sp100 | L4 · gem · 1280-d | pendente | 0.9030 | pendente | [disc_g20_l_sp100_val_gem](../../results/svm_disc_g20_l_sp100_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_sp100.yaml) |
 | — | bp01w64c1280 | L2 · avgpool2d · 48-d | pendente | 0.9022 | pendente | [disc_bp01w64c1280_val_l12](../../results/svm_disc_bp01w64c1280_val_l12.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | g20_l_sp100 | L4 · avgpool2d · 1280-d | pendente | 0.9015 | pendente | [disc_g20_l_sp100_val](../../results/svm_disc_g20_l_sp100_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_sp100.yaml) |
 | — | g20_l_aug | L4 · avgpool2d · 1280-d | pendente | 0.9010 | pendente | [disc_g20_l_aug_val](../../results/svm_disc_g20_l_aug_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_aug.yaml) |
 | — | g20_l_bp10 | L3 · avgpool2d · 64-d | pendente | 0.9003 | pendente | [disc_g20_l_bp10_val](../../results/svm_disc_g20_l_bp10_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_bp10.yaml) |
-| — | bp01w64c1280 | L3 · avgpool2d · 64-d | pendente | 0.8998 | pendente | [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | g20_l_bp10 | L4 · avgpool2d · 1280-d | pendente | 0.8996 | pendente | [disc_g20_l_bp10_val](../../results/svm_disc_g20_l_bp10_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_bp10.yaml) |
+| — | bp01w64c1280 | L4 · gem_fg · 1280-d | pendente | 0.8995 | pendente | [disc_bp01w64c1280_val_gemfg](../../results/svm_disc_bp01w64c1280_val_gemfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | bp01c1280 | L3 · avgpool2d · 48-d | pendente | 0.8992 | pendente | [disc_bp01c1280_val](../../results/svm_disc_bp01c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01c1280.yaml) |
 | — | g20_l_sp100 | L3 · avgpool2d · 64-d | pendente | 0.8967 | pendente | [disc_g20_l_sp100_val](../../results/svm_disc_g20_l_sp100_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_sp100.yaml) |
 | — | g20_l_bg0 | L4 · avgpool2d · 1280-d | pendente | 0.8953 | pendente | [disc_g20_l_bg0_val](../../results/svm_disc_g20_l_bg0_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_bg0.yaml) |
 | — | g20_l_aug | L3 · avgpool2d · 64-d | pendente | 0.8932 | pendente | [disc_g20_l_aug_val](../../results/svm_disc_g20_l_aug_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_aug.yaml) |
 | — | g20_l_bg0 | L3 · avgpool2d · 64-d | pendente | 0.8722 | pendente | [disc_g20_l_bg0_val](../../results/svm_disc_g20_l_bg0_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_g20_l_bg0.yaml) |
 | — | bp01w64 | L3 · spp · 1344-d | pendente | 0.8720 | pendente | [disc_bp01w64_val_spp](../../results/svm_disc_bp01w64_val_spp.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64.yaml) |
+| — | bp01w64c1280 | L3 · avgpool2d_fg · 64-d | pendente | 0.8497 | pendente | [disc_bp01w64c1280_val_avgfg](../../results/svm_disc_bp01w64c1280_val_avgfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | bp01w64 | L3 · flatten · 36864-d | pendente | 0.8449 | pendente | [disc_bp01w64_val](../../results/svm_disc_bp01w64_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64.yaml) |
 | — | bp01w64c96 | L4 · flatten · 55296-d | pendente | 0.8437 | pendente | [disc_bp01w64c96_val](../../results/svm_disc_bp01w64c96_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c96.yaml) |
 | — | bp01w64c1280 | L1 · avgpool2d · 32-d | pendente | 0.8421 | pendente | [disc_bp01w64c1280_val_l12](../../results/svm_disc_bp01w64c1280_val_l12.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
@@ -128,6 +276,7 @@
 | — | r1 | L1 · flatten · 235224-d | pendente | 0.7615 | pendente | [disc_r1_val](../../results/svm_disc_r1_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r1.yaml) |
 | — | a1_mask50 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_a1_mask50.yaml) |
 | — | g20_base_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_base_e60.yaml) |
+| — | g20_bg1_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_bg1_e60.yaml) |
 | — | g20_l_anc03 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_l_anc03.yaml) |
 | — | g20_l_anc03_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_l_anc03_e60.yaml) |
 | — | g20_l_anc3 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_l_anc3.yaml) |
@@ -139,17 +288,20 @@
 | — | g20_l_se_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_l_se_e60.yaml) |
 | — | g20_l_w96 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_l_w96.yaml) |
 | — | g20_mask50_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_mask50_e60.yaml) |
+| — | g20_nomask_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_nomask_e60.yaml) |
 | — | r2 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_r2.yaml) |
 
 ## protozoan — 50% dos dados
 
-2 leitura(s) com teste, 38 pendente(s).
+3 leitura(s) com teste, 42 pendente(s).
 
 | # | família | leitura (camada · embed · dim) | κ teste média ± dp (n) | κ val média | Δ vs I-JEPA (teste) | links |
 |---|---|---|---|---|---|---|
 | ref | **I-JEPA** | ijepa | **0.8636 ± 0.0032 (3)** | — | 0 | [ijepa_svm_aggregated](../../../Scalable_Hybrid_FLIM/results/ijepa_svm_aggregated.csv) |
 | 1 | bp01w64c1280 | L4 · gem · 1280-d | 0.8860 ± 0.0115 (3) | 0.8746 | +0.0225 | [disc_bp01w64c1280_test_gem](../../results/svm_disc_bp01w64c1280_test_gem.csv) · [disc_bp01w64c1280_val_gem](../../results/svm_disc_bp01w64c1280_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
-| 2 | bp01w64c1280 | L4 · avgpool2d · 1280-d | 0.8448 ± 0.0144 (3) | 0.8370 | -0.0188 | [disc_bp01w64c1280_test_avg](../../results/svm_disc_bp01w64c1280_test_avg.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| 2 | bp01w64c1280 | L4 · avgpool2d · 1280-d | 0.8448 ± 0.0144 (3) | 0.8370 | -0.0188 | [disc_bp01w64c1280_test](../../results/svm_disc_bp01w64c1280_test.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| 3 | bp01w64c1280 | L3 · avgpool2d · 60-d | 0.7883 ± 0.0228 (3) | 0.7857 | -0.0753 | [disc_bp01w64c1280_test](../../results/svm_disc_bp01w64c1280_test.csv) · [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| — | bp01w64c1280 | L4 · gem_fg · 1280-d | pendente | 0.8710 | pendente | [disc_bp01w64c1280_val_gemfg](../../results/svm_disc_bp01w64c1280_val_gemfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | bp01w64c1280 | L4 · gem_dense · 1340-d | pendente | 0.8709 | pendente | [disc_bp01w64c1280_val_gemdense](../../results/svm_disc_bp01w64c1280_val_gemdense.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | w64fg | L3 · flatten · 34560-d | pendente | 0.8655 | pendente | [disc_w64fg_val](../../results/svm_disc_w64fg_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_w64fg.yaml) |
 | — | a2_bp01 | L3 · flatten · 27648-d | pendente | 0.8655 | pendente | [disc_a2_bp01_val](../../results/svm_disc_a2_bp01_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_a2_bp01.yaml) |
@@ -158,6 +310,7 @@
 | — | bp01w64c96 | L4 · flatten · 55296-d | pendente | 0.8576 | pendente | [disc_bp01w64c96_val](../../results/svm_disc_bp01w64c96_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c96.yaml) |
 | — | a1_fg01 | L3 · flatten · 27648-d | pendente | 0.8552 | pendente | [disc_a1_fg01_val](../../results/svm_disc_a1_fg01_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_a1_fg01.yaml) |
 | — | a3_sp200 | L3 · flatten · 27648-d | pendente | 0.8525 | pendente | [disc_a3_sp200_val](../../results/svm_disc_a3_sp200_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_a3_sp200.yaml) |
+| — | bp01w64c1280 | L4 · avgpool2d_fg · 1280-d | pendente | 0.8505 | pendente | [disc_bp01w64c1280_val_avgfg](../../results/svm_disc_bp01w64c1280_val_avgfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | r1 | L3 · flatten · 27648-d | pendente | 0.8482 | pendente | [disc_r1_val](../../results/svm_disc_r1_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r1.yaml) |
 | — | a3_popz | L3 · flatten · 27648-d | pendente | 0.8444 | pendente | [disc_a3_popz_val](../../results/svm_disc_a3_popz_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_a3_popz.yaml) |
 | — | bp01w64 | L3 · spp · 1260-d | pendente | 0.8295 | pendente | [disc_bp01w64_val_spp](../../results/svm_disc_bp01w64_val_spp.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64.yaml) |
@@ -169,7 +322,7 @@
 | — | r1_rand | L3 · flatten · 27648-d | pendente | 0.8046 | pendente | [disc_r1_rand_val](../../results/svm_disc_r1_rand_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r1_rand.yaml) |
 | — | bp01w64 | L3 · gem · 60-d | pendente | 0.7976 | pendente | [disc_bp01w64_val_gem](../../results/svm_disc_bp01w64_val_gem.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64.yaml) |
 | — | bp01w64 | L3 · avgpool2d · 60-d | pendente | 0.7970 | pendente | [disc_bp01w64_val_avg](../../results/svm_disc_bp01w64_val_avg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64.yaml) |
-| — | bp01w64c1280 | L3 · avgpool2d · 60-d | pendente | 0.7857 | pendente | [disc_bp01w64c1280_val](../../results/svm_disc_bp01w64c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
+| — | bp01w64c1280 | L3 · avgpool2d_fg · 60-d | pendente | 0.7833 | pendente | [disc_bp01w64c1280_val_avgfg](../../results/svm_disc_bp01w64c1280_val_avgfg.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | a3_popz | L1 · flatten · 235224-d | pendente | 0.7692 | pendente | [disc_a3_popz_val](../../results/svm_disc_a3_popz_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_a3_popz.yaml) |
 | — | r1 | L1 · flatten · 235224-d | pendente | 0.7648 | pendente | [disc_r1_val](../../results/svm_disc_r1_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_r1.yaml) |
 | — | bp01c1280 | L3 · avgpool2d · 48-d | pendente | 0.7496 | pendente | [disc_bp01c1280_val](../../results/svm_disc_bp01c1280_val.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01c1280.yaml) |
@@ -177,7 +330,9 @@
 | — | bp01w64c1280 | L1 · avgpool2d · 30-d | pendente | 0.2333 | pendente | [disc_bp01w64c1280_val_l12](../../results/svm_disc_bp01w64c1280_val_l12.csv) · [yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280.yaml) |
 | — | a1_mask50 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_a1_mask50.yaml) |
 | — | g20_base_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_base_e60.yaml) |
+| — | g20_bg1_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_bg1_e60.yaml) |
 | — | g20_mask50_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_mask50_e60.yaml) |
+| — | g20_nomask_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_nomask_e60.yaml) |
 | — | g20_p_aug | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_p_aug.yaml) |
 | — | g20_p_aug_e60 | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_p_aug_e60.yaml) |
 | — | g20_p_base | — | pendente | — | pendente | [yaml](../../experiments/autoencoder/growth_disc_g20_p_base.yaml) |
@@ -264,6 +419,7 @@ Valores do YAML (`runner_args` + `overrides`). `(cfg)` = veio do `config.yaml` d
 | bp01w64c1280_pcts | [growth_disc_bp01w64c1280_pcts.yaml](../../experiments/autoencoder/growth_disc_bp01w64c1280_pcts.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_bp01w64c1280` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/9dyhd2h7) · [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/auhczi6f) · [proto](https://wandb.ai/ophira-ai/flim-ssl/runs/63g3h1n9) | eggs,larva,proto / 1/2/3 / 1/5/25/75/100% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | eggs 200.9k, larva 200.9k, proto 38.3k | vs r1: embed_mode: flatten→avgpool2d; fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→32/48/64/1280; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | bp01w64c1280 nas outras porcentagens (lei de escala). 50% ja pronto em disc_bp01w64c1280; mesma pasta, pastas pct novas. |
 | bp01w64c96 | [growth_disc_bp01w64c96.yaml](../../experiments/autoencoder/growth_disc_bp01w64c96.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_bp01w64c96` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/n4g5hot4) · [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/s9hy867q) · [proto](https://wandb.ai/ophira-ai/flim-ssl/runs/b55g2e9u) | eggs,larva,proto / 1/2/3 / 50% | 4 | 32/48/64/96 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | eggs 124.0k, larva 124.0k, proto 116.2k | vs r1: fill_random_last: —→True; kernel_size: 5→—; layer_channels: 24/32/48→32/48/64/96; layer_kernels: —→5/5/5/1; layer_pools: —→2/2/2/1; layerwise: 3→4; layerwise_backprop: —→0.1; recon_bg_weight: —→0.1 | bp01w64 + L4 1x1x96 lida achatada (96x24x24 = 55k-d): a 1x1 sem perder a posicao, para eggs e protozoan. |
 | g20_base_e60 | [growth_disc_g20_base_e60.yaml](../../experiments/autoencoder/growth_disc_g20_base_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_base_e60` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/8negvzrb) · larva: — · proto: — | eggs,larva,proto / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 60 | False (cfg) | False (cfg) | 0 (cfg) | False (cfg) | 0.0 (cfg) | 0.0 (cfg) | — | eggs 200.9k | vs bp01w64c1280: max_epochs: 200→60 | e60: max_epochs 200 -> 60 (cosine reescalado); A4 viu o best das L1-L3 na epoca ~195 de 200, entao so encurtar o orcamento corta tempo referencia e60 (base bp01w64c1280) para os eixos *_e60 |
+| g20_bg1_e60 | [growth_disc_g20_bg1_e60.yaml](../../experiments/autoencoder/growth_disc_g20_bg1_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_bg1_e60` (não existe) | eggs: — · larva: — · proto: — | eggs,larva,proto / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 50 | True | 0.1 | 1.0 | 60 | — | — | — | — | — | — | — | — | vs g20_base_e60: recon_bg_weight: 0.1→1.0 | sem-fundo (usuario 02/11): a receita tem que rodar em dataset sem fundo constante e sem mascara; mede o custo de tirar cada dependencia bg1: recon sem o fg sem rotulo (fundo pesa 1): nao depende de borda de cor constante |
 | g20_e_anc03 | [growth_disc_g20_e_anc03.yaml](../../experiments/autoencoder/growth_disc_g20_e_anc03.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_anc03` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/n9m5sy1m) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | False (cfg) | 0.3 | 0.0 (cfg) | — | eggs 200.9k | vs bp01w64c1280: embed_mode: avgpool2d→gem; spifil_anchor: —→0.3 | g20 e_anc03: ancora L2-SP lambda=0.3 no SPiFiL (A8: backprop apaga o contraste objeto x fundo) |
 | g20_e_anc3 | [growth_disc_g20_e_anc3.yaml](../../experiments/autoencoder/growth_disc_g20_e_anc3.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_anc3` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/q10rfxqa) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | False (cfg) | 3.0 | 0.0 (cfg) | — | eggs 200.9k | vs bp01w64c1280: embed_mode: avgpool2d→gem; spifil_anchor: —→3.0 | g20 e_anc3: ancora L2-SP lambda=3.0 no SPiFiL (A8: backprop apaga o contraste objeto x fundo) |
 | g20_e_aug | [growth_disc_g20_e_aug.yaml](../../experiments/autoencoder/growth_disc_g20_e_aug.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_aug` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/ki1cjwqv) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | True | False (cfg) | — | — | — | 0.0 (cfg) | — | eggs 200.9k | vs bp01w64c1280: embed_mode: avgpool2d→gem; geo_aug: —→True | g20 e_aug: invariancia a rotacao/flip sobre o SPiFiL |
@@ -272,11 +428,16 @@ Valores do YAML (`runner_args` + `overrides`). `(cfg)` = veio do `config.yaml` d
 | g20_e_bn | [growth_disc_g20_e_bn.yaml](../../experiments/autoencoder/growth_disc_g20_e_bn.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_bn` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/nsp9gbdp) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | True | — | — | — | 0.0 (cfg) | — | eggs 200.9k | vs bp01w64c1280: batch_norm: —→True; embed_mode: avgpool2d→gem | g20 e_bn: BN estabiliza a escala dos filtros SPiFiL |
 | g20_e_bp03 | [growth_disc_g20_e_bp03.yaml](../../experiments/autoencoder/growth_disc_g20_e_bp03.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_bp03` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/srwqixg3) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.3 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | eggs 200.9k | vs bp01w64c1280: embed_mode: avgpool2d→gem; layerwise_backprop: 0.1→0.3 | g20 e_bp03: camadas antigas acompanham mais o filtro SPiFiL novo |
 | g20_e_bp10 | [growth_disc_g20_e_bp10.yaml](../../experiments/autoencoder/growth_disc_g20_e_bp10.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_bp10` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/7x71197e) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 1.0 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | eggs 200.9k | vs bp01w64c1280: embed_mode: avgpool2d→gem; layerwise_backprop: 0.1→1.0 | g20 e_bp10: SPiFiL so como init, encoder todo livre |
+| g20_e_d5_e60 | [growth_disc_g20_e_d5_e60.yaml](../../experiments/autoencoder/growth_disc_g20_e_d5_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_d5_e60` (não existe) | eggs: — | eggs / 1/2/3 / 50% | 5 | 32/48/64/96/1280 | 5/5/5/5/1 | 2/2/2/1/1 | 1/1/1/1/1 | disf 50 | True | 0.1 | 0.1 | 60 | — | — | — | — | — | — | — | — | vs g20_base_e60: layer_channels: 32/48/64/1280→32/48/64/96/1280; layer_dilations: —→1/1/1/1/1; layer_kernels: 5/5/5/1→5/5/5/5/1; layer_pools: 2/2/2/1→2/2/2/1/1; layerwise: 4→5 | eggs-foco (usuario 02/11): larvae/protozoan perto ou acima do I-JEPA, eggs a -0.049; leis de construcao sobre a base_e60 e_d5: lei da profundidade: +1 camada SPiFiL 5x5 (96) antes da 1x1; campo receptivo ~40 -> ~72 px cobre o ovo inteiro (25-50 px) |
+| g20_e_d6_e60 | [growth_disc_g20_e_d6_e60.yaml](../../experiments/autoencoder/growth_disc_g20_e_d6_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_d6_e60` (não existe) | eggs: — | eggs / 1/2/3 / 50% | 6 | 32/48/64/96/128/1280 | 5/5/5/5/5/1 | 2/2/2/1/1/1 | 1/1/1/1/1/1 | disf 50 | True | 0.1 | 0.1 | 60 | — | — | — | — | — | — | — | — | vs g20_base_e60: layer_channels: 32/48/64/1280→32/48/64/96/128/1280; layer_dilations: —→1/1/1/1/1/1; layer_kernels: 5/5/5/1→5/5/5/5/5/1; layer_pools: 2/2/2/1→2/2/2/1/1/1; layerwise: 4→6 | eggs-foco (usuario 02/11): larvae/protozoan perto ou acima do I-JEPA, eggs a -0.049; leis de construcao sobre a base_e60 e_d6: lei da profundidade, 2o ponto: +2 camadas SPiFiL (96, 128) |
+| g20_e_dil2_e60 | [growth_disc_g20_e_dil2_e60.yaml](../../experiments/autoencoder/growth_disc_g20_e_dil2_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_dil2_e60` (não existe) | eggs: — | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/2/1 | disf 50 | True | 0.1 | 0.1 | 60 | — | — | — | — | — | — | — | — | vs g20_base_e60: layer_dilations: —→1/1/2/1 | eggs-foco (usuario 02/11): larvae/protozoan perto ou acima do I-JEPA, eggs a -0.049; leis de construcao sobre a base_e60 e_dil2: lei do campo receptivo sem parametros: L3 com dilation 2 (+16 px) |
 | g20_e_grn | [growth_disc_g20_e_grn.yaml](../../experiments/autoencoder/growth_disc_g20_e_grn.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_grn` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/hct8rv12) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | True | 0.0 (cfg) | 0.0 (cfg) | — | eggs 200.9k | vs bp01w64c1280: embed_mode: avgpool2d→gem; grn: —→True | g20 e_grn: GRN na 1x1: realca prototipos SPiFiL que se destacam |
 | g20_e_k3 | [growth_disc_g20_e_k3.yaml](../../experiments/autoencoder/growth_disc_g20_e_k3.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_k3` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/h4hba29o) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 3/3/3/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | eggs 125.7k | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_kernels: 5/5/5/1→3/3/3/1 | g20 e_k3: patch SPiFiL menor, mais local |
 | g20_e_k7 | [growth_disc_g20_e_k7.yaml](../../experiments/autoencoder/growth_disc_g20_e_k7.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_k7` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/mjmbl0sm) | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 7/7/7/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | False (cfg) | 0.0 (cfg) | 0.0 (cfg) | — | eggs 313.8k | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_kernels: 5/5/5/1→7/7/7/1 | g20 e_k7: lei do kernel (k3 perdeu -0.024 para k5); patch SPiFiL maior pega mais forma do ovo |
 | g20_e_se | [growth_disc_g20_e_se.yaml](../../experiments/autoencoder/growth_disc_g20_e_se.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_se` (não existe) | eggs: — | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 50 | True | 0.1 | 0.1 | 200 | — | — | 16 | — | — | — | — | — | vs bp01w64c1280: embed_mode: avgpool2d→gem; se_reduction: —→16 | g20 e_se: SE: volume por filtro SPiFiL, init identidade |
 | g20_e_se_e60 | [growth_disc_g20_e_se_e60.yaml](../../experiments/autoencoder/growth_disc_g20_e_se_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_se_e60` (não existe) | eggs: — | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 50 | True | 0.1 | 0.1 | 60 | — | — | 16 | — | — | — | — | — | vs g20_base_e60: embed_mode: avgpool2d→gem; se_reduction: —→16 | e60: max_epochs 200 -> 60 (cosine reescalado); A4 viu o best das L1-L3 na epoca ~195 de 200, entao so encurtar o orcamento corta tempo g20 e_se: SE: volume por filtro SPiFiL, init identidade |
+| g20_e_sp100_e60 | [growth_disc_g20_e_sp100_e60.yaml](../../experiments/autoencoder/growth_disc_g20_e_sp100_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_sp100_e60` (não existe) | eggs: — | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 100 | True | 0.1 | 0.1 | 60 | — | — | — | — | — | — | — | — | vs g20_base_e60: n_superpixels: 50→100 | eggs-foco (usuario 02/11): larvae/protozoan perto ou acima do I-JEPA, eggs a -0.049; leis de construcao sobre a base_e60 e_sp100: lei das sementes SPiFiL: mais superpixels, mais filtros do dado e menos aleatorios na 1x1 |
+| g20_e_sp25_e60 | [growth_disc_g20_e_sp25_e60.yaml](../../experiments/autoencoder/growth_disc_g20_e_sp25_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_sp25_e60` (não existe) | eggs: — | eggs / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 25 | True | 0.1 | 0.1 | 60 | — | — | — | — | — | — | — | — | vs g20_base_e60: n_superpixels: 50→25 | eggs-foco (usuario 02/11): larvae/protozoan perto ou acima do I-JEPA, eggs a -0.049; leis de construcao sobre a base_e60 e_sp25: lei das sementes SPiFiL: menos superpixels, filtros de regioes maiores do ovo |
 | g20_e_w128 | [growth_disc_g20_e_w128.yaml](../../experiments/autoencoder/growth_disc_g20_e_w128.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_w128` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/ehki8d4y) | eggs / 1/2/3 / 50% | 4 | 64/96/128/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | eggs 631.0k | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_channels: 32/48/64/1280→64/96/128/1280 | g20 e_w128: lei da largura, 2o ponto |
 | g20_e_w96 | [growth_disc_g20_e_w96.yaml](../../experiments/autoencoder/growth_disc_g20_e_w96.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_e_w96` | [eggs](https://wandb.ai/ophira-ai/flim-ssl/runs/bdgc4pl8) | eggs / 1/2/3 / 50% | 4 | 48/64/96/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | False (cfg) | 0.0 (cfg) | 0.0 (cfg) | — | eggs 358.4k | vs bp01w64c1280: embed_mode: avgpool2d→gem; layer_channels: 32/48/64/1280→48/64/96/1280 | g20 e_w96: mais prototipos SPiFiL por classe |
 | g20_l_anc03 | [growth_disc_g20_l_anc03.yaml](../../experiments/autoencoder/growth_disc_g20_l_anc03.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_anc03` | [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/blolzzwr) | larva / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | False (cfg) | 0.3 | 0.0 (cfg) | — | larva 117.7k | vs bp01w64c1280: spifil_anchor: —→0.3 | g20 l_anc03: ancora L2-SP lambda=0.3 no SPiFiL (A8: backprop apaga o contraste objeto x fundo) |
@@ -288,12 +449,13 @@ Valores do YAML (`runner_args` + `overrides`). `(cfg)` = veio do `config.yaml` d
 | g20_l_bp03 | [growth_disc_g20_l_bp03.yaml](../../experiments/autoencoder/growth_disc_g20_l_bp03.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_bp03` | [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/z7auv30g) | larva / 2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.3 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | False (cfg) | — | 0.0 (cfg) | — | larva 200.9k | vs bp01w64c1280: layerwise_backprop: 0.1→0.3 | g20 l_bp03: camadas antigas acompanham mais o filtro SPiFiL novo |
 | g20_l_bp10 | [growth_disc_g20_l_bp10.yaml](../../experiments/autoencoder/growth_disc_g20_l_bp10.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_bp10` | [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/sk4g71sl) | larva / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 1.0 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | larva 200.9k | vs bp01w64c1280: layerwise_backprop: 0.1→1.0 | g20 l_bp10: SPiFiL so como init, encoder todo livre |
 | g20_l_c2560 | [growth_disc_g20_l_c2560.yaml](../../experiments/autoencoder/growth_disc_g20_l_c2560.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_c2560` | [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/zj7fstmd) | larva / 1/2/3 / 50% | 4 | 32/48/64/2560 | 5/5/5/1 | 2/2/2/1 | 1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | larva 2.4k | vs bp01w64c1280: layer_channels: 32/48/64/1280→32/48/64/2560 | g20 l_c2560: lei da largura da 1x1, 2o ponto |
-| g20_l_grn | [growth_disc_g20_l_grn.yaml](../../experiments/autoencoder/growth_disc_g20_l_grn.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_grn` | [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/nvtyfxs5) | larva / 3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | True | 0.0 (cfg) | 0.0 (cfg) | — | larva 117.7k | vs bp01w64c1280: grn: —→True | g20 l_grn: GRN na 1x1: realca prototipos SPiFiL que se destacam |
+| g20_l_grn | [growth_disc_g20_l_grn.yaml](../../experiments/autoencoder/growth_disc_g20_l_grn.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_grn` | [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/p3i4219t) | larva / 3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | True | 0.0 (cfg) | 0.0 (cfg) | — | larva 200.9k | vs bp01w64c1280: grn: —→True | g20 l_grn: GRN na 1x1: realca prototipos SPiFiL que se destacam |
 | g20_l_se | [growth_disc_g20_l_se.yaml](../../experiments/autoencoder/growth_disc_g20_l_se.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_se` (não existe) | larva: — | larva / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 50 | True | 0.1 | 0.1 | 200 | — | — | 16 | — | — | — | — | — | vs bp01w64c1280: se_reduction: —→16 | g20 l_se: SE: volume por filtro SPiFiL, init identidade |
 | g20_l_se_e60 | [growth_disc_g20_l_se_e60.yaml](../../experiments/autoencoder/growth_disc_g20_l_se_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_se_e60` (não existe) | larva: — | larva / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 50 | True | 0.1 | 0.1 | 60 | — | — | 16 | — | — | — | — | — | vs g20_base_e60: se_reduction: —→16 | e60: max_epochs 200 -> 60 (cosine reescalado); A4 viu o best das L1-L3 na epoca ~195 de 200, entao so encurtar o orcamento corta tempo g20 l_se: SE: volume por filtro SPiFiL, init identidade |
 | g20_l_sp100 | [growth_disc_g20_l_sp100.yaml](../../experiments/autoencoder/growth_disc_g20_l_sp100.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_sp100` | [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/3n317lry) | larva / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 100 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | larva 200.9k | vs bp01w64c1280: n_superpixels: 50→100 | g20 l_sp100: mais sementes: mais filtros SPiFiL, menos aleatorios na 1x1 |
 | g20_l_w96 | [growth_disc_g20_l_w96.yaml](../../experiments/autoencoder/growth_disc_g20_l_w96.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_l_w96` | [larva](https://wandb.ai/ophira-ai/flim-ssl/runs/iuxv2i7o) | larva / 2/3 / 50% | 4 | 48/64/96/1280 | 5/5/5/1 | 2/2/2/1 | 1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | — | — | — | 0.0 (cfg) | — | larva 3.6k | vs bp01w64c1280: layer_channels: 32/48/64/1280→48/64/96/1280 | g20 l_w96: base mais larga sob a 1x1  / split 1 ja pronto (pausado 17:10, cap 20 GB) |
 | g20_mask50_e60 | [growth_disc_g20_mask50_e60.yaml](../../experiments/autoencoder/growth_disc_g20_mask50_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_mask50_e60` (não existe) | eggs: — · larva: — · proto: — | eggs,larva,proto / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 50 | True | 0.1 | 0.1 | 60 | — | — | — | — | — | 0.5 | — | — | vs g20_base_e60: mask_patch: —→20; mask_ratio: —→0.5 | e60: max_epochs 200 -> 60 (cosine reescalado); A4 viu o best das L1-L3 na epoca ~195 de 200, entao so encurtar o orcamento corta tempo mask50 (A1, interrompido em 30/10) refeito sobre a base_e60: esconder 50% dos patches 20x20 obriga o encoder a inferir o objeto pelo contexto |
+| g20_nomask_e60 | [growth_disc_g20_nomask_e60.yaml](../../experiments/autoencoder/growth_disc_g20_nomask_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_nomask_e60` (não existe) | eggs: — · larva: — · proto: — | eggs,larva,proto / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 50 | True | 0.1 | 0.1 | 60 | — | — | — | — | — | — | — | — | vs g20_base_e60: impurities: —→True | sem-fundo (usuario 02/11): a receita tem que rodar em dataset sem fundo constante e sem mascara; mede o custo de tirar cada dependencia nomask: SPiFiL sem a mascara do dataset: sementes no quadro inteiro (o Fisher tende a punir as de fundo) |
 | g20_p_aug | [growth_disc_g20_p_aug.yaml](../../experiments/autoencoder/growth_disc_g20_p_aug.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_p_aug` | [proto](https://wandb.ai/ophira-ai/flim-ssl/runs/uwcer1kb) | proto / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | True | False (cfg) | — | — | — | 0.0 (cfg) | — | proto 110.4k | vs bp01w64c1280: embed_mode: avgpool2d→gem; geo_aug: —→True | g20 p_aug: invariancia a rotacao/flip sobre o SPiFiL |
 | g20_p_aug_e60 | [growth_disc_g20_p_aug_e60.yaml](../../experiments/autoencoder/growth_disc_g20_p_aug_e60.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_p_aug_e60` (não existe) | proto: — | proto / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | — | disf 50 | True | 0.1 | 0.1 | 60 | True | — | — | — | — | — | — | — | vs g20_base_e60: embed_mode: avgpool2d→gem; geo_aug: —→True | e60: max_epochs 200 -> 60 (cosine reescalado); A4 viu o best das L1-L3 na epoca ~195 de 200, entao so encurtar o orcamento corta tempo g20 p_aug: invariancia a rotacao/flip sobre o SPiFiL |
 | g20_p_base | [growth_disc_g20_p_base.yaml](../../experiments/autoencoder/growth_disc_g20_p_base.yaml) | `/dados/home/moliveira/artifacts/spifil_growth/disc_g20_p_base` | [proto](https://wandb.ai/ophira-ai/flim-ssl/runs/7cqw6k6h) | proto / 1/2/3 / 50% | 4 | 32/48/64/1280 | 5/5/5/1 | 2/2/2/1 | 1/1/1/1 (arch) | disf 50 | True | 0.1 | 0.1 | 200 | False (cfg) | False (cfg) | 0 (cfg) | False (cfg) | 0.0 (cfg) | 0.0 (cfg) | — | proto 188.5k | vs bp01w64c1280: embed_mode: avgpool2d→gem | g20 p_base: referencia justa = bp01w64c1280 sem mudanca, sonda de treino gem (como os e_*/p_*) |
