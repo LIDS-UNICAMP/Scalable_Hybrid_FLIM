@@ -697,3 +697,7 @@ Aceite: κ teste ≥ I-JEPA nos 3 datasets a 50% (média dos splits rodados). Te
 - I-JEPA (teste): eggs 0.661/0.864/0.917/0.940/0.945/0.957; larvae 0.822/0.881/0.919/0.943/0.941/0.950; protozoan 0.586/0.725/0.831/0.864/0.882/0.892.
 - Passamos o I-JEPA com >=25% em larvae/protozoan e com >=75% em eggs; perdemos com 1-5%.
 - Hipótese "o whitening colapsa com poucas amostras e causa a perda em 1%": REFUTADA. gem_tta sem whitening é pior em todos os pontos (Δ −0.004 a −0.082; parcial, protozoan com 2 splits). A perda em 1-5% vem do encoder com poucos dados, não da leitura.
+
+## 2026-11-02: eggs empata com o I-JEPA no teste (e_bp10 + leitura final)
+- e_bp10 (bp 1.0) + gem_tta_pw, teste 50% (Jaci): 0.9434/0.9396/0.9401 (0.941) contra I-JEPA 0.940. Empate (+0.001). Val era 0.949.
+- Com isso, no teste a 50%: eggs 0.941 (empate), larvae 0.968 (+0.025), protozoan 0.928 (+0.064). O objetivo original (κ >= I-JEPA nos 3 a 50%) está atingido.
