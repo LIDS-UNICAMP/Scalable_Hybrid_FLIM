@@ -1,0 +1,38 @@
+# curvas 1-100% com gem_tta SEM whitening: com poucas amostras (1%) o PCA do whitening colapsa (dim n-1)
+name: svm_disc_bp01w64c1280_pcts_test_gemtta
+method: autoencoder
+runner: eval
+grid:
+  datasets:
+  - helminth-eggs
+  - helminth-larvae
+  - protozoan-cysts
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 1
+  - 5
+  - 25
+  - 50
+  - 75
+  - 100
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: disc_bp01w64c1280
+  ckpt_selection: best
+  results_csv: results/svm_disc_bp01w64c1280_pcts_test_gemtta.csv
+  embed_mode: gem_tta
+  eval_set: test
+  stages:
+  - L4
+resources:
+  gpu_ids:
+  - 0
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /dados/home/moliveira/artifacts/eval/svm_disc_bp01w64c1280_pcts_test_gemtta
+skip: state
