@@ -256,6 +256,11 @@ def stage_cmd(exp: Experiment, point: dict, name: str, arch: str, weights: str,
         # conv1..conv{old_layers} treinam com lr * old_layer_lr_scale; nada congela
         cmd += ["--model.init_args.freeze_encoder_flag=false",
                 f"--model.init_args.old_layers={old_layers}"]
+    elif old_layers and "layerwise_backprop" in exp.runner_args:
+        # `layerwise_backprop: s`: as antigas treinam junto com a nova, com lr * s
+        cmd += ["--model.init_args.freeze_encoder_flag=false",
+                f"--model.init_args.old_layers={old_layers}",
+                f"--model.init_args.old_layer_lr_scale={exp.runner_args['layerwise_backprop']}"]
     elif freeze:
         cmd.append("--model.init_args.freeze_encoder_flag=true")
     # So o estagio `round{r}_head` pede a Head: os estagios 1 e 2 sao de
@@ -350,7 +355,10 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
             # `layer_kernels` da o kernel de cada camada (ex. 5,5,5,1,1); sem ela, `kernel_size` em todas
             kernels = exp.runner_args.get(
                 "layer_kernels", [exp.runner_args.get("kernel_size", 3)] * len(LAYERWISE_SPECS))
-            specs = [(w, s) for w, (_, s) in zip(widths, LAYERWISE_SPECS)]
+            # `layer_pools` da o stride do max-pool de cada camada (1 = sem pooling);
+            # sem ela, o de LAYERWISE_SPECS
+            pools = exp.runner_args.get("layer_pools", [s for _, s in LAYERWISE_SPECS])
+            specs = list(zip(widths, pools))
             # `layerwise_from_flim: n`: L1..Ln sao o FLIM de partida (_paths), sem grow;
             # o primeiro estagio `L{n}` treina essas n e o grow recomeca em L{n+1}
             start = exp.runner_args.get("layerwise_from_flim", 0)
@@ -372,7 +380,9 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                                    if "layer_kernels" in exp.runner_args else []))
                 elif _grow_once(exp, point, gpu_id, ckpt, arch, weights, grow_dir,
                                 out_channels=width, kernel_size=kernels[k - 1],
-                                pool_stride=stride) == GROW_EXHAUSTED:
+                                pool_stride=stride,
+                                fill_random=k == layerwise
+                                and exp.runner_args.get("fill_random_last", False)) == GROW_EXHAUSTED:
                     result["reason"] = f"spifil grow recusou L{k}: N <= D"
                     break
                 arch, weights = os.path.join(grow_dir, ARCH_JSON_FILENAME), grow_dir
@@ -381,7 +391,7 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                                          old_layers=k - 1)
                 if dry_run:
                     continue
-                if prev and not ijepa:
+                if prev and not ijepa and "layerwise_backprop" not in exp.runner_args:
                     _assert_frozen(prev, ckpt, k - 1)
                 if exp.evaluate.SVM:
                     rows.append((str(k), f"L{k}", _kappa(_stage_dir(exp, point, f"L{k}"))))

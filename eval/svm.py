@@ -300,7 +300,9 @@ DEFAULT_EMBED_MODE = "avgpool2d"
 # processos separados — o parâmetro explícito não tem nenhum dos dois problemas.
 EMBED_MODE = DEFAULT_EMBED_MODE
 
-EMBED_MODES = ("avgpool2d", "flatten")
+# Leituras so de eval: "gem" GeM p=3 no lugar do avg; "gem_tta": media do gem nas 8
+# rotacoes/flips da imagem (TTA, Shanmugam et al. 2021).
+EMBED_MODES = ("avgpool2d", "flatten", "gem", "gem_tta")
 
 
 def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torch.Tensor:
@@ -320,11 +322,17 @@ def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torc
         raise ValueError(
             f"embed mode inválido: {mode!r}; use um de {EMBED_MODES}"
         )
+    if mode == "gem_tta":
+        return torch.stack([_encode_pooled(model, torch.rot90(x, k, (2, 3)), "gem")
+                            for x in (inputs, inputs.flip(3)) for k in range(4)]).mean(0)
     out = inputs
     for n in range(1, getattr(model, "n_layers", 3) + 1):
         out = getattr(model, f"conv{n}")(out)
     if mode == "flatten":
         return out.flatten(start_dim=1).detach().cpu()
+    if mode == "gem":
+        return F.adaptive_avg_pool2d(out.clamp(min=1e-6).pow(3), 1).pow(1 / 3).flatten(
+            start_dim=1).detach().cpu()
     return F.adaptive_avg_pool2d(out, 1).flatten(start_dim=1).detach().cpu()
 
 
@@ -623,6 +631,10 @@ def _run_svm_job(config: str) -> str:
     csv_path     = job["results_csv"]
     csv_path     = csv_path if os.path.isabs(csv_path) else os.path.join(_ROOT, csv_path)
     num_classes  = DATASET_NUM_CLASSES[dataset_name]
+    # Conjunto avaliado: "test" (default) ou "val" (= "validation" no descritor).
+    eval_set     = job.get("eval_set", "test")
+    if eval_set not in ("test", "val"):
+        raise ValueError(f"{cfg_path}: eval_set={eval_set!r} — use 'test' ou 'val'")
 
     row: dict = {
         "method":       job["method"],
@@ -657,6 +669,8 @@ def _run_svm_job(config: str) -> str:
             # LAB[0,1], que e o que os bracos viram no treino.
             imagenet_norm = False
             mode = job.get("embed_mode", "flatten")
+            # sufixo "_pw": PCA-whitening (shrinkage) + L2 do vetor (Jegou & Chum 2012), fitado no treino
+            pw, mode = mode.endswith("_pw"), mode.removesuffix("_pw")
             def _feats(loader):
                 return extract_features(encoder, loader, mode)
         elif source == "distillation":
@@ -679,9 +693,11 @@ def _run_svm_job(config: str) -> str:
         transform = build_test(IMAGE_SIZE, imagenet_norm=imagenet_norm)
 
         def _loader(set_name: str) -> DataLoader:
+            # `svm_train_pct`: encoder do pct da grade, SVM treinado so com os rotulos deste pct
+            pct = job.get("svm_train_pct", percentage) if set_name == "train" else percentage
             return DataLoader(
                 ParasiteDataset(
-                    set_name=set_name, split=split, percentage=percentage,
+                    set_name=set_name, split=split, percentage=pct,
                     transform=transform, loader="ift_lab",
                     path_dataset=dataset_name,
                 ),
@@ -689,9 +705,16 @@ def _run_svm_job(config: str) -> str:
             )
 
         X_train, y_train = _feats(_loader("train"))
+        feats, y_true = _feats(_loader("validation" if eval_set == "val" else "test"))
+        if source == "growth_stages" and pw:
+            from sklearn.decomposition import PCA  # noqa: PLC0415
+            from sklearn.preprocessing import normalize  # noqa: PLC0415
+            # whitening com shrinkage: sem o eps, os componentes de variancia ~0 viram ruido
+            # amplificado e o SVM colapsa numa classe (kappa ~0 em larvae, 02/11)
+            pca = PCA().fit(X_train)
+            s = (pca.explained_variance_ + 0.1 * pca.explained_variance_.mean()) ** -0.5
+            X_train, feats = (normalize(pca.transform(z) * s) for z in (X_train, feats))
         clf = fit_svm(X_train, y_train, tag=row["method"])
-
-        feats, y_true = _feats(_loader("test"))
         y_pred = clf.predict(feats)
 
         metrics = compute_metrics(y_true=y_true, y_pred=y_pred,

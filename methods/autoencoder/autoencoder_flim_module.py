@@ -263,6 +263,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
         init_ckpt: str = "",
         fresh_decoder: bool = False,
         embed_mode: Optional[str] = None,
+        recon_bg_weight: float = 1.0,
+        old_layers: int = 0,
+        old_layer_lr_scale: float = 0.1,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -324,7 +327,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
             n: p.detach().cpu().clone() for n, p in self.model.encoder.named_parameters()
         }
         if fresh_decoder:
-            freeze_encoder(self.model, except_last=True)
+            # `old_layers` > 0: conv1..conv{old_layers} treinam com lr * old_layer_lr_scale
+            if not old_layers:
+                freeze_encoder(self.model, except_last=True)
             delta = 0  # o log de congelamento abaixo le esta variavel
         elif freeze_encoder_flag:
             # Stage 1 (no init_ckpt): whole encoder frozen, whole decoder learning.
@@ -590,8 +595,20 @@ class AutoEncoderFlimModule(pl.LightningModule):
 
     def _recon_loss(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         target = self._target_from_input(x)
+        bg = self.hparams.recon_bg_weight
+        if bg >= 1:
+            logits = self(x)
+            return self.criterion(logits, target), logits, target
+        b, _, h, w = x.shape
+        m = torch.ones(b, 1, h, w, device=x.device, dtype=x.dtype)
+        edge = torch.cat([target[..., :4, :].flatten(2), target[..., -4:, :].flatten(2),
+                          target[..., :4].flatten(2), target[..., -4:].flatten(2)], 2)
+        fg = ((target - edge.median(2).values[..., None, None]).norm(dim=1, keepdim=True)
+              > 0.04).to(x.dtype)
+        m = m * (bg + (1 - bg) * fg)
         logits = self(x)
-        return self.criterion(logits, target), logits, target
+        per_px = nn.functional.binary_cross_entropy_with_logits(logits, target, reduction="none")
+        return (per_px * m).sum() / (m.sum() * target.shape[1]).clamp_min(1), logits, target
 
     def training_step(self, batch: Any, batch_idx: int) -> Tensor:
         views, y = batch  # y so entra na perda no braco head_finetune
@@ -986,11 +1003,19 @@ class AutoEncoderFlimModule(pl.LightningModule):
         total = self.hparams.max_epochs or 100
         # Same filter as classification_flim_module.py:232 — stage 1's frozen encoder is
         # then respected for free, with no optimizer state allocated for its kernels.
+        # Escala de lr das camadas antigas (conv1..conv{old_layers}) do layerwise; o resto,
+        # e todos com os defaults, lr cheio num grupo so.
+        hp, enc = self.hparams, self.model.encoder
+        scale = {id(p): hp.old_layer_lr_scale for n in range(1, hp.old_layers + 1)
+                 for p in enc.blocks[f"conv{n}"].parameters()}
+        groups: dict[float, list] = {}
+        # self.parameters(), nao self.model.parameters(): a Head vive fora de `model`.
+        # Sem Head os dois conjuntos sao identicos, entao nada muda no fluxo de recon.
+        for p in filter(lambda p: p.requires_grad, self.parameters()):
+            groups.setdefault(scale.get(id(p), 1.0), []).append(p)
         optimizer = AdamW(
-            # self.parameters(), nao self.model.parameters(): a Head vive fora de `model`.
-            # Sem Head os dois conjuntos sao identicos, entao nada muda no fluxo de recon.
-            filter(lambda p: p.requires_grad, self.parameters()),
-            lr=self.hparams.lr, weight_decay=self.hparams.weight_decay,
+            [{"params": ps, "lr": hp.lr * s} for s, ps in groups.items()],
+            lr=hp.lr, weight_decay=hp.weight_decay,
         )
         sched_warmup = LinearLR(optimizer, start_factor=0.01, total_iters=warmup)
         sched_cosine = CosineAnnealingLR(optimizer, T_max=max(1, total - warmup), eta_min=1e-5)

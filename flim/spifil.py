@@ -719,6 +719,7 @@ def grow(
     one_per_class: bool = True,
     random_layer: bool = False,
     random_layer_classic: bool = False,
+    fill_random: bool = False,
     paper_classes: bool = False,
     superpixels: str = "slic",
     budget_check: bool = True,
@@ -855,6 +856,21 @@ def grow(
                 block.conv.bias.zero_()
         print(f"[grow] random_layer: {got} filtros sorteados (seed={seed}, "
               f"norma por filtro preservada, bias=0)")
+
+    if fill_random and got < out_channels:
+        # SPiFiL + resto aleatorio: completa ate `out_channels` com ruido na norma MEDIA
+        # dos filtros SPiFiL (mesma regra de escala do random_layer), bias 0.
+        with torch.no_grad():
+            w, b = block.conv.weight, block.conv.bias
+            g = torch.Generator().manual_seed(seed)
+            noise = torch.randn((out_channels - got, *w.shape[1:]), generator=g).to(w.device, w.dtype)
+            noise *= (w.flatten(1).norm(dim=1).mean()
+                      / noise.flatten(1).norm(dim=1)).view(-1, *([1] * (w.dim() - 1)))
+            block.conv.weight = torch.nn.Parameter(torch.cat([w, noise]))
+            if b is not None:
+                block.conv.bias = torch.nn.Parameter(torch.cat([b, b.new_zeros(out_channels - got)]))
+        print(f"[grow] fill_random: {got} SPiFiL + {out_channels - got} aleatorios (seed={seed})")
+        got = out_channels
 
     write_weights(out, flim_weights_path,
                   grown_arch(arch, kernel_size, got, pool_stride), layer, block)
