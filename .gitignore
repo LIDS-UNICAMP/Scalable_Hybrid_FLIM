@@ -195,3 +195,8 @@ preview_crops/
 research/spifil_b0b4/heatmaps_athena/**/*.png
 research/spifil_b0b4/visualize_GA_copia/
 research/spifil_b0b4/wandb_curvas/figures/*.png
+# gerados automaticamente (estado vivo), fora do git
+A_reports/november/testes_todos_athena_*.md
+ga_search/modehb/reports/HYBRID_PROGRESS.md
+ga_search/modehb/reports/watchdog_status.json
+research/spifil_b0b4/readout_x/tabela.md
