@@ -1,0 +1,240 @@
+# PNAS-CS = search_v3.yaml + Progressive NAS com Compound Scaling (ga_search/modehb/pnas_cs.py; usuário 15/11).
+# Muda só: blocos `pnas_cs:` e `external_seed:` (semente SPiFiL pequeno + LeJEPA, só a própria semente: o crescimento
+# é o compound scaling), datasets, ssl/reg fixos (LeJEPA + SIGReg), bf16, estratos = níveis P0..P4 (pnas_cs.budgets),
+# memória/teto do athena (GPU 2, 49 GB), max_brackets e paths. Morfismos = external_seed.py (reaproveitados).
+# tests/modehb/test_pnas_cs.py checa que o resto é idêntico ao search_v3.yaml.
+# Progressive MO-DEHB NAS (prompt §7.4, §12, §14). Busca sem rótulo: só a validation de cada dataset.
+# Valores antes marcados "MEASURED_IN_Q1" foram medidos no Q1 (jaci, 13/11/2026); ver comentários em resources.
+project: progressive_mo_dehb
+entity: ophira-ai
+seed: 42
+seeds: [42, 43, 44]            # repetições independentes da busca; ablações usam os mesmos
+dataset_config_dir: ga_search/config/modehb/datasets
+datasets: [remote_sensing, ham10000, flowers]   # fila do athena GPU 2 (nesta ordem)
+split: 1
+val_max_samples: null           # validação INTEIRA (null). O default antigo 512 cortava a val ordenada por classe (coconut só via a classe 1)
+search_split_key: validation   # NUNCA train/test na busca; rótulos não são lidos
+image_size: 224
+# SPiFiL estendido (ga_search/modehb/spifil_ops.py): true = SPiFiL também para kernel 1/7, pointwise,
+# depthwise, dwsep, gelu/selu/prelu/leaky_relu, avgpool, norms e residual (aproximações marcadas em
+# provenance["spifil_variant"]). false (default) = comportamento atual: repair_for_spifil + fit_new_block.
+spifil_ops: true
+# Nº de imagens de TREINO por classe usadas pelo SPiFiL para aprender os kernels: gene global
+# `spifil_images_per_class` do genoma (escolhido entre estes valores). Pool estratificado e fixo
+# por seed do dataset, só do split de treino; subconjuntos aninhados (k=2 ⊂ k=4 ...); k=1 = protocolo antigo.
+spifil_images_choices: [1, 2, 4, 8, 16, 32]
+# Espaço de filtros por camada (v3, opt-in): qualquer INTEIRO em [min, max] (escala log, para
+# explorar bem larguras pequenas), com regra monotônica c1 <= c2 <= ... <= c_depth aplicada ao
+# GENOMA (repair por máximo corrente nas camadas ativas). Ausente = grade discreta antiga
+# (modehb.CHANNELS). O SPiFiL pode construir MENOS canais que o pedido (effective_spec); o
+# resultado registra `effective_monotonic`. stages.stage1.space.channels abaixo é só documental.
+channel_space:
+  type: int_range
+  min: 1
+  max: 1024
+  scale: log
+  monotonic: true
+
+# --- DEHB: fidelidade = épocas (AE + SSL na razão 1:2) ---
+fidelities: [5, 15, 45, 100, 200]        # orçamento total de épocas por fidelidade (usuário, 14/11)
+max_brackets: 4               # PNAS-CS: ~220 jobs/base, ~45 GPU-h remote_sensing / ~105 ham10000 e flowers (6 brackets: ~345 jobs, ~1,6x)
+eta: 3
+fidelity_split:
+  ae: 1                        # AE:SSL = 1:2 → 5 = (≈2 AE, 3 SSL) arredondado para baixo no AE
+  ssl: 2
+  rounding: floor_ae
+
+# Experimento SÓ SPiFiL (decisão do usuário, 14/11): sem baseline random (sem gêmeas, sem filhos
+# random, população inicial só init=spifil). Operadores buscados DESDE O INÍCIO junto com o SPiFiL
+# (sem adiar para o stage 2) e vocabulário por gene lido de stages.stage2.space abaixo.
+operators_from_start: true     # = stage1_brackets 0: todos os genes mutáveis desde o bracket 0
+search_space_from_yaml: true   # decode/repair restritos a stages.stage2.space (ausente = vocab do código)
+
+population:
+  random_baseline: false       # false = só SPiFiL (default do código = true, comportamento antigo)
+  initial_operators: sampled   # sementes: larguras/profundidades em pirâmide + operadores amostrados (estratificado) do espaço
+  initial_size: 16             # >= 16 sementes SPiFiL (grade 4 larguras × 2 profundidades ciclada 2×)
+  initial_grid:
+    filters: [16, 32, 64, 128]
+    init: [spifil]
+    depth: [2, 3]
+    pyramid_growth: 2.0          # população inicial em PIRÂMIDE: camada i = filtros × 2^i (ex.: 16→32→64); 1.0 = larguras iguais
+  spifil_offspring_share: 1.0  # só SPiFiL (ignorado com random_baseline: false)
+  random_twin_at_max_fidelity: false  # sem gêmeas random neste experimento
+  exploration_epsilon: 0.1     # prob. de amostra uniforme do espaço em vez de mutação/crossover DE
+  de:
+    mutation_factor: 0.5
+    crossover_prob: 0.5
+    strategy: rand1_bin
+
+stages:
+  stage1:
+    name: macro
+    search: [channels, depth, embed_dim]
+    space:
+      channels: [16, 32, 64, 128]
+      depth: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+      embed_dim: [48, 128, 256, 512]
+    fixed: {operator: conv, kernel: 3, activation: relu, pooling: gap, batchnorm: true}
+  stage2:
+    name: operators
+    search: [operator, softhebb, kernel, activation, norm, pool, residual, pooling]
+    space:                       # lido pelo código (search_space_from_yaml: true)
+      operator: [conv, dwsep, inception]      # tipo de conv por camada
+      softhebb: [true, false]                 # softhebb_conv: gene booleano por camada
+      kernel: [3, 5, 7]
+      activation: [relu, gelu, silu, selu]
+      norm: [none, batch, zca, dbn, batch_zca, batch_dbn]   # batchnorm × whitening
+      pool: [none, max, avg]                  # pooling intermediário por camada
+      residual: [true, false]
+      pooling: [gap, gem, moments]            # pooling final
+      protect: [full, lowlr, freeze]          # Hybrid SPiFiL: kernels SPiFiL livres / lr×0.01 / congelados no backprop
+      projector: [true, false]                # perdas SSL num projetor separado (não no embedding do SVM)
+      ae_schedule: [decoder_first, joint]     # por camada: SPiFiL -> congela e treina só o decoder -> depois backprop no bloco
+      ssl: [lejepa]                           # PNAS-CS: LeJEPA + SIGReg é o SSL global (usuário)
+      reg: [sigreg]
+    inherit_from: none           # operators_from_start: buscado junto com o macro desde o bracket 0
+
+# --- MO-DEHB estratificado por PARÂMETROS (ga_search/modehb/strata.py; 14/11) ---
+# Categoria = nº total de parâmetros do encoder + projeção final 1x1 (medido após avaliar;
+# estimado estruturalmente antes). MACs/FLOPs/latência seguem só como métricas/objetivo.
+stratified:
+  enabled: true
+  # PNAS-CS: os estratos são os níveis P0..P4 (faixas = médias geométricas entre os orçamentos de
+  # pnas_cs.budgets) e o teto = 5.5M x 1.05; calculados no código (strata/param_cap daqui são ignorados).
+  tiny_floor: 5000             # alvo mínimo ao projetar um Tiny
+  min_share: 0.25              # >= 25% das promoções por categoria (fase de promoção, se houver candidatos)
+  protected_brackets: 5        # brackets com promoção protegida (= os 5 brackets com successive halving)
+  cross_category_prob: 0.3     # DE com pais de qualquer categoria (senão: pais da mesma categoria)
+  projection_prob: 1.0         # PNAS-CS: todo filho de DE é escalado (compound) para o nível-alvo
+  explore_extra: 1             # promoções exploratórias extras por rung: Medium/Huge ainda melhorando
+  explore_min_slope: 0.0       # ganho de quality por log2(época) mínimo para a promoção exploratória
+  explore_strata: [P2, P3, P4]  # promoção exploratória (inclinação da curva) para os grandes
+  calibration: true            # 1 representante por categoria em todas as fidelidades antes do bracket 0
+  extension_fidelities: []     # sem extensão além de 200 (fidelidade máxima já é 200)
+  extension_min_gain: 0.01     # ganho mínimo de quality para estender / saturação na calibração
+  extension_max_per_bracket: 2
+  memory_budget_gb: 40         # athena GPU 2 (49 GB): orçamento 40 GB pela estimativa fp32 (bf16 usa menos); teto do processo 44
+  spifil_seeds_per_image: 100  # superpixels por imagem no SPiFiL: imagens/classe sobem até N = 100·classes·k > D
+
+# --- Objetivos multiobjetivo ---
+objectives:
+  - {name: quality, direction: max}
+  - {name: flops, direction: min, unit: gflops}
+  # - {name: latency_ms, direction: min}   # adicionado depois (fase posterior)
+hypervolume:
+  # Ponto de referência no espaço (quality, flops), dominado por todo candidato válido:
+  # quality ∈ [0,1] → ref 0.0 (pior possível); flops → 1.1 × max_flops do espaço (folga de 10%).
+  # HV é calculado após normalizar flops por max_flops, logo ref = (0.0, 1.1) fixo entre datasets.
+  reference_point: {quality: 0.0, flops: 1.1}
+  flops_normalizer: max_flops_in_space
+  max_flops_in_space: 1.0e+11   # Q1: = modehb.FLOPS_HI (MACs, log-normalised); medido 2.83e10 p/ 5x256ch k5 @224
+
+fitness:                       # quality sem rótulo
+  knn_view_consistency: 0.5    # concordância de k-NN entre duas views aumentadas
+  clustering_stability: 0.5    # ARI médio entre reclusterizações bootstrap
+  knn_k: 10
+  clustering_bootstrap: 5
+
+fitness_mode: svm_kappa   # critério supervisionado: quality = 0.75·κ + 0.25·F1 (SVM linear C=100, treino→validação)
+# Hybrid SPiFiL (14/11, agentes F/C): leitura de 2ª ordem cov_head (covariância por bloco, PCA k=64 em
+# pixels de treino, sem rótulo) + head; signed-sqrt+L2 por grupo, StandardScaler, C=100 (SVM padrão do repo, ordem do usuário 15/11). Medido em 7
+# checkpoints do remote_sensing: κ de teste médio 0.51 -> 0.61 (c00306: 0.534 -> 0.639).
+# wise_alphas: WiSE-FT — pesos (1-a)·SPiFiL(+AE) + a·SSL, a escolhido pelo κ (a=0 = SPiFiL puro: o
+# backprop só soma). Os FMs de referência usam SVM C=100 sem scaler na cabeça (régua diferente).
+svm_fitness: {C: 100, scaler: standard, max_train: 4000, kappa_weight: 1.0, solver: libsvm,
+              readout: cov_head, cov_k: 64, tta: 1, whiten: none, wise_alphas: [0.0, 0.25, 0.5, 0.75, 1.0]}
+
+collapse:                      # candidato com colapso → quality = 0, não entra na frente
+  min_embedding_std: 1.0e-4
+  min_effective_rank_frac: 0.05   # rank efetivo / embed_dim
+  max_mean_cosine: 0.95
+  nan_is_collapse: true
+
+tta:
+  search: 1                    # FIXO durante a busca; 4/8 só na ablação de TTA
+training:
+  batch_size: 64               # FIXO; nunca autoajustado
+  max_images_per_epoch: 2048   # 1 "época" = ≤2048 imagens de treino sorteadas (32 passos). Sem isso o protozoan
+                               # (26k imgs) levava 25 h só para levar 1 rede Tiny a 200 épocas. remote/flowers/larvae não mudam
+  lr_new: 1.0e-3               # camadas novas do bloco progressivo
+  lr_old: 1.0e-4               # camadas herdadas
+  auto_adjust_batch_size: false
+  auto_adjust_lr: false
+  optimizer: adamw
+  weight_decay: 1.0e-4
+  ssl: lejepa
+  local_ae: true
+  amp_dtype: bf16              # PNAS-CS: autocast bf16 no SSL e no AE local; SPiFiL, ZCA/DBN, cov_head, SIGReg, perdas e SVM em fp32
+
+spectral_every: 5              # diagnóstico espectral (rank efetivo / espectro) a cada N épocas
+
+resources:
+  host: athena                 # GPU 2 exclusiva (CUDA_VISIBLE_DEVICES=2)
+  gpu_memory_target_gb: {min: 36, max: 44}
+  # Q1 (13/11, jaci): decode IFT-LAB satura em ~800-900 img/s com 32-96 workers; 120 piora (590 img/s).
+  num_workers: 64
+  # cache float32 = 0.60 MB/img @224 -> food101 42.6 GB (+2x transitório no torch.cat); RAM livre ~235 GB.
+  ram_cache_gb: 96
+  max_concurrent_trials: 1     # MO-DEHB síncrono; 1 processo/GPU (5x256ch k5 sozinho: 58 GB alloc, 82 GB reservado)
+  gpu_process_cap_gb: 44       # athena GPU 2 (49 GB): teto do processo; acima disso OOM -> 4 retentativas
+
+paths:
+  state_dir: "artifacts/pnas_cs/{dataset}/state"          # estado do DEHB (retomável) -> .../state/seed42
+  checkpoint_dir: "artifacts/pnas_cs/{dataset}/checkpoints"
+  log_dir: "artifacts/pnas_cs/{dataset}/logs"
+  pareto_dir: "artifacts/pnas_cs/{dataset}/pareto"
+
+# --- Semente EXTERNA (external_seed.py, reaproveitado): SPiFiL pequeno + LeJEPA (40-80-152-152-152-312 k3),
+# pesos importados 1:1 (MaxPool sem padding). Só a própria semente (grade 1x, +0): o crescimento dela é o
+# compound scaling do PNAS-CS. Arquivo ausente -> aviso e a busca roda sem ela.
+external_seed:
+  enabled: true
+  name: ssl_pequeno_lejepa
+  arch: "artifacts/external_ssl_pequeno/{dataset}_split{split}_pct{pct}/L0/architecture.json"
+  checkpoint: "artifacts/external_ssl_pequeno/{dataset}_split{split}_pct{pct}/lejepa/checkpoints/best_kappa.ckpt"
+  state_prefix: "model.encoder."
+  genes: {ssl: lejepa, reg: sigreg, embed_dim: 1280, pooling: gem, ae_target: pixel, projector: false,
+          protect: lowlr, ae_schedule: decoder_first, spifil_images_per_class: 1}
+  grid: {width_mults: [1.0], extra_depths: [0], residual_extra: false, residual_activation: silu}
+
+# --- PNAS-CS (ga_search/modehb/pnas_cs.py; opt-in, ausente = MO-DEHB de sempre) ---
+pnas_cs:
+  enabled: true
+  budgets: [500000, 1000000, 2000000, 3500000, 5500000]   # P0..P4 (params do encoder + projeção 1x1 final)
+  level_names: [P0, P1, P2, P3, P4]
+  tolerance: 0.10              # |params/orçamento - 1| <= 10% (registrado em genome.pnas.within_tol)
+  cap_factor: 1.05             # teto duro = 5.5M x 1.05 (medido acima = infeasible; o gerador nunca passa)
+  alphas: [1.0, 1.1, 1.2, 1.3, 1.4]    # coeficiente de profundidade (gene do DE)
+  betas: [1.05, 1.1, 1.15, 1.2, 1.3]   # coeficiente de largura (gene do DE); resolução fixa em 224
+  seed_alpha: 1.2              # coeficientes das famílias das sementes importadas
+  seed_beta: 1.1
+  deepen: auto                 # camada nova: identidade (Net2Deeper) após relu, senão residual init zero (silu)
+  residual_activation: silu
+  plain_grid: true             # sementes da grade com conv densa / sem norm / sem skip: crescimento 100% preservando a função
+  grow_prob: 0.4               # filho = P_k -> P_k+1 de uma família (morfismo + herança)
+  mutate_prob: 0.3             # filho = mutação estrutural (rodízio); resto = DE sobre (base, alpha, beta)
+  mutations: [add_layer, add_residual, widen, pooling]
+  widen_factors: [1.25, 1.5]
+  inherit_fidelity: le_child   # checkpoint do pai com fidelidade <= a do filho
+  random_twins: false          # true = gêmea aleatória (baseline) de todo candidato SPiFiL na fidelidade máxima
+  tables_every: 5              # tabelas W&B a cada N jobs (Pareto e HV x GPU-h: todo job)
+  saturation_gain: 0.01        # lei de escala: saturação quando o ganho de kappa por duplicação de params < 0.01
+  mem_scale: 1.0               # fator sobre a estimativa fp32 de memória (bf16 mede menos; 1.0 = conservador)
+  external_seed_dirs:          # ham10000: o L6 atual viu o nosso val (FILA §2) -> só o retreino no nosso treino
+    ham10000: "artifacts/external_ssl_pequeno/ham10000_trainonly_split1_pct100"
+  phase0:                      # ablação do AE por camada ANTES da busca: sem AE x decoder_first x joint
+    enabled: true
+    n_seeds: 2                 # sementes P0 (as mesmas para os 3 braços, mesmo orçamento de épocas)
+    fidelity: 45
+    level: P0
+  seeds:                       # checkpoints do GA (genoma + encoder importados 1:1, protect + âncora WiSE)
+    checkpoints:
+      remote_sensing:
+        - artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00004/f200/encoder.pt
+        - artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00010/f200/encoder.pt
+        - artifacts/modehb_lemonade_C01_final/remote_sensing/state/seed42/candidates/c00098/f200/encoder.pt
+    best_from:                 # + o melhor da fidelidade máxima por quality de VALIDAÇÃO (nunca teste)
+      - "artifacts/modehb_hybrid/{dataset}/state/seed42/search_state.json"
+      - "artifacts/modehb_lemonade/{dataset}/state/seed42/search_state.json"
+    best_k: 1

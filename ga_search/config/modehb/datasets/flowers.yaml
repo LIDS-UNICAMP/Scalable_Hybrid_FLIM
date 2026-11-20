@@ -1,0 +1,32 @@
+name: flowers
+layout: organized
+root: /dados/home/moliveira/datasets/organized/flowers
+images_dir: "{root}/orig"
+masks_dir: null              # sem máscara
+split_json: "{root}/splits/split{split}.json"   # split fixo (100% do treino); não usar splits_incremental
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: 5cc9654620d751cfdd234db45e7b46e90a76cf18e290872355abd909252a630a
+expected_counts:
+  train: 1922
+  validation: 412
+  test: 412
+image_size: 224
+image_ext: jpg
+labels_json: "{root}/classes.json"
+label_source: filename_prefix   # 000NNN_ = id da classe
+classes:
+  1: daisy
+  2: dandelion
+  3: rose
+  4: sunflower
+  5: tulip
+n_classes: 5
+impurity_class: null
+has_mask: false

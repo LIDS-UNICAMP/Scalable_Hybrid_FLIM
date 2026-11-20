@@ -1,0 +1,137 @@
+{
+ "pesquisa": "SPiFiL Progressivo B0-B4 — cadeia de crescimento (A2+A3+A4 integrados)",
+ "patch": "research/spifil_b0b4/growth/growth.patch",
+ "pre_requisitos": [
+  "git apply research/spifil_b0b4/growth/growth.patch (árvore limpa)",
+  "python -m pytest -q tests/hmodehb/test_growth_chain.py tests/backbones",
+  "seed checkpoints do seed_registry (regua ORIG, B0) presentes no host; ausentes são pulados com aviso (no athena: rsync da Jaci antes)",
+  "artifacts/external_ssl_pequeno/<ds>_split1_pct100 presente (semente SPiFiL pequeno)",
+  "rodar 'smoke_antes' e conferir peak_gpu_reserved_gb nos result.json"
+ ],
+ "regras": {
+  "gpu2_athena": "NAO MEXER",
+  "teste": "canal separado (growth_test_channel), never_feeds_fitness",
+  "oom": "10 x 300 s, depois failed/oom",
+  "concorrencia": "1 job por GPU; Flowers pode dividir a GPU com RS só até B2->B3 se o pico medido somar < 44 GB"
+ },
+ "ordem": [
+  "growth_athena_gpu3_remote_sensing",
+  "growth_athena_gpu3_flowers",
+  "growth_jaci_gpu0_remote_sensing",
+  "growth_jaci_gpu0_flowers"
+ ],
+ "jobs": [
+  {
+   "job_id": "growth_athena_gpu3_remote_sensing",
+   "host": "athena_gpu3",
+   "prioridade": 0,
+   "status": "queued",
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/hmodehb_b0b4/growth/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.hmodehb.growth_chain --dataset remote_sensing --device cuda --cov-eigh-workers 1 --out artifacts/hmodehb_b0b4/growth/athena_gpu3/remote_sensing/seed42 >> artifacts/hmodehb_b0b4/growth/logs/growth_athena_gpu3_remote_sensing.log 2>&1",
+   "smoke_antes": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/hmodehb_b0b4/growth/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.hmodehb.growth_chain --dataset remote_sensing --device cuda --cov-eigh-workers 1 --out artifacts/hmodehb_b0b4/growth_smoke/athena_gpu3/remote_sensing --gset n_children=2 --gset generations=1 --gset fid_low=1 --gset fid_high=1 --gset end_band=B2 --gset test_channel=false >> artifacts/hmodehb_b0b4/growth/logs/growth_athena_gpu3_remote_sensing_smoke.log 2>&1",
+   "torch": "2.2 (sem APIs 2.7; checado estaticamente, smoke obrigatório)",
+   "estimativa_por_geracao": {
+    "config": "8 filhos f15 + ceil(8/3)=3 promovidos f45",
+    "horas_gpu": {
+     "B0->B1": 2.01,
+     "B1->B2": 2.86,
+     "B2->B3": 4.64,
+     "B3->B4": 7.5
+    },
+    "pico_gpu_reservado_gb": {
+     "B0->B1": 14,
+     "B1->B2": 20,
+     "B2->B3": 28,
+     "B3->B4": 38
+    },
+    "fonte": "[H] extrapolado de A2 (RS f45 0,34-0,51 h, Flowers f45 0,35-0,70 h; pico RS 36 GB com COV, aqui sem COV) escalado por FLOPs da faixa; o result.json grava wall_s e peak_gpu_reserved_gb reais"
+   },
+   "estimativa_total_horas_gpu": 34.0,
+   "retomada": "relançar o MESMO comando adota os jobs feitos (cand_key + sha); flock impede 2 controladores (exit 3); deriva de config -> exit 4",
+   "concluido_quando": "summary.json existe e gens_done contém B3:1"
+  },
+  {
+   "job_id": "growth_athena_gpu3_flowers",
+   "host": "athena_gpu3",
+   "prioridade": 1,
+   "status": "queued",
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/hmodehb_b0b4/growth/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.hmodehb.growth_chain --dataset flowers --device cuda --cov-eigh-workers 1 --out artifacts/hmodehb_b0b4/growth/athena_gpu3/flowers/seed42 >> artifacts/hmodehb_b0b4/growth/logs/growth_athena_gpu3_flowers.log 2>&1",
+   "smoke_antes": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/hmodehb_b0b4/growth/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.hmodehb.growth_chain --dataset flowers --device cuda --cov-eigh-workers 1 --out artifacts/hmodehb_b0b4/growth_smoke/athena_gpu3/flowers --gset n_children=2 --gset generations=1 --gset fid_low=1 --gset fid_high=1 --gset end_band=B2 --gset test_channel=false >> artifacts/hmodehb_b0b4/growth/logs/growth_athena_gpu3_flowers_smoke.log 2>&1",
+   "torch": "2.2 (sem APIs 2.7; checado estaticamente, smoke obrigatório)",
+   "estimativa_por_geracao": {
+    "config": "8 filhos f15 + ceil(8/3)=3 promovidos f45",
+    "horas_gpu": {
+     "B0->B1": 3.4,
+     "B1->B2": 4.64,
+     "B2->B3": 7.5,
+     "B3->B4": 11.6
+    },
+    "pico_gpu_reservado_gb": {
+     "B0->B1": 8,
+     "B1->B2": 11,
+     "B2->B3": 16,
+     "B3->B4": 24
+    },
+    "fonte": "[H] extrapolado de A2 (RS f45 0,34-0,51 h, Flowers f45 0,35-0,70 h; pico RS 36 GB com COV, aqui sem COV) escalado por FLOPs da faixa; o result.json grava wall_s e peak_gpu_reserved_gb reais"
+   },
+   "estimativa_total_horas_gpu": 54.3,
+   "retomada": "relançar o MESMO comando adota os jobs feitos (cand_key + sha); flock impede 2 controladores (exit 3); deriva de config -> exit 4",
+   "concluido_quando": "summary.json existe e gens_done contém B3:1"
+  },
+  {
+   "job_id": "growth_jaci_gpu0_remote_sensing",
+   "host": "jaci_gpu0",
+   "prioridade": 0,
+   "status": "queued",
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/hmodehb_b0b4/growth/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.hmodehb.growth_chain --dataset remote_sensing --device cuda --out artifacts/hmodehb_b0b4/growth/jaci_gpu0/remote_sensing/seed42 >> artifacts/hmodehb_b0b4/growth/logs/growth_jaci_gpu0_remote_sensing.log 2>&1",
+   "smoke_antes": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/hmodehb_b0b4/growth/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.hmodehb.growth_chain --dataset remote_sensing --device cuda --out artifacts/hmodehb_b0b4/growth_smoke/jaci_gpu0/remote_sensing --gset n_children=2 --gset generations=1 --gset fid_low=1 --gset fid_high=1 --gset end_band=B2 --gset test_channel=false >> artifacts/hmodehb_b0b4/growth/logs/growth_jaci_gpu0_remote_sensing_smoke.log 2>&1",
+   "torch": "2.7.1+cu128",
+   "estimativa_por_geracao": {
+    "config": "8 filhos f15 + ceil(8/3)=3 promovidos f45",
+    "horas_gpu": {
+     "B0->B1": 2.01,
+     "B1->B2": 2.86,
+     "B2->B3": 4.64,
+     "B3->B4": 7.5
+    },
+    "pico_gpu_reservado_gb": {
+     "B0->B1": 14,
+     "B1->B2": 20,
+     "B2->B3": 28,
+     "B3->B4": 38
+    },
+    "fonte": "[H] extrapolado de A2 (RS f45 0,34-0,51 h, Flowers f45 0,35-0,70 h; pico RS 36 GB com COV, aqui sem COV) escalado por FLOPs da faixa; o result.json grava wall_s e peak_gpu_reserved_gb reais"
+   },
+   "estimativa_total_horas_gpu": 34.0,
+   "retomada": "relançar o MESMO comando adota os jobs feitos (cand_key + sha); flock impede 2 controladores (exit 3); deriva de config -> exit 4",
+   "concluido_quando": "summary.json existe e gens_done contém B3:1"
+  },
+  {
+   "job_id": "growth_jaci_gpu0_flowers",
+   "host": "jaci_gpu0",
+   "prioridade": 1,
+   "status": "queued",
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/hmodehb_b0b4/growth/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.hmodehb.growth_chain --dataset flowers --device cuda --out artifacts/hmodehb_b0b4/growth/jaci_gpu0/flowers/seed42 >> artifacts/hmodehb_b0b4/growth/logs/growth_jaci_gpu0_flowers.log 2>&1",
+   "smoke_antes": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/hmodehb_b0b4/growth/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.hmodehb.growth_chain --dataset flowers --device cuda --out artifacts/hmodehb_b0b4/growth_smoke/jaci_gpu0/flowers --gset n_children=2 --gset generations=1 --gset fid_low=1 --gset fid_high=1 --gset end_band=B2 --gset test_channel=false >> artifacts/hmodehb_b0b4/growth/logs/growth_jaci_gpu0_flowers_smoke.log 2>&1",
+   "torch": "2.7.1+cu128",
+   "estimativa_por_geracao": {
+    "config": "8 filhos f15 + ceil(8/3)=3 promovidos f45",
+    "horas_gpu": {
+     "B0->B1": 3.4,
+     "B1->B2": 4.64,
+     "B2->B3": 7.5,
+     "B3->B4": 11.6
+    },
+    "pico_gpu_reservado_gb": {
+     "B0->B1": 8,
+     "B1->B2": 11,
+     "B2->B3": 16,
+     "B3->B4": 24
+    },
+    "fonte": "[H] extrapolado de A2 (RS f45 0,34-0,51 h, Flowers f45 0,35-0,70 h; pico RS 36 GB com COV, aqui sem COV) escalado por FLOPs da faixa; o result.json grava wall_s e peak_gpu_reserved_gb reais"
+   },
+   "estimativa_total_horas_gpu": 54.3,
+   "retomada": "relançar o MESMO comando adota os jobs feitos (cand_key + sha); flock impede 2 controladores (exit 3); deriva de config -> exit 4",
+   "concluido_quando": "summary.json existe e gens_done contém B3:1"
+  }
+ ]
+}

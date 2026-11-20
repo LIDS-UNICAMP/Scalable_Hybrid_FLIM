@@ -1,0 +1,412 @@
+{
+ "host": "athena",
+ "gpu_fisica": 3,
+ "cuda_visible_devices": "3",
+ "dono": "moliveira",
+ "pesquisa": "SPiFiL Progressivo B0-B4 — Agente 2 (init abstrata)",
+ "gerado_por": "Agente 2 (implementação)",
+ "gerado_em": "2026-11-17 00:47:02",
+ "patch": "research/spifil_b0b4/agent2/a2impl_v2.patch",
+ "patch_md5": "c3dfc7a19e19bb5ad250611553f27934",
+ "pre_requisitos": [
+  "aplicar o patch na árvore do athena (só arquivos NOVOS: ga_search/abstract_init/, tests/abstract_init/)",
+  "/dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m pytest -q tests/abstract_init  (deve passar tudo)",
+  "mkdir -p artifacts/a2_ablation/logs",
+  "gate A aprovado (fila do Agente 5)"
+ ],
+ "regras": {
+  "gpu2": "NAO MEXER",
+  "estados": [
+   "queued",
+   "running",
+   "checkpointed",
+   "failed",
+   "completed"
+  ],
+  "idempotencia": "relançar o mesmo comando é seguro: pula runs feitos; nunca apaga",
+  "hpc": "OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 (o runner também força); --cov-eigh-workers 1 (torch 2.2 do athena)",
+  "oom": "o runner refaz o run até 10x com 300 s de espera (mesma política R5); depois status failed",
+  "teste": "o split de teste nunca é carregado; seleção (α do WiSE) pela régua ORIG na validação",
+  "memoria": "v2: o smoke RS f5 deu OOM no SSL (whitening DBN do train_global_ssl, pico > 22 GiB). O rs_b1 precisa de ~36 GB (produção: 34,3 alocados / 35,9 reservados). Lançar cada job só com gate_memoria_livre_gb livres na GPU 3 por 3 leituras; NÃO usar --gpu-cap-gb abaixo de 38 no RS. O runner ainda refaz OOM 10x300 s. Reduzir memória (bf16, batch menor) seria variante científica nova, não aplicada.",
+  "concorrencia": "1 job por vez. Exceção: um job de flowers pode rodar ao lado de um de RS se houver >= 14 GB livres por 3 leituras (o rs_b1 chegou a 36 GB reservados na produção)."
+ },
+ "ordem": [
+  "a2_B0_smoke_gpu",
+  "a2_B1_rs_b1_baseline",
+  "a2_B1_rs_b1_lowlr",
+  "a2_B1_flowers_b1_baseline",
+  "a2_B1_flowers_b1_lowlr",
+  "a2_B2_rs_b1_inits",
+  "a2_B2_flowers_b1_inits",
+  "a2_B2_rs_seed_small_inits",
+  "a2_B2_flowers_seed_small_inits"
+ ],
+ "estimativa_total_horas_gpu": 176.8,
+ "estimativa_total_dias_1_lane": 7.4,
+ "jobs": [
+  {
+   "job_id": "a2_B0_smoke_gpu",
+   "prioridade": 0,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "smoke na GPU 3 (torch 2.2): 3 runs f5 do rs_b1 (SPiFiL, S1, S2); mede pico real e tempo. Saída separada (não entra nas ablações). Se o pico > 40 GB, rodar tudo com 1 lane só.",
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && mkdir -p artifacts/a2_ablation/logs && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset remote_sensing --genome rs_b1 --inits 'spifil,spifil1,spifil2:variant=s2' --ae joint --seeds 42 --fidelity 5 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation_smoke >> artifacts/a2_ablation/logs/a2_B0_smoke_gpu.log 2>&1",
+   "n_runs_no_plano": 3,
+   "estimativa": {
+    "horas_gpu_total": 0.3,
+    "pico_gpu_reservado_gb": 36.0
+   },
+   "gate_memoria_livre_gb": 40,
+   "concluido_quando": "3 linhas ok em artifacts/a2_ablation_smoke/remote_sensing/results.jsonl",
+   "depende_de": []
+  },
+  {
+   "job_id": "a2_B1_rs_b1_baseline",
+   "prioridade": 1,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "1) BASELINE RS B1 (c00009): SPiFiL-0 (protect=freeze, do genoma) x aleatório (gêmeo) x {noae, joint, decoder_first} x 3 seeds",
+   "dataset": "remote_sensing",
+   "genome": "rs_b1",
+   "inits": [
+    "spifil",
+    "random"
+   ],
+   "ae": [
+    "noae",
+    "joint",
+    "decoder_first"
+   ],
+   "seeds": [
+    42,
+    1042,
+    2042
+   ],
+   "fidelidade": 45,
+   "n_runs_no_plano": 18,
+   "estimativa": {
+    "horas_gpu_por_run": 0.4,
+    "horas_gpu_total": 7.2,
+    "pico_gpu_reservado_gb": 36.0,
+    "ram_cpu_gb": 6
+   },
+   "n_runs_ja_feitos_por_outro_job": 0,
+   "gate_memoria_livre_gb": 40,
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset remote_sensing --genome rs_b1 --inits 'spifil,random' --ae noae,joint,decoder_first --seeds 42,1042,2042 --fidelity 45 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation >> artifacts/a2_ablation/logs/a2_B1_rs_b1_baseline.log 2>&1",
+   "saida": "artifacts/a2_ablation/remote_sensing/ (results.jsonl + candidates/<run>/f45/)",
+   "idempotente": "sim (run com ablation.json é pulado; run morto vai para *.interrompido_<ts> e é refeito)",
+   "concluido_quando": "18 linhas definitivas (ok/infeasible/not_applicable) para este plano em results.jsonl (`--dry-run` mostra 0 a fazer)",
+   "depende_de": [
+    "a2_B0_smoke_gpu"
+   ]
+  },
+  {
+   "job_id": "a2_B1_rs_b1_lowlr",
+   "prioridade": 1,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "1) BASELINE RS B1: SPiFiL-0 com --protect lowlr (só init=spifil) x AE x 3 seeds",
+   "dataset": "remote_sensing",
+   "genome": "rs_b1",
+   "inits": [
+    "spifil"
+   ],
+   "ae": [
+    "noae",
+    "joint",
+    "decoder_first"
+   ],
+   "seeds": [
+    42,
+    1042,
+    2042
+   ],
+   "fidelidade": 45,
+   "n_runs_no_plano": 9,
+   "estimativa": {
+    "horas_gpu_por_run": 0.4,
+    "horas_gpu_total": 3.6,
+    "pico_gpu_reservado_gb": 36.0,
+    "ram_cpu_gb": 6
+   },
+   "n_runs_ja_feitos_por_outro_job": 0,
+   "gate_memoria_livre_gb": 40,
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset remote_sensing --genome rs_b1 --inits 'spifil' --ae noae,joint,decoder_first --seeds 42,1042,2042 --fidelity 45 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation --protect lowlr >> artifacts/a2_ablation/logs/a2_B1_rs_b1_lowlr.log 2>&1",
+   "saida": "artifacts/a2_ablation/remote_sensing/ (results.jsonl + candidates/<run>/f45/)",
+   "idempotente": "sim (run com ablation.json é pulado; run morto vai para *.interrompido_<ts> e é refeito)",
+   "concluido_quando": "9 linhas definitivas (ok/infeasible/not_applicable) para este plano em results.jsonl (`--dry-run` mostra 0 a fazer)",
+   "depende_de": [
+    "a2_B0_smoke_gpu"
+   ]
+  },
+  {
+   "job_id": "a2_B1_flowers_b1_baseline",
+   "prioridade": 2,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "2) BASELINE Flowers B1 (c00002): SPiFiL-0 (freeze) x aleatório x AE x 3 seeds",
+   "dataset": "flowers",
+   "genome": "flowers_b1",
+   "inits": [
+    "spifil",
+    "random"
+   ],
+   "ae": [
+    "noae",
+    "joint",
+    "decoder_first"
+   ],
+   "seeds": [
+    42,
+    1042,
+    2042
+   ],
+   "fidelidade": 45,
+   "n_runs_no_plano": 18,
+   "estimativa": {
+    "horas_gpu_por_run": 0.7,
+    "horas_gpu_total": 12.6,
+    "pico_gpu_reservado_gb": 12.0,
+    "ram_cpu_gb": 12
+   },
+   "n_runs_ja_feitos_por_outro_job": 0,
+   "gate_memoria_livre_gb": 16,
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset flowers --genome flowers_b1 --inits 'spifil,random' --ae noae,joint,decoder_first --seeds 42,1042,2042 --fidelity 45 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation >> artifacts/a2_ablation/logs/a2_B1_flowers_b1_baseline.log 2>&1",
+   "saida": "artifacts/a2_ablation/flowers/ (results.jsonl + candidates/<run>/f45/)",
+   "idempotente": "sim (run com ablation.json é pulado; run morto vai para *.interrompido_<ts> e é refeito)",
+   "concluido_quando": "18 linhas definitivas (ok/infeasible/not_applicable) para este plano em results.jsonl (`--dry-run` mostra 0 a fazer)",
+   "depende_de": [
+    "a2_B0_smoke_gpu"
+   ]
+  },
+  {
+   "job_id": "a2_B1_flowers_b1_lowlr",
+   "prioridade": 2,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "2) BASELINE Flowers B1: SPiFiL-0 --protect lowlr x AE x 3 seeds",
+   "dataset": "flowers",
+   "genome": "flowers_b1",
+   "inits": [
+    "spifil"
+   ],
+   "ae": [
+    "noae",
+    "joint",
+    "decoder_first"
+   ],
+   "seeds": [
+    42,
+    1042,
+    2042
+   ],
+   "fidelidade": 45,
+   "n_runs_no_plano": 9,
+   "estimativa": {
+    "horas_gpu_por_run": 0.7,
+    "horas_gpu_total": 6.3,
+    "pico_gpu_reservado_gb": 12.0,
+    "ram_cpu_gb": 12
+   },
+   "n_runs_ja_feitos_por_outro_job": 0,
+   "gate_memoria_livre_gb": 16,
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset flowers --genome flowers_b1 --inits 'spifil' --ae noae,joint,decoder_first --seeds 42,1042,2042 --fidelity 45 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation --protect lowlr >> artifacts/a2_ablation/logs/a2_B1_flowers_b1_lowlr.log 2>&1",
+   "saida": "artifacts/a2_ablation/flowers/ (results.jsonl + candidates/<run>/f45/)",
+   "idempotente": "sim (run com ablation.json é pulado; run morto vai para *.interrompido_<ts> e é refeito)",
+   "concluido_quando": "9 linhas definitivas (ok/infeasible/not_applicable) para este plano em results.jsonl (`--dry-run` mostra 0 a fazer)",
+   "depende_de": [
+    "a2_B0_smoke_gpu"
+   ]
+  },
+  {
+   "job_id": "a2_B2_rs_b1_inits",
+   "prioridade": 3,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "3) S1, S0+, S0-data, S2 (s2, s2_noinv, s2_dcpen, s2 aug rs) x {noae, joint} x 3 seeds, RS B1. S3/S3-rand: não aplicável (dwsep na camada 1)",
+   "dataset": "remote_sensing",
+   "genome": "rs_b1",
+   "inits": [
+    "spifil",
+    "s0plus",
+    "s0data",
+    "spifil1",
+    "spifil2:variant=s2",
+    "spifil2:variant=s2_noinv",
+    "spifil2:variant=s2_dcpen",
+    "spifil2:variant=s2_aug_domain,aug_policy=rs"
+   ],
+   "ae": [
+    "noae",
+    "joint"
+   ],
+   "seeds": [
+    42,
+    1042,
+    2042
+   ],
+   "fidelidade": 45,
+   "n_runs_no_plano": 48,
+   "estimativa": {
+    "horas_gpu_por_run": 0.45,
+    "horas_gpu_total": 18.9,
+    "pico_gpu_reservado_gb": 36.0,
+    "ram_cpu_gb": 6
+   },
+   "n_runs_ja_feitos_por_outro_job": 6,
+   "gate_memoria_livre_gb": 40,
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset remote_sensing --genome rs_b1 --inits 'spifil,s0plus,s0data,spifil1,spifil2:variant=s2,spifil2:variant=s2_noinv,spifil2:variant=s2_dcpen,spifil2:variant=s2_aug_domain,aug_policy=rs' --ae noae,joint --seeds 42,1042,2042 --fidelity 45 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation >> artifacts/a2_ablation/logs/a2_B2_rs_b1_inits.log 2>&1",
+   "saida": "artifacts/a2_ablation/remote_sensing/ (results.jsonl + candidates/<run>/f45/)",
+   "idempotente": "sim (run com ablation.json é pulado; run morto vai para *.interrompido_<ts> e é refeito)",
+   "concluido_quando": "48 linhas definitivas (ok/infeasible/not_applicable) para este plano em results.jsonl (`--dry-run` mostra 0 a fazer)",
+   "depende_de": [
+    "a2_B1_rs_b1_baseline"
+   ],
+   "nota": "S0 = init 'spifil' (os runs já feitos no baseline são pulados: mesmo nome de run e mesmo out-root)"
+  },
+  {
+   "job_id": "a2_B2_flowers_b1_inits",
+   "prioridade": 3,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "3) idem, Flowers B1 (S3: não aplicável, dwsep)",
+   "dataset": "flowers",
+   "genome": "flowers_b1",
+   "inits": [
+    "spifil",
+    "s0plus",
+    "s0data",
+    "spifil1",
+    "spifil2:variant=s2",
+    "spifil2:variant=s2_noinv",
+    "spifil2:variant=s2_dcpen",
+    "spifil2:variant=s2_aug_domain,aug_policy=flowers"
+   ],
+   "ae": [
+    "noae",
+    "joint"
+   ],
+   "seeds": [
+    42,
+    1042,
+    2042
+   ],
+   "fidelidade": 45,
+   "n_runs_no_plano": 48,
+   "estimativa": {
+    "horas_gpu_por_run": 0.75,
+    "horas_gpu_total": 31.5,
+    "pico_gpu_reservado_gb": 12.0,
+    "ram_cpu_gb": 12
+   },
+   "n_runs_ja_feitos_por_outro_job": 6,
+   "gate_memoria_livre_gb": 16,
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset flowers --genome flowers_b1 --inits 'spifil,s0plus,s0data,spifil1,spifil2:variant=s2,spifil2:variant=s2_noinv,spifil2:variant=s2_dcpen,spifil2:variant=s2_aug_domain,aug_policy=flowers' --ae noae,joint --seeds 42,1042,2042 --fidelity 45 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation >> artifacts/a2_ablation/logs/a2_B2_flowers_b1_inits.log 2>&1",
+   "saida": "artifacts/a2_ablation/flowers/ (results.jsonl + candidates/<run>/f45/)",
+   "idempotente": "sim (run com ablation.json é pulado; run morto vai para *.interrompido_<ts> e é refeito)",
+   "concluido_quando": "48 linhas definitivas (ok/infeasible/not_applicable) para este plano em results.jsonl (`--dry-run` mostra 0 a fazer)",
+   "depende_de": [
+    "a2_B1_flowers_b1_baseline"
+   ],
+   "nota": "S0 = init 'spifil' (os runs já feitos no baseline são pulados: mesmo nome de run e mesmo out-root)"
+  },
+  {
+   "job_id": "a2_B2_rs_seed_small_inits",
+   "prioridade": 4,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "3) semente pequena RS (só conv): S0, aleatório, S1, S0+, S0-data, S2 x4, S3, S3-rand x {noae, joint} x 3 seeds",
+   "dataset": "remote_sensing",
+   "genome": "seed_small",
+   "inits": [
+    "spifil",
+    "random",
+    "s0plus",
+    "s0data",
+    "spifil1",
+    "spifil2:variant=s2",
+    "spifil2:variant=s2_noinv",
+    "spifil2:variant=s2_dcpen",
+    "spifil2:variant=s2_aug_domain,aug_policy=rs",
+    "spifil3",
+    "spifil3_rand"
+   ],
+   "ae": [
+    "noae",
+    "joint"
+   ],
+   "seeds": [
+    42,
+    1042,
+    2042
+   ],
+   "fidelidade": 45,
+   "n_runs_no_plano": 66,
+   "estimativa": {
+    "horas_gpu_por_run": 0.58,
+    "horas_gpu_total": 38.3,
+    "pico_gpu_reservado_gb": 24.0,
+    "ram_cpu_gb": 6
+   },
+   "n_runs_ja_feitos_por_outro_job": 0,
+   "gate_memoria_livre_gb": 28,
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset remote_sensing --genome seed_small --inits 'spifil,random,s0plus,s0data,spifil1,spifil2:variant=s2,spifil2:variant=s2_noinv,spifil2:variant=s2_dcpen,spifil2:variant=s2_aug_domain,aug_policy=rs,spifil3,spifil3_rand' --ae noae,joint --seeds 42,1042,2042 --fidelity 45 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation >> artifacts/a2_ablation/logs/a2_B2_rs_seed_small_inits.log 2>&1",
+   "saida": "artifacts/a2_ablation/remote_sensing/ (results.jsonl + candidates/<run>/f45/)",
+   "idempotente": "sim (run com ablation.json é pulado; run morto vai para *.interrompido_<ts> e é refeito)",
+   "concluido_quando": "66 linhas definitivas (ok/infeasible/not_applicable) para este plano em results.jsonl (`--dry-run` mostra 0 a fazer)",
+   "depende_de": [
+    "a2_B2_rs_b1_inits"
+   ],
+   "nota": "S0 = init 'spifil' (os runs já feitos no baseline são pulados: mesmo nome de run e mesmo out-root)"
+  },
+  {
+   "job_id": "a2_B2_flowers_seed_small_inits",
+   "prioridade": 4,
+   "fase": "B",
+   "status": "queued",
+   "descricao": "3) idem, Flowers semente pequena",
+   "dataset": "flowers",
+   "genome": "seed_small",
+   "inits": [
+    "spifil",
+    "random",
+    "s0plus",
+    "s0data",
+    "spifil1",
+    "spifil2:variant=s2",
+    "spifil2:variant=s2_noinv",
+    "spifil2:variant=s2_dcpen",
+    "spifil2:variant=s2_aug_domain,aug_policy=flowers",
+    "spifil3",
+    "spifil3_rand"
+   ],
+   "ae": [
+    "noae",
+    "joint"
+   ],
+   "seeds": [
+    42,
+    1042,
+    2042
+   ],
+   "fidelidade": 45,
+   "n_runs_no_plano": 66,
+   "estimativa": {
+    "horas_gpu_por_run": 0.88,
+    "horas_gpu_total": 58.1,
+    "pico_gpu_reservado_gb": 14.0,
+    "ram_cpu_gb": 12
+   },
+   "n_runs_ja_feitos_por_outro_job": 0,
+   "gate_memoria_livre_gb": 18,
+   "comando": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m ga_search.abstract_init.run_ablation --dataset flowers --genome seed_small --inits 'spifil,random,s0plus,s0data,spifil1,spifil2:variant=s2,spifil2:variant=s2_noinv,spifil2:variant=s2_dcpen,spifil2:variant=s2_aug_domain,aug_policy=flowers,spifil3,spifil3_rand' --ae noae,joint --seeds 42,1042,2042 --fidelity 45 --device cuda --cov-eigh-workers 1 --out-root artifacts/a2_ablation >> artifacts/a2_ablation/logs/a2_B2_flowers_seed_small_inits.log 2>&1",
+   "saida": "artifacts/a2_ablation/flowers/ (results.jsonl + candidates/<run>/f45/)",
+   "idempotente": "sim (run com ablation.json é pulado; run morto vai para *.interrompido_<ts> e é refeito)",
+   "concluido_quando": "66 linhas definitivas (ok/infeasible/not_applicable) para este plano em results.jsonl (`--dry-run` mostra 0 a fazer)",
+   "depende_de": [
+    "a2_B2_flowers_b1_inits"
+   ],
+   "nota": "S0 = init 'spifil' (os runs já feitos no baseline são pulados: mesmo nome de run e mesmo out-root)"
+  }
+ ]
+}

@@ -1,0 +1,184 @@
+{
+ "ae_blocks": [
+  0,
+  1,
+  2
+ ],
+ "ae_epochs": 5,
+ "ae_logs": [
+  {
+   "block": 0,
+   "effective_rank": 1.0,
+   "effective_rank_ratio": 0.010526315789473684,
+   "epochs": 5,
+   "final_recon_loss": 0.005505395339181026,
+   "initial_recon_loss": 0.40927404165267944,
+   "out_channels": 95,
+   "recon_ratio": 0.01345161133833415,
+   "skipped_steps": 0,
+   "stability": 0.000596992172889484,
+   "steps": 150,
+   "target": "pixel",
+   "time_s": 133.26872640289366
+  },
+  {
+   "block": 1,
+   "effective_rank": 1.0,
+   "effective_rank_ratio": 0.008333333333333333,
+   "epochs": 5,
+   "final_recon_loss": 0.005404344977190097,
+   "initial_recon_loss": 0.6638056635856628,
+   "out_channels": 120,
+   "recon_ratio": 0.00814145656425644,
+   "skipped_steps": 0,
+   "stability": 0.0003612319541090987,
+   "steps": 150,
+   "target": "pixel",
+   "time_s": 306.6682405024767
+  },
+  {
+   "block": 2,
+   "effective_rank": 1.0,
+   "effective_rank_ratio": 0.008333333333333333,
+   "epochs": 5,
+   "final_recon_loss": 0.003637979707370202,
+   "initial_recon_loss": 0.37193426489830017,
+   "out_channels": 120,
+   "recon_ratio": 0.00978124375920286,
+   "skipped_steps": 0,
+   "stability": 0.000227597246148549,
+   "steps": 150,
+   "target": "pixel",
+   "time_s": 249.67597429454327
+  }
+ ],
+ "arch": "flowers/B1/c152565bb8cc",
+ "aux": {
+  "kappa_val_alpha0": 0.6655844449996948,
+  "macro_f1": 0.7307889461517334,
+  "wise_kappas": {
+   "0.0": 0.6655844449996948,
+   "0.25": 0.5988137722015381,
+   "0.5": 0.6134998798370361,
+   "0.75": 0.5740343928337097,
+   "1.0": 0.5895081758499146
+  }
+ },
+ "band": "B1",
+ "cand_key": "e1b2d707236341f4e1d3",
+ "checkpoint": "artifacts/hmodehb_b0b4/growth/athena_gpu2/flowers/seed42/nodes/B1g0c00/f15/backbone.pt",
+ "checkpoint_sha256": "673b07536d40028bf2936c448e7f63832329c3aa7d5fe4c0ec09e107ea53621c",
+ "decision_rulers": [
+  "941c7f4db3ad"
+ ],
+ "delta_kappa": -0.006186842918395996,
+ "fid": 15,
+ "fitness_sig": "4a86cea85c34",
+ "flops": 3018839040,
+ "flops_2mac": 6037678080,
+ "growth_spec_id": "e643881e7e5a->c152565bb8cc:widen+deepen_residual_zero",
+ "inheritance_totals": {
+  "inherited": 236600,
+  "new": 176970
+ },
+ "init_method": "spifil0",
+ "kappa_val_orig": 0.6655844449996948,
+ "mem": {
+  "embed_batch_size": null,
+  "empty_cache": true,
+  "grad_checkpoint": true,
+  "ssl_amp_bf16": true,
+  "wise_on_cpu": true
+ },
+ "n_svm_decisions": 5,
+ "new_filter_init": [
+  {
+   "fallback": null,
+   "fit_seconds": 3.5254317224025726,
+   "layer": 0,
+   "method": "spifil0",
+   "n_fit": 35,
+   "n_new": 35,
+   "n_pytorch": 0
+  }
+ ],
+ "node_id": "B1g0c00",
+ "ops": [
+  {
+   "op": "widen",
+   "seed": 51909241,
+   "widths": {
+    "0": 95
+   }
+  },
+  {
+   "act": "silu",
+   "at": 2,
+   "kernel": 3,
+   "op": "deepen_residual_zero"
+  }
+ ],
+ "params": 413570,
+ "parent": "seed01",
+ "parent_checkpoint_sha256": "b81d217c403164115dbd8e42d2e22a557c9c1c39a5170cc90e03335651b4fe7d",
+ "parent_kappa_val_orig": 0.6717712879180908,
+ "peak_gpu_reserved_gb": 33.6068608,
+ "preservation": {
+  "data": {
+   "mode": "eval(), fp32, no_grad, antes de treino",
+   "n": 8,
+   "n_images": 8,
+   "sha256": "9ab62c03646da17ee7e7b2434039c06bf8742f9f1bb94a415ee1478e8ec1dc37",
+   "shape": [
+    8,
+    3,
+    224,
+    224
+   ],
+   "split": "validation"
+  },
+  "emb_cos_min": 1.0000000000000009,
+  "emb_max_abs": 0.0,
+  "emb_rel_l2": 0.0,
+  "exact_claimed": true,
+  "map_cos_min": 0.9999999999999134,
+  "map_max_abs": 0.0,
+  "map_rel_l2": 0.0,
+  "per_layer": [
+   {
+    "child_index": 0,
+    "cos_min": 0.9999999999999476,
+    "max_abs": 0.0,
+    "parent_index": 0,
+    "rel_l2": 0.0
+   },
+   {
+    "child_index": 1,
+    "cos_min": 0.9999999999999134,
+    "max_abs": 0.0,
+    "parent_index": 1,
+    "rel_l2": 0.0
+   }
+  ],
+  "tolerance_rel": 1e-05,
+  "verdict": "exact"
+ },
+ "preservation_rel_l2_emb": 0.0,
+ "preservation_verdict": "exact",
+ "protect": "lowlr",
+ "quality": 0.6655844449996948,
+ "seed": 1074510706,
+ "ssl_epochs": 10,
+ "ssl_final_loss": 0.3176785488923391,
+ "ssl_finite": true,
+ "ssl_steps": 300,
+ "status": "ok",
+ "theta": [
+  0.8604500224138197,
+  0.2789597911449665,
+  0.46351649475437817,
+  0.18121846107625894
+ ],
+ "wall_s": 3760.798268556595,
+ "wise_alpha": 0.0
+}

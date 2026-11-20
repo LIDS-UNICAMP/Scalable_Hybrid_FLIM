@@ -1,0 +1,29 @@
+name: coconut_trees
+layout: organized
+root: /dados/home/moliveira/datasets/organized/coconut_trees
+images_dir: "{root}/orig"
+masks_dir: null              # sem máscara
+split_json: "{root}/splits/split{split}.json"   # split fixo (100% do treino); não usar splits_incremental
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: 07db7b24c50ea26c7cab209ade87af89aa884bbe2774ffd471bf0225ce330ebd
+expected_counts:
+  train: 9511
+  validation: 2038
+  test: 2038
+image_size: 224
+image_ext: png
+labels_json: "{root}/classes.json"
+label_source: filename_prefix   # 000NNN_ = id da classe
+classes:
+  1: coco
+  2: non_coco
+n_classes: 2
+impurity_class: null
+has_mask: false

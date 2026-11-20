@@ -1,0 +1,33 @@
+=== seed01 (B0, spifil c00306)  [B0]
+params enc 61,950 | head 135,040 | total 196,990 | FLOPs(2MAC) 2,776,488,960 (enc 1,933,532,160, head 842,956,800)
+cabeca: pooling=moments proj=full embed_dim=2560 kurtosis=True taps=['last']
+  0: stem: conv=conv k=3 3->210 norm=batch act=selu pool=max2 residual=none init=inherited -> saida (210, 112, 112)
+  1: local[0]: conv=dwsep k=7 210->210 norm=batch_dbn act=silu pool=avg2 residual=identity init=inherited -> saida (210, 56, 56)
+ops: — (semente)
+alpha WiSE=None | kappa val ORIG=0.5714472532272339 (pai None None) | kappa TESTE=0.5344172716140747
+=== B1g0c00 f45  [B1]
+params enc 459,060 | head 135,040 | total 594,100 | FLOPs(2MAC) 5,265,845,760 (enc 4,422,888,960, head 842,956,800)
+cabeca: pooling=moments proj=full embed_dim=2560 kurtosis=True taps=['last']
+  0: stem: conv=conv k=3 3->210 norm=batch act=selu pool=max2 residual=none init=inherited -> saida (210, 112, 112)
+  1: local[0]: conv=dwsep k=7 210->210 norm=batch_dbn act=silu pool=avg2 residual=identity init=inherited -> saida (210, 56, 56)
+  2: local[1]: conv=conv k=3 210->210 norm=none act=silu pool=none2 residual=identity init=residual_zero -> saida (210, 56, 56)
+ops: [{"act": "silu", "at": 2, "kernel": 3, "op": "deepen_residual_zero"}]
+alpha WiSE=0.25 | kappa val ORIG=0.592449426651001 (pai seed01 0.5714472532272339) | kappa TESTE=0.5769616961479187
+=== B2g1c02 f15  [B2]
+params enc 856,170 | head 135,040 | total 991,210 | FLOPs(2MAC) 7,755,202,560 (enc 6,912,245,760, head 842,956,800)
+cabeca: pooling=moments proj=full embed_dim=2560 kurtosis=True taps=['last']
+  0: stem: conv=conv k=3 3->210 norm=batch act=selu pool=max2 residual=none init=inherited -> saida (210, 112, 112)
+  1: local[0]: conv=dwsep k=7 210->210 norm=batch_dbn act=silu pool=avg2 residual=identity init=inherited -> saida (210, 56, 56)
+  2: local[1]: conv=conv k=3 210->210 norm=none act=silu pool=none2 residual=identity init=residual_zero -> saida (210, 56, 56)
+  3: local[2]: conv=conv k=3 210->210 norm=none act=silu pool=none2 residual=identity init=residual_zero -> saida (210, 56, 56)
+ops: [{"act": "silu", "at": 2, "kernel": 3, "op": "deepen_residual_zero"}]
+alpha WiSE=0.25 | kappa val ORIG=0.6202614307403564 (pai B1g0c00 0.592449426651001) | kappa TESTE=0.5918464660644531
+=== B2g1c02 f45  [B2]
+params enc 856,170 | head 135,040 | total 991,210 | FLOPs(2MAC) 7,755,202,560 (enc 6,912,245,760, head 842,956,800)
+cabeca: pooling=moments proj=full embed_dim=2560 kurtosis=True taps=['last']
+  0: stem: conv=conv k=3 3->210 norm=batch act=selu pool=max2 residual=none init=inherited -> saida (210, 112, 112)
+  1: local[0]: conv=dwsep k=7 210->210 norm=batch_dbn act=silu pool=avg2 residual=identity init=inherited -> saida (210, 56, 56)
+  2: local[1]: conv=conv k=3 210->210 norm=none act=silu pool=none2 residual=identity init=residual_zero -> saida (210, 56, 56)
+  3: local[2]: conv=conv k=3 210->210 norm=none act=silu pool=none2 residual=identity init=residual_zero -> saida (210, 56, 56)
+ops: [{"act": "silu", "at": 2, "kernel": 3, "op": "deepen_residual_zero"}]
+alpha WiSE=0.5 | kappa val ORIG=0.5930681228637695 (pai B1g0c00 0.592449426651001) | kappa TESTE=0.5288066864013672

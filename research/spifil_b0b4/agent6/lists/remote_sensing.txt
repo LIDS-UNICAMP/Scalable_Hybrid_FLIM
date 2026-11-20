@@ -1,0 +1,10 @@
+# remote_sensing: melhor por validacao de cada (kind, estrato); md5 em checkpoints_E0_E8.csv
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00009/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00006/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00015/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00020/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00012/f45/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00054/f15/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00066/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00028/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00042/f15/encoder.pt

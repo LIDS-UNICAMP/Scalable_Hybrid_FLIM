@@ -1,0 +1,178 @@
+[
+ {
+  "kind": "modehb_hybrid",
+  "base": "flowers",
+  "seed": 43,
+  "src": "artifacts/_staging_gpu3/modehb_hybrid_seed43/flowers",
+  "dest": "artifacts/modehb_hybrid/flowers",
+  "state_dir_dest": "artifacts/modehb_hybrid/flowers/state/seed43",
+  "checks": {
+   "state": {
+    "ok": true,
+    "n_jobs": 2,
+    "status": {
+     "ok": 2
+    },
+    "done": false,
+    "brackets_done": 0,
+    "bracket": 0,
+    "gpu_hours": 0.54,
+    "updated": "2026-11-16 02:18:04",
+    "fidelities_cfg": [
+     5,
+     15,
+     45,
+     100,
+     200
+    ],
+    "max_brackets": 10,
+    "last_job": {
+     "job": 1,
+     "cand_id": "c00001",
+     "fidelity": 15.0,
+     "status": "ok",
+     "role": "search"
+    },
+    "sha256": "8c1947acadc9742f3dcde9ef8b78c0b3b9bff20f9cb8a96c127254e125790d2c",
+    "failed_jobs": [],
+    "md5": "0efd16054567ddf23bc345ab7ecd9f83"
+   },
+   "manifest": {
+    "sources": [
+     "artifacts/_staging_gpu3/modehb_hybrid_seed43_flowers.ok",
+     "research/spifil_b0b4/agent5/gpu3_migration_manifest.csv"
+    ],
+    "csv_row": {
+     "kind": "modehb_hybrid_seed43",
+     "base": "flowers",
+     "seed": "seed43",
+     "origem_athena": "artifacts/modehb_hybrid_s43_pausado_0518/flowers",
+     "destino_jaci_staging": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/_staging_gpu3/modehb_hybrid_seed43/flowers/",
+     "jobs_athena": "2",
+     "jobs_jaci": "2",
+     "md5_search_state_athena": "0efd16054567ddf23bc345ab7ecd9f83",
+     "md5_search_state_jaci": "0efd16054567ddf23bc345ab7ecd9f83",
+     "encoder_pt_conferidos": "2",
+     "encoder_pt_iguais": "True",
+     "rsync_rc": "0",
+     "marcador": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/_staging_gpu3/modehb_hybrid_seed43_flowers.ok",
+     "tmux_laco_original": "",
+     "comando_original": "",
+     "original_preservado_athena": "True",
+     "concluido_em": "2026-11-17_01:04:38"
+    },
+    "n_jobs": 2,
+    "md5": {
+     "md5_search_state_athena": "0efd16054567ddf23bc345ab7ecd9f83",
+     "md5_search_state_jaci": "0efd16054567ddf23bc345ab7ecd9f83"
+    },
+    "state_md5_ok": true
+   },
+   "checkpoints": {
+    "ok_jobs": 2,
+    "missing": 0,
+    "missing_examples": [],
+    "embeddings_missing": 0,
+    "absolute_paths": 0,
+    "max_fidelity": 15.0,
+    "n_max_fidelity": 1,
+    "loaded": 2,
+    "load_failed": [],
+    "loaded_detail": [
+     {
+      "job": 0,
+      "cand_id": "c00001",
+      "fid": 5.0,
+      "blocks": 2,
+      "MB": 0.6
+     },
+     {
+      "job": 1,
+      "cand_id": "c00001",
+      "fid": 15.0,
+      "blocks": 2,
+      "MB": 0.6
+     }
+    ]
+   },
+   "config_search_diff": [],
+   "config_resolved_diff": [],
+   "controller": {
+    "fit_sig_jaci": "C100_kw1",
+    "fit_sig_resolved": "C100_kw1",
+    "controller_id_jaci": "ctrl-524ac822d16d6d11",
+    "controller_ids_in_logs": [
+     "ctrl-3d9ba151a477550c"
+    ],
+    "fitness_modes_jobs": [
+     "svm_kappa"
+    ],
+    "note": "id NOVO na Jaci (esperado: o artifacts do athena é symlink, o resolve() muda); o state/jobs continuam; só o painel W&B do controller recomeça"
+   },
+   "dataset": {
+    "yaml": "ga_search/config/modehb/datasets/flowers.yaml",
+    "root_exists": true,
+    "images_dir": "/dados/home/moliveira/datasets/organized/flowers/orig",
+    "images_dir_exists": true,
+    "split_json": "/dados/home/moliveira/datasets/organized/flowers/splits/split1.json",
+    "split_json_exists": true,
+    "split_sha256_ok": true,
+    "data_sha256_jobs": [
+     "3fcb5b64c9faadcd0e82ae4118176e644d85ebd023e433b1925b946b8c26590d"
+    ],
+    "identity_sha256_jaci": "3fcb5b64c9faadcd0e82ae4118176e644d85ebd023e433b1925b946b8c26590d",
+    "n_train": 1922,
+    "n_val": 412,
+    "spifil_pool_sizes_jaci": [
+     32,
+     32,
+     32,
+     32,
+     32
+    ],
+    "spifil_pool_sizes_state": [
+     32,
+     32,
+     32,
+     32,
+     32
+    ]
+   },
+   "replay": {
+    "ok": true,
+    "replayed": 2,
+    "logged_identical": true,
+    "extra_cached_jobs": [],
+    "next_job": 2,
+    "next_fidelity": 45.0,
+    "next_role": "search",
+    "next_cand": "c00001",
+    "next_inherit_ckpt": null,
+    "outcome": "replay reproduziu todos os jobs e parou no próximo job novo",
+    "seconds": 0.0
+   }
+  },
+  "errors": [],
+  "warnings": [],
+  "validated_at": "2026-11-16 22:25:22",
+  "run_cmd": {
+   "config": "ga_search/config/modehb/search_v3.yaml",
+   "dataset": "flowers",
+   "seed": 43,
+   "sets": [
+    "output_dir=artifacts/modehb_hybrid/flowers/state/seed43",
+    "search.stratified.memory_budget_gb=12",
+    "gpu_process_cap_gb=14"
+   ]
+  },
+  "resources": {
+   "memory_budget_gb": 12,
+   "gpu_process_cap_gb": 14,
+   "peak_gpu_reserved_gb_max": 4.35,
+   "gate_free_mib": 22528
+  },
+  "tmpdir": "/tmp/claude-1014/-dados-home-moliveira-Scalable-Hybrid-FLIM/05a95f35-17a2-4976-a2bd-9c4d1e4ff9eb/scratchpad/resumeval_modehb_hybrid_flowers_s43_yomh3oc0",
+  "seconds": 6.7,
+  "verdict": "VALIDADA"
+ }
+]

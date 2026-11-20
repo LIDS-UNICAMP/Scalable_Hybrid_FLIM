@@ -1,0 +1,90 @@
+====================================================================================================
+B0 = seed01 (SPiFiL c00306)
+====================================================================================================
+Layer (nome)                               Tipo                     Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------
+blocks.0.conv                              Conv2d                   [1, 210, 224, 224]          5,880  
+blocks.0.norm                              BatchNorm2d              [1, 210, 224, 224]            420  ← não muda shape: BatchNorm2d
+blocks.0.activation                        SELU                     [1, 210, 224, 224]              0  ← não muda shape: SELU
+blocks.0.dropout                           Identity                 [1, 210, 224, 224]              0  ← não muda shape: Identity
+blocks.0.pool                              MaxPool2d                [1, 210, 112, 112]              0  
+blocks.0                                   SpifilOpsBlock           [1, 210, 112, 112]              0  
+blocks.1.conv.depthwise                    Conv2d                   [1, 210, 112, 112]         10,500  ← não muda shape: Conv2d
+blocks.1.conv.pointwise                    Conv2d                   [1, 210, 112, 112]         44,310  ← não muda shape: Conv2d
+blocks.1.norm.0                            BatchNorm2d              [1, 210, 112, 112]            420  ← não muda shape: BatchNorm2d
+blocks.1.norm.1                            DecorrelatedBatchNorm    [1, 210, 112, 112]            420  ← não muda shape: DecorrelatedBatchNorm
+blocks.1.activation                        SiLU                     [1, 210, 112, 112]              0  ← não muda shape: SiLU
+blocks.1.dropout                           Identity                 [1, 210, 112, 112]              0  ← não muda shape: Identity
+blocks.1.skip                              Identity                 [1, 210, 112, 112]              0  ← não muda shape: Identity
+blocks.1.pool                              AvgPool2d                [1, 210, 56, 56]                0  
+blocks.1                                   SpifilOpsBlock           [1, 210, 56, 56]                0  
+head.proj.0                                Conv2d                   [1, 640, 56, 56]          135,040  
+----------------------------------------------------------------------------------------------------
+Total params: 196,990 | encoder 61,950 | cabeça 135,040
+====================================================================================================
+B1 = B1g0c00 (deepen_residual_zero em 2)
+====================================================================================================
+Layer (nome)                               Tipo                     Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------
+blocks.0.conv                              Conv2d                   [1, 210, 224, 224]          5,880  
+blocks.0.norm                              BatchNorm2d              [1, 210, 224, 224]            420  ← não muda shape: BatchNorm2d
+blocks.0.activation                        SELU                     [1, 210, 224, 224]              0  ← não muda shape: SELU
+blocks.0.dropout                           Identity                 [1, 210, 224, 224]              0  ← não muda shape: Identity
+blocks.0.pool                              MaxPool2d                [1, 210, 112, 112]              0  
+blocks.0                                   SpifilOpsBlock           [1, 210, 112, 112]              0  
+blocks.1.conv.depthwise                    Conv2d                   [1, 210, 112, 112]         10,500  ← não muda shape: Conv2d
+blocks.1.conv.pointwise                    Conv2d                   [1, 210, 112, 112]         44,310  ← não muda shape: Conv2d
+blocks.1.norm.0                            BatchNorm2d              [1, 210, 112, 112]            420  ← não muda shape: BatchNorm2d
+blocks.1.norm.1                            DecorrelatedBatchNorm    [1, 210, 112, 112]            420  ← não muda shape: DecorrelatedBatchNorm
+blocks.1.activation                        SiLU                     [1, 210, 112, 112]              0  ← não muda shape: SiLU
+blocks.1.dropout                           Identity                 [1, 210, 112, 112]              0  ← não muda shape: Identity
+blocks.1.skip                              Identity                 [1, 210, 112, 112]              0  ← não muda shape: Identity
+blocks.1.pool                              AvgPool2d                [1, 210, 56, 56]                0  
+blocks.1                                   SpifilOpsBlock           [1, 210, 56, 56]                0  
+blocks.2.conv                              Conv2d                   [1, 210, 56, 56]          397,110  ← não muda shape: Conv2d
+blocks.2.norm                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.2.act                               SiLU                     [1, 210, 56, 56]                0  ← não muda shape: SiLU
+blocks.2.dropout                           Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.2.skip                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.2.pool                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.2                                   ConvBlock                [1, 210, 56, 56]                0  ← não muda shape: ConvBlock
+head.proj.0                                Conv2d                   [1, 640, 56, 56]          135,040  
+----------------------------------------------------------------------------------------------------
+Total params: 594,100 | encoder 459,060 | cabeça 135,040
+====================================================================================================
+B2 = B2g1c02 (deepen_residual_zero em 2 sobre o B1)
+====================================================================================================
+Layer (nome)                               Tipo                     Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------
+blocks.0.conv                              Conv2d                   [1, 210, 224, 224]          5,880  
+blocks.0.norm                              BatchNorm2d              [1, 210, 224, 224]            420  ← não muda shape: BatchNorm2d
+blocks.0.activation                        SELU                     [1, 210, 224, 224]              0  ← não muda shape: SELU
+blocks.0.dropout                           Identity                 [1, 210, 224, 224]              0  ← não muda shape: Identity
+blocks.0.pool                              MaxPool2d                [1, 210, 112, 112]              0  
+blocks.0                                   SpifilOpsBlock           [1, 210, 112, 112]              0  
+blocks.1.conv.depthwise                    Conv2d                   [1, 210, 112, 112]         10,500  ← não muda shape: Conv2d
+blocks.1.conv.pointwise                    Conv2d                   [1, 210, 112, 112]         44,310  ← não muda shape: Conv2d
+blocks.1.norm.0                            BatchNorm2d              [1, 210, 112, 112]            420  ← não muda shape: BatchNorm2d
+blocks.1.norm.1                            DecorrelatedBatchNorm    [1, 210, 112, 112]            420  ← não muda shape: DecorrelatedBatchNorm
+blocks.1.activation                        SiLU                     [1, 210, 112, 112]              0  ← não muda shape: SiLU
+blocks.1.dropout                           Identity                 [1, 210, 112, 112]              0  ← não muda shape: Identity
+blocks.1.skip                              Identity                 [1, 210, 112, 112]              0  ← não muda shape: Identity
+blocks.1.pool                              AvgPool2d                [1, 210, 56, 56]                0  
+blocks.1                                   SpifilOpsBlock           [1, 210, 56, 56]                0  
+blocks.2.conv                              Conv2d                   [1, 210, 56, 56]          397,110  ← não muda shape: Conv2d
+blocks.2.norm                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.2.act                               SiLU                     [1, 210, 56, 56]                0  ← não muda shape: SiLU
+blocks.2.dropout                           Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.2.skip                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.2.pool                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.2                                   ConvBlock                [1, 210, 56, 56]                0  ← não muda shape: ConvBlock
+blocks.3.conv                              Conv2d                   [1, 210, 56, 56]          397,110  ← não muda shape: Conv2d
+blocks.3.norm                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.3.act                               SiLU                     [1, 210, 56, 56]                0  ← não muda shape: SiLU
+blocks.3.dropout                           Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.3.skip                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.3.pool                              Identity                 [1, 210, 56, 56]                0  ← não muda shape: Identity
+blocks.3                                   ConvBlock                [1, 210, 56, 56]                0  ← não muda shape: ConvBlock
+head.proj.0                                Conv2d                   [1, 640, 56, 56]          135,040  
+----------------------------------------------------------------------------------------------------
+Total params: 991,210 | encoder 856,170 | cabeça 135,040

@@ -1,0 +1,28 @@
+# Ablação de família única: varia SÓ 'local_ae'. Nada de produto cartesiano.
+name: local_ae
+description: "AE local por bloco ligado/desligado"
+base: ga_search/config/modehb/search.yaml
+factor: local_ae
+levels: [true, false]
+fixed:                       # todo o resto fixo no valor da base
+  architecture: best_stage2_pareto_knee   # mesma arquitetura para todos os níveis
+  encoder_init: spifil
+  activation: relu
+  pooling: gap
+  batchnorm: true
+  whitening: none
+  softhebb: false
+  # local_ae: variado
+  ssl: lejepa
+  ssl_regularizer: sigreg
+  tta: 1
+  training_mode: progressive
+seeds: [42, 43, 44]          # mesmas seeds da busca
+budget:
+  epochs: 45                 # fidelidade máxima; AE:SSL = 1:2
+  batch_size: 64
+  lr_new: 1.0e-3
+  lr_old: 1.0e-4
+datasets: [larvae, remote_sensing, flowers, ham10000, aid, eggs, coconut_trees, protozoan, food101]
+metrics: [quality, flops, knn_view_consistency, clustering_stability]
+output_dir: "artifacts/modehb/{dataset}/ablations/local_ae"

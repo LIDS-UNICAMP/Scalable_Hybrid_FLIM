@@ -1,0 +1,47 @@
+{
+ "host": "athena",
+ "gpu_fisica": 3,
+ "cuda_visible_devices": "3",
+ "dono": "moliveira",
+ "pesquisa": "SPiFiL Progressivo B0-B4",
+ "regras": {
+  "gpu2": "NAO MEXER",
+  "gate": "fase seguinte so roda com gate aprovado (arquivo gate_<fase>.approved em research/spifil_b0b4/gates/ na Jaci, assinado pelo Agente CHECK)",
+  "estados": [
+   "queued",
+   "running",
+   "checkpointed",
+   "failed",
+   "completed"
+  ],
+  "idempotencia": "cada job tem job_id unico; relancar um job completed e no-op; running exige lock em <output_dir>/.controller.lock",
+  "hpc": "OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8; LD_LIBRARY_PATH do env scalable_FLIM; OOM -> diagnostico, sem repeticao infinita"
+ },
+ "fases": {
+  "A": {
+   "descricao": "testes de implementacao",
+   "gate_requerido": null,
+   "status": "aguardando_jobs",
+   "jobs": []
+  },
+  "B": {
+   "descricao": "ablacoes (RS, Flowers, HAM, parasitas raw/pre)",
+   "gate_requerido": "A",
+   "status": "bloqueada",
+   "jobs": []
+  },
+  "C": {
+   "descricao": "crescimento B0->B4",
+   "gate_requerido": "B",
+   "status": "bloqueada",
+   "jobs": []
+  },
+  "D": {
+   "descricao": "busca evolutiva (MO-DEHB hierarquico)",
+   "gate_requerido": "C",
+   "status": "bloqueada",
+   "jobs": []
+  }
+ },
+ "gpu3_livre_desde": "2026-11-17T01:12:12"
+}

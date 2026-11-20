@@ -1,0 +1,29 @@
+name: larvae
+layout: organized
+root: /dados/home/moliveira/datasets/organized/Larvae
+images_dir: "{root}/pre/orig"
+masks_dir: "{root}/pre/label"
+split_json: "{root}/splits/split{split}_modehb.json"   # split1_modehb: split1 original (nomes raw/) remapeado para os nomes atuais de pre/orig; ver splits/split1_modehb_README.md e split1_modehb_mapping.csv
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: e05103880d2f4c5588ceb6b479287ff8a950eb50c0f8843f4bd5c9fc7d8aec58   # split1_modehb.json (original split1.json: c4ad3eea370c803ed9635437910a98903c360e53c7309a8cc1e9b67c49a58116)
+expected_counts:
+  train: 1118
+  validation: 240
+  test: 240
+image_size: 224
+image_ext: png
+labels_csv: "{root}/Lar_2.csv"
+label_source: csv
+classes:
+  1: "S.stercoralis"
+  2: Impurities
+n_classes: 2
+impurity_class: 2
+has_mask: true

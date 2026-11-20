@@ -1,0 +1,57 @@
+name: aid
+layout: organized
+root: /dados/home/moliveira/datasets/organized/aid
+images_dir: "{root}/orig"
+masks_dir: null              # sem máscara
+split_json: "{root}/splits/split{split}.json"   # split fixo (100% do treino); não usar splits_incremental
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: 41d25f65e84cc317c76af30dc94e8713507508f62c1b28f8f1c111e272b602e3
+expected_counts:
+  train: 6996
+  validation: 1502
+  test: 1502
+image_size: 224
+image_ext: jpg
+labels_json: "{root}/classes.json"
+label_source: filename_prefix   # 000NNN_ = id da classe
+classes:
+  1: Airport
+  2: BareLand
+  3: BaseballField
+  4: Beach
+  5: Bridge
+  6: Center
+  7: Church
+  8: Commercial
+  9: DenseResidential
+  10: Desert
+  11: Farmland
+  12: Forest
+  13: Industrial
+  14: Meadow
+  15: MediumResidential
+  16: Mountain
+  17: Park
+  18: Parking
+  19: Playground
+  20: Pond
+  21: Port
+  22: RailwayStation
+  23: Resort
+  24: River
+  25: School
+  26: SparseResidential
+  27: Square
+  28: Stadium
+  29: StorageTanks
+  30: Viaduct
+n_classes: 30
+impurity_class: null
+has_mask: false

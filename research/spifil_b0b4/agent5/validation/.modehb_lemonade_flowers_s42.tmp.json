@@ -1,0 +1,228 @@
+[
+ {
+  "kind": "modehb_lemonade",
+  "base": "flowers",
+  "seed": 42,
+  "src": "artifacts/_staging_gpu3/modehb_lemonade/flowers",
+  "dest": "artifacts/modehb_lemonade/flowers",
+  "state_dir_dest": "artifacts/modehb_lemonade/flowers/state/seed42",
+  "checks": {
+   "state": {
+    "ok": true,
+    "n_jobs": 36,
+    "status": {
+     "ok": 36
+    },
+    "done": false,
+    "brackets_done": 0,
+    "bracket": 0,
+    "gpu_hours": 13.44,
+    "updated": "2026-11-16 22:05:34",
+    "fidelities_cfg": [
+     5,
+     15,
+     45,
+     100,
+     200
+    ],
+    "max_brackets": 4,
+    "last_job": {
+     "job": 35,
+     "cand_id": "c00016",
+     "fidelity": 5.0,
+     "status": "ok",
+     "role": "search"
+    },
+    "sha256": "901ba50018c53b4a3df696b34f7b529f71dfcdbff0229d465dfc802e29c732a9",
+    "failed_jobs": [],
+    "md5": "68942de115fc266051ad7486e2d3f325"
+   },
+   "manifest": {
+    "sources": [
+     "artifacts/_staging_gpu3/modehb_lemonade_flowers.ok",
+     "research/spifil_b0b4/agent5/gpu3_migration_manifest.csv"
+    ],
+    "csv_row": {
+     "kind": "modehb_lemonade",
+     "base": "flowers",
+     "seed": "seed42",
+     "origem_athena": "artifacts/modehb_lemonade/flowers",
+     "destino_jaci_staging": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/_staging_gpu3/modehb_lemonade/flowers/",
+     "jobs_athena": "36",
+     "jobs_jaci": "36",
+     "md5_search_state_athena": "68942de115fc266051ad7486e2d3f325",
+     "md5_search_state_jaci": "68942de115fc266051ad7486e2d3f325",
+     "encoder_pt_conferidos": "32",
+     "encoder_pt_iguais": "True",
+     "rsync_rc": "0",
+     "marcador": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/_staging_gpu3/modehb_lemonade_flowers.ok",
+     "tmux_laco_original": "modehb_gpu3_lem_flowers2",
+     "comando_original": "/exps/moliveira/queues/gpu3_migracao/loops/modehb_gpu3_lem_flowers2.txt",
+     "original_preservado_athena": "True",
+     "concluido_em": "2026-11-17_01:05:59"
+    },
+    "n_jobs": 36,
+    "md5": {
+     "md5_search_state_athena": "68942de115fc266051ad7486e2d3f325",
+     "md5_search_state_jaci": "68942de115fc266051ad7486e2d3f325"
+    },
+    "state_md5_ok": true
+   },
+   "checkpoints": {
+    "ok_jobs": 36,
+    "missing": 0,
+    "missing_examples": [],
+    "embeddings_missing": 0,
+    "absolute_paths": 0,
+    "max_fidelity": 200.0,
+    "n_max_fidelity": 4,
+    "loaded": 9,
+    "load_failed": [],
+    "loaded_detail": [
+     {
+      "job": 8,
+      "cand_id": "c00002",
+      "fid": 100.0,
+      "blocks": 5,
+      "MB": 7.6
+     },
+     {
+      "job": 33,
+      "cand_id": "c00014",
+      "fid": 5.0,
+      "blocks": 4,
+      "MB": 13.3
+     },
+     {
+      "job": 0,
+      "cand_id": "c00001",
+      "fid": 5.0,
+      "blocks": 3,
+      "MB": 2.2
+     },
+     {
+      "job": 35,
+      "cand_id": "c00016",
+      "fid": 5.0,
+      "blocks": 3,
+      "MB": 0.2
+     },
+     {
+      "job": 30,
+      "cand_id": "c00011",
+      "fid": 5.0,
+      "blocks": 5,
+      "MB": 38.8
+     },
+     {
+      "job": 4,
+      "cand_id": "c00001",
+      "fid": 200.0,
+      "blocks": 3,
+      "MB": 2.2
+     },
+     {
+      "job": 9,
+      "cand_id": "c00002",
+      "fid": 200.0,
+      "blocks": 5,
+      "MB": 7.6
+     },
+     {
+      "job": 14,
+      "cand_id": "c00003",
+      "fid": 200.0,
+      "blocks": 6,
+      "MB": 17.8
+     },
+     {
+      "job": 19,
+      "cand_id": "c00004",
+      "fid": 200.0,
+      "blocks": 6,
+      "MB": 30.0
+     }
+    ]
+   },
+   "config_search_diff": [],
+   "config_resolved_diff": [],
+   "controller": {
+    "fit_sig_jaci": "C100_kw1",
+    "fit_sig_resolved": "C100_kw1",
+    "controller_id_jaci": "ctrl-a50a46a30b8058ed",
+    "controller_ids_in_logs": [
+     "ctrl-24610332633b29bb",
+     "ctrl-30fb505017774b26"
+    ],
+    "fitness_modes_jobs": [
+     "svm_kappa"
+    ],
+    "note": "id NOVO na Jaci (esperado: o artifacts do athena é symlink, o resolve() muda); o state/jobs continuam; só o painel W&B do controller recomeça"
+   },
+   "dataset": {
+    "yaml": "ga_search/config/modehb/datasets/flowers.yaml",
+    "root_exists": true,
+    "images_dir": "/dados/home/moliveira/datasets/organized/flowers/orig",
+    "images_dir_exists": true,
+    "split_json": "/dados/home/moliveira/datasets/organized/flowers/splits/split1.json",
+    "split_json_exists": true,
+    "split_sha256_ok": true,
+    "data_sha256_jobs": [
+     "94a5228ff3f48e091d2fe8e43d62e6150ca36ce6f905f23cd43bf7eb7b17d90c"
+    ],
+    "identity_sha256_jaci": "94a5228ff3f48e091d2fe8e43d62e6150ca36ce6f905f23cd43bf7eb7b17d90c",
+    "n_train": 1922,
+    "n_val": 412,
+    "spifil_pool_sizes_jaci": [
+     32,
+     32,
+     32,
+     32,
+     32
+    ],
+    "spifil_pool_sizes_state": [
+     32,
+     32,
+     32,
+     32,
+     32
+    ]
+   },
+   "replay": {
+    "ok": true,
+    "replayed": 36,
+    "logged_identical": true,
+    "extra_cached_jobs": [],
+    "next_job": 36,
+    "next_fidelity": 5.0,
+    "next_role": "search",
+    "next_cand": "c00017",
+    "next_inherit_ckpt": null,
+    "outcome": "replay reproduziu todos os jobs e parou no próximo job novo",
+    "seconds": 0.3
+   }
+  },
+  "errors": [],
+  "warnings": [],
+  "validated_at": "2026-11-16 22:25:42",
+  "run_cmd": {
+   "config": "ga_search/config/modehb/search_v3_lemonade.yaml",
+   "dataset": "flowers",
+   "seed": 42,
+   "sets": [
+    "output_dir=artifacts/modehb_lemonade/flowers/state/seed42",
+    "search.stratified.memory_budget_gb=12",
+    "gpu_process_cap_gb=14"
+   ]
+  },
+  "resources": {
+   "memory_budget_gb": 12,
+   "gpu_process_cap_gb": 14,
+   "peak_gpu_reserved_gb_max": 9.64,
+   "gate_free_mib": 22528
+  },
+  "tmpdir": "/tmp/claude-1014/-dados-home-moliveira-Scalable-Hybrid-FLIM/05a95f35-17a2-4976-a2bd-9c4d1e4ff9eb/scratchpad/resumeval_modehb_lemonade_flowers_s42_sgl1lufr",
+  "seconds": 8.4,
+  "verdict": "VALIDADA"
+ }
+]

@@ -1,0 +1,5 @@
+--- /dev/fd/63	2026-11-17 11:51:38.545416607 -0300
++++ /dev/fd/62	2026-11-17 11:51:38.545416607 -0300
+@@ -1 +1 @@
+-                with torch.autocast(self.device.type, enabled=amp, **_amp_kw(self)):
++                with torch.autocast(self.device.type, enabled=amp):  # leitura igual em fp32 e bf16 (autocast padrão)

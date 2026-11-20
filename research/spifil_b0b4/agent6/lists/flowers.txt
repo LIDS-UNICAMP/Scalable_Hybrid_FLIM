@@ -1,0 +1,8 @@
+# flowers: melhor por validacao de cada (kind, estrato); md5 em checkpoints_E0_E8.csv
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/flowers/state/seed42/candidates/c00001/f100/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/flowers/state/seed42/candidates/c00002/f200/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/flowers/state/seed42/candidates/c00003/f45/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/flowers/state/seed42/candidates/c00001/f45/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/flowers/state/seed42/candidates/c00013/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/flowers/state/seed42/candidates/c00003/f15/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/flowers/state/seed42/candidates/c00004/f15/encoder.pt

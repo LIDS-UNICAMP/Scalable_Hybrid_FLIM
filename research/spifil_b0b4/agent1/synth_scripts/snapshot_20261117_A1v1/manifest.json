@@ -1,0 +1,464 @@
+{
+ "tag": "20261117_A1v1",
+ "created": "2026-11-16 23:52:32 -03",
+ "host": "jaci",
+ "script_version": "v1",
+ "files": {
+  "artifacts/modehb_hybrid/aid/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/aid/state/seed42/search_state.json",
+   "md5_source": "ead5f2ba2eb6ba9dff765de6e9c07876",
+   "bytes": 2781981,
+   "mtime": 1794874038.8348308,
+   "gz": "artifacts/modehb_hybrid/aid/state/seed42/search_state.json.gz",
+   "md5_gz": "8e3a43c169ecc849da777b56eb29acbb"
+  },
+  "artifacts/modehb_hybrid/aid/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/aid/state/seed42/config_resolved.yaml",
+   "md5_source": "2ffd7d13cc4a6a03ad4b68fe5eeabfb1",
+   "bytes": 4228,
+   "mtime": 1794788480.0974278,
+   "gz": "artifacts/modehb_hybrid/aid/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "e8f17dd474f89653332b04f03578d6bc"
+  },
+  "artifacts/modehb_hybrid/coconut_trees/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/coconut_trees/state/seed42/search_state.json",
+   "md5_source": "def7dccada05c6a59f1b9930e1664e20",
+   "bytes": 907624,
+   "mtime": 1794877470.464295,
+   "gz": "artifacts/modehb_hybrid/coconut_trees/state/seed42/search_state.json.gz",
+   "md5_gz": "5a4385f60d4caf223d7284a11f4f77c1"
+  },
+  "artifacts/modehb_hybrid/coconut_trees/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/coconut_trees/state/seed42/config_resolved.yaml",
+   "md5_source": "7bddf7d381144d5823c84d7bd2f28da0",
+   "bytes": 3740,
+   "mtime": 1794786702.7781708,
+   "gz": "artifacts/modehb_hybrid/coconut_trees/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "6f39cddae01f6c91f778f28f2d49824a"
+  },
+  "artifacts/modehb_hybrid/eggs/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/eggs/state/seed42/search_state.json",
+   "md5_source": "00be53667baafb7bf50d0b4b26081901",
+   "bytes": 2137411,
+   "mtime": 1794877638.7915277,
+   "gz": "artifacts/modehb_hybrid/eggs/state/seed42/search_state.json.gz",
+   "md5_gz": "cd11ef31da932331bf39698c3ae3e89e"
+  },
+  "artifacts/modehb_hybrid/eggs/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/eggs/state/seed42/config_resolved.yaml",
+   "md5_source": "8dc0b58276bc3ffdc9e9939dfcfecc26",
+   "bytes": 3899,
+   "mtime": 1794786703.2461686,
+   "gz": "artifacts/modehb_hybrid/eggs/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "2d0cc360df501d8e44b94286568872c2"
+  },
+  "artifacts/modehb_hybrid/eggs_raw/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/eggs_raw/state/seed42/search_state.json",
+   "md5_source": "3ee5651f036f7480c71c4e9142cbd1d1",
+   "bytes": 2090098,
+   "mtime": 1794877924.5262089,
+   "gz": "artifacts/modehb_hybrid/eggs_raw/state/seed42/search_state.json.gz",
+   "md5_gz": "ddb5814935b23e20956fe2a48eda7613"
+  },
+  "artifacts/modehb_hybrid/eggs_raw/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/eggs_raw/state/seed42/config_resolved.yaml",
+   "md5_source": "9960c6a4c02c1ccfe488d3c0b2f438e6",
+   "bytes": 3933,
+   "mtime": 1794786702.8581705,
+   "gz": "artifacts/modehb_hybrid/eggs_raw/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "06e2d8d5a31e0710f3cb54af30c03b44"
+  },
+  "artifacts/modehb_hybrid/flowers/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/flowers/state/seed42/search_state.json",
+   "md5_source": "67004908e0c3dca1d14366bd9ed4f15d",
+   "bytes": 349976,
+   "mtime": 1794882328.3756552,
+   "gz": "artifacts/modehb_hybrid/flowers/state/seed42/search_state.json.gz",
+   "md5_gz": "8d497cc07df1102047b3b66b9b5897de"
+  },
+  "artifacts/modehb_hybrid/flowers/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/flowers/state/seed42/config_resolved.yaml",
+   "md5_source": "5e742e14be21759ed50e129652ec3763",
+   "bytes": 3758,
+   "mtime": 1794838872.5800905,
+   "gz": "artifacts/modehb_hybrid/flowers/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "6686532a504eb0abb4b53acde4b645f3"
+  },
+  "artifacts/modehb_hybrid/ham10000/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/ham10000/state/seed42/search_state.json",
+   "md5_source": "671aadc3de379cc79f1c4756161caa4f",
+   "bytes": 3068307,
+   "mtime": 1794882252.5117047,
+   "gz": "artifacts/modehb_hybrid/ham10000/state/seed42/search_state.json.gz",
+   "md5_gz": "6a2082a96d4733abc246c5d2e36bed94"
+  },
+  "artifacts/modehb_hybrid/ham10000/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/ham10000/state/seed42/config_resolved.yaml",
+   "md5_source": "68aee608bab3514c4babd18c84b888aa",
+   "bytes": 3836,
+   "mtime": 1794788479.9754264,
+   "gz": "artifacts/modehb_hybrid/ham10000/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "96f4a07ad67ff974cc89292b8f109c82"
+  },
+  "artifacts/modehb_hybrid/larvae/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/larvae/state/seed42/search_state.json",
+   "md5_source": "a3f920a37076cf04cd6319a287a3c2d0",
+   "bytes": 1564270,
+   "mtime": 1794883433.4946127,
+   "gz": "artifacts/modehb_hybrid/larvae/state/seed42/search_state.json.gz",
+   "md5_gz": "88f0b34f91557e3f57e82cce21161436"
+  },
+  "artifacts/modehb_hybrid/larvae/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/larvae/state/seed42/config_resolved.yaml",
+   "md5_source": "fbea30656ec3f2c313e7f063e2764578",
+   "bytes": 3719,
+   "mtime": 1794789238.0617712,
+   "gz": "artifacts/modehb_hybrid/larvae/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "345e7f66667d72dd6ff630429c415f6a"
+  },
+  "artifacts/modehb_hybrid/larvae_raw/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/larvae_raw/state/seed42/search_state.json",
+   "md5_source": "636b643ab64a5775695845ce6f52599f",
+   "bytes": 1538909,
+   "mtime": 1794883683.9658086,
+   "gz": "artifacts/modehb_hybrid/larvae_raw/state/seed42/search_state.json.gz",
+   "md5_gz": "8d8c329f21e6c8818bc5f5463cb6cf7c"
+  },
+  "artifacts/modehb_hybrid/larvae_raw/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/larvae_raw/state/seed42/config_resolved.yaml",
+   "md5_source": "431b77bacbf632ba30fdce0f03918878",
+   "bytes": 3739,
+   "mtime": 1794786701.2581782,
+   "gz": "artifacts/modehb_hybrid/larvae_raw/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "5e9fb9f00c9713fe765f918c13b34aca"
+  },
+  "artifacts/modehb_hybrid/protozoan/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/protozoan/state/seed42/search_state.json",
+   "md5_source": "925127cb5dd395f231a076372b548984",
+   "bytes": 1982903,
+   "mtime": 1794882008.2416527,
+   "gz": "artifacts/modehb_hybrid/protozoan/state/seed42/search_state.json.gz",
+   "md5_gz": "cf0d0d931e71baf5fe9efc3122eeeb26"
+  },
+  "artifacts/modehb_hybrid/protozoan/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/protozoan/state/seed42/config_resolved.yaml",
+   "md5_source": "07f529dddbea4f8fe4a8e43acb927b26",
+   "bytes": 3836,
+   "mtime": 1794788480.9034374,
+   "gz": "artifacts/modehb_hybrid/protozoan/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "93f9d460f17b5abb4a2d9c77fb2e3d87"
+  },
+  "artifacts/modehb_hybrid/protozoan_raw/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/protozoan_raw/state/seed42/search_state.json",
+   "md5_source": "97e4a47ab54205a20ae669b2893b3495",
+   "bytes": 1532991,
+   "mtime": 1794883411.621283,
+   "gz": "artifacts/modehb_hybrid/protozoan_raw/state/seed42/search_state.json.gz",
+   "md5_gz": "4876e0fe91ab5a6b9f00eef7881b3fbd"
+  },
+  "artifacts/modehb_hybrid/protozoan_raw/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/protozoan_raw/state/seed42/config_resolved.yaml",
+   "md5_source": "7a471525135d81b0a2f0e8dd279405f6",
+   "bytes": 3870,
+   "mtime": 1794786703.0341697,
+   "gz": "artifacts/modehb_hybrid/protozoan_raw/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "4811de33308c8640420fee2df2287c39"
+  },
+  "artifacts/modehb_hybrid/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "f153b24f5b2baf38c09adb8d113fe3c4",
+   "bytes": 1585685,
+   "mtime": 1794853966.4189475,
+   "gz": "artifacts/modehb_hybrid/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "1c95f0c9edf169003d9b6a1b7be1725e"
+  },
+  "artifacts/modehb_hybrid/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "909343f71b10d76ebf79f5328082f579",
+   "bytes": 3947,
+   "mtime": 1794789637.4531934,
+   "gz": "artifacts/modehb_hybrid/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "e734616c5e80dae7565784c585d8da2e"
+  },
+  "artifacts/modehb_lemonade/aid/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/aid/state/seed42/search_state.json",
+   "md5_source": "6d15b8ce5736eb8823f883f0722749e6",
+   "bytes": 36203,
+   "mtime": 1794808216.3640614,
+   "gz": "artifacts/modehb_lemonade/aid/state/seed42/search_state.json.gz",
+   "md5_gz": "f66d20208b6856894b7a358f47fed2bf"
+  },
+  "artifacts/modehb_lemonade/aid/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/aid/state/seed42/config_resolved.yaml",
+   "md5_source": "20bfaa64153cde0ad53ad05368780604",
+   "bytes": 5426,
+   "mtime": 1794806968.1761773,
+   "gz": "artifacts/modehb_lemonade/aid/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "767a6d2cb7bc4fef6874cbff2308bcde"
+  },
+  "artifacts/modehb_lemonade/coconut_trees/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/coconut_trees/state/seed42/search_state.json",
+   "md5_source": "0bddf9f736b48e186de618304483f1e3",
+   "bytes": 456626,
+   "mtime": 1794877588.871756,
+   "gz": "artifacts/modehb_lemonade/coconut_trees/state/seed42/search_state.json.gz",
+   "md5_gz": "65d844938c28a9761f3c98f6cc41d57b"
+  },
+  "artifacts/modehb_lemonade/coconut_trees/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/coconut_trees/state/seed42/config_resolved.yaml",
+   "md5_source": "7d9f01de77e340dece5c0cf667cd5343",
+   "bytes": 4938,
+   "mtime": 1794786702.338173,
+   "gz": "artifacts/modehb_lemonade/coconut_trees/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "032b9a9d9702b78c1bb90c3c75afc25d"
+  },
+  "artifacts/modehb_lemonade/eggs/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/eggs/state/seed42/search_state.json",
+   "md5_source": "03fc106d7c87be595f3f215cbc5733f6",
+   "bytes": 1435195,
+   "mtime": 1794883781.9863546,
+   "gz": "artifacts/modehb_lemonade/eggs/state/seed42/search_state.json.gz",
+   "md5_gz": "27611bdfdc26e97beab7b17a57c3f215"
+  },
+  "artifacts/modehb_lemonade/eggs/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/eggs/state/seed42/config_resolved.yaml",
+   "md5_source": "5fb31738f181bb93de35aa7f4aa466f6",
+   "bytes": 5097,
+   "mtime": 1794786703.3221684,
+   "gz": "artifacts/modehb_lemonade/eggs/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "d1ed3d3f41870b230d0896a338e0e34b"
+  },
+  "artifacts/modehb_lemonade/flowers/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/flowers/state/seed42/search_state.json",
+   "md5_source": "68942de115fc266051ad7486e2d3f325",
+   "bytes": 1032966,
+   "mtime": 1794877534.4360044,
+   "gz": "artifacts/modehb_lemonade/flowers/state/seed42/search_state.json.gz",
+   "md5_gz": "fb00ea9c901d86811b3daee06cda8a14"
+  },
+  "artifacts/modehb_lemonade/flowers/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/flowers/state/seed42/config_resolved.yaml",
+   "md5_source": "0ee9b49a36ea3867425b4c7975b17e19",
+   "bytes": 4956,
+   "mtime": 1794786703.6661665,
+   "gz": "artifacts/modehb_lemonade/flowers/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "38d616acd0ffde4bc13f5e51cc2caafe"
+  },
+  "artifacts/modehb_lemonade/ham10000/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/ham10000/state/seed42/search_state.json",
+   "md5_source": "b816fc2ab299a39b364ee07fe9827dd6",
+   "bytes": 1677769,
+   "mtime": 1794883917.1144211,
+   "gz": "artifacts/modehb_lemonade/ham10000/state/seed42/search_state.json.gz",
+   "md5_gz": "ba3bf9727c412dace81b27af391978c8"
+  },
+  "artifacts/modehb_lemonade/ham10000/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/ham10000/state/seed42/config_resolved.yaml",
+   "md5_source": "6860aba3fb7b6d2f164f05fc6251b872",
+   "bytes": 5034,
+   "mtime": 1794790318.6956885,
+   "gz": "artifacts/modehb_lemonade/ham10000/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "66b61892a86174bada6dcd3c8d806ccf"
+  },
+  "artifacts/modehb_lemonade/larvae/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/larvae/state/seed42/search_state.json",
+   "md5_source": "744aaf66285ebc3e77a4bf9a592d30b8",
+   "bytes": 672936,
+   "mtime": 1794878730.6987598,
+   "gz": "artifacts/modehb_lemonade/larvae/state/seed42/search_state.json.gz",
+   "md5_gz": "75afa907565ef2b3869b13ffa1b4a5f1"
+  },
+  "artifacts/modehb_lemonade/larvae/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/larvae/state/seed42/config_resolved.yaml",
+   "md5_source": "ea6c6b5f2fc35eac64480d54d11a5968",
+   "bytes": 4917,
+   "mtime": 1794786703.0141697,
+   "gz": "artifacts/modehb_lemonade/larvae/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "644611a22acb3d8f932cffec6c213acc"
+  },
+  "artifacts/modehb_lemonade/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "0ef2da90e38dc2e79f94764e943dfb88",
+   "bytes": 5590281,
+   "mtime": 1794883440.5067363,
+   "gz": "artifacts/modehb_lemonade/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "4b60ac3955a1d68342d1f44533ad52e4"
+  },
+  "artifacts/modehb_lemonade/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "a9f2e7258a837eac6cdb4443edc5596c",
+   "bytes": 5145,
+   "mtime": 1794789162.500437,
+   "gz": "artifacts/modehb_lemonade/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "e6c76df9dfdf6c989898cdaf9ab42186"
+  },
+  "artifacts/modehb_spifil/flowers/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/flowers/state/seed42/search_state.json",
+   "md5_source": "c797e9e5f3a673cbdf57b3ddc6a40985",
+   "bytes": 1556402,
+   "mtime": 1794674091.4177308,
+   "gz": "artifacts/modehb_spifil/flowers/state/seed42/search_state.json.gz",
+   "md5_gz": "3e9bd62d46c85ca6c489e008fb0b21ac"
+  },
+  "artifacts/modehb_spifil/flowers/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/flowers/state/seed42/config_resolved.yaml",
+   "md5_source": "ddc37a5e2d723537f2553d5b978f3f0e",
+   "bytes": 2822,
+   "mtime": 1794663370.6781585,
+   "gz": "artifacts/modehb_spifil/flowers/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "3cc56c4acf0d5eab654264fd4e69767b"
+  },
+  "artifacts/modehb_spifil/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "0751d54c8a8df13d6a874d7481b84065",
+   "bytes": 10225740,
+   "mtime": 1794663364.6640904,
+   "gz": "artifacts/modehb_spifil/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "0b3a2313fcb1d6a19e4e531fd6c65ec1"
+  },
+  "artifacts/modehb_spifil/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "f3089a40b051a273e2817715c69100ab",
+   "bytes": 3010,
+   "mtime": 1794629753.6403458,
+   "gz": "artifacts/modehb_spifil/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "59b9275724042462bdac52d85626554a"
+  },
+  "artifacts/modehb_strat_fid120_1415/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_fid120_1415/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "59b447fb3364f7ec87f019ab36cb37d1",
+   "bytes": 38301,
+   "mtime": 1794677014.4146898,
+   "gz": "artifacts/modehb_strat_fid120_1415/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "373aa7c5ab0ebecc64dea443c901181b"
+  },
+  "artifacts/modehb_strat_fid120_1415/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_fid120_1415/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "e0feaa25dbe73ab6173e41d39c54361f",
+   "bytes": 3644,
+   "mtime": 1794676546.1923938,
+   "gz": "artifacts/modehb_strat_fid120_1415/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "3a9c172eddeede3a464aea873dd4d1a0"
+  },
+  "artifacts/modehb_strat_oom_1347/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_oom_1347/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "85c20f79e28c4bd851a5cf54523f777c",
+   "bytes": 53351,
+   "mtime": 1794674917.873483,
+   "gz": "artifacts/modehb_strat_oom_1347/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "82e1b086d25c2612314df46964ebde53"
+  },
+  "artifacts/modehb_strat_oom_1347/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_oom_1347/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "abc643efab452793aa54bd8865382727",
+   "bytes": 3570,
+   "mtime": 1794674723.9529874,
+   "gz": "artifacts/modehb_strat_oom_1347/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "50d5995f9111de756e74740ba667b31e"
+  },
+  "artifacts/modehb_strat_preHybrid_2325/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_preHybrid_2325/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "9f68b586e3897a88b96622ba1f1183cd",
+   "bytes": 180696,
+   "mtime": 1794709402.15376,
+   "gz": "artifacts/modehb_strat_preHybrid_2325/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "a70126ae6134ba6ef7eecad24176f253"
+  },
+  "artifacts/modehb_strat_preHybrid_2325/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_preHybrid_2325/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "2c1cef7762ca44e65a3df85e77be7fd1",
+   "bytes": 3645,
+   "mtime": 1794705352.193122,
+   "gz": "artifacts/modehb_strat_preHybrid_2325/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "cc77d54fbea05e6275e9a06e24c4ecbe"
+  },
+  "artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "978155de09019455a44bbe9beb7e796f",
+   "bytes": 3184164,
+   "mtime": 1794700848.5892928,
+   "gz": "artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "79773168c5eea9de3f5aa15d7993cf2b"
+  },
+  "artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "11754385801fd47ca6fa235894aee15a",
+   "bytes": 3645,
+   "mtime": 1794677153.3402116,
+   "gz": "artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "1cad5ad47bf1696b8bbef97566a604fa"
+  },
+  "artifacts/modehb_v3/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "743152fbaa917457211af550469eff3d",
+   "bytes": 608613,
+   "mtime": 1794629389.6462023,
+   "gz": "artifacts/modehb_v3/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "03ef1f6fef3338a7212e26c8af97b204"
+  },
+  "artifacts/modehb_v3/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "c724703084a478b188ca40d8d16da946",
+   "bytes": 2501,
+   "mtime": 1794628562.5660663,
+   "gz": "artifacts/modehb_v3/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "85154c0c98ca9dc316714d7b9e8a977e"
+  },
+  "artifacts/modehb_v3_old/remote_sensing/state/seed42/search_state.json": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/search_state.json",
+   "md5_source": "1ff984d994c17cf9356b1594c44c762a",
+   "bytes": 1352888,
+   "mtime": 1794628551.6339464,
+   "gz": "artifacts/modehb_v3_old/remote_sensing/state/seed42/search_state.json.gz",
+   "md5_gz": "4a8c5109d84b077320dad915b04e0380"
+  },
+  "artifacts/modehb_v3_old/remote_sensing/state/seed42/config_resolved.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/config_resolved.yaml",
+   "md5_source": "a28f483723dff51bd1710774f7a1b8b2",
+   "bytes": 2453,
+   "mtime": 1794626474.4113884,
+   "gz": "artifacts/modehb_v3_old/remote_sensing/state/seed42/config_resolved.yaml.gz",
+   "md5_gz": "565cc566c0eb33cae07129d51b20fca3"
+  },
+  "extra/bundle_pnas_cs_search_state.json": {
+   "source": "/dados/home/moliveira/exps/queues/relatorios_athena/all_results_bundle/athena/pnas_cs/search_state.json",
+   "md5_source": "867f46a0d7dee19cdb3b173f65610ee1",
+   "bytes": 2896169,
+   "mtime": 1794874743.4355655,
+   "gz": "extra/bundle_pnas_cs_search_state.json.gz",
+   "md5_gz": "3a717e66e5f22b4d3d46f20d1ee90a57"
+  },
+  "extra/pnas_cs_yaml.yaml": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/ga_search/config/modehb/pnas_cs.yaml",
+   "md5_source": "ce5fffff8a5db090d6fd5736135196c9",
+   "bytes": 15633,
+   "mtime": 1794821134.7987127,
+   "gz": "extra/pnas_cs_yaml.yaml.gz",
+   "md5_gz": "430726c5f671cdf701d826c82be862df"
+  },
+  "extra/agent6_E0_jsonl.jsonl": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/research/spifil_b0b4/agent6/results/E0_val_jaci_cpu.jsonl",
+   "md5_source": "bd5b80660e15cebe7cd182a39887ac71",
+   "bytes": 14012,
+   "mtime": 1794882799.4905732,
+   "gz": "extra/agent6_E0_jsonl.jsonl.gz",
+   "md5_gz": "de039b09b3eb8328d8134ce6f89a7393"
+  },
+  "extra/agent6_ckpt_csv.csv": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/research/spifil_b0b4/agent6/checkpoints_E0_E8_congelado_20261117_0159.csv",
+   "md5_source": "33fbec50d9fe42992470091b8b8d7b97",
+   "bytes": 22624,
+   "mtime": 1794880798.3794749,
+   "gz": "extra/agent6_ckpt_csv.csv.gz",
+   "md5_gz": "8f55032764d41c1d809ad000e29a8a48"
+  },
+  "extra/A1b_embed_diag_csv.csv": {
+   "source": "/dados/home/moliveira/Scalable_Hybrid_FLIM/research/spifil_b0b4/agent1/parts/A1b_embed_diag.csv",
+   "md5_source": "08abd1fbe72495a9d31b7786c4ce2eaf",
+   "bytes": 28169,
+   "mtime": 1794882339.7197974,
+   "gz": "extra/A1b_embed_diag_csv.csv.gz",
+   "md5_gz": "3cf04dc179328f771e70fe12c7f26cac"
+  }
+ }
+}

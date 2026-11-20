@@ -1,0 +1,16 @@
+# eggs_raw — treino/val/teste por % e por classe (split1)
+
+val e teste são fixos (os da busca, split1); só o treino da SVM muda com a %.
+
+| classe | tr 1% | tr 5% | tr 10% | tr 25% | tr 50% | tr 75% | tr 100% | val | teste | % do treino |
+|---|---|---|---|---|---|---|---|---|---|---|
+| H.nana | 4 | 18 | 36 | 88 | 176 | 264 | 351 | 75 | 75 | 4.0% |
+| H.diminuta | 1 | 3 | 6 | 15 | 30 | 45 | 59 | 12 | 12 | 0.7% |
+| Ancilostomideo | 2 | 10 | 20 | 50 | 100 | 150 | 200 | 43 | 43 | 2.3% |
+| E.vermicularis | 1 | 4 | 8 | 19 | 37 | 55 | 73 | 15 | 15 | 0.8% |
+| A.lumbricoides | 6 | 30 | 59 | 147 | 293 | 439 | 585 | 125 | 125 | 6.6% |
+| T.trichiura | 4 | 16 | 31 | 77 | 153 | 229 | 305 | 65 | 65 | 3.4% |
+| S.mansoni | 2 | 9 | 18 | 45 | 89 | 134 | 178 | 38 | 38 | 2.0% |
+| Taenia parasites | 3 | 14 | 27 | 67 | 133 | 199 | 265 | 57 | 57 | 3.0% |
+| impurities | 73 | 348 | 692 | 1720 | 3437 | 5155 | 6869 | 1473 | 1473 | 77.3% |
+| TOTAL | 96 | 452 | 897 | 2228 | 4448 | 6670 | 8885 | 1903 | 1903 | 100% |

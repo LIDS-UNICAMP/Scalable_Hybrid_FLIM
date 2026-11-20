@@ -1,0 +1,6 @@
+# protozoan (congelado_20261117_0159_v2): melhor por validacao de cada (kind, estrato)
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00021/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00006/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00003/f100/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00020/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00012/f5/encoder.pt

@@ -1,0 +1,37 @@
+name: eggs_raw
+layout: organized
+root: /dados/home/moliveira/datasets/organized/Eggs
+images_dir: "{root}/raw_modehb/orig"   # fundo ORIGINAL (raw/orig, tamanhos variaveis); symlinks <rotulo:06d>_<nome raw> -> ../../raw/orig, pois o prefixo raw é o grupo fino 16/12, não o rótulo
+masks_dir: "{root}/raw_modehb/label"
+split_json: "{root}/splits/split{split}_modehb_raw.json"   # mesma partição/teste de split{split}_modehb.json, nomes raw; ver splits/split1_modehb_raw_build.py
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: 86b2a423ca06e26d0de033345fb97d0e009f00ccdb3325e08aa4333754b0a4be   # split1_modehb_raw.json
+expected_counts:
+  train: 8885
+  validation: 1903
+  test: 1903
+image_size: 224
+image_ext: png
+labels_csv: "{root}/Eggs_9.csv"   # rótulo oficial; o prefixo do nome do arquivo codifica 16 grupos, NÃO usar como rótulo
+label_source: csv
+classes:
+  1: "H.nana"
+  2: "H.diminuta"
+  3: Ancilostomideo
+  4: "E.vermicularis"
+  5: "A.lumbricoides"
+  6: "T.trichiura"
+  7: "S.mansoni"
+  8: "Taenia parasites"
+  9: impurities
+n_classes: 9
+impurity_class: 9
+has_mask: true
+labels_external_eval_only: true   # rótulos de 9 classes (Eggs_9.csv) só na avaliação externa; busca usa validation sem rótulo

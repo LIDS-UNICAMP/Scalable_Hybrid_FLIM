@@ -1,0 +1,1159 @@
+{
+ "host": "athena",
+ "gpu_fisica": 3,
+ "cuda_visible_devices": "3",
+ "cuda_device_order": "PCI_BUS_ID",
+ "gpu_uuid_esperado": "GPU-3c72f1c7… (PCI AF:00.0)",
+ "dono": "moliveira",
+ "pesquisa": "SPiFiL Progressivo B0-B4 -- Agente 6: atencao fixa sem pesos (E0-E8)",
+ "congelamento": "congelado_20261117_0159_v2",
+ "gerado_em": "2026-11-16T23:30:47",
+ "gerado_por": "agente6 freeze_E0_E8.py (jaci)",
+ "regras": {
+  "gpu2": "NAO MEXER",
+  "jaci": "NAO usar GPU da Jaci (so leitura dos checkpoints para o staging)",
+  "gate": "fase seguinte so roda com gate aprovado (gates/gate_<fase>.approved na Jaci, assinado pelo CHECK)",
+  "estados": [
+   "queued",
+   "running",
+   "checkpointed",
+   "failed",
+   "completed"
+  ],
+  "idempotencia": "job_id unico; relancar completed e no-op; running exige flock em <output_dir>/.controller.lock",
+  "hpc": "CUDA_DEVICE_ORDER=PCI_BUS_ID em TODO comando; OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8; OOM -> diagnostico, --bs 32->16->8 registrado, sem repeticao infinita",
+  "protocolo": "SVM core.svm.fit_svm linear C=100 sem scaler; treino = subconjunto estratificado max_train da busca (regua ORIG_sub4000); selecao SO na validacao; teste so no B-attn-test-report",
+  "unidades": "FLOPs = 2*MAC em codigo e documentos; o campo flops da busca e MAC (coluna flops_mac)",
+  "paralelismo": "ate 4 jobs B simultaneos (~6 GB cada) na GPU 3",
+  "codigo": "copia congelada em /dados/home/moliveira/exps/attn6/code (patch v2); a arvore viva nao e usada"
+ },
+ "codigo_md5": {
+  "ga_search/modehb/fixed_attention.py": "f4bc107c0830791e555ca5ae4d8fce54",
+  "tests/modehb/test_fixed_attention.py": "2fa8c5a1c3ea0a4f480b26836d34810f",
+  "research/spifil_b0b4/agent6/tools/eval_fixed_attention.py": "f4fc9a2d5ad09242d13771d352f9ddd4",
+  "research/spifil_b0b4/agent6/tools/select_checkpoints.py": "60d1163197922d2a4c6fef39dab3a0ab",
+  "research/spifil_b0b4/agent6/tools/freeze_E0_E8.py": "388e0036d6eb2eeafaa106a4dfd793fe",
+  "research/spifil_b0b4/agent6/tools/ckpt_compat_check.py": "c8d084273f6d4fb244b20f768d615d73",
+  "research/spifil_b0b4/agent6/tools/paired_bootstrap.py": "b8f52e3e87b42480abde189399c5f06c"
+ },
+ "artefatos_md5": {
+  "checkpoints_E0_E8_congelado_20261117_0159_v2.csv": "c25d6fa53ed70476f0b3458ed3ce11b3",
+  "rsync_files_from_congelado_20261117_0159_v2.txt": "dca8e8da3351bd7804c367c01cdbfda3",
+  "lists_congelado_20261117_0159_v2/aid.txt": "a528833c70400a3ccd24210ba958c592",
+  "lists_congelado_20261117_0159_v2/coconut_trees.txt": "1d0fa1b610af9d47a3d8323f65ce33ce",
+  "lists_congelado_20261117_0159_v2/eggs.txt": "49e0fcd9851c2e929946b6c2b5f17d56",
+  "lists_congelado_20261117_0159_v2/eggs_raw.txt": "c5507d3624e2645e52743bff1e2d094e",
+  "lists_congelado_20261117_0159_v2/flowers.txt": "1fef7ed15c342175cf7fa229011f0007",
+  "lists_congelado_20261117_0159_v2/ham10000.txt": "b7ab152ad496de056767e54dcb9fd7fd",
+  "lists_congelado_20261117_0159_v2/larvae.txt": "9a4a895635b92fd61e0974b75648fcd5",
+  "lists_congelado_20261117_0159_v2/larvae_raw.txt": "ea6558199f7ef5733a80e4821f9bf147",
+  "lists_congelado_20261117_0159_v2/protozoan.txt": "cb6c1480aba839441d99f4363043cd67",
+  "lists_congelado_20261117_0159_v2/protozoan_raw.txt": "162cf7b015b3e116d3b95c5396c8926a",
+  "lists_congelado_20261117_0159_v2/remote_sensing.txt": "512cf7e9ed63c1a3c1884cbf0af43996",
+  "compat_ref_congelado_20261117_0159_v2.npz": "460a2b8b84e2458709ee5024f758ab05"
+ },
+ "fases": {
+  "A": {
+   "descricao": "testes de implementacao (atencao fixa); A-attn-00/01/02 ja completed (agent5 attn_fase_A); 00b/01b/03 = delta do patch v2 e compat C7",
+   "gate_requerido": null,
+   "status": "aguardando_jobs",
+   "jobs": [
+    {
+     "job_id": "A-attn-00b",
+     "status": "queued",
+     "fase": "A",
+     "gate_requerido": null,
+     "tipo": "staging_somente_leitura",
+     "descricao": "delta do congelamento congelado_20261117_0159_v2: rsync (sem --delete) dos arquivos de rsync_files_from_congelado_20261117_0159_v2.txt ainda ausentes em /dados/home/moliveira/exps/attn6/ckpts; md5 contra a coluna md5; recopiar o codigo congelado (patch v2) para /dados/home/moliveira/exps/attn6/code e conferir codigo_md5",
+     "cmd": "rsync -a --ignore-existing --files-from=rsync_files_from_congelado_20261117_0159_v2.txt jaci:/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/ /dados/home/moliveira/exps/attn6/ckpts/",
+     "gpu": false,
+     "tempo_est_h": 0.1
+    },
+    {
+     "job_id": "A-attn-01b",
+     "status": "queued",
+     "fase": "A",
+     "gate_requerido": null,
+     "depende_de": [
+      "A-attn-00b"
+     ],
+     "tipo": "testes",
+     "descricao": "suite no athena (torch 2.2.2), CPU, com o patch v2",
+     "cmd": "cd /dados/home/moliveira/exps/attn6/code && env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=2 nice -n 15 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m pytest -q tests/ -p no:cacheprovider",
+     "gpu": false,
+     "criterio": "0 failed",
+     "tempo_est_h": 0.05
+    },
+    {
+     "job_id": "A-attn-03",
+     "status": "queued",
+     "fase": "A",
+     "gate_requerido": null,
+     "depende_de": [
+      "A-attn-01b"
+     ],
+     "tipo": "compat_torch_2.7_para_2.2 (C7)",
+     "descricao": "carrega OS N checkpoints da lista no athena (torch 2.2.2, weights_only=False), forward E0 numa entrada sintetica fixa e compara com a referencia da Jaci (torch 2.7.1): cos >= 0.9999 e erro relativo L2 <= 1e-3, TF32 desligado; confere que o processo esta na GPU-3c72f1c7 (PCI AF:00.0)",
+     "cmd": "cd /dados/home/moliveira/exps/attn6/code && env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/ckpt_compat_check.py --csv research/spifil_b0b4/agent6/checkpoints_E0_E8_congelado_20261117_0159_v2.csv --root /dados/home/moliveira/exps/attn6/ckpts --device cuda --compare research/spifil_b0b4/agent6/compat_ref_congelado_20261117_0159_v2.npz --expect-gpu-uuid GPU-3c72f1c7 --out /dados/home/moliveira/exps/attn6/out/A-attn-03/compat.jsonl",
+     "gpu": true,
+     "mem_est_gb": 3,
+     "tempo_est_h": 0.1,
+     "criterio": "0 divergencias; uuid confere"
+    }
+   ]
+  },
+  "B": {
+   "descricao": "E0-E8 nos mesmos checkpoints (sem treino) + relato de teste",
+   "gate_requerido": "A",
+   "status": "bloqueada",
+   "jobs": [
+    {
+     "job_id": "B-attn-E0E8-remote_sensing",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 9 checkpoints de remote_sensing",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00009",
+       "fid": "f5",
+       "params": 132620,
+       "kappa_val_busca": 0.5914,
+       "md5": "f2f23b2c050b0a02a3200fc2626c421e",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00009/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00006",
+       "fid": "f5",
+       "params": 322734,
+       "kappa_val_busca": 0.5279,
+       "md5": "09036b1817dc60033b07a1e30a92ffe6",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00006/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00015",
+       "fid": "f5",
+       "params": 1481220,
+       "kappa_val_busca": 0.5697,
+       "md5": "21a38e0d16f92745d95f5b43c9cb9780",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00015/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00020",
+       "fid": "f5",
+       "params": 2376496,
+       "kappa_val_busca": 0.5991,
+       "md5": "dc4a3b9238244b850581715240702728",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00020/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B0",
+       "cand": "c00012",
+       "fid": "f45",
+       "params": 29888,
+       "kappa_val_busca": 0.5563,
+       "md5": "d250d65f131612696f7989e1958a92c7",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00012/f45/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B1",
+       "cand": "c00054",
+       "fid": "f15",
+       "params": 735774,
+       "kappa_val_busca": 0.5693,
+       "md5": "524018cf2b9bfda98837cb848dc6f7a2",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00054/f15/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B2",
+       "cand": "c00066",
+       "fid": "f5",
+       "params": 1405920,
+       "kappa_val_busca": 0.5914,
+       "md5": "87c7e1274e6de8fcef19fb5a3250f5af",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00066/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B3",
+       "cand": "c00028",
+       "fid": "f5",
+       "params": 1815554,
+       "kappa_val_busca": 0.611,
+       "md5": "539d2188b8b55429e38654741254e4b6",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00028/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B4",
+       "cand": "c00042",
+       "fid": "f15",
+       "params": 3154296,
+       "kappa_val_busca": 0.5623,
+       "md5": "9ed2a11c24de3e51f22b6b665f74a0f1",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00042/f15/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-remote_sensing",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-remote_sensing/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-remote_sensing && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-remote_sensing/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/remote_sensing.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-remote_sensing/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-remote_sensing/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.11,
+     "svm_cpu_h_est": 0.11,
+     "imagens_por_ckpt": 841
+    },
+    {
+     "job_id": "B-attn-E0E8-flowers",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 8 checkpoints de flowers",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00001",
+       "fid": "f100",
+       "params": 21079,
+       "kappa_val_busca": 0.6527,
+       "md5": "1f1f920bec0907fd175546d1b6ca9f36",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/flowers/state/seed42/candidates/c00001/f100/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00002",
+       "fid": "f200",
+       "params": 683680,
+       "kappa_val_busca": 0.7476,
+       "md5": "287f1be4c15d6bc9278e3b4c6bb18318",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/flowers/state/seed42/candidates/c00002/f200/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00003",
+       "fid": "f45",
+       "params": 894960,
+       "kappa_val_busca": 0.7565,
+       "md5": "75cfccecee3d16c30523ccc8c73b04f5",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/flowers/state/seed42/candidates/c00003/f45/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00004",
+       "fid": "f15",
+       "params": 1887320,
+       "kappa_val_busca": 0.7417,
+       "md5": "61ac813d23269a031c93934a9f9eca4f",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/flowers/state/seed42/candidates/c00004/f15/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B0",
+       "cand": "c00001",
+       "fid": "f45",
+       "params": 181715,
+       "kappa_val_busca": 0.7019,
+       "md5": "26573b64b35475df28571b464749e878",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/flowers/state/seed42/candidates/c00001/f45/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B1",
+       "cand": "c00013",
+       "fid": "f5",
+       "params": 481535,
+       "kappa_val_busca": 0.7051,
+       "md5": "7b7ae297c6b1c06ecb2c4d18fc507075",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/flowers/state/seed42/candidates/c00013/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B2",
+       "cand": "c00003",
+       "fid": "f15",
+       "params": 1311920,
+       "kappa_val_busca": 0.7568,
+       "md5": "2f5b9dfa4dd6f579cf9a9b7ca630e6e5",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/flowers/state/seed42/candidates/c00003/f15/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B3",
+       "cand": "c00004",
+       "fid": "f15",
+       "params": 2182290,
+       "kappa_val_busca": 0.7261,
+       "md5": "9fd086d24bcfc98db512db7df662cfb0",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/flowers/state/seed42/candidates/c00004/f15/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-flowers",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-flowers/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-flowers && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-flowers/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/flowers.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-flowers/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-flowers/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.27,
+     "svm_cpu_h_est": 0.1,
+     "imagens_por_ckpt": 2334
+    },
+    {
+     "job_id": "B-attn-E0E8-ham10000",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 8 checkpoints de ham10000",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00025",
+       "fid": "f5",
+       "params": 169748,
+       "kappa_val_busca": 0.5856,
+       "md5": "04fbc3463cbabdac178c2b75ee89dcb9",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/ham10000/state/seed42/candidates/c00025/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00034",
+       "fid": "f5",
+       "params": 466666,
+       "kappa_val_busca": 0.6009,
+       "md5": "36847cc4996ec1c2f22c0e3139f5292e",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/ham10000/state/seed42/candidates/c00034/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00043",
+       "fid": "f5",
+       "params": 1352854,
+       "kappa_val_busca": 0.612,
+       "md5": "cd8ea1838b06692be81968030177f12a",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/ham10000/state/seed42/candidates/c00043/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00020",
+       "fid": "f5",
+       "params": 2534920,
+       "kappa_val_busca": 0.5857,
+       "md5": "49a1fa5045d587a2e024d45e5cc4bc85",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/ham10000/state/seed42/candidates/c00020/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B0",
+       "cand": "c00012",
+       "fid": "f5",
+       "params": 17078,
+       "kappa_val_busca": 0.5143,
+       "md5": "fa0783ac5f0ef19c7cd19297dea382c4",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/ham10000/state/seed42/candidates/c00012/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B1",
+       "cand": "c00002",
+       "fid": "f45",
+       "params": 408896,
+       "kappa_val_busca": 0.5874,
+       "md5": "5a64612d33784b934360a60359a0e6e3",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/ham10000/state/seed42/candidates/c00002/f45/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B2",
+       "cand": "c00003",
+       "fid": "f15",
+       "params": 1309804,
+       "kappa_val_busca": 0.5468,
+       "md5": "77f0429f7239e324421fd2d132af11b5",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/ham10000/state/seed42/candidates/c00003/f15/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B3",
+       "cand": "c00007",
+       "fid": "f5",
+       "params": 1820852,
+       "kappa_val_busca": 0.5723,
+       "md5": "e19b24446ddf6c5dbc53a8e0b0421ad8",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/ham10000/state/seed42/candidates/c00007/f5/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-ham10000",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-ham10000/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-ham10000 && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-ham10000/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/ham10000.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-ham10000/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-ham10000/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.57,
+     "svm_cpu_h_est": 0.4,
+     "imagens_por_ckpt": 4878
+    },
+    {
+     "job_id": "B-attn-E0E8-larvae",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 9 checkpoints de larvae",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00021",
+       "fid": "f5",
+       "params": 119806,
+       "kappa_val_busca": 0.9346,
+       "md5": "8ab685dc4aed496770e3bc77c7995754",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00021/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00026",
+       "fid": "f5",
+       "params": 349298,
+       "kappa_val_busca": 0.9504,
+       "md5": "6ba4ea8866d158986d40728c7b251786",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00026/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00027",
+       "fid": "f5",
+       "params": 1393870,
+       "kappa_val_busca": 0.9673,
+       "md5": "615fe86101bb8cc62a6ba7f38d8668c6",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00027/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00004",
+       "fid": "f15",
+       "params": 1973718,
+       "kappa_val_busca": 0.9504,
+       "md5": "4cdcb800ba5adde16121502fce9ff0df",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00004/f15/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B4",
+       "cand": "c00024",
+       "fid": "f5",
+       "params": 3493820,
+       "kappa_val_busca": 0.9673,
+       "md5": "5c166757f016059750436328aa6d6bf9",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00024/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B0",
+       "cand": "c00001",
+       "fid": "f100",
+       "params": 200944,
+       "kappa_val_busca": 0.9838,
+       "md5": "56ddc46424a978593d062341f438cae7",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/larvae/state/seed42/candidates/c00001/f100/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B1",
+       "cand": "c00009",
+       "fid": "f5",
+       "params": 797474,
+       "kappa_val_busca": 0.9515,
+       "md5": "eff29fec51c88235d4dcc772eecab04b",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/larvae/state/seed42/candidates/c00009/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B2",
+       "cand": "c00006",
+       "fid": "f5",
+       "params": 1354728,
+       "kappa_val_busca": 0.9504,
+       "md5": "e8478cf9571cb5fc7a55c322ab179704",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/larvae/state/seed42/candidates/c00006/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B3",
+       "cand": "c00007",
+       "fid": "f5",
+       "params": 1973718,
+       "kappa_val_busca": 0.902,
+       "md5": "c94aa0e9f900194ef1119834160cbe37",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/larvae/state/seed42/candidates/c00007/f5/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/larvae.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.18,
+     "svm_cpu_h_est": 0.11,
+     "imagens_por_ckpt": 1358
+    },
+    {
+     "job_id": "B-attn-E0E8-larvae_raw",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 5 checkpoints de larvae_raw",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00021",
+       "fid": "f5",
+       "params": 119806,
+       "kappa_val_busca": 0.7852,
+       "md5": "2c4dffe8afa780873012362adc66628c",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae_raw/state/seed42/candidates/c00021/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00026",
+       "fid": "f5",
+       "params": 349298,
+       "kappa_val_busca": 0.9154,
+       "md5": "f9aa2a0a5c13be3e92c1cff282f33d76",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae_raw/state/seed42/candidates/c00026/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00023",
+       "fid": "f5",
+       "params": 884856,
+       "kappa_val_busca": 0.8843,
+       "md5": "074558e998ce8dc4d2599b5849cba046",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae_raw/state/seed42/candidates/c00023/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00004",
+       "fid": "f45",
+       "params": 1973718,
+       "kappa_val_busca": 0.9154,
+       "md5": "78c219fc8516cf62fff6623ef2ac3196",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae_raw/state/seed42/candidates/c00004/f45/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B4",
+       "cand": "c00024",
+       "fid": "f5",
+       "params": 3493820,
+       "kappa_val_busca": 0.8631,
+       "md5": "048b7047bc234eabdbe6ae2c5e7e91a6",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae_raw/state/seed42/candidates/c00024/f5/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae_raw",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae_raw/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae_raw && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae_raw/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/larvae_raw.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae_raw/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-larvae_raw/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.1,
+     "svm_cpu_h_est": 0.06,
+     "imagens_por_ckpt": 1358
+    },
+    {
+     "job_id": "B-attn-E0E8-eggs",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 8 checkpoints de eggs",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00025",
+       "fid": "f5",
+       "params": 132875,
+       "kappa_val_busca": 0.904,
+       "md5": "e8f3ee395ab237560c40313619116253",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs/state/seed42/candidates/c00025/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00006",
+       "fid": "f5",
+       "params": 752924,
+       "kappa_val_busca": 0.9409,
+       "md5": "8b8b47054cabdb5c72d5122a1e1e444b",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs/state/seed42/candidates/c00006/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00019",
+       "fid": "f5",
+       "params": 862910,
+       "kappa_val_busca": 0.934,
+       "md5": "f5c4002e83127827dceaf3aad9c15beb",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs/state/seed42/candidates/c00019/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00024",
+       "fid": "f5",
+       "params": 1850671,
+       "kappa_val_busca": 0.9451,
+       "md5": "1e6c283be27d13a7d0c27a898abe4632",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs/state/seed42/candidates/c00024/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B0",
+       "cand": "c00001",
+       "fid": "f45",
+       "params": 185330,
+       "kappa_val_busca": 0.8989,
+       "md5": "f5a01b3f7b48dd9386da371229ddab77",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/eggs/state/seed42/candidates/c00001/f45/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B1",
+       "cand": "c00009",
+       "fid": "f5",
+       "params": 752924,
+       "kappa_val_busca": 0.9371,
+       "md5": "81185baf50efc59190a6ade57e49c518",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/eggs/state/seed42/candidates/c00009/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B2",
+       "cand": "c00014",
+       "fid": "f5",
+       "params": 930658,
+       "kappa_val_busca": 0.9152,
+       "md5": "42ac3a45a63ac840a6dbf4559099548a",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/eggs/state/seed42/candidates/c00014/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B3",
+       "cand": "c00015",
+       "fid": "f5",
+       "params": 2017688,
+       "kappa_val_busca": 0.9175,
+       "md5": "875af7c87c29ddc1ef0bb345c49fee08",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/eggs/state/seed42/candidates/c00015/f5/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/eggs.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.69,
+     "svm_cpu_h_est": 0.4,
+     "imagens_por_ckpt": 5903
+    },
+    {
+     "job_id": "B-attn-E0E8-eggs_raw",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 4 checkpoints de eggs_raw",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00025",
+       "fid": "f5",
+       "params": 132875,
+       "kappa_val_busca": 0.8861,
+       "md5": "51925705b704dff194f046c0dd32e2a6",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00025/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00030",
+       "fid": "f5",
+       "params": 431140,
+       "kappa_val_busca": 0.8796,
+       "md5": "f955bf0460d8436e1a229a44d29cfbce",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00030/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00023",
+       "fid": "f5",
+       "params": 880604,
+       "kappa_val_busca": 0.8927,
+       "md5": "ee540f0acc868135002275df42393941",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00023/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00004",
+       "fid": "f200",
+       "params": 1697303,
+       "kappa_val_busca": 0.8957,
+       "md5": "aa546aefeb7a78fedf7b82a37dd2129d",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00004/f200/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs_raw",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs_raw/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs_raw && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs_raw/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/eggs_raw.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs_raw/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-eggs_raw/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.35,
+     "svm_cpu_h_est": 0.2,
+     "imagens_por_ckpt": 5903
+    },
+    {
+     "job_id": "B-attn-E0E8-protozoan",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 5 checkpoints de protozoan",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00021",
+       "fid": "f5",
+       "params": 137396,
+       "kappa_val_busca": 0.7725,
+       "md5": "d46807b8bb934548a20849fbdf5f3260",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00021/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00006",
+       "fid": "f5",
+       "params": 332576,
+       "kappa_val_busca": 0.8974,
+       "md5": "a6fb5ae8a45a4680a90f93592ceae559",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00006/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00003",
+       "fid": "f100",
+       "params": 875216,
+       "kappa_val_busca": 0.8899,
+       "md5": "6e26bb36b55aab08654f5618ede96e6a",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00003/f100/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00020",
+       "fid": "f5",
+       "params": 2636896,
+       "kappa_val_busca": 0.8356,
+       "md5": "164e8f6403512bf05cf48d1fc84d90d4",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00020/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B4",
+       "cand": "c00012",
+       "fid": "f5",
+       "params": 3042668,
+       "kappa_val_busca": 0.8349,
+       "md5": "756a3dc814c85f094f37858a83ad7156",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan/state/seed42/candidates/c00012/f5/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/protozoan.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.7,
+     "svm_cpu_h_est": 0.25,
+     "imagens_por_ckpt": 9607
+    },
+    {
+     "job_id": "B-attn-E0E8-protozoan_raw",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 4 checkpoints de protozoan_raw",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00005",
+       "fid": "f5",
+       "params": 54591,
+       "kappa_val_busca": 0.681,
+       "md5": "4d017b7bebbe0bc28667bd9da23c686a",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan_raw/state/seed42/candidates/c00005/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00006",
+       "fid": "f5",
+       "params": 775172,
+       "kappa_val_busca": 0.776,
+       "md5": "fa9b880339df4cf0f4c7f539e6decffc",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan_raw/state/seed42/candidates/c00006/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00003",
+       "fid": "f100",
+       "params": 1306514,
+       "kappa_val_busca": 0.7975,
+       "md5": "05646c93be65ef340c6931c0451b157a",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan_raw/state/seed42/candidates/c00003/f100/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00004",
+       "fid": "f200",
+       "params": 1812234,
+       "kappa_val_busca": 0.7847,
+       "md5": "4d9166d6b03fd7539aaf056eb2e547d0",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/protozoan_raw/state/seed42/candidates/c00004/f200/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan_raw",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan_raw/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan_raw && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan_raw/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/protozoan_raw.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan_raw/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-protozoan_raw/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.56,
+     "svm_cpu_h_est": 0.2,
+     "imagens_por_ckpt": 9607
+    },
+    {
+     "job_id": "B-attn-E0E8-coconut_trees",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 8 checkpoints de coconut_trees",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00009",
+       "fid": "f5",
+       "params": 81448,
+       "kappa_val_busca": 0.714,
+       "md5": "f44ad0fd0208818a3d994e2aecdb8a45",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00009/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00014",
+       "fid": "f5",
+       "params": 336140,
+       "kappa_val_busca": 0.7778,
+       "md5": "0f1d7047c43ac0365b160549c5553c8b",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00014/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00007",
+       "fid": "f5",
+       "params": 1477350,
+       "kappa_val_busca": 0.79,
+       "md5": "9b2ccd5d36fb2684fe3dd480909e2476",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00007/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00004",
+       "fid": "f100",
+       "params": 2297872,
+       "kappa_val_busca": 0.7899,
+       "md5": "279c3c83951ee75d2b7dd02c3e2f7a79",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00004/f100/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B0",
+       "cand": "c00001",
+       "fid": "f45",
+       "params": 200944,
+       "kappa_val_busca": 0.7357,
+       "md5": "ad9a32717c7bb9cb9e751fb3935b7621",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00001/f45/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B1",
+       "cand": "c00002",
+       "fid": "f15",
+       "params": 593840,
+       "kappa_val_busca": 0.6632,
+       "md5": "d2d39714bbc681ad3f80529f8803bf59",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00002/f15/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B2",
+       "cand": "c00003",
+       "fid": "f200",
+       "params": 1341376,
+       "kappa_val_busca": 0.7952,
+       "md5": "dd3c89f52a507c4ae6d0c5ff42c338b7",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00003/f200/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B3",
+       "cand": "c00004",
+       "fid": "f100",
+       "params": 2223066,
+       "kappa_val_busca": 0.7867,
+       "md5": "4f5af84ae33201f79ae1e4578de151e1",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00004/f100/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-coconut_trees",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-coconut_trees/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-coconut_trees && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-coconut_trees/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/coconut_trees.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-coconut_trees/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-coconut_trees/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.71,
+     "svm_cpu_h_est": 0.4,
+     "imagens_por_ckpt": 6038
+    },
+    {
+     "job_id": "B-attn-E0E8-aid",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "A-attn-03"
+     ],
+     "tipo": "avaliacao_sem_treino",
+     "never_feeds_fitness": true,
+     "descricao": "E0-E5 (validacao) + E6-E8 (TTA do melhor E0-E5 pela validacao) em 6 checkpoints de aid",
+     "checkpoints": [
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B0",
+       "cand": "c00025",
+       "fid": "f5",
+       "params": 212710,
+       "kappa_val_busca": 0.8194,
+       "md5": "729299df2786f66f8d3d16b4e89ff07b",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/aid/state/seed42/candidates/c00025/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B1",
+       "cand": "c00038",
+       "fid": "f5",
+       "params": 502304,
+       "kappa_val_busca": 0.8297,
+       "md5": "e6fe3101cb3205b4777ceeb76f99749a",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/aid/state/seed42/candidates/c00038/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B2",
+       "cand": "c00023",
+       "fid": "f5",
+       "params": 805202,
+       "kappa_val_busca": 0.8152,
+       "md5": "164b3e8fd705f9bfbec7bb751c95b7c5",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/aid/state/seed42/candidates/c00023/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B3",
+       "cand": "c00020",
+       "fid": "f5",
+       "params": 2137000,
+       "kappa_val_busca": 0.8449,
+       "md5": "f7046e9f414fa151c2b1b359523e1c0c",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/aid/state/seed42/candidates/c00020/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_hybrid",
+       "estrato": "B4",
+       "cand": "c00012",
+       "fid": "f5",
+       "params": 3351628,
+       "kappa_val_busca": 0.7683,
+       "md5": "d10a82e09ebce913d1ac725e4200014a",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/aid/state/seed42/candidates/c00012/f5/encoder.pt"
+      },
+      {
+       "kind": "modehb_lemonade",
+       "estrato": "B0",
+       "cand": "c00001",
+       "fid": "f15",
+       "params": 147950,
+       "kappa_val_busca": 0.7056,
+       "md5": "38ccbdf111b0987dac2ae65daaa5567a",
+       "path": "/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/aid/state/seed42/candidates/c00001/f15/encoder.pt"
+      }
+     ],
+     "output_dir": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-aid",
+     "lock": "/dados/home/moliveira/exps/attn6/out/B-attn-E0E8-aid/.controller.lock",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-aid && cd /dados/home/moliveira/exps/attn6/code && flock -n /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-aid/.controller.lock env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/aid.txt --experiments E0,E1,E2,E3,E4,E5,E6,E7,E8 --split validation --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-aid/val.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-aid/data_cache",
+     "verificacao_gpu": "nvidia-smi --query-compute-apps=pid,gpu_uuid --format=csv | grep GPU-3c72f1c7",
+     "retomada": "relancar o mesmo cmd: linhas (checkpoint, exp) ja gravadas sao reaproveitadas; checkpoint com linha selected_by_validation e pulado",
+     "saidas": "val.jsonl (1 linha por exp + 1 selected_by_validation por checkpoint) + preds/*.npz (sample_id, y, pred; md5 na linha)",
+     "mem_est_gb": 6,
+     "gpu_h_est": 0.48,
+     "svm_cpu_h_est": 0.3,
+     "imagens_por_ckpt": 5502
+    },
+    {
+     "job_id": "B-attn-test-report",
+     "status": "queued",
+     "fase": "B",
+     "gate_requerido": "A",
+     "depende_de": [
+      "B-attn-E0E8-remote_sensing",
+      "B-attn-E0E8-flowers",
+      "B-attn-E0E8-ham10000",
+      "B-attn-E0E8-larvae",
+      "B-attn-E0E8-larvae_raw",
+      "B-attn-E0E8-eggs",
+      "B-attn-E0E8-eggs_raw",
+      "B-attn-E0E8-protozoan",
+      "B-attn-E0E8-protozoan_raw",
+      "B-attn-E0E8-coconut_trees",
+      "B-attn-E0E8-aid"
+     ],
+     "tipo": "relato_teste",
+     "descricao": "SO depois de TODOS os B-attn-E0E8 completed e da selecao congelada: teste com E0 + vencedor sem TTA + vencedor congelado. used_for_selection=false, reporting_only=true. Nada e reajustado no teste. Relato com as ressalvas do A1c (plano §8): HAM 26,2% do teste com lesao em train/val; sensibilidade sem recapturas (eggs/larvae); duplicatas flowers/aid; pre/raw so contra FM do mesmo dominio; regua ORIG_sub4000.",
+     "cmd": "mkdir -p /dados/home/moliveira/exps/attn6/out/B-attn-test-report && cd /dados/home/moliveira/exps/attn6/code && for ds in remote_sensing flowers ham10000 larvae larvae_raw eggs eggs_raw protozoan protozoan_raw coconut_trees aid; do env CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 10 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python research/spifil_b0b4/agent6/tools/eval_fixed_attention.py --checkpoint-list research/spifil_b0b4/agent6/lists_congelado_20261117_0159_v2/$ds.txt --split test --frozen-from /dados/home/moliveira/exps/attn6/out/B-attn-E0E8-$ds/val.jsonl --device cuda --bs 32 --num-workers 8 --out /dados/home/moliveira/exps/attn6/out/B-attn-test-report/test.jsonl --cache /dados/home/moliveira/exps/attn6/out/B-attn-test-report/data_cache; done",
+     "gpu": true,
+     "mem_est_gb": 6,
+     "tempo_est_h": 2.0
+    }
+   ]
+  },
+  "B2": {
+   "descricao": "2a ablacao: operador dentro do AE local e do LeJEPA+SIGReg (so aprovados)",
+   "gate_requerido": "B",
+   "status": "bloqueada",
+   "jobs": []
+  },
+  "D": {
+   "descricao": "genes de atencao no MO-DEHB hierarquico (Agente 4), so aprovados",
+   "gate_requerido": "C",
+   "status": "bloqueada",
+   "jobs": []
+  }
+ },
+ "estimativa": {
+  "gpu_h_B": 4.7,
+  "svm_cpu_h_B": 2.5,
+  "wall_h_B_4_paralelos": 2.3
+ }
+}

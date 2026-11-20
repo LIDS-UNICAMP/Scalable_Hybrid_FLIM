@@ -1,0 +1,35 @@
+name: protozoan
+layout: organized
+root: /dados/home/moliveira/datasets/organized/Protozoan
+images_dir: "{root}/pre/orig"
+masks_dir: "{root}/pre/label"
+split_json: "{root}/splits/split{split}_modehb.json"   # split1_modehb: split1 original (nomes raw/) remapeado para os nomes atuais de pre/orig; ver splits/split1_modehb_README.md e split1_modehb_mapping.csv
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: 95debda9a1f930904af85a92016fdd4f710a90b2e6e38209c323728f7a2ffd0f   # split1_modehb.json (original split1.json: 89d1f29600adabaa6025d92fbceb0a9c93d7c820fbcd053edda9b0d6b253cd64)
+expected_counts:
+  train: 26159
+  validation: 5607
+  test: 5606
+# 4 imagens do split1 original não existem em pre/orig (puladas por iftPreProcProtozoa.c): 3 train, 1 test
+image_size: 224
+image_ext: png
+labels_csv: "{root}/Pro_7.csv"
+label_source: csv
+classes:
+  1: "E.coli"
+  2: "E.histolytica"
+  3: "E.nana"
+  4: Giardia
+  5: "I.butschlii"
+  6: "B.hominis parasites"
+  7: Impurities
+n_classes: 7
+impurity_class: 7
+has_mask: true

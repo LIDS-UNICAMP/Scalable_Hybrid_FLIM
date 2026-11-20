@@ -1,0 +1,41 @@
+name: remote_sensing
+layout: organized
+root: /dados/home/moliveira/datasets/organized/remote_sensing
+images_dir: "{root}/orig"
+masks_dir: null              # sem máscara
+split_json: "{root}/splits/split{split}.json"   # split fixo (100% do treino); não usar splits_incremental
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: e665ded28bea2b383618b7c5a93d02213a0b3af914bc3eb40b2bf7a651675bd3
+expected_counts:
+  train: 682
+  validation: 159
+  test: 159
+image_size: 224
+image_ext: jpg
+labels_json: "{root}/classes.json"
+label_source: filename_prefix   # 000NNN_ = id da classe
+classes:
+  1: Agriculture
+  2: Airport
+  3: Beach
+  4: City
+  5: Desert
+  6: Forest
+  7: Grassland
+  8: Highway
+  9: Lake
+  10: Mountain
+  11: Parking
+  12: Port
+  13: Railway
+  14: River
+n_classes: 14
+impurity_class: null
+has_mask: false

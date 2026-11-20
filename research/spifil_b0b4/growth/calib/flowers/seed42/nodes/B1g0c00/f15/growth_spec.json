@@ -1,0 +1,785 @@
+{
+  "child": "flowers/B1/c152565bb8cc",
+  "child_hash": "c152565bb8cca31901f4f802f0d6f7625508b6054cfb802b0b1743486ef3219d",
+  "content_sha256": "2360e73c89f28e4a7e3ec309aea93bdedd30b0e2869d6ef29c932ebec9b4bab7",
+  "flops": {
+    "child": 6037678080,
+    "parent": 3654819840
+  },
+  "id": "e643881e7e5a->c152565bb8cc:widen+deepen_residual_zero",
+  "inheritance": {
+    "head": "inherit_zero_cols",
+    "head_detail": {
+      "label": "gap1280",
+      "n_inherited_elements": 154880,
+      "n_new_elements": 0,
+      "shape_child": {
+        "proj.0.bias": [
+          1280
+        ],
+        "proj.0.weight": [
+          1280,
+          120,
+          1,
+          1
+        ]
+      },
+      "shape_parent": {
+        "proj.0.bias": [
+          1280
+        ],
+        "proj.0.weight": [
+          1280,
+          120,
+          1,
+          1
+        ]
+      }
+    },
+    "per_layer": [
+      {
+        "child_index": 0,
+        "child_layer": "stem",
+        "in_map": [
+          0,
+          1,
+          2
+        ],
+        "n_inherited_elements": 9000,
+        "n_new_elements": 5250,
+        "new_init": "spifil0:residual_zero_out(seed=51909241)",
+        "origin": "fp_widen",
+        "out_map": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "parent_index": 0,
+        "parent_layer": "stem",
+        "shape_child": {
+          "conv.bias": [
+            95
+          ],
+          "conv.weight": [
+            95,
+            3,
+            7,
+            7
+          ],
+          "norm.bias": [
+            95
+          ],
+          "norm.weight": [
+            95
+          ]
+        },
+        "shape_parent": {
+          "conv.bias": [
+            60
+          ],
+          "conv.weight": [
+            60,
+            3,
+            7,
+            7
+          ],
+          "norm.bias": [
+            60
+          ],
+          "norm.weight": [
+            60
+          ]
+        },
+        "skip_added": false
+      },
+      {
+        "child_index": 1,
+        "child_layer": "local.0",
+        "in_map": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1,
+          -1
+        ],
+        "n_inherited_elements": 72720,
+        "n_new_elements": 42000,
+        "new_init": "",
+        "origin": "fp_widen",
+        "out_map": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119
+        ],
+        "parent_index": 1,
+        "parent_layer": "local.0",
+        "shape_child": {
+          "conv.branches.b1.bias": [
+            30
+          ],
+          "conv.branches.b1.weight": [
+            30,
+            95,
+            1,
+            1
+          ],
+          "conv.branches.b3.bias": [
+            30
+          ],
+          "conv.branches.b3.weight": [
+            30,
+            95,
+            3,
+            3
+          ],
+          "conv.branches.b5.bias": [
+            30
+          ],
+          "conv.branches.b5.weight": [
+            30,
+            95,
+            5,
+            5
+          ],
+          "conv.branches.pool.proj.bias": [
+            30
+          ],
+          "conv.branches.pool.proj.weight": [
+            30,
+            95,
+            1,
+            1
+          ],
+          "norm.0.bias": [
+            120
+          ],
+          "norm.0.weight": [
+            120
+          ],
+          "norm.1.bias": [
+            120
+          ],
+          "norm.1.weight": [
+            120
+          ],
+          "skip.bias": [
+            120
+          ],
+          "skip.weight": [
+            120,
+            95,
+            1,
+            1
+          ]
+        },
+        "shape_parent": {
+          "conv.branches.b1.bias": [
+            30
+          ],
+          "conv.branches.b1.weight": [
+            30,
+            60,
+            1,
+            1
+          ],
+          "conv.branches.b3.bias": [
+            30
+          ],
+          "conv.branches.b3.weight": [
+            30,
+            60,
+            3,
+            3
+          ],
+          "conv.branches.b5.bias": [
+            30
+          ],
+          "conv.branches.b5.weight": [
+            30,
+            60,
+            5,
+            5
+          ],
+          "conv.branches.pool.proj.bias": [
+            30
+          ],
+          "conv.branches.pool.proj.weight": [
+            30,
+            60,
+            1,
+            1
+          ],
+          "norm.0.bias": [
+            120
+          ],
+          "norm.0.weight": [
+            120
+          ],
+          "norm.1.bias": [
+            120
+          ],
+          "norm.1.weight": [
+            120
+          ],
+          "skip.bias": [
+            120
+          ],
+          "skip.weight": [
+            120,
+            60,
+            1,
+            1
+          ]
+        },
+        "skip_added": false
+      },
+      {
+        "child_index": 2,
+        "child_layer": "local.1",
+        "in_map": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          89,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95,
+          96,
+          97,
+          98,
+          99,
+          100,
+          101,
+          102,
+          103,
+          104,
+          105,
+          106,
+          107,
+          108,
+          109,
+          110,
+          111,
+          112,
+          113,
+          114,
+          115,
+          116,
+          117,
+          118,
+          119
+        ],
+        "n_inherited_elements": 0,
+        "n_new_elements": 129720,
+        "new_init": "residual_zero",
+        "origin": "fp_residual_zero",
+        "out_map": null,
+        "parent_index": null,
+        "parent_layer": null,
+        "shape_child": {
+          "conv.bias": [
+            120
+          ],
+          "conv.weight": [
+            120,
+            120,
+            3,
+            3
+          ]
+        },
+        "shape_parent": {},
+        "skip_added": false
+      }
+    ],
+    "totals": {
+      "inherited": 236600,
+      "new": 176970
+    }
+  },
+  "macs": {
+    "child": 3018839040,
+    "parent": 1827409920
+  },
+  "operations": [
+    {
+      "condition": "eval(); norm.1: DBN exato s\u00f3 em eval() (running_W congelado); norm: DBN exato s\u00f3 em eval() (running_W congelado)",
+      "exact_claimed": true,
+      "op": "widen",
+      "params": {
+        "kernels": {},
+        "new_init": "spifil0:residual_zero_out",
+        "seed": 51909241,
+        "variant": "widen_zero",
+        "widths": {
+          "0": 95
+        }
+      },
+      "where": {
+        "layers": [
+          0
+        ]
+      }
+    },
+    {
+      "condition": "act(0)=0; qualquer entrada",
+      "exact_claimed": true,
+      "op": "deepen_residual_zero",
+      "params": {
+        "act": "silu",
+        "conv": "conv",
+        "kernel": 3,
+        "norm": "none",
+        "trainable_at_zero": true,
+        "width": 120
+      },
+      "where": {
+        "before": 2
+      }
+    }
+  ],
+  "params": {
+    "child_band": "B1",
+    "child_budget_class": "B1",
+    "child_total": 413570,
+    "delta": 176970,
+    "parent_total": 236600
+  },
+  "parent": "flowers/B0/e643881e7e5a",
+  "parent_hash": "e643881e7e5a89e93a5a49a2796b1de41b1cf390d611c861d2fa0957537f12c8",
+  "preservation": {
+    "data": {
+      "mode": "eval(), fp32, no_grad, antes de treino",
+      "n": 8,
+      "n_images": 8,
+      "sha256": "9ab62c03646da17ee7e7b2434039c06bf8742f9f1bb94a415ee1478e8ec1dc37",
+      "shape": [
+        8,
+        3,
+        224,
+        224
+      ],
+      "split": "validation"
+    },
+    "emb_cos_min": 1.0000000000000009,
+    "emb_max_abs": 0.0,
+    "emb_rel_l2": 0.0,
+    "exact_claimed": true,
+    "map_cos_min": 0.9999999999999134,
+    "map_max_abs": 0.0,
+    "map_rel_l2": 0.0,
+    "per_layer": [
+      {
+        "child_index": 0,
+        "cos_min": 0.9999999999999476,
+        "max_abs": 0.0,
+        "parent_index": 0,
+        "rel_l2": 0.0
+      },
+      {
+        "child_index": 1,
+        "cos_min": 0.9999999999999134,
+        "max_abs": 0.0,
+        "parent_index": 1,
+        "rel_l2": 0.0
+      }
+    ],
+    "tolerance_rel": 1e-05,
+    "verdict": "exact"
+  },
+  "protect": {
+    "mode": "lowlr",
+    "scope": "inherited_elements"
+  },
+  "schema": "growth_spec/v1",
+  "twin": {
+    "reinit_twin_id": null
+  }
+}

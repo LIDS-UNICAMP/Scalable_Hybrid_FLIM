@@ -1,0 +1,1877 @@
+{
+ "modehb_hybrid/flowers": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 12.6,
+  "n_jobs": 47,
+  "mem_budget": 20,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 8,
+    "small": 8,
+    "medium": 8,
+    "huge": 7
+   },
+   "15.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "45.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "100.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "200.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 8,
+    "B1": 8,
+    "B2": 8,
+    "B3": 6,
+    "B4": 1
+   },
+   "15.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "45.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "100.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "200.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 5,
+    "small": 5,
+    "medium": 5,
+    "huge": 5
+   },
+   "seed": {
+    "tiny": 4,
+    "small": 4,
+    "medium": 4,
+    "huge": 4
+   },
+   "random": {
+    "tiny": 3,
+    "small": 3,
+    "medium": 2,
+    "huge": 2
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 12,
+    "small": 1
+   },
+   "small": {
+    "small": 11
+   },
+   "medium": {
+    "medium": 11
+   },
+   "huge": {
+    "huge": 11
+   }
+  },
+  "promotions": {},
+  "fails": [],
+  "params_quantiles": [
+   21079,
+   683680,
+   1887320,
+   3398220
+  ],
+  "n_unique_cands_gt1.5M": 6,
+  "n_unique_cands": 27,
+  "mem_est_over_peak": {
+   "n": 43,
+   "median": 1.64,
+   "p10": 1.39,
+   "p90": 3.5,
+   "max_peak": 17.1,
+   "max_est": 19.9
+  },
+  "global_front_strata": {
+   "5": {
+    "small": 4,
+    "huge": 2,
+    "tiny": 4
+   },
+   "15": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "45": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1
+   },
+   "100": {
+    "tiny": 1,
+    "small": 1,
+    "huge": 1
+   },
+   "200": {
+    "tiny": 1,
+    "small": 1,
+    "huge": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.763,
+   "huge@15.0": 0.742,
+   "huge@45.0": 0.735,
+   "huge@100.0": 0.75,
+   "huge@200.0": 0.772,
+   "medium@5.0": 0.753,
+   "medium@15.0": 0.745,
+   "medium@45.0": 0.757,
+   "medium@100.0": 0.75,
+   "medium@200.0": 0.741,
+   "small@5.0": 0.735,
+   "small@15.0": 0.735,
+   "small@45.0": 0.744,
+   "small@100.0": 0.735,
+   "small@200.0": 0.748,
+   "tiny@5.0": 0.687,
+   "tiny@15.0": 0.607,
+   "tiny@45.0": 0.622,
+   "tiny@100.0": 0.653,
+   "tiny@200.0": 0.617
+  }
+ },
+ "modehb_hybrid/remote_sensing": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 10.8,
+  "n_jobs": 47,
+  "mem_budget": 60,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 12,
+    "medium": 8,
+    "huge": 7,
+    "small": 4
+   },
+   "15.0": {
+    "tiny": 2,
+    "medium": 1,
+    "huge": 1
+   },
+   "45.0": {
+    "tiny": 2,
+    "medium": 1,
+    "huge": 1
+   },
+   "100.0": {
+    "tiny": 2,
+    "medium": 1,
+    "huge": 1
+   },
+   "200.0": {
+    "tiny": 2,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 12,
+    "B2": 8,
+    "B3": 7,
+    "B1": 4
+   },
+   "15.0": {
+    "B0": 2,
+    "B2": 1,
+    "B3": 1
+   },
+   "45.0": {
+    "B0": 2,
+    "B2": 1,
+    "B3": 1
+   },
+   "100.0": {
+    "B0": 2,
+    "B2": 1,
+    "B3": 1
+   },
+   "200.0": {
+    "B0": 2,
+    "B2": 1,
+    "B3": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 10,
+    "medium": 5,
+    "huge": 5
+   },
+   "seed": {
+    "tiny": 7,
+    "medium": 4,
+    "huge": 4,
+    "small": 1
+   },
+   "random": {
+    "tiny": 3,
+    "small": 3,
+    "medium": 2,
+    "huge": 2
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 15,
+    "small": 1
+   },
+   "small": {
+    "tiny": 5,
+    "medium": 2,
+    "small": 3
+   },
+   "medium": {
+    "medium": 9
+   },
+   "huge": {
+    "huge": 11
+   }
+  },
+  "promotions": {},
+  "fails": [],
+  "params_quantiles": [
+   19790,
+   794562,
+   1926440,
+   2950862
+  ],
+  "n_unique_cands_gt1.5M": 6,
+  "n_unique_cands": 27,
+  "mem_est_over_peak": {
+   "n": 43,
+   "median": 1.66,
+   "p10": 1.33,
+   "p90": 2.28,
+   "max_peak": 43.7,
+   "max_est": 59.9
+  },
+  "global_front_strata": {
+   "5": {
+    "tiny": 3,
+    "huge": 1
+   },
+   "15": {
+    "tiny": 2,
+    "huge": 1
+   },
+   "45": {
+    "tiny": 2,
+    "huge": 1
+   },
+   "100": {
+    "tiny": 2,
+    "huge": 1
+   },
+   "200": {
+    "tiny": 2,
+    "huge": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.599,
+   "huge@15.0": 0.577,
+   "huge@45.0": 0.598,
+   "huge@100.0": 0.591,
+   "huge@200.0": 0.57,
+   "medium@5.0": 0.579,
+   "medium@15.0": 0.549,
+   "medium@45.0": 0.548,
+   "medium@100.0": 0.542,
+   "medium@200.0": 0.535,
+   "small@5.0": 0.542,
+   "tiny@5.0": 0.591,
+   "tiny@15.0": 0.494,
+   "tiny@45.0": 0.494,
+   "tiny@100.0": 0.521,
+   "tiny@200.0": 0.521
+  }
+ },
+ "modehb_hybrid/ham10000": {
+  "bracket": 1,
+  "done": false,
+  "gpuh": 36.7,
+  "n_jobs": 147,
+  "mem_budget": 15,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 22,
+    "small": 24,
+    "huge": 24,
+    "medium": 15
+   },
+   "15.0": {
+    "tiny": 9,
+    "small": 8,
+    "huge": 9,
+    "medium": 8
+   },
+   "45.0": {
+    "tiny": 3,
+    "small": 5,
+    "huge": 4,
+    "medium": 2
+   },
+   "100.0": {
+    "tiny": 2,
+    "small": 3,
+    "huge": 2,
+    "medium": 1
+   },
+   "200.0": {
+    "tiny": 2,
+    "small": 2,
+    "huge": 2
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 22,
+    "B1": 24,
+    "B3": 22,
+    "B2": 15,
+    "B4": 2
+   },
+   "15.0": {
+    "B0": 9,
+    "B1": 8,
+    "B3": 9,
+    "B2": 8
+   },
+   "45.0": {
+    "B0": 3,
+    "B1": 5,
+    "B3": 4,
+    "B2": 2
+   },
+   "100.0": {
+    "B0": 2,
+    "B1": 3,
+    "B3": 2,
+    "B2": 1
+   },
+   "200.0": {
+    "B0": 2,
+    "B1": 2,
+    "B3": 2
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 5,
+    "small": 10,
+    "huge": 5
+   },
+   "seed": {
+    "tiny": 4,
+    "small": 5,
+    "huge": 4,
+    "medium": 3
+   },
+   "random": {
+    "tiny": 17,
+    "small": 17,
+    "medium": 12,
+    "huge": 19
+   },
+   "de": {
+    "huge": 1
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 26,
+    "small": 1
+   },
+   "small": {
+    "small": 24,
+    "huge": 1
+   },
+   "medium": {
+    "small": 7,
+    "medium": 15,
+    "huge": 3
+   },
+   "huge": {
+    "huge": 25
+   }
+  },
+  "promotions": {
+   "5.0->15.0": {
+    "tiny": 8,
+    "small": 6,
+    "medium": 7,
+    "huge": 7
+   },
+   "15.0->45.0": {
+    "tiny": 2,
+    "small": 3,
+    "medium": 2,
+    "huge": 3
+   },
+   "45.0->100.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "100.0->200.0": {
+    "tiny": 1,
+    "huge": 1
+   }
+  },
+  "fails": [],
+  "params_quantiles": [
+   19550,
+   751680,
+   1974398,
+   3215456
+  ],
+  "n_unique_cands_gt1.5M": 24,
+  "n_unique_cands": 83,
+  "mem_est_over_peak": {
+   "n": 139,
+   "median": 1.56,
+   "p10": 1.3,
+   "p90": 3.24,
+   "max_peak": 13.4,
+   "max_est": 15.0
+  },
+  "global_front_strata": {
+   "5": {
+    "small": 5,
+    "tiny": 6,
+    "medium": 1,
+    "huge": 1
+   },
+   "15": {
+    "tiny": 4,
+    "small": 5,
+    "medium": 2,
+    "huge": 1
+   },
+   "45": {
+    "small": 4,
+    "tiny": 2,
+    "medium": 1,
+    "huge": 1
+   },
+   "100": {
+    "small": 2,
+    "tiny": 1,
+    "medium": 1
+   },
+   "200": {
+    "tiny": 1,
+    "small": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.586,
+   "huge@15.0": 0.584,
+   "huge@45.0": 0.583,
+   "huge@100.0": 0.544,
+   "huge@200.0": 0.558,
+   "medium@5.0": 0.612,
+   "medium@15.0": 0.612,
+   "medium@45.0": 0.612,
+   "medium@100.0": 0.521,
+   "small@5.0": 0.601,
+   "small@15.0": 0.601,
+   "small@45.0": 0.601,
+   "small@100.0": 0.621,
+   "small@200.0": 0.574,
+   "tiny@5.0": 0.586,
+   "tiny@15.0": 0.581,
+   "tiny@45.0": 0.582,
+   "tiny@100.0": 0.579,
+   "tiny@200.0": 0.572
+  }
+ },
+ "modehb_hybrid/aid": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 35.4,
+  "n_jobs": 135,
+  "mem_budget": 15,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 25,
+    "small": 21,
+    "medium": 21,
+    "huge": 18
+   },
+   "15.0": {
+    "tiny": 9,
+    "small": 7,
+    "medium": 7,
+    "huge": 9
+   },
+   "45.0": {
+    "tiny": 3,
+    "small": 3,
+    "medium": 3,
+    "huge": 1
+   },
+   "100.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "200.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 25,
+    "B1": 21,
+    "B2": 21,
+    "B3": 16,
+    "B4": 2
+   },
+   "15.0": {
+    "B0": 9,
+    "B1": 7,
+    "B2": 7,
+    "B3": 9
+   },
+   "45.0": {
+    "B0": 3,
+    "B1": 3,
+    "B2": 3,
+    "B3": 1
+   },
+   "100.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "200.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 5,
+    "small": 5,
+    "medium": 5,
+    "huge": 5
+   },
+   "seed": {
+    "tiny": 4,
+    "small": 4,
+    "medium": 4,
+    "huge": 4
+   },
+   "random": {
+    "tiny": 20,
+    "small": 16,
+    "huge": 13,
+    "medium": 16
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 26
+   },
+   "small": {
+    "small": 22,
+    "tiny": 3
+   },
+   "medium": {
+    "medium": 22,
+    "small": 3
+   },
+   "huge": {
+    "huge": 22,
+    "medium": 3
+   }
+  },
+  "promotions": {
+   "5.0->15.0": {
+    "tiny": 8,
+    "small": 6,
+    "medium": 6,
+    "huge": 8
+   },
+   "15.0->45.0": {
+    "tiny": 2,
+    "small": 2,
+    "medium": 1
+   }
+  },
+  "fails": [
+   {
+    "cand": "c00051",
+    "fid": 5.0,
+    "params_est": 1476815,
+    "err": "InfeasibleCandidate: SPiFiL fit failed: OutOfMemoryError: CUDA out of memory. Tried to all"
+   },
+   {
+    "cand": "c00054",
+    "fid": 5.0,
+    "params_est": 622317,
+    "err": "OutOfMemoryError: CUDA out of memory. Tried to allocate 460.00 MiB. GPU 0 has a total capa"
+   }
+  ],
+  "params_quantiles": [
+   23408,
+   611838,
+   1829904,
+   3351628
+  ],
+  "n_unique_cands_gt1.5M": 17,
+  "n_unique_cands": 81,
+  "mem_est_over_peak": {
+   "n": 128,
+   "median": 1.55,
+   "p10": 1.3,
+   "p90": 3.33,
+   "max_peak": 13.1,
+   "max_est": 15.0
+  },
+  "global_front_strata": {
+   "5": {
+    "tiny": 6,
+    "huge": 1,
+    "small": 4,
+    "medium": 2
+   },
+   "15": {
+    "tiny": 6,
+    "small": 4,
+    "medium": 2,
+    "huge": 1
+   },
+   "45": {
+    "small": 3,
+    "tiny": 2,
+    "medium": 1
+   },
+   "100": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "200": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.845,
+   "huge@15.0": 0.84,
+   "huge@45.0": 0.768,
+   "huge@100.0": 0.781,
+   "huge@200.0": 0.787,
+   "medium@5.0": 0.837,
+   "medium@15.0": 0.841,
+   "medium@45.0": 0.844,
+   "medium@100.0": 0.79,
+   "medium@200.0": 0.788,
+   "small@5.0": 0.83,
+   "small@15.0": 0.832,
+   "small@45.0": 0.837,
+   "small@100.0": 0.761,
+   "small@200.0": 0.761,
+   "tiny@5.0": 0.819,
+   "tiny@15.0": 0.82,
+   "tiny@45.0": 0.82,
+   "tiny@100.0": 0.663,
+   "tiny@200.0": 0.666
+  }
+ },
+ "modehb_hybrid/coconut_trees": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 23.2,
+  "n_jobs": 39,
+  "mem_budget": 34,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 6,
+    "small": 6,
+    "medium": 6,
+    "huge": 4,
+    "fail": 1
+   },
+   "15.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "45.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "100.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "200.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 6,
+    "B1": 6,
+    "B2": 6,
+    "B3": 4,
+    "B4": 1
+   },
+   "15.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "45.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "100.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "200.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 5,
+    "small": 5,
+    "medium": 5,
+    "huge": 5
+   },
+   "seed": {
+    "tiny": 4,
+    "small": 4,
+    "medium": 4,
+    "huge": 3,
+    "fail": 1
+   },
+   "random": {
+    "tiny": 1,
+    "small": 1
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 10
+   },
+   "small": {
+    "small": 10
+   },
+   "medium": {
+    "medium": 9
+   },
+   "huge": {
+    "huge": 8,
+    "fail": 1
+   }
+  },
+  "promotions": {},
+  "fails": [
+   {
+    "cand": "c00012",
+    "fid": 5.0,
+    "params_est": 3309082,
+    "err": "params 3541364 > cap 3500000"
+   }
+  ],
+  "params_quantiles": [
+   22368,
+   551536,
+   2297872,
+   2297872
+  ],
+  "n_unique_cands_gt1.5M": 3,
+  "n_unique_cands": 19,
+  "mem_est_over_peak": {
+   "n": 34,
+   "median": 1.68,
+   "p10": 1.4,
+   "p90": 3.26,
+   "max_peak": 24.1,
+   "max_est": 33.5
+  },
+  "global_front_strata": {
+   "5": {
+    "small": 2,
+    "medium": 1,
+    "tiny": 3
+   },
+   "15": {
+    "tiny": 1,
+    "huge": 1
+   },
+   "45": {
+    "tiny": 1,
+    "huge": 1
+   },
+   "100": {
+    "tiny": 1,
+    "huge": 1
+   },
+   "200": {
+    "tiny": 1,
+    "huge": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.79,
+   "huge@15.0": 0.783,
+   "huge@45.0": 0.783,
+   "huge@100.0": 0.79,
+   "huge@200.0": 0.783,
+   "medium@5.0": 0.79,
+   "medium@15.0": 0.76,
+   "medium@45.0": 0.76,
+   "medium@100.0": 0.766,
+   "medium@200.0": 0.751,
+   "small@5.0": 0.778,
+   "small@15.0": 0.763,
+   "small@45.0": 0.75,
+   "small@100.0": 0.763,
+   "small@200.0": 0.763,
+   "tiny@5.0": 0.714,
+   "tiny@15.0": 0.646,
+   "tiny@45.0": 0.646,
+   "tiny@100.0": 0.646,
+   "tiny@200.0": 0.646
+  }
+ },
+ "modehb_lemonade/flowers": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 13.5,
+  "n_jobs": 37,
+  "mem_budget": 12,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 6,
+    "small": 5,
+    "medium": 5,
+    "huge": 5
+   },
+   "15.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "45.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "100.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "200.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 6,
+    "B1": 5,
+    "B2": 5,
+    "B3": 5
+   },
+   "15.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "45.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "100.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "200.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 5,
+    "small": 5,
+    "medium": 5,
+    "huge": 5
+   },
+   "seed": {
+    "medium": 4,
+    "huge": 4,
+    "tiny": 5,
+    "small": 3
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 10
+   },
+   "small": {
+    "small": 8
+   },
+   "medium": {
+    "medium": 9
+   },
+   "huge": {
+    "huge": 9
+   }
+  },
+  "promotions": {},
+  "fails": [],
+  "params_quantiles": [
+   134037,
+   791060,
+   2182290,
+   2330115
+  ],
+  "n_unique_cands_gt1.5M": 4,
+  "n_unique_cands": 17,
+  "mem_est_over_peak": {
+   "n": 33,
+   "median": 1.82,
+   "p10": 1.41,
+   "p90": 3.26,
+   "max_peak": 8.5,
+   "max_est": 12.0
+  },
+  "global_front_strata": {
+   "5": {
+    "medium": 3,
+    "huge": 2,
+    "tiny": 1,
+    "small": 1
+   },
+   "15": {
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "45": {
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "100": {
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "200": {
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.717,
+   "huge@15.0": 0.726,
+   "huge@45.0": 0.723,
+   "huge@100.0": 0.717,
+   "huge@200.0": 0.723,
+   "medium@5.0": 0.75,
+   "medium@15.0": 0.757,
+   "medium@45.0": 0.754,
+   "medium@100.0": 0.757,
+   "medium@200.0": 0.744,
+   "small@5.0": 0.705,
+   "small@15.0": 0.403,
+   "small@45.0": 0.403,
+   "small@100.0": 0.416,
+   "small@200.0": 0.412,
+   "tiny@5.0": 0.693,
+   "tiny@15.0": 0.69,
+   "tiny@45.0": 0.702,
+   "tiny@100.0": 0.687,
+   "tiny@200.0": 0.699
+  }
+ },
+ "modehb_lemonade/remote_sensing": {
+  "bracket": 3,
+  "done": true,
+  "gpuh": 28.8,
+  "n_jobs": 208,
+  "mem_budget": 20,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 24,
+    "small": 19,
+    "medium": 20,
+    "huge": 22
+   },
+   "15.0": {
+    "tiny": 15,
+    "small": 14,
+    "medium": 15,
+    "huge": 15
+   },
+   "45.0": {
+    "tiny": 9,
+    "small": 7,
+    "medium": 7,
+    "huge": 9
+   },
+   "100.0": {
+    "tiny": 5,
+    "small": 6,
+    "medium": 6,
+    "huge": 4
+   },
+   "200.0": {
+    "tiny": 3,
+    "small": 3,
+    "medium": 3,
+    "huge": 2
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 24,
+    "B1": 19,
+    "B2": 20,
+    "B3": 21,
+    "B4": 1
+   },
+   "15.0": {
+    "B0": 15,
+    "B1": 14,
+    "B2": 15,
+    "B3": 14,
+    "B4": 1
+   },
+   "45.0": {
+    "B0": 9,
+    "B1": 7,
+    "B2": 7,
+    "B3": 9
+   },
+   "100.0": {
+    "B0": 5,
+    "B1": 6,
+    "B2": 6,
+    "B3": 4
+   },
+   "200.0": {
+    "B0": 3,
+    "B1": 3,
+    "B2": 3,
+    "B3": 2
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 5,
+    "small": 5,
+    "medium": 5,
+    "huge": 5
+   },
+   "seed": {
+    "medium": 5,
+    "huge": 8,
+    "tiny": 6,
+    "small": 5
+   },
+   "morph": {
+    "tiny": 16,
+    "medium": 16,
+    "huge": 11,
+    "small": 13
+   },
+   "random": {
+    "small": 7,
+    "huge": 8,
+    "tiny": 7,
+    "medium": 5
+   },
+   "de": {
+    "huge": 5,
+    "small": 4,
+    "medium": 4,
+    "tiny": 3
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 35,
+    "small": 1,
+    "huge": 1
+   },
+   "small": {
+    "small": 28,
+    "tiny": 2,
+    "medium": 3
+   },
+   "medium": {
+    "medium": 29,
+    "small": 5,
+    "huge": 2
+   },
+   "huge": {
+    "huge": 34,
+    "medium": 3
+   }
+  },
+  "promotions": {
+   "5.0->15.0": {
+    "tiny": 8,
+    "small": 6,
+    "medium": 7,
+    "huge": 7
+   },
+   "15.0->45.0": {
+    "tiny": 6,
+    "small": 4,
+    "medium": 4,
+    "huge": 5
+   },
+   "45.0->100.0": {
+    "tiny": 3,
+    "small": 3,
+    "medium": 3,
+    "huge": 2
+   },
+   "100.0->200.0": {
+    "tiny": 2,
+    "medium": 2,
+    "small": 2,
+    "huge": 1
+   }
+  },
+  "fails": [
+   {
+    "cand": "c00104",
+    "fid": 15.0,
+    "params_est": 222134,
+    "err": "OutOfMemoryError: CUDA out of memory. Tried to allocate 344.00 MiB. GPU 0 has a total capa"
+   }
+  ],
+  "params_quantiles": [
+   29888,
+   771680,
+   2009440,
+   3154296
+  ],
+  "n_unique_cands_gt1.5M": 32,
+  "n_unique_cands": 121,
+  "mem_est_over_peak": {
+   "n": 201,
+   "median": 1.55,
+   "p10": 1.31,
+   "p90": 9.02,
+   "max_peak": 15.7,
+   "max_est": 20.0
+  },
+  "global_front_strata": {
+   "5": {
+    "tiny": 5,
+    "huge": 2
+   },
+   "15": {
+    "tiny": 5,
+    "huge": 1,
+    "small": 1,
+    "medium": 1
+   },
+   "45": {
+    "tiny": 5,
+    "huge": 2,
+    "medium": 1
+   },
+   "100": {
+    "tiny": 3,
+    "small": 1,
+    "huge": 1
+   },
+   "200": {
+    "tiny": 2,
+    "small": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.611,
+   "huge@15.0": 0.604,
+   "huge@45.0": 0.604,
+   "huge@100.0": 0.576,
+   "huge@200.0": 0.548,
+   "medium@5.0": 0.591,
+   "medium@15.0": 0.596,
+   "medium@45.0": 0.582,
+   "medium@100.0": 0.562,
+   "medium@200.0": 0.555,
+   "small@5.0": 0.569,
+   "small@15.0": 0.569,
+   "small@45.0": 0.569,
+   "small@100.0": 0.554,
+   "small@200.0": 0.561,
+   "tiny@5.0": 0.549,
+   "tiny@15.0": 0.537,
+   "tiny@45.0": 0.556,
+   "tiny@100.0": 0.556,
+   "tiny@200.0": 0.537
+  }
+ },
+ "modehb_lemonade/ham10000": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 31.3,
+  "n_jobs": 143,
+  "mem_budget": 15,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 24,
+    "small": 17,
+    "medium": 18,
+    "huge": 26
+   },
+   "15.0": {
+    "tiny": 9,
+    "small": 7,
+    "medium": 8,
+    "huge": 7
+   },
+   "45.0": {
+    "tiny": 3,
+    "small": 3,
+    "medium": 5,
+    "huge": 3
+   },
+   "100.0": {
+    "tiny": 2,
+    "small": 2,
+    "medium": 2,
+    "huge": 2
+   },
+   "200.0": {
+    "tiny": 2,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 24,
+    "B1": 17,
+    "B2": 18,
+    "B3": 24,
+    "B4": 2
+   },
+   "15.0": {
+    "B0": 9,
+    "B1": 7,
+    "B2": 8,
+    "B3": 7
+   },
+   "45.0": {
+    "B0": 3,
+    "B1": 3,
+    "B2": 5,
+    "B3": 3
+   },
+   "100.0": {
+    "B0": 2,
+    "B1": 2,
+    "B2": 2,
+    "B3": 2
+   },
+   "200.0": {
+    "B0": 2,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 5,
+    "small": 5,
+    "medium": 5,
+    "huge": 5
+   },
+   "seed": {
+    "medium": 4,
+    "huge": 9,
+    "tiny": 6,
+    "small": 5
+   },
+   "morph": {
+    "tiny": 8,
+    "huge": 7,
+    "medium": 7,
+    "small": 5
+   },
+   "random": {
+    "small": 6,
+    "huge": 9,
+    "tiny": 9,
+    "medium": 6
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 26
+   },
+   "small": {
+    "small": 20,
+    "medium": 1,
+    "tiny": 2
+   },
+   "medium": {
+    "medium": 21,
+    "small": 1,
+    "huge": 2
+   },
+   "huge": {
+    "huge": 28
+   }
+  },
+  "promotions": {
+   "5.0->15.0": {
+    "tiny": 8,
+    "small": 6,
+    "medium": 7,
+    "huge": 6
+   },
+   "15.0->45.0": {
+    "tiny": 2,
+    "small": 2,
+    "medium": 4,
+    "huge": 2
+   },
+   "45.0->100.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "fails": [],
+  "params_quantiles": [
+   17554,
+   847165,
+   2136693,
+   3213566
+  ],
+  "n_unique_cands_gt1.5M": 24,
+  "n_unique_cands": 79,
+  "mem_est_over_peak": {
+   "n": 137,
+   "median": 1.69,
+   "p10": 1.3,
+   "p90": 2.55,
+   "max_peak": 13.2,
+   "max_est": 15.0
+  },
+  "global_front_strata": {
+   "5": {
+    "tiny": 7,
+    "medium": 4,
+    "small": 1
+   },
+   "15": {
+    "tiny": 6,
+    "small": 1,
+    "medium": 3
+   },
+   "45": {
+    "small": 2,
+    "tiny": 1,
+    "medium": 3,
+    "huge": 1
+   },
+   "100": {
+    "small": 1,
+    "tiny": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "200": {
+    "small": 1,
+    "tiny": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.578,
+   "huge@15.0": 0.565,
+   "huge@45.0": 0.583,
+   "huge@100.0": 0.585,
+   "huge@200.0": 0.537,
+   "medium@5.0": 0.614,
+   "medium@15.0": 0.605,
+   "medium@45.0": 0.601,
+   "medium@100.0": 0.546,
+   "medium@200.0": 0.527,
+   "small@5.0": 0.577,
+   "small@15.0": 0.598,
+   "small@45.0": 0.587,
+   "small@100.0": 0.572,
+   "small@200.0": 0.583,
+   "tiny@5.0": 0.584,
+   "tiny@15.0": 0.58,
+   "tiny@45.0": 0.58,
+   "tiny@100.0": 0.477,
+   "tiny@200.0": 0.484
+  }
+ },
+ "modehb_lemonade/aid": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 0.3,
+  "n_jobs": 2,
+  "mem_budget": 15,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 1
+   },
+   "15.0": {
+    "tiny": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 1
+   },
+   "15.0": {
+    "B0": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 1
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 1
+   }
+  },
+  "promotions": {},
+  "fails": [],
+  "params_quantiles": [
+   147950,
+   147950,
+   147950,
+   147950
+  ],
+  "n_unique_cands_gt1.5M": 0,
+  "n_unique_cands": 1,
+  "mem_est_over_peak": {
+   "n": 2,
+   "median": 1.61,
+   "p10": 1.61,
+   "p90": 1.61,
+   "max_peak": 5.2,
+   "max_est": 8.4
+  },
+  "global_front_strata": {},
+  "best_quality_stratum_fid": {
+   "tiny@5.0": 0.702,
+   "tiny@15.0": 0.706
+  }
+ },
+ "modehb_lemonade/coconut_trees": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 13.8,
+  "n_jobs": 24,
+  "mem_budget": 12,
+  "cap": 3500000,
+  "strata": [
+   "tiny",
+   "small",
+   "medium",
+   "huge"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "tiny": 3,
+    "small": 1,
+    "medium": 2,
+    "huge": 2
+   },
+   "15.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "45.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "100.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "200.0": {
+    "tiny": 1,
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 3,
+    "B1": 1,
+    "B2": 2,
+    "B3": 2
+   },
+   "15.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "45.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "100.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   },
+   "200.0": {
+    "B0": 1,
+    "B1": 1,
+    "B2": 1,
+    "B3": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "tiny": 5,
+    "small": 5,
+    "medium": 5,
+    "huge": 5
+   },
+   "seed": {
+    "medium": 1,
+    "huge": 1,
+    "tiny": 1
+   }
+  },
+  "target_vs_measured": {
+   "tiny": {
+    "tiny": 6
+   },
+   "small": {
+    "small": 5
+   },
+   "medium": {
+    "medium": 6
+   },
+   "huge": {
+    "huge": 6
+   }
+  },
+  "promotions": {},
+  "fails": [],
+  "params_quantiles": [
+   200944,
+   967608,
+   2223066,
+   2223066
+  ],
+  "n_unique_cands_gt1.5M": 1,
+  "n_unique_cands": 5,
+  "mem_est_over_peak": {
+   "n": 21,
+   "median": 2.25,
+   "p10": 1.41,
+   "p90": 2.86,
+   "max_peak": 7.6,
+   "max_est": 11.9
+  },
+  "global_front_strata": {
+   "5": {
+    "small": 1,
+    "medium": 2,
+    "huge": 2
+   },
+   "15": {
+    "small": 1,
+    "huge": 1
+   },
+   "45": {
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   },
+   "100": {
+    "small": 1,
+    "huge": 1
+   },
+   "200": {
+    "small": 1,
+    "medium": 1,
+    "huge": 1
+   }
+  },
+  "best_quality_stratum_fid": {
+   "huge@5.0": 0.781,
+   "huge@15.0": 0.782,
+   "huge@45.0": 0.774,
+   "huge@100.0": 0.787,
+   "huge@200.0": 0.778,
+   "medium@5.0": 0.788,
+   "medium@15.0": 0.779,
+   "medium@45.0": 0.782,
+   "medium@100.0": 0.783,
+   "medium@200.0": 0.795,
+   "small@5.0": 0.651,
+   "small@15.0": 0.663,
+   "small@45.0": 0.646,
+   "small@100.0": 0.628,
+   "small@200.0": 0.649,
+   "tiny@5.0": 0.725,
+   "tiny@15.0": 0.724,
+   "tiny@45.0": 0.736,
+   "tiny@100.0": 0.73,
+   "tiny@200.0": 0.732
+  }
+ },
+ "modehb_lemonade_seeded/remote_sensing": {
+  "bracket": 0,
+  "done": false,
+  "gpuh": 0.2,
+  "n_jobs": 4,
+  "mem_budget": 24,
+  "cap": 5500000,
+  "strata": [
+   "small",
+   "medium",
+   "large",
+   "xl"
+  ],
+  "by_fid_stratum": {
+   "5.0": {
+    "small": 1
+   },
+   "15.0": {
+    "small": 1
+   },
+   "45.0": {
+    "small": 1
+   },
+   "100.0": {
+    "small": 1
+   }
+  },
+  "by_fid_band_B0B4": {
+   "5.0": {
+    "B0": 1
+   },
+   "15.0": {
+    "B0": 1
+   },
+   "45.0": {
+    "B0": 1
+   },
+   "100.0": {
+    "B0": 1
+   }
+  },
+  "generated_by_op": {
+   "calibration": {
+    "small": 3
+   }
+  },
+  "target_vs_measured": {
+   "small": {
+    "small": 3
+   }
+  },
+  "promotions": {},
+  "fails": [],
+  "params_quantiles": [
+   163386,
+   163386,
+   163386,
+   163386
+  ],
+  "n_unique_cands_gt1.5M": 0,
+  "n_unique_cands": 1,
+  "mem_est_over_peak": {
+   "n": 4,
+   "median": 1.26,
+   "p10": 1.26,
+   "p90": 1.26,
+   "max_peak": 6.7,
+   "max_est": 8.4
+  },
+  "global_front_strata": {},
+  "best_quality_stratum_fid": {
+   "small@5.0": 0.466,
+   "small@15.0": 0.467,
+   "small@45.0": 0.466,
+   "small@100.0": 0.48
+  }
+ }
+}

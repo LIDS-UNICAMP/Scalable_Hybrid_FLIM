@@ -1,0 +1,77 @@
+{
+ "name": "fila_v4",
+ "created": "2026-11-18",
+ "config": "ga_search/config/modehb/search_v4.yaml",
+ "prerequisite": "aplicar research/spifil_b0b4/ga_v4/ga_v4.diff (conferir o md5) numa árvore em que nenhuma busca v3 esteja importando os arquivos (ou num clone/worktree próprio) e só depois de o usuário aprovar. As buscas v3 em andamento NÃO são reiniciadas.",
+ "regua": "fitness = SVM original (linear, C=100, sem scaler) na leitura so2_4096_pca; o teste SVM original de todo job terminado continua no pipeline de sempre",
+ "memory_budget_note": "budget real por GPU com o estimador calibrado (mem_scale 0.8); o OOM residual cai na escada bf16 -> bf16+batch/2 -> bf16+batch/4 sem punir a faixa",
+ "datasets": [
+  "flowers",
+  "remote_sensing",
+  "ham10000",
+  "aid",
+  "coconut_trees"
+ ],
+ "jobs": [
+  {
+   "id": "v4_remote_sensing",
+   "host": "jaci",
+   "gpu": 0,
+   "dataset": "remote_sensing",
+   "memory_budget_gb": 24,
+   "gpu_process_cap_gb": 28,
+   "start_when": "free_gpu_mem_gb >= 30 por 3 checagens de 2 min (backfill)",
+   "tmux": "ga_v4_rs",
+   "command": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM; ulimit -n 65536; export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8; mkdir -p artifacts/modehb_v4/remote_sensing/logs; for i in 1 2 3 4 5; do /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m ga_search.modehb.run_search --config ga_search/config/modehb/search_v4.yaml --dataset remote_sensing --seed 42 --set output_dir=artifacts/modehb_v4/remote_sensing/state/seed42 --set search.stratified.memory_budget_gb=24 --set gpu_process_cap_gb=28 >> artifacts/modehb_v4/remote_sensing/logs/search_s42.log 2>&1 && break; sleep 60; done",
+   "launch": "tmux new-session -d -s ga_v4_rs \"bash -c '<command>'\""
+  },
+  {
+   "id": "v4_aid",
+   "host": "jaci",
+   "gpu": 0,
+   "dataset": "aid",
+   "memory_budget_gb": 20,
+   "gpu_process_cap_gb": 24,
+   "start_when": "free_gpu_mem_gb >= 26 (backfill; após v4_remote_sensing caber)",
+   "tmux": "ga_v4_aid",
+   "command": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM; ulimit -n 65536; export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8; mkdir -p artifacts/modehb_v4/aid/logs; for i in 1 2 3 4 5; do /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m ga_search.modehb.run_search --config ga_search/config/modehb/search_v4.yaml --dataset aid --seed 42 --set output_dir=artifacts/modehb_v4/aid/state/seed42 --set search.stratified.memory_budget_gb=20 --set gpu_process_cap_gb=24 >> artifacts/modehb_v4/aid/logs/search_s42.log 2>&1 && break; sleep 60; done",
+   "launch": "tmux new-session -d -s ga_v4_aid \"bash -c '<command>'\""
+  },
+  {
+   "id": "v4_ham10000",
+   "host": "athena",
+   "gpu": 3,
+   "dataset": "ham10000",
+   "memory_budget_gb": 36,
+   "gpu_process_cap_gb": 40,
+   "start_when": "GPU 3 com >= 42 GB livres",
+   "tmux": "ga_v4_ham",
+   "command": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM; ulimit -n 65536; export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3; mkdir -p artifacts/modehb_v4/ham10000/logs; for i in 1 2 3 4 5; do /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m ga_search.modehb.run_search --config ga_search/config/modehb/search_v4.yaml --dataset ham10000 --seed 42 --set output_dir=artifacts/modehb_v4/ham10000/state/seed42 --set search.stratified.memory_budget_gb=36 --set gpu_process_cap_gb=40 >> artifacts/modehb_v4/ham10000/logs/search_s42.log 2>&1 && break; sleep 60; done",
+   "launch": "tmux new-session -d -s ga_v4_ham \"bash -c '<command>'\""
+  },
+  {
+   "id": "v4_flowers",
+   "host": "athena",
+   "gpu": 2,
+   "dataset": "flowers",
+   "memory_budget_gb": 36,
+   "gpu_process_cap_gb": 40,
+   "start_when": "GPU 2 com >= 42 GB livres (não tocar no PNAS-CS da GPU 2)",
+   "tmux": "ga_v4_flowers",
+   "command": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM; ulimit -n 65536; export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2; mkdir -p artifacts/modehb_v4/flowers/logs; for i in 1 2 3 4 5; do /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m ga_search.modehb.run_search --config ga_search/config/modehb/search_v4.yaml --dataset flowers --seed 42 --set output_dir=artifacts/modehb_v4/flowers/state/seed42 --set search.stratified.memory_budget_gb=36 --set gpu_process_cap_gb=40 >> artifacts/modehb_v4/flowers/logs/search_s42.log 2>&1 && break; sleep 60; done",
+   "launch": "tmux new-session -d -s ga_v4_flowers \"bash -c '<command>'\""
+  },
+  {
+   "id": "v4_coconut_trees",
+   "host": "athena",
+   "gpu": 2,
+   "dataset": "coconut_trees",
+   "memory_budget_gb": 36,
+   "gpu_process_cap_gb": 40,
+   "start_when": "depois de v4_flowers ou GPU 2 com >= 84 GB livres",
+   "tmux": "ga_v4_coconut",
+   "command": "cd /dados/home/moliveira/Scalable_Hybrid_FLIM; ulimit -n 65536; export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2; mkdir -p artifacts/modehb_v4/coconut_trees/logs; for i in 1 2 3 4 5; do /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -m ga_search.modehb.run_search --config ga_search/config/modehb/search_v4.yaml --dataset coconut_trees --seed 42 --set output_dir=artifacts/modehb_v4/coconut_trees/state/seed42 --set search.stratified.memory_budget_gb=36 --set gpu_process_cap_gb=40 >> artifacts/modehb_v4/coconut_trees/logs/search_s42.log 2>&1 && break; sleep 60; done",
+   "launch": "tmux new-session -d -s ga_v4_coconut \"bash -c '<command>'\""
+  }
+ ]
+}

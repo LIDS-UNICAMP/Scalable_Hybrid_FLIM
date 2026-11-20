@@ -1,0 +1,659 @@
+{
+ "host": "athena",
+ "gpus": [
+  2,
+  3
+ ],
+ "dono": "moliveira",
+ "pesquisa": "SPiFiL hibrido de outubro (disc_bp01w64c1280) nas 5 bases prioritarias",
+ "gerado_por": "agente oct_hybrid",
+ "gerado_em": "2026-11-18 11:22:22",
+ "codigo": "/dados/home/moliveira/exps/oct_hybrid/code (copia propria: git archive d31e5ac = sha do treino de outubro + adaptador minimo, ver /dados/home/moliveira/exps/oct_hybrid/adapter_vs_d31e5ac.diff)",
+ "pre_requisitos": [
+  "rsync de /dados/home/moliveira/exps/oct_hybrid/code/ (jaci -> athena, mesmo caminho)",
+  "datasets/organized/{flowers,remote_sensing,ham10000,aid,coconut_trees}/orig no athena (os mesmos das buscas; o split 1 vai dentro da copia, sha256 conferido)",
+  "env scalable_FLIM com spifil (editable /dados/home/moliveira/SPiFiL) e pyift"
+ ],
+ "regras": {
+  "gpus": "athena GPU 2 e 3 (CUDA_DEVICE_ORDER=PCI_BUS_ID); trocar {GPU} no comando_template",
+  "sem_sh": "comando inline (bash -c), nenhum .sh",
+  "parasitas": "fora",
+  "concorrencia": "ate 2 jobs por GPU se a soma dos picos + 4 GB couber; o treino e limitado por CPU/IO (loader ift), 10 CPUs por job",
+  "svm": "core.svm.fit_svm (SVC linear C=100, ovo, max_iter=-1, sem scaler) no TREINO; teste so reporte",
+  "selecao_ckpt": "min probe/val_recon_loss na VALIDACAO verdadeira do split das buscas (sem rotulo, = receita de outubro); kappa_val reportado",
+  "wandb": "projeto flim-ssl (o mesmo do outubro); WANDB_MODE=offline se o athena estiver sem rede",
+  "memoria": "pico estimado = medicao CPU do maior estagio (tensores salvos p/ backward + params/AdamW, batch 32) + contexto CUDA/cudnn; o runner grava o pico real (nvidia-smi) em <estagio>/.oct_done"
+ },
+ "ordem": [
+  "oct_hybrid_flowers_seed42",
+  "oct_hybrid_remote_sensing_seed42",
+  "oct_hybrid_ham10000_seed42",
+  "oct_hybrid_aid_seed42",
+  "oct_hybrid_coconut_trees_seed42",
+  "oct_hybrid_flowers_seed43",
+  "oct_hybrid_remote_sensing_seed43",
+  "oct_hybrid_ham10000_seed43",
+  "oct_hybrid_aid_seed43",
+  "oct_hybrid_coconut_trees_seed43",
+  "oct_hybrid_flowers_seed44",
+  "oct_hybrid_remote_sensing_seed44",
+  "oct_hybrid_ham10000_seed44",
+  "oct_hybrid_aid_seed44",
+  "oct_hybrid_coconut_trees_seed44"
+ ],
+ "estimativa_total_horas_gpu": 136.5,
+ "jobs": [
+  {
+   "job_id": "oct_hybrid_flowers_seed42",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 2,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "flowers",
+   "seed": 42,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    1922,
+    412,
+    412
+   ],
+   "n_classes": 5,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset flowers --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_flowers_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed42.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset flowers --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_flowers_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed42.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 3.7,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed42.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/flowers_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/flowers_seed42.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed42.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_remote_sensing_seed42",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 3,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "remote_sensing",
+   "seed": 42,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    682,
+    159,
+    159
+   ],
+   "n_classes": 14,
+   "status": "running",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset remote_sensing --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_remote_sensing_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed42.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset remote_sensing --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_remote_sensing_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed42.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 1.3,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed42.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/remote_sensing_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed42.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed42.{train,eval}.log"
+   },
+   "depende_de": [],
+   "obs": "lancado no athena pelo coordenador (GPU 2)"
+  },
+  {
+   "job_id": "oct_hybrid_ham10000_seed42",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 2,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "ham10000",
+   "seed": 42,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    4129,
+    878,
+    5008
+   ],
+   "n_classes": 7,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset ham10000 --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_ham10000_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed42.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset ham10000 --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_ham10000_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed42.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 8.0,
+    "horas_eval": 0.16,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed42.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/ham10000_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed42.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed42.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_aid_seed42",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 3,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "aid",
+   "seed": 42,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    6996,
+    1502,
+    1502
+   ],
+   "n_classes": 30,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset aid --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_aid_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/aid_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/aid_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed42.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset aid --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_aid_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/aid_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/aid_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed42.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 13.5,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/aid_seed42.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/aid_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/aid_seed42.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed42.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_coconut_trees_seed42",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 2,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "coconut_trees",
+   "seed": 42,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    9511,
+    2038,
+    2038
+   ],
+   "n_classes": 2,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset coconut_trees --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_coconut_trees_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed42.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset coconut_trees --seed 42 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed42.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_coconut_trees_seed42,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed42/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed42.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed42.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed42.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 18.4,
+    "horas_eval": 0.13,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed42.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/coconut_trees_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed42/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed42.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed42.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_flowers_seed43",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 3,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "flowers",
+   "seed": 43,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    1922,
+    412,
+    412
+   ],
+   "n_classes": 5,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset flowers --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_flowers_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed43.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset flowers --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_flowers_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed43.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 3.7,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed43.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/flowers_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/flowers_seed43.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed43.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_remote_sensing_seed43",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 2,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "remote_sensing",
+   "seed": 43,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    682,
+    159,
+    159
+   ],
+   "n_classes": 14,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset remote_sensing --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_remote_sensing_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed43.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset remote_sensing --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_remote_sensing_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed43.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 1.3,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed43.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/remote_sensing_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed43.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed43.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_ham10000_seed43",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 3,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "ham10000",
+   "seed": 43,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    4129,
+    878,
+    5008
+   ],
+   "n_classes": 7,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset ham10000 --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_ham10000_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed43.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset ham10000 --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_ham10000_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed43.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 8.0,
+    "horas_eval": 0.16,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed43.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/ham10000_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed43.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed43.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_aid_seed43",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 2,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "aid",
+   "seed": 43,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    6996,
+    1502,
+    1502
+   ],
+   "n_classes": 30,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset aid --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_aid_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/aid_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/aid_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed43.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset aid --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_aid_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/aid_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/aid_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed43.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 13.5,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/aid_seed43.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/aid_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/aid_seed43.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed43.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_coconut_trees_seed43",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 3,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "coconut_trees",
+   "seed": 43,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    9511,
+    2038,
+    2038
+   ],
+   "n_classes": 2,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset coconut_trees --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_coconut_trees_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed43.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset coconut_trees --seed 43 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed43.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_coconut_trees_seed43,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed43/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed43.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed43.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed43.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 18.4,
+    "horas_eval": 0.13,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed43.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/coconut_trees_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed43/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed43.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed43.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_flowers_seed44",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 2,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "flowers",
+   "seed": 44,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    1922,
+    412,
+    412
+   ],
+   "n_classes": 5,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset flowers --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_flowers_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed44.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset flowers --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_flowers_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed44.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 3.7,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/flowers_seed44.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/flowers_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/flowers_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/flowers_seed44.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_flowers_seed44.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_remote_sensing_seed44",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 3,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "remote_sensing",
+   "seed": 44,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    682,
+    159,
+    159
+   ],
+   "n_classes": 14,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset remote_sensing --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_remote_sensing_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed44.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset remote_sensing --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_remote_sensing_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed44.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 1.3,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed44.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/remote_sensing_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/remote_sensing_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/remote_sensing_seed44.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_remote_sensing_seed44.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_ham10000_seed44",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 2,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "ham10000",
+   "seed": 44,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    4129,
+    878,
+    5008
+   ],
+   "n_classes": 7,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset ham10000 --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_ham10000_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed44.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset ham10000 --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_ham10000_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed44.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 8.0,
+    "horas_eval": 0.16,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed44.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/ham10000_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/ham10000_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/ham10000_seed44.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_ham10000_seed44.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_aid_seed44",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 3,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "aid",
+   "seed": 44,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    6996,
+    1502,
+    1502
+   ],
+   "n_classes": 30,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset aid --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_aid_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/aid_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/aid_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed44.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset aid --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_aid_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/aid_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/aid_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed44.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 13.5,
+    "horas_eval": 0.1,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/aid_seed44.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/aid_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/aid_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/aid_seed44.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_aid_seed44.{train,eval}.log"
+   },
+   "depende_de": []
+  },
+  {
+   "job_id": "oct_hybrid_coconut_trees_seed44",
+   "host": "athena",
+   "gpus_permitidas": [
+    2,
+    3
+   ],
+   "gpu": 2,
+   "prioridade": "ALTA",
+   "prioridade_num": 0,
+   "dataset": "coconut_trees",
+   "seed": 44,
+   "dados": "100% (split 1 das buscas; val verdadeira)",
+   "n_train_val_test": [
+    9511,
+    2038,
+    2038
+   ],
+   "n_classes": 2,
+   "status": "queued",
+   "descricao": "SPiFiL hibrido de outubro disc_bp01w64c1280 (L1..L4 32/48/64/1280, k5/5/5/1, pool 2/2/2/1, SPiFiL DISF50 + AE BCE, bp 0.1 nas antigas, 200 ep./camada, AdamW 5e-4, ES 50 na val_recon_loss) -> eval SVM C=100 no TESTE: gap1280 (oficial), so2_4096_pca, so2_4096_pca_tta8",
+   "comando": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset coconut_trees --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_coconut_trees_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed44.eval.log 2>&1",
+   "comando_template": "cd /dados/home/moliveira/exps/oct_hybrid/code && mkdir -p /dados/home/moliveira/exps/oct_hybrid/logs /dados/home/moliveira/exps/oct_hybrid/results && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u -m oct_hybrid.run_arm --dataset coconut_trees --seed 44 --device cuda --work-root /dados/home/moliveira/exps/oct_hybrid/runs >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed44.train.log 2>&1 && CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={GPU} LD_LIBRARY_PATH=/dados/home/moliveira/miniforge3/envs/scalable_FLIM/lib OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True nice -n 5 /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python -u research/spifil_b0b4/readout_x/eval_backbone_head.py --item id=OCT_coconut_trees_seed44,kind=hybrid,ckpt=/dados/home/moliveira/exps/oct_hybrid/runs/seed44/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt --code-root /dados/home/moliveira/exps/oct_hybrid/code --heads gap1280 so2_4096_pca --tta8 --device cuda:0 --batch-size 16 --num-workers 8 --out /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed44.jsonl --table-md /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed44.md >> /dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed44.eval.log 2>&1",
+   "retomada": "idempotente: TRAIN_DONE.json pula o treino; estagio/grow com .oct_done nao refaz; estagio interrompido recomeca do zero; eval pula cabecas ja no jsonl",
+   "estimativa": {
+    "horas_gpu_treino": 18.4,
+    "horas_eval": 0.13,
+    "pico_gpu_reservado_gb": 7.0,
+    "fonte_pico": "medido em CPU (smoke RS): 3,6 GB L1 .. 4,35 GB L4 com contexto CUDA e x1,3; outubro na Jaci ~7 GB/braco; usa-se 7 GB. Mesma forma em todas as bases (L4 1280, 200x200, batch 32)"
+   },
+   "gate_memoria_livre_gb": 11.0,
+   "concluido_quando": "3 linhas em /dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed44.jsonl",
+   "saidas": {
+    "treino": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/coconut_trees_split1_pct100/",
+    "ckpt_L4": "/dados/home/moliveira/exps/oct_hybrid/runs/seed44/coconut_trees_split1_pct100/L4/checkpoints/best_kappa.ckpt",
+    "resultado": "/dados/home/moliveira/exps/oct_hybrid/results/coconut_trees_seed44.jsonl",
+    "logs": "/dados/home/moliveira/exps/oct_hybrid/logs/oct_hybrid_coconut_trees_seed44.{train,eval}.log"
+   },
+   "depende_de": []
+  }
+ ],
+ "smoke_cpu": {
+  "status": "ok nas 5 bases (1 epoca, 2 batches, grow L1-L4 + AE 4 estagios); eval SVM C=100 3 leituras ok no RS (60 imagens)",
+  "filtros_por_camada_seed42": {
+   "flowers": "30/45/60/1280 (250 SPiFiL+1030 aleat.)",
+   "remote_sensing": "28/42/56/1280 (700+580)",
+   "ham10000": "28/42/63/1280 (350+930)",
+   "aid": "30/30/60/1280 (1260+20)",
+   "coconut_trees": "32/48/64/1280 (100+1180)"
+  },
+  "logs": "/dados/home/moliveira/exps/oct_hybrid/smoke/"
+ }
+}

@@ -1,0 +1,2494 @@
+{
+ "chains": {
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00029": [
+   {
+    "fid": 5.0,
+    "wandb": "55jwrxz6",
+    "kappa": 0.7747652530670166,
+    "erank": 3.3718665238440124,
+    "rankme": 36.2690741719983,
+    "ssl_final": 2.9179996808369952
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00004": [
+   {
+    "fid": 5.0,
+    "wandb": "myursd8o",
+    "kappa": 0.7292376160621643,
+    "erank": 13.616933229744932,
+    "rankme": 232.24741602169888,
+    "ssl_final": 0.5986825227737427
+   },
+   {
+    "fid": 15.0,
+    "wandb": "76adfjh0",
+    "kappa": 0.7417137622833252,
+    "erank": 17.200955832469997,
+    "rankme": 217.94477926233068,
+    "ssl_final": 0.3889889697233836
+   },
+   {
+    "fid": 45.0,
+    "wandb": "er4z0djx",
+    "kappa": 0.735304594039917,
+    "erank": 16.39328818041465,
+    "rankme": 197.97606006046638,
+    "ssl_final": 0.27268744707107545
+   },
+   {
+    "fid": 100.0,
+    "wandb": "lexandhw",
+    "kappa": 0.750413715839386,
+    "erank": 21.861144825866532,
+    "rankme": 215.8393392909979,
+    "ssl_final": 0.2227824906508128
+   },
+   {
+    "fid": 200.0,
+    "wandb": "psy9wxhx",
+    "kappa": 0.7715544700622559,
+    "erank": 23.070901666810478,
+    "rankme": 201.63280242691488,
+    "ssl_final": 0.1949615215261777
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00020": [
+   {
+    "fid": 5.0,
+    "wandb": "51zkogxx",
+    "kappa": 0.7628216743469238,
+    "erank": 2.857709402426193,
+    "rankme": 84.2409025658075,
+    "ssl_final": 0.3280189643303553
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/flowers/state/seed42/candidates/c00003": [
+   {
+    "fid": 5.0,
+    "wandb": "kcddpmb9",
+    "kappa": 0.7502162456512451,
+    "erank": 1.2225123137651452,
+    "rankme": 97.76722593411101,
+    "ssl_final": 1.1549691756566365
+   },
+   {
+    "fid": 15.0,
+    "wandb": "31p43l6f",
+    "kappa": 0.7568478584289551,
+    "erank": 1.293483877748564,
+    "rankme": 47.85075338218781,
+    "ssl_final": 0.8931889990965526
+   },
+   {
+    "fid": 45.0,
+    "wandb": "sr53wpvm",
+    "kappa": 0.7535102367401123,
+    "erank": 5.318748261111771,
+    "rankme": 84.08189989942832,
+    "ssl_final": 0.6567515333493551
+   },
+   {
+    "fid": 100.0,
+    "wandb": "3848at56",
+    "kappa": 0.7568227648735046,
+    "erank": 5.454739576192221,
+    "rankme": 66.82289028424762,
+    "ssl_final": 0.5364850362141927
+   },
+   {
+    "fid": 200.0,
+    "wandb": "21jnkfct",
+    "kappa": 0.7443941831588745,
+    "erank": 8.403672447788484,
+    "rankme": 266.09419447792726,
+    "ssl_final": 0.44635583062966666
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00003": [
+   {
+    "fid": 5.0,
+    "wandb": "3vnkpht8",
+    "kappa": 0.7384320497512817,
+    "erank": 3.2247824931007565,
+    "rankme": 16.36908764835298,
+    "ssl_final": 0.5093775749206543
+   },
+   {
+    "fid": 15.0,
+    "wandb": "sudmdnmt",
+    "kappa": 0.7446205615997314,
+    "erank": 3.412261499142103,
+    "rankme": 16.397696909991367,
+    "ssl_final": 0.4609055817127228
+   },
+   {
+    "fid": 45.0,
+    "wandb": "ji3ymh4r",
+    "kappa": 0.7565227746963501,
+    "erank": 3.777247956229737,
+    "rankme": 12.797237721564796,
+    "ssl_final": 0.42637270092964175
+   },
+   {
+    "fid": 100.0,
+    "wandb": "hcc0tbkr",
+    "kappa": 0.7503970861434937,
+    "erank": 3.760753778558116,
+    "rankme": 12.541436504183562,
+    "ssl_final": 0.41234117448329927
+   },
+   {
+    "fid": 200.0,
+    "wandb": "z6ez0c3k",
+    "kappa": 0.7413780689239502,
+    "erank": 4.087902501100843,
+    "rankme": 14.189842115227348,
+    "ssl_final": 0.396938951810201
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00002": [
+   {
+    "fid": 5.0,
+    "wandb": "9yeotjba",
+    "kappa": 0.7351559400558472,
+    "erank": 4.1575649221107644,
+    "rankme": 78.50035402284762,
+    "ssl_final": 0.34062311152617136
+   },
+   {
+    "fid": 15.0,
+    "wandb": "8o9x3zv2",
+    "kappa": 0.7348581552505493,
+    "erank": 4.415694421274871,
+    "rankme": 93.74406805417453,
+    "ssl_final": 0.23678873827060062
+   },
+   {
+    "fid": 45.0,
+    "wandb": "ltgstoe9",
+    "kappa": 0.7443866729736328,
+    "erank": 4.244799932214328,
+    "rankme": 74.66211127051011,
+    "ssl_final": 0.19465110798676807
+   },
+   {
+    "fid": 100.0,
+    "wandb": "o1ycsvw5",
+    "kappa": 0.7353787422180176,
+    "erank": 5.320372514476872,
+    "rankme": 118.40066380282721,
+    "ssl_final": 0.1619741385181745
+   },
+   {
+    "fid": 200.0,
+    "wandb": "wmqautdn",
+    "kappa": 0.747552752494812,
+    "erank": 5.441699555349802,
+    "rankme": 125.19632745809226,
+    "ssl_final": 0.14262952556212743
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00028": [
+   {
+    "fid": 5.0,
+    "wandb": "iobtwxm8",
+    "kappa": 0.7383895516395569,
+    "erank": 1.0582395985580608,
+    "rankme": 1.774266992348058,
+    "ssl_final": 4.52039213180542
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/flowers/state/seed42/candidates/c00004": [
+   {
+    "fid": 5.0,
+    "wandb": "y08sjhvr",
+    "kappa": 0.7171729803085327,
+    "erank": 6.260295720412824,
+    "rankme": 261.08362854072226,
+    "ssl_final": 1.2723530888557435
+   },
+   {
+    "fid": 15.0,
+    "wandb": "ot6zb30g",
+    "kappa": 0.7261366844177246,
+    "erank": 4.55827900116187,
+    "rankme": 233.08014448713203,
+    "ssl_final": 0.7985054155190786
+   },
+   {
+    "fid": 45.0,
+    "wandb": "g1ing7ds",
+    "kappa": 0.7231326103210449,
+    "erank": 2.9776211322022736,
+    "rankme": 83.43038929043227,
+    "ssl_final": 0.6451956550280253
+   },
+   {
+    "fid": 100.0,
+    "wandb": "t97msfm3",
+    "kappa": 0.7172480821609497,
+    "erank": 5.119188922635263,
+    "rankme": 48.71507826206532,
+    "ssl_final": 0.5343519906202953
+   },
+   {
+    "fid": 200.0,
+    "wandb": "yp92dd79",
+    "kappa": 0.7230671644210815,
+    "erank": 8.368979624156305,
+    "rankme": 61.15436803953026,
+    "ssl_final": 0.4591496487458547
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/flowers/state/seed42/candidates/c00013": [
+   {
+    "fid": 5.0,
+    "wandb": "bj1dcqqb",
+    "kappa": 0.7050561904907227,
+    "erank": 2.422510053963542,
+    "rankme": 42.13102120921594,
+    "ssl_final": 0.3062996049722036
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/flowers/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "felksckf",
+    "kappa": 0.693063497543335,
+    "erank": 3.112193753912647,
+    "rankme": 14.612471495139976,
+    "ssl_final": 0.9607788920402527
+   },
+   {
+    "fid": 15.0,
+    "wandb": "ueec2po9",
+    "kappa": 0.6897109746932983,
+    "erank": 3.1771254957733355,
+    "rankme": 17.317491567218628,
+    "ssl_final": 0.6024826149145762
+   },
+   {
+    "fid": 45.0,
+    "wandb": "3gf13prg",
+    "kappa": 0.7018725275993347,
+    "erank": 3.5735324207503885,
+    "rankme": 16.25048722558516,
+    "ssl_final": 0.5432987292607625
+   },
+   {
+    "fid": 100.0,
+    "wandb": "2b08tjhq",
+    "kappa": 0.6865068674087524,
+    "erank": 3.9506644010269025,
+    "rankme": 14.545054285673462,
+    "ssl_final": 0.47737548450628914
+   },
+   {
+    "fid": 200.0,
+    "wandb": "ckfgl5p0",
+    "kappa": 0.6988415718078613,
+    "erank": 3.619599300568864,
+    "rankme": 12.50117171268334,
+    "ssl_final": 0.4337851206461589
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/flowers/state/seed42/candidates/c00003": [
+   {
+    "fid": 5.0,
+    "wandb": "xjv3b807",
+    "kappa": 0.6414538025856018,
+    "erank": 1.3680873503962103,
+    "rankme": 8.356839894593513,
+    "ssl_final": 0.5382574359575908
+   },
+   {
+    "fid": 15.0,
+    "wandb": "7txwxg3i",
+    "kappa": 0.6746808290481567,
+    "erank": 2.452263777548317,
+    "rankme": 8.923859899903809,
+    "ssl_final": 0.4031395693620046
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/flowers/state/seed42/candidates/c00046": [
+   {
+    "fid": 5.0,
+    "wandb": "225wgng8",
+    "kappa": 0.6472082138061523,
+    "erank": 9.504305278315659,
+    "rankme": 94.43245893757867,
+    "ssl_final": 0.3724343528350194
+   },
+   {
+    "fid": 15.0,
+    "wandb": "s5ugxpd1",
+    "kappa": 0.6107555627822876,
+    "erank": 13.10015612677724,
+    "rankme": 108.71107269816018,
+    "ssl_final": 0.36237689753373464
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/flowers/state/seed42/candidates/c00006": [
+   {
+    "fid": 5.0,
+    "wandb": "3zrvchle",
+    "kappa": 0.6205366849899292,
+    "erank": 1.2245786361994426,
+    "rankme": 21.794898353300624,
+    "ssl_final": 1.0664041697978974
+   },
+   {
+    "fid": 15.0,
+    "wandb": "82hdi466",
+    "kappa": 0.5006541013717651,
+    "erank": 1.3250070704435748,
+    "rankme": 11.000491097253025,
+    "ssl_final": 0.7688584784666698
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/flowers/state/seed42/candidates/c00042": [
+   {
+    "fid": 5.0,
+    "wandb": "hatvbm9d",
+    "kappa": 0.47033530473709106,
+    "erank": 2.509811522980988,
+    "rankme": 102.88281726144702,
+    "ssl_final": 0.3922037919362386
+   },
+   {
+    "fid": 15.0,
+    "wandb": "tj6j262z",
+    "kappa": 0.46155327558517456,
+    "erank": 7.355511944009279,
+    "rankme": 120.92233421364354,
+    "ssl_final": 0.3852550059556961
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00028": [
+   {
+    "fid": 5.0,
+    "wandb": "p1o2njed",
+    "kappa": 0.6109581589698792,
+    "erank": 3.9154194062195327,
+    "rankme": 31.550392076453367,
+    "ssl_final": 0.3484843820333481
+   },
+   {
+    "fid": 15.0,
+    "wandb": "babocs8v",
+    "kappa": 0.6037513017654419,
+    "erank": 4.20291366419122,
+    "rankme": 34.21149407049146,
+    "ssl_final": 0.23540267795324327
+   },
+   {
+    "fid": 45.0,
+    "wandb": "ph476jaz",
+    "kappa": 0.6037513017654419,
+    "erank": 4.20291366419122,
+    "rankme": 34.21149407049146,
+    "ssl_final": 0.19326525330543518
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00020": [
+   {
+    "fid": 5.0,
+    "wandb": "nefvixve",
+    "kappa": 0.6048569679260254,
+    "erank": 3.359745306157393,
+    "rankme": 48.505112381965404,
+    "ssl_final": 0.34009930193424226
+   },
+   {
+    "fid": 15.0,
+    "wandb": "mziswykg",
+    "kappa": 0.5981699228286743,
+    "erank": 4.885173323051391,
+    "rankme": 57.07345883070749,
+    "ssl_final": 0.14463638067245482
+   },
+   {
+    "fid": 45.0,
+    "wandb": "2g93ehjg",
+    "kappa": 0.6051496267318726,
+    "erank": 6.541143798182012,
+    "rankme": 70.71842915225353,
+    "ssl_final": 0.09086196348071099
+   },
+   {
+    "fid": 5.0,
+    "wandb": "nefvixve",
+    "kappa": 0.6048569679260254,
+    "erank": 3.359745306157393,
+    "rankme": 48.505112381965404,
+    "ssl_final": 0.34009930193424226
+   },
+   {
+    "fid": 15.0,
+    "wandb": "mziswykg",
+    "kappa": 0.5981699228286743,
+    "erank": 4.885173323051391,
+    "rankme": 57.07345883070749,
+    "ssl_final": 0.14463638067245482
+   },
+   {
+    "fid": 45.0,
+    "wandb": "2g93ehjg",
+    "kappa": 0.6051496267318726,
+    "erank": 6.541143798182012,
+    "rankme": 70.71842915225353,
+    "ssl_final": 0.09086196348071099
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00020": [
+   {
+    "fid": 5.0,
+    "wandb": "c5ig8hd6",
+    "kappa": 0.5990958213806152,
+    "erank": 5.001135136788015,
+    "rankme": 75.13571191098923,
+    "ssl_final": 0.1800108090043068
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00039": [
+   {
+    "fid": 5.0,
+    "wandb": "sa6a2ldu",
+    "kappa": 0.5964996814727783,
+    "erank": 2.1486087743640456,
+    "rankme": 14.410107729983665,
+    "ssl_final": 0.42485580742359164
+   },
+   {
+    "fid": 15.0,
+    "wandb": "8g6my61e",
+    "kappa": 0.5619643926620483,
+    "erank": 1.9468028036894747,
+    "rankme": 9.549814843064809,
+    "ssl_final": 0.3979525983333588
+   },
+   {
+    "fid": 45.0,
+    "wandb": "m2rmua1s",
+    "kappa": 0.5765368938446045,
+    "erank": 4.658578379172094,
+    "rankme": 17.721222810855288,
+    "ssl_final": 0.391965439915657
+   },
+   {
+    "fid": 100.0,
+    "wandb": "pzevhrzt",
+    "kappa": 0.5680104494094849,
+    "erank": 5.5838403323110635,
+    "rankme": 17.32211540841943,
+    "ssl_final": 0.38903201520442965
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00107": [
+   {
+    "fid": 15.0,
+    "wandb": "xaq4vt6r",
+    "kappa": 0.5960755348205566,
+    "erank": 3.926271499859647,
+    "rankme": 26.91687848237634,
+    "ssl_final": 0.3560430407524109
+   },
+   {
+    "fid": 45.0,
+    "wandb": "q0gsyzod",
+    "kappa": 0.5692751407623291,
+    "erank": 4.512612920030569,
+    "rankme": 24.219433626335704,
+    "ssl_final": 0.2764290124177933
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00009": [
+   {
+    "fid": 5.0,
+    "wandb": "m9vttfop",
+    "kappa": 0.5913842916488647,
+    "erank": 2.8301138352226234,
+    "rankme": 56.15086724887245,
+    "ssl_final": 1.625083601474762
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade_C01_final/remote_sensing/state/seed42/candidates/c00081": [
+   {
+    "fid": 15.0,
+    "wandb": "ty8sil36",
+    "kappa": 0.5906354188919067,
+    "erank": 3.219567504721067,
+    "rankme": 15.630460899689647,
+    "ssl_final": 0.3333875685930252
+   },
+   {
+    "fid": 45.0,
+    "wandb": "xece96vb",
+    "kappa": 0.5613505244255066,
+    "erank": 3.532702587602553,
+    "rankme": 22.689145619585087,
+    "ssl_final": 0.21562426686286926
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade_C01_final/remote_sensing/state/seed42/candidates/c00061": [
+   {
+    "fid": 5.0,
+    "wandb": "dcoh06wm",
+    "kappa": 0.5706071853637695,
+    "erank": 2.2355960005952564,
+    "rankme": 44.68503106933839,
+    "ssl_final": 3.823149085044861
+   },
+   {
+    "fid": 15.0,
+    "wandb": "f4dg5lgx",
+    "kappa": 0.5848021507263184,
+    "erank": 2.7952169027355063,
+    "rankme": 48.0320410517897,
+    "ssl_final": 2.4550697088241575
+   },
+   {
+    "fid": 45.0,
+    "wandb": "gjkrm1mf",
+    "kappa": 0.556755781173706,
+    "erank": 3.5470414295218187,
+    "rankme": 55.86331832077252,
+    "ssl_final": 1.8311782836914063
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade_C01_final/remote_sensing/state/seed42/candidates/c00014": [
+   {
+    "fid": 5.0,
+    "wandb": "qf7pkbva",
+    "kappa": 0.5836424827575684,
+    "erank": 2.252750710077577,
+    "rankme": 35.55959611497323,
+    "ssl_final": 2.0102070450782774
+   },
+   {
+    "fid": 15.0,
+    "wandb": "655zxwkp",
+    "kappa": 0.5828961133956909,
+    "erank": 2.2354093534974013,
+    "rankme": 34.329803606197316,
+    "ssl_final": 1.8823638319969178
+   },
+   {
+    "fid": 45.0,
+    "wandb": "7nluevku",
+    "kappa": 0.5825310945510864,
+    "erank": 1.5916742451270278,
+    "rankme": 22.58567288110202,
+    "ssl_final": 1.7853474736213684
+   },
+   {
+    "fid": 100.0,
+    "wandb": "sj8tif34",
+    "kappa": 0.5825310945510864,
+    "erank": 1.5916742451270278,
+    "rankme": 22.58567288110202,
+    "ssl_final": 1.8536775827407836
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade_C01_final/remote_sensing/state/seed42/candidates/c00105": [
+   {
+    "fid": 45.0,
+    "wandb": "1j2w9wcd",
+    "kappa": 0.5830055475234985,
+    "erank": 1.691139247682748,
+    "rankme": 14.920284465077044,
+    "ssl_final": 0.897735732793808
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00027": [
+   {
+    "fid": 5.0,
+    "wandb": "gf156m1l",
+    "kappa": 0.5789816975593567,
+    "erank": 1.8714375720613816,
+    "rankme": 25.60850913806162,
+    "ssl_final": 4.15430109500885
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00010": [
+   {
+    "fid": 5.0,
+    "wandb": "b84ttpos",
+    "kappa": 0.5637004375457764,
+    "erank": 3.3019485425308766,
+    "rankme": 49.49191128003848,
+    "ssl_final": 0.36532944440841675
+   },
+   {
+    "fid": 15.0,
+    "wandb": "52zpw295",
+    "kappa": 0.5508865118026733,
+    "erank": 2.9438555084022573,
+    "rankme": 50.336716505104555,
+    "ssl_final": 0.21799101531505585
+   },
+   {
+    "fid": 45.0,
+    "wandb": "hofj83wd",
+    "kappa": 0.5709062814712524,
+    "erank": 3.068471675852831,
+    "rankme": 52.31097654253285,
+    "ssl_final": 0.1630246087908745
+   },
+   {
+    "fid": 100.0,
+    "wandb": "al2k06k3",
+    "kappa": 0.5638145208358765,
+    "erank": 3.948839092419115,
+    "rankme": 55.32813456627731,
+    "ssl_final": 0.14019502252340316
+   },
+   {
+    "fid": 200.0,
+    "wandb": "u7v9z53c",
+    "kappa": 0.5774224996566772,
+    "erank": 4.383687640546999,
+    "rankme": 62.58125804636305,
+    "ssl_final": 0.11579921767115593
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/remote_sensing/state/seed42/candidates/c00306": [
+   {
+    "fid": 100.0,
+    "wandb": "o026tyzj",
+    "kappa": 0.5719310641288757,
+    "erank": 13.003065510516025,
+    "rankme": 110.3637401235713,
+    "ssl_final": 0.36778420209884644
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00058": [
+   {
+    "fid": 5.0,
+    "wandb": "5yjff6ab",
+    "kappa": 0.5636435151100159,
+    "erank": 3.877448337551023,
+    "rankme": 70.75979543571634,
+    "ssl_final": 0.260248002409935
+   },
+   {
+    "fid": 15.0,
+    "wandb": "ksz3v04p",
+    "kappa": 0.5636435151100159,
+    "erank": 3.877448337551023,
+    "rankme": 70.75979543571634,
+    "ssl_final": 0.14271553009748458
+   },
+   {
+    "fid": 45.0,
+    "wandb": "lj0lm2uj",
+    "kappa": 0.5703264474868774,
+    "erank": 4.971929012782045,
+    "rankme": 60.75355034109555,
+    "ssl_final": 0.09927494004368782
+   },
+   {
+    "fid": 100.0,
+    "wandb": "w52s0qli",
+    "kappa": 0.5636435151100159,
+    "erank": 3.877448337551023,
+    "rankme": 70.75979543571634,
+    "ssl_final": 0.08683132827281952
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00015": [
+   {
+    "fid": 5.0,
+    "wandb": "952bye7t",
+    "kappa": 0.5697263479232788,
+    "erank": 2.056361160169182,
+    "rankme": 8.065023710263388,
+    "ssl_final": 0.8325366079807281
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00054": [
+   {
+    "fid": 5.0,
+    "wandb": "oh4kkatp",
+    "kappa": 0.5693315267562866,
+    "erank": 11.509690136793086,
+    "rankme": 127.59971903995185,
+    "ssl_final": 0.7469321012496948
+   },
+   {
+    "fid": 15.0,
+    "wandb": "8s1dzanl",
+    "kappa": 0.5693315267562866,
+    "erank": 11.509690136793086,
+    "rankme": 127.59971903995185,
+    "ssl_final": 0.574325168132782
+   },
+   {
+    "fid": 45.0,
+    "wandb": "06jbd34i",
+    "kappa": 0.5693315267562866,
+    "erank": 11.509690136793086,
+    "rankme": 127.59971903995185,
+    "ssl_final": 0.5110590279102325
+   },
+   {
+    "fid": 5.0,
+    "wandb": "oh4kkatp",
+    "kappa": 0.5693315267562866,
+    "erank": 11.509690136793086,
+    "rankme": 127.59971903995185,
+    "ssl_final": 0.7469321012496948
+   },
+   {
+    "fid": 15.0,
+    "wandb": "8s1dzanl",
+    "kappa": 0.5693315267562866,
+    "erank": 11.509690136793086,
+    "rankme": 127.59971903995185,
+    "ssl_final": 0.574325168132782
+   },
+   {
+    "fid": 45.0,
+    "wandb": "06jbd34i",
+    "kappa": 0.5693315267562866,
+    "erank": 11.509690136793086,
+    "rankme": 127.59971903995185,
+    "ssl_final": 0.5110590279102325
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/remote_sensing/state/seed42/candidates/c00301": [
+   {
+    "fid": 100.0,
+    "wandb": "modain1x",
+    "kappa": 0.5571994185447693,
+    "erank": 10.226995688012417,
+    "rankme": 92.00666173583056,
+    "ssl_final": 0.3963366687297821
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00012": [
+   {
+    "fid": 5.0,
+    "wandb": "eom8v0wf",
+    "kappa": 0.5492214560508728,
+    "erank": 1.6140983605069472,
+    "rankme": 36.09077259069524,
+    "ssl_final": 4.064993953704834
+   },
+   {
+    "fid": 15.0,
+    "wandb": "64d7qm9z",
+    "kappa": 0.5370675921440125,
+    "erank": 2.7687455765096356,
+    "rankme": 54.81607658056813,
+    "ssl_final": 1.9145328998565674
+   },
+   {
+    "fid": 45.0,
+    "wandb": "weake1zs",
+    "kappa": 0.5562919974327087,
+    "erank": 1.8606241180069898,
+    "rankme": 43.266690301937956,
+    "ssl_final": 0.8593752682209015
+   },
+   {
+    "fid": 100.0,
+    "wandb": "rgespefq",
+    "kappa": 0.5562726259231567,
+    "erank": 1.8842781541646692,
+    "rankme": 43.68998060899483,
+    "ssl_final": 0.7510850429534912
+   },
+   {
+    "fid": 200.0,
+    "wandb": "0kmm2pog",
+    "kappa": 0.5368865132331848,
+    "erank": 1.9197461719249433,
+    "rankme": 44.429721909985574,
+    "ssl_final": 0.6716899275779724
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00026": [
+   {
+    "fid": 5.0,
+    "wandb": "bhmvg5d4",
+    "kappa": 0.5421066880226135,
+    "erank": 3.4404185734968618,
+    "rankme": 97.71838969458086,
+    "ssl_final": 0.0022199109196662905
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/remote_sensing/state/seed42/candidates/c00004": [
+   {
+    "fid": 5.0,
+    "wandb": "vxl3ipqt",
+    "kappa": 0.5348238945007324,
+    "erank": 2.1125982972249044,
+    "rankme": 80.3537181551423,
+    "ssl_final": 1.0622506856918335
+   },
+   {
+    "fid": 15.0,
+    "wandb": "327zsbvu",
+    "kappa": 0.5066428184509277,
+    "erank": 3.1691370656921234,
+    "rankme": 78.09338633515026,
+    "ssl_final": 0.5416621565818787
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00006": [
+   {
+    "fid": 5.0,
+    "wandb": "ngxqkwis",
+    "kappa": 0.5279426574707031,
+    "erank": 2.428122188536041,
+    "rankme": 11.587694247574042,
+    "ssl_final": 0.5144567102193832
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/candidates/c00003": [
+   {
+    "fid": 5.0,
+    "wandb": "wrxp2q4i",
+    "kappa": 0.4407486319541931,
+    "erank": 2.711230863548487,
+    "rankme": 17.56514715362766,
+    "ssl_final": 0.7284069120883941
+   },
+   {
+    "fid": 15.0,
+    "wandb": "jn6eyqel",
+    "kappa": 0.49216628074645996,
+    "erank": 3.5260581185732964,
+    "rankme": 17.363611518830176,
+    "ssl_final": 0.39638716280460357
+   },
+   {
+    "fid": 45.0,
+    "wandb": "dl69jj62",
+    "kappa": 0.5039646625518799,
+    "erank": 4.559991993154236,
+    "rankme": 18.02085111754076,
+    "ssl_final": 0.3327077716588974
+   },
+   {
+    "fid": 100.0,
+    "wandb": "1urrsuvd",
+    "kappa": 0.5166333913803101,
+    "erank": 4.308023870762903,
+    "rankme": 18.416585930191772,
+    "ssl_final": 0.2812292605638504
+   },
+   {
+    "fid": 200.0,
+    "wandb": "3z05xhmb",
+    "kappa": 0.4949086308479309,
+    "erank": 4.997672394787428,
+    "rankme": 18.15154165984894,
+    "ssl_final": 0.2441878706216812
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00008": [
+   {
+    "fid": 5.0,
+    "wandb": "1c27s5po",
+    "kappa": 0.5141010284423828,
+    "erank": 1.4180714488564217,
+    "rankme": 8.305068372104037,
+    "ssl_final": 0.6553011298179626
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/candidates/c00016": [
+   {
+    "fid": 5.0,
+    "wandb": "3rjhpgk6",
+    "kappa": 0.5073317289352417,
+    "erank": 4.226998413139206,
+    "rankme": 24.463724595420548,
+    "ssl_final": 0.38667491376399993
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/candidates/c00009": [
+   {
+    "fid": 5.0,
+    "wandb": "729c78uf",
+    "kappa": 0.5005889534950256,
+    "erank": 1.8952603983353908,
+    "rankme": 64.52930870852079,
+    "ssl_final": 1.2178753674030305
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/remote_sensing/state/seed42/candidates/c00099": [
+   {
+    "fid": 15.0,
+    "wandb": "o1hfl31d",
+    "kappa": 0.49347585439682007,
+    "erank": 4.627477263303979,
+    "rankme": 55.455177300156514,
+    "ssl_final": 0.0022451337659731506
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00006": [
+   {
+    "fid": 5.0,
+    "wandb": "9q9zv1bn",
+    "kappa": 0.48743194341659546,
+    "erank": 1.8775277177178018,
+    "rankme": 10.491824315961768,
+    "ssl_final": 0.7188010334968566
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_preHybrid_2325/remote_sensing/state/seed42/candidates/c00002": [
+   {
+    "fid": 5.0,
+    "wandb": "jbjwt26y",
+    "kappa": 0.4870743751525879,
+    "erank": 5.566115193782252,
+    "rankme": 105.90699828636474,
+    "ssl_final": 0.7041610658168793
+   },
+   {
+    "fid": 15.0,
+    "wandb": "zcnrkdog",
+    "kappa": 0.41449302434921265,
+    "erank": 7.306962916459167,
+    "rankme": 105.36878165347898,
+    "ssl_final": 0.5805040299892426
+   },
+   {
+    "fid": 45.0,
+    "wandb": "kr98xckv",
+    "kappa": 0.4588060975074768,
+    "erank": 8.661684809751028,
+    "rankme": 96.66275147393021,
+    "ssl_final": 0.46216909885406493
+   },
+   {
+    "fid": 100.0,
+    "wandb": "stlo5xcb",
+    "kappa": 0.4265415668487549,
+    "erank": 11.086181930348673,
+    "rankme": 92.19019130239165,
+    "ssl_final": 0.37662388384342194
+   },
+   {
+    "fid": 200.0,
+    "wandb": "jzg51jgr",
+    "kappa": 0.4474850296974182,
+    "erank": 11.815406625336195,
+    "rankme": 88.2534019892314,
+    "ssl_final": 0.3167175352573395
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00008": [
+   {
+    "fid": 5.0,
+    "wandb": "38s3gb8w",
+    "kappa": 0.48664921522140503,
+    "erank": 1.7142652817093633,
+    "rankme": 10.869297195785965,
+    "ssl_final": 0.7349308848381042
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_spifil/remote_sensing/state/seed42/candidates/c00021": [
+   {
+    "fid": 5.0,
+    "wandb": "ixer5o60",
+    "kappa": 0.4108543395996094,
+    "erank": 10.113002634894935,
+    "rankme": 103.84424522614222,
+    "ssl_final": 3.472193479537964
+   },
+   {
+    "fid": 15.0,
+    "wandb": "93xx3uz5",
+    "kappa": 0.48599886894226074,
+    "erank": 16.180503346212994,
+    "rankme": 116.13978069058889,
+    "ssl_final": 2.5126429319381716
+   },
+   {
+    "fid": 45.0,
+    "wandb": "65uf8ghv",
+    "kappa": 0.43887245655059814,
+    "erank": 21.408357499479333,
+    "rankme": 120.80773167265073,
+    "ssl_final": 1.9116134524345398
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_prefix_2130/remote_sensing/state/seed42/candidates/c00038": [
+   {
+    "fid": 5.0,
+    "wandb": "brzx79pj",
+    "kappa": 0.48269134759902954,
+    "erank": 2.940313482728825,
+    "rankme": 37.79987416924621,
+    "ssl_final": 4.0691200494766235
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade_seeded/remote_sensing/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "rphso3p6",
+    "kappa": 0.46604734659194946,
+    "erank": 3.0896354727563993,
+    "rankme": 10.60868404407312,
+    "ssl_final": 6.829661226272583
+   },
+   {
+    "fid": 15.0,
+    "wandb": "i929w3ax",
+    "kappa": 0.4667915105819702,
+    "erank": 3.2182905595403275,
+    "rankme": 14.017716705527356,
+    "ssl_final": 0.951865267753601
+   },
+   {
+    "fid": 45.0,
+    "wandb": "hiwa2w0h",
+    "kappa": 0.46572113037109375,
+    "erank": 3.2859855446970516,
+    "rankme": 14.601726793919036,
+    "ssl_final": 0.8180564343929291
+   },
+   {
+    "fid": 100.0,
+    "wandb": "r7x4at9x",
+    "kappa": 0.48025625944137573,
+    "erank": 2.6158688270936814,
+    "rankme": 11.260386068209844,
+    "ssl_final": 0.7241342902183533
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00004": [
+   {
+    "fid": 5.0,
+    "wandb": "m7r1i42p",
+    "kappa": 0.47823232412338257,
+    "erank": 1.6422510629506597,
+    "rankme": 8.04657107247295,
+    "ssl_final": 0.9615009248256683
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_fid120_1415/remote_sensing/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "fktezssr",
+    "kappa": 0.4754753112792969,
+    "erank": 2.0444327985338098,
+    "rankme": 18.826080251973245,
+    "ssl_final": 2.3270646572113036
+   },
+   {
+    "fid": 20.0,
+    "wandb": "jzcg6dye",
+    "kappa": 0.3992704749107361,
+    "erank": 1.636534406382252,
+    "rankme": 16.80128766107195,
+    "ssl_final": 1.3339221000671386
+   },
+   {
+    "fid": 60.0,
+    "wandb": "s6gyv3j1",
+    "kappa": 0.3885951638221741,
+    "erank": 1.3654694639153593,
+    "rankme": 8.743388960904843,
+    "ssl_final": 1.0701300263404847
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00015": [
+   {
+    "fid": 5.0,
+    "wandb": "h8kjrg0a",
+    "kappa": 0.4657678008079529,
+    "erank": 1.9025493834091631,
+    "rankme": 5.691820272947297,
+    "ssl_final": 0.7665240049362183
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00042": [
+   {
+    "fid": 5.0,
+    "wandb": "sc2ctvdk",
+    "kappa": 0.45904213190078735,
+    "erank": 1.280934528248105,
+    "rankme": 5.578497368137895,
+    "ssl_final": 0.8441540181636811
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_strat_preHybrid_2325/remote_sensing/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "2vwvkqab",
+    "kappa": 0.43933653831481934,
+    "erank": 2.1433211739688276,
+    "rankme": 19.284102926362483,
+    "ssl_final": 2.417815899848938
+   },
+   {
+    "fid": 15.0,
+    "wandb": "4ok5oawy",
+    "kappa": 0.38990145921707153,
+    "erank": 1.8025606344904304,
+    "rankme": 17.393487704438083,
+    "ssl_final": 1.4849507570266725
+   },
+   {
+    "fid": 45.0,
+    "wandb": "0ceu461u",
+    "kappa": 0.4093611240386963,
+    "erank": 1.442636401658731,
+    "rankme": 10.45889902487698,
+    "ssl_final": 1.1043325781822204
+   },
+   {
+    "fid": 100.0,
+    "wandb": "jdysprpc",
+    "kappa": 0.40671640634536743,
+    "erank": 1.416038864781008,
+    "rankme": 7.794106426402369,
+    "ssl_final": 0.9613362550735474
+   },
+   {
+    "fid": 200.0,
+    "wandb": "52qobbro",
+    "kappa": 0.40775632858276367,
+    "erank": 1.3920036089712113,
+    "rankme": 7.651821256520177,
+    "ssl_final": 0.8780655026435852
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00018": [
+   {
+    "fid": 5.0,
+    "wandb": "stzow34e",
+    "kappa": 0.4390679597854614,
+    "erank": 1.447388763540724,
+    "rankme": 7.4716538362583,
+    "ssl_final": 0.937252527475357
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00046": [
+   {
+    "fid": 5.0,
+    "wandb": "stkuvzs8",
+    "kappa": 0.4360221028327942,
+    "erank": 1.7000707169532283,
+    "rankme": 5.426320014848103,
+    "ssl_final": 0.7401796758174897
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00018": [
+   {
+    "fid": 5.0,
+    "wandb": "zwdcwkbw",
+    "kappa": 0.3978846073150635,
+    "erank": 1.4949763806536103,
+    "rankme": 7.6216945658496975,
+    "ssl_final": 0.9335815370082855
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/ham10000/state/seed42/candidates/c00034": [
+   {
+    "fid": 5.0,
+    "wandb": "9d2nwg33",
+    "kappa": 0.6008814573287964,
+    "erank": 1.578288368371068,
+    "rankme": 5.870687386479391,
+    "ssl_final": 5.007585167884827
+   },
+   {
+    "fid": 15.0,
+    "wandb": "zms18ne1",
+    "kappa": 0.6008814573287964,
+    "erank": 1.578288368371068,
+    "rankme": 5.870687386479391,
+    "ssl_final": 4.735611587762833
+   },
+   {
+    "fid": 45.0,
+    "wandb": "ibcs1vkn",
+    "kappa": 0.6008814573287964,
+    "erank": 1.578288368371068,
+    "rankme": 5.870687386479391,
+    "ssl_final": 4.497066095471382
+   },
+   {
+    "fid": 100.0,
+    "wandb": "08ctnkea",
+    "kappa": 0.6212067008018494,
+    "erank": 1.6740567123670538,
+    "rankme": 6.863886798235572,
+    "ssl_final": 4.41101960837841
+   },
+   {
+    "fid": 5.0,
+    "wandb": "9d2nwg33",
+    "kappa": 0.6008814573287964,
+    "erank": 1.578288368371068,
+    "rankme": 5.870687386479391,
+    "ssl_final": 5.007585167884827
+   },
+   {
+    "fid": 15.0,
+    "wandb": "zms18ne1",
+    "kappa": 0.6008814573287964,
+    "erank": 1.578288368371068,
+    "rankme": 5.870687386479391,
+    "ssl_final": 4.735611587762833
+   },
+   {
+    "fid": 45.0,
+    "wandb": "ibcs1vkn",
+    "kappa": 0.6008814573287964,
+    "erank": 1.578288368371068,
+    "rankme": 5.870687386479391,
+    "ssl_final": 4.497066095471382
+   },
+   {
+    "fid": 100.0,
+    "wandb": "08ctnkea",
+    "kappa": 0.6212067008018494,
+    "erank": 1.6740567123670538,
+    "rankme": 6.863886798235572,
+    "ssl_final": 4.41101960837841
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/ham10000/state/seed42/candidates/c00061": [
+   {
+    "fid": 5.0,
+    "wandb": "yk0blp0h",
+    "kappa": 0.6144594550132751,
+    "erank": 5.0041231698438144,
+    "rankme": 189.42684003467835,
+    "ssl_final": 0.0015952045596350217
+   },
+   {
+    "fid": 15.0,
+    "wandb": "a834i5q2",
+    "kappa": 0.6048035025596619,
+    "erank": 5.039370678161067,
+    "rankme": 189.54565077229643,
+    "ssl_final": 0.0012723375066343579
+   },
+   {
+    "fid": 45.0,
+    "wandb": "e64ue3ad",
+    "kappa": 0.600785493850708,
+    "erank": 5.056692420564079,
+    "rankme": 185.5567133652135,
+    "ssl_final": 0.0009829694799918798
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/ham10000/state/seed42/candidates/c00043": [
+   {
+    "fid": 5.0,
+    "wandb": "fdr19031",
+    "kappa": 0.6119623184204102,
+    "erank": 1.7244297790869831,
+    "rankme": 3.052344630226562,
+    "ssl_final": 0.36774654034525156
+   },
+   {
+    "fid": 15.0,
+    "wandb": "tld6ee9j",
+    "kappa": 0.6119623184204102,
+    "erank": 1.7244297790869831,
+    "rankme": 3.052344630226562,
+    "ssl_final": 0.17894510366022587
+   },
+   {
+    "fid": 45.0,
+    "wandb": "p3p5sz2w",
+    "kappa": 0.6119623184204102,
+    "erank": 1.7244297790869831,
+    "rankme": 3.052344630226562,
+    "ssl_final": 0.14863964403048158
+   },
+   {
+    "fid": 5.0,
+    "wandb": "fdr19031",
+    "kappa": 0.6119623184204102,
+    "erank": 1.7244297790869831,
+    "rankme": 3.052344630226562,
+    "ssl_final": 0.36774654034525156
+   },
+   {
+    "fid": 15.0,
+    "wandb": "tld6ee9j",
+    "kappa": 0.6119623184204102,
+    "erank": 1.7244297790869831,
+    "rankme": 3.052344630226562,
+    "ssl_final": 0.17894510366022587
+   },
+   {
+    "fid": 45.0,
+    "wandb": "p3p5sz2w",
+    "kappa": 0.6119623184204102,
+    "erank": 1.7244297790869831,
+    "rankme": 3.052344630226562,
+    "ssl_final": 0.14863964403048158
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/ham10000/state/seed42/candidates/c00048": [
+   {
+    "fid": 5.0,
+    "wandb": "7l5llem4",
+    "kappa": 0.5771065950393677,
+    "erank": 2.6832158307643588,
+    "rankme": 12.545698163053531,
+    "ssl_final": 0.4844572301954031
+   },
+   {
+    "fid": 15.0,
+    "wandb": "yhshvffz",
+    "kappa": 0.5982507467269897,
+    "erank": 2.8364056641162994,
+    "rankme": 18.0444201004137,
+    "ssl_final": 0.3247355157509446
+   },
+   {
+    "fid": 45.0,
+    "wandb": "rm6gy3ks",
+    "kappa": 0.5861268043518066,
+    "erank": 3.672084365335353,
+    "rankme": 41.9003331882536,
+    "ssl_final": 0.27227626368403435
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/ham10000/state/seed42/candidates/c00020": [
+   {
+    "fid": 5.0,
+    "wandb": "61d70j2a",
+    "kappa": 0.5857022404670715,
+    "erank": 5.190281674364651,
+    "rankme": 101.34250155217217,
+    "ssl_final": 0.2621544562280178
+   },
+   {
+    "fid": 15.0,
+    "wandb": "fh9ociv3",
+    "kappa": 0.5844852924346924,
+    "erank": 8.148724295704888,
+    "rankme": 110.62238036520759,
+    "ssl_final": 0.12650816095992923
+   },
+   {
+    "fid": 45.0,
+    "wandb": "v20301sb",
+    "kappa": 0.5831985473632812,
+    "erank": 3.1992357929171624,
+    "rankme": 92.06157210182383,
+    "ssl_final": 0.07761406060308218
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/ham10000/state/seed42/candidates/c00025": [
+   {
+    "fid": 5.0,
+    "wandb": "0nqeq7m8",
+    "kappa": 0.5856157541275024,
+    "erank": 2.9885779265683627,
+    "rankme": 18.48873799152547,
+    "ssl_final": 3.9798436984419823
+   },
+   {
+    "fid": 15.0,
+    "wandb": "fnakcve7",
+    "kappa": 0.5813461542129517,
+    "erank": 2.754174224770632,
+    "rankme": 18.033145480259556,
+    "ssl_final": 3.5123575776815414
+   },
+   {
+    "fid": 45.0,
+    "wandb": "6fsh5284",
+    "kappa": 0.5817712545394897,
+    "erank": 2.4843910708084405,
+    "rankme": 17.722509395640923,
+    "ssl_final": 2.9434028193354607
+   },
+   {
+    "fid": 100.0,
+    "wandb": "w17mdul2",
+    "kappa": 0.5793841481208801,
+    "erank": 2.274797746678496,
+    "rankme": 17.50218068103348,
+    "ssl_final": 2.6848496943712234
+   },
+   {
+    "fid": 200.0,
+    "wandb": "w17qxgr6",
+    "kappa": 0.571873128414154,
+    "erank": 1.8456859192945139,
+    "rankme": 16.620417914792725,
+    "ssl_final": 2.463927313685417
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/ham10000/state/seed42/candidates/c00070": [
+   {
+    "fid": 5.0,
+    "wandb": "grsztca1",
+    "kappa": 0.5739578604698181,
+    "erank": 1.4376733392711318,
+    "rankme": 12.364685935347197,
+    "ssl_final": 3.021383583545685
+   },
+   {
+    "fid": 15.0,
+    "wandb": "hdxatl97",
+    "kappa": 0.5654792785644531,
+    "erank": 1.3858905720535852,
+    "rankme": 12.01752525583971,
+    "ssl_final": 3.2373878210783005
+   },
+   {
+    "fid": 45.0,
+    "wandb": "95ibtquf",
+    "kappa": 0.583104133605957,
+    "erank": 1.2302213154993913,
+    "rankme": 9.20942332176161,
+    "ssl_final": 2.884715646505356
+   },
+   {
+    "fid": 100.0,
+    "wandb": "ohqshabh",
+    "kappa": 0.5845851302146912,
+    "erank": 1.4065600625882737,
+    "rankme": 14.191931793994913,
+    "ssl_final": 2.2992537915706635
+   },
+   {
+    "fid": 5.0,
+    "wandb": "grsztca1",
+    "kappa": 0.5739578604698181,
+    "erank": 1.4376733392711318,
+    "rankme": 12.364685935347197,
+    "ssl_final": 3.021383583545685
+   },
+   {
+    "fid": 15.0,
+    "wandb": "hdxatl97",
+    "kappa": 0.5654792785644531,
+    "erank": 1.3858905720535852,
+    "rankme": 12.01752525583971,
+    "ssl_final": 3.2373878210783005
+   },
+   {
+    "fid": 45.0,
+    "wandb": "95ibtquf",
+    "kappa": 0.583104133605957,
+    "erank": 1.2302213154993913,
+    "rankme": 9.20942332176161,
+    "ssl_final": 2.884715646505356
+   },
+   {
+    "fid": 100.0,
+    "wandb": "ohqshabh",
+    "kappa": 0.5845851302146912,
+    "erank": 1.4065600625882737,
+    "rankme": 14.191931793994913,
+    "ssl_final": 2.2992537915706635
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/ham10000/state/seed42/candidates/c00044": [
+   {
+    "fid": 5.0,
+    "wandb": "h6jfgln7",
+    "kappa": 0.5843864679336548,
+    "erank": 4.662321528622574,
+    "rankme": 197.37861886414362,
+    "ssl_final": 2.6762966737151146
+   },
+   {
+    "fid": 15.0,
+    "wandb": "1kxwp4l2",
+    "kappa": 0.5803587436676025,
+    "erank": 8.90458104892548,
+    "rankme": 309.604255866427,
+    "ssl_final": 1.7930201515555382
+   },
+   {
+    "fid": 45.0,
+    "wandb": "q57qceff",
+    "kappa": 0.5803587436676025,
+    "erank": 8.90458104892548,
+    "rankme": 309.604255866427,
+    "ssl_final": 1.3662036769092083
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid_C01_2049/ham10000/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "605qswum",
+    "kappa": 0.5181968212127686,
+    "erank": 3.5282130337729893,
+    "rankme": 48.21358756989199,
+    "ssl_final": 0.5340317748486996
+   },
+   {
+    "fid": 15.0,
+    "wandb": "fd3df3l1",
+    "kappa": 0.49783819913864136,
+    "erank": 3.499716088073528,
+    "rankme": 53.98887422455835,
+    "ssl_final": 0.39744145330041647
+   },
+   {
+    "fid": 45.0,
+    "wandb": "c41ygd4z",
+    "kappa": 0.5257353186607361,
+    "erank": 3.2956589652438466,
+    "rankme": 59.83586184401096,
+    "ssl_final": 0.3089344101026654
+   },
+   {
+    "fid": 100.0,
+    "wandb": "6jj5pel1",
+    "kappa": 0.48023051023483276,
+    "erank": 4.190460895334329,
+    "rankme": 75.8368518994855,
+    "ssl_final": 0.2629196410998702
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid_fullepoch_1555/ham10000/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "3hj9qfkk",
+    "kappa": 0.4686394929885864,
+    "erank": 3.168306044316978,
+    "rankme": 69.2136664070295,
+    "ssl_final": 0.30683159455657005
+   },
+   {
+    "fid": 15.0,
+    "wandb": "fvj2pzw7",
+    "kappa": 0.46494561433792114,
+    "erank": 3.029364737890276,
+    "rankme": 67.04872329987559,
+    "ssl_final": 0.2286254931241274
+   },
+   {
+    "fid": 45.0,
+    "wandb": "v470kyv3",
+    "kappa": 0.47806233167648315,
+    "erank": 2.8023418791674044,
+    "rankme": 70.21445500903954,
+    "ssl_final": 0.17903450643643737
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/aid/state/seed42/candidates/c00020": [
+   {
+    "fid": 5.0,
+    "wandb": "jw7tfx0f",
+    "kappa": 0.8448668122291565,
+    "erank": 3.948589290828405,
+    "rankme": 72.53706431805712,
+    "ssl_final": 0.314249275252223
+   },
+   {
+    "fid": 15.0,
+    "wandb": "oj9vhoqu",
+    "kappa": 0.8400430679321289,
+    "erank": 4.123564814478532,
+    "rankme": 86.57062969207762,
+    "ssl_final": 0.10575323994271457
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/aid/state/seed42/candidates/c00043": [
+   {
+    "fid": 5.0,
+    "wandb": "7eo6g8uh",
+    "kappa": 0.8372772932052612,
+    "erank": 2.010297673108064,
+    "rankme": 4.111390887489533,
+    "ssl_final": 0.3033357271924615
+   },
+   {
+    "fid": 15.0,
+    "wandb": "b9ybj94e",
+    "kappa": 0.8414229154586792,
+    "erank": 2.3593094325675774,
+    "rankme": 3.9759126265096687,
+    "ssl_final": 0.13069739332422614
+   },
+   {
+    "fid": 45.0,
+    "wandb": "jqinoo88",
+    "kappa": 0.8441758155822754,
+    "erank": 2.4777541446981997,
+    "rankme": 4.187950979975735,
+    "ssl_final": 0.09822226595133543
+   },
+   {
+    "fid": 5.0,
+    "wandb": "7eo6g8uh",
+    "kappa": 0.8372772932052612,
+    "erank": 2.010297673108064,
+    "rankme": 4.111390887489533,
+    "ssl_final": 0.3033357271924615
+   },
+   {
+    "fid": 15.0,
+    "wandb": "b9ybj94e",
+    "kappa": 0.8414229154586792,
+    "erank": 2.3593094325675774,
+    "rankme": 3.9759126265096687,
+    "ssl_final": 0.13069739332422614
+   },
+   {
+    "fid": 45.0,
+    "wandb": "jqinoo88",
+    "kappa": 0.8441758155822754,
+    "erank": 2.4777541446981997,
+    "rankme": 4.187950979975735,
+    "ssl_final": 0.09822226595133543
+   },
+   {
+    "fid": 5.0,
+    "wandb": "7eo6g8uh",
+    "kappa": 0.8372772932052612,
+    "erank": 2.010297673108064,
+    "rankme": 4.111390887489533,
+    "ssl_final": 0.3033357271924615
+   },
+   {
+    "fid": 15.0,
+    "wandb": "b9ybj94e",
+    "kappa": 0.8414229154586792,
+    "erank": 2.3593094325675774,
+    "rankme": 3.9759126265096687,
+    "ssl_final": 0.13069739332422614
+   },
+   {
+    "fid": 45.0,
+    "wandb": "jqinoo88",
+    "kappa": 0.8441758155822754,
+    "erank": 2.4777541446981997,
+    "rankme": 4.187950979975735,
+    "ssl_final": 0.09822226595133543
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/aid/state/seed42/candidates/c00038": [
+   {
+    "fid": 5.0,
+    "wandb": "krkqzy8w",
+    "kappa": 0.8297106027603149,
+    "erank": 4.161033855257607,
+    "rankme": 414.37978781389444,
+    "ssl_final": 0.008651281357742846
+   },
+   {
+    "fid": 15.0,
+    "wandb": "3wcw5ixc",
+    "kappa": 0.8324667811393738,
+    "erank": 4.040110803947241,
+    "rankme": 407.7834897267082,
+    "ssl_final": 0.0044455669485614635
+   },
+   {
+    "fid": 45.0,
+    "wandb": "wp7rsigt",
+    "kappa": 0.8366007208824158,
+    "erank": 4.397000243529215,
+    "rankme": 422.5084575480731,
+    "ssl_final": 0.0033771533489925787
+   },
+   {
+    "fid": 5.0,
+    "wandb": "krkqzy8w",
+    "kappa": 0.8297106027603149,
+    "erank": 4.161033855257607,
+    "rankme": 414.37978781389444,
+    "ssl_final": 0.008651281357742846
+   },
+   {
+    "fid": 15.0,
+    "wandb": "3wcw5ixc",
+    "kappa": 0.8324667811393738,
+    "erank": 4.040110803947241,
+    "rankme": 407.7834897267082,
+    "ssl_final": 0.0044455669485614635
+   },
+   {
+    "fid": 45.0,
+    "wandb": "wp7rsigt",
+    "kappa": 0.8366007208824158,
+    "erank": 4.397000243529215,
+    "rankme": 422.5084575480731,
+    "ssl_final": 0.0033771533489925787
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/aid/state/seed42/candidates/c00025": [
+   {
+    "fid": 5.0,
+    "wandb": "2wk431v1",
+    "kappa": 0.8193618059158325,
+    "erank": 2.127131252894547,
+    "rankme": 19.29871934176151,
+    "ssl_final": 4.30508328974247
+   },
+   {
+    "fid": 15.0,
+    "wandb": "fpxk9bk2",
+    "kappa": 0.8200573921203613,
+    "erank": 2.111065575121488,
+    "rankme": 20.372157678949936,
+    "ssl_final": 3.685568206012249
+   },
+   {
+    "fid": 45.0,
+    "wandb": "h32nwaje",
+    "kappa": 0.8200658559799194,
+    "erank": 2.112674090164501,
+    "rankme": 21.611221726122647,
+    "ssl_final": 3.02693210542202
+   },
+   {
+    "fid": 5.0,
+    "wandb": "2wk431v1",
+    "kappa": 0.8193618059158325,
+    "erank": 2.127131252894547,
+    "rankme": 19.29871934176151,
+    "ssl_final": 4.30508328974247
+   },
+   {
+    "fid": 15.0,
+    "wandb": "fpxk9bk2",
+    "kappa": 0.8200573921203613,
+    "erank": 2.111065575121488,
+    "rankme": 20.372157678949936,
+    "ssl_final": 3.685568206012249
+   },
+   {
+    "fid": 45.0,
+    "wandb": "h32nwaje",
+    "kappa": 0.8200658559799194,
+    "erank": 2.112674090164501,
+    "rankme": 21.611221726122647,
+    "ssl_final": 3.02693210542202
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid_fullepoch_1555/aid/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "qts4wwmb",
+    "kappa": 0.733183741569519,
+    "erank": 3.7083054789165764,
+    "rankme": 107.9970195270469,
+    "ssl_final": 0.31436347031812056
+   },
+   {
+    "fid": 15.0,
+    "wandb": "tv6rfigs",
+    "kappa": 0.7290973663330078,
+    "erank": 3.2622799063152215,
+    "rankme": 99.77191772182267,
+    "ssl_final": 0.2199680006832158
+   },
+   {
+    "fid": 45.0,
+    "wandb": "jazrugm9",
+    "kappa": 0.7283549308776855,
+    "erank": 3.085949471231588,
+    "rankme": 103.29670495313721,
+    "ssl_final": 0.17930537503246868
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/aid/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "677lyunj",
+    "kappa": 0.7021580934524536,
+    "erank": 1.6570698262188925,
+    "rankme": 7.92971343539809,
+    "ssl_final": 0.8406918533146381
+   },
+   {
+    "fid": 15.0,
+    "wandb": "pqg0hjs3",
+    "kappa": 0.7055952548980713,
+    "erank": 2.4879560209214437,
+    "rankme": 15.06429979096747,
+    "ssl_final": 0.6683606524020433
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid_C01_2049/aid/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "tlx394x9",
+    "kappa": 0.667694091796875,
+    "erank": 4.2789992244092705,
+    "rankme": 98.75185348729659,
+    "ssl_final": 0.4041763385757804
+   },
+   {
+    "fid": 15.0,
+    "wandb": "crf5og6y",
+    "kappa": 0.667694091796875,
+    "erank": 4.2789992244092705,
+    "rankme": 98.75185348729659,
+    "ssl_final": 0.3248041719198227
+   },
+   {
+    "fid": 45.0,
+    "wandb": "puph48m8",
+    "kappa": 0.667694091796875,
+    "erank": 4.2789992244092705,
+    "rankme": 98.75185348729659,
+    "ssl_final": 0.2624912769533694
+   },
+   {
+    "fid": 100.0,
+    "wandb": "ebihaoco",
+    "kappa": 0.667694091796875,
+    "erank": 4.2789992244092705,
+    "rankme": 98.75185348729659,
+    "ssl_final": 0.2343316380865872
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00003": [
+   {
+    "fid": 5.0,
+    "wandb": "r52l4zc5",
+    "kappa": 0.7881180644035339,
+    "erank": 28.794705572880527,
+    "rankme": 933.9871331449431,
+    "ssl_final": 0.9984793271869421
+   },
+   {
+    "fid": 15.0,
+    "wandb": "6q1mylj3",
+    "kappa": 0.7790251970291138,
+    "erank": 36.44587708099353,
+    "rankme": 924.2070944473837,
+    "ssl_final": 0.8330495767295361
+   },
+   {
+    "fid": 45.0,
+    "wandb": "er3jdavm",
+    "kappa": 0.7820760607719421,
+    "erank": 4.787454578147642,
+    "rankme": 178.72450092382164,
+    "ssl_final": 0.7156251613050699
+   },
+   {
+    "fid": 100.0,
+    "wandb": "ffyu1z6d",
+    "kappa": 0.7829884886741638,
+    "erank": 4.635343213422872,
+    "rankme": 21.962172370428558,
+    "ssl_final": 0.6511031091213226
+   },
+   {
+    "fid": 200.0,
+    "wandb": "r431q85b",
+    "kappa": 0.7952079176902771,
+    "erank": 5.677218090627601,
+    "rankme": 58.174029723148784,
+    "ssl_final": 0.6165800932794809
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00007": [
+   {
+    "fid": 5.0,
+    "wandb": "2l5r7081",
+    "kappa": 0.7899593114852905,
+    "erank": 10.604865447820709,
+    "rankme": 164.26475136038604,
+    "ssl_final": 0.4811576036736369
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00004": [
+   {
+    "fid": 5.0,
+    "wandb": "hyq8gdh5",
+    "kappa": 0.7832871675491333,
+    "erank": 7.476236844497025,
+    "rankme": 367.835393604266,
+    "ssl_final": 0.6927644815295935
+   },
+   {
+    "fid": 15.0,
+    "wandb": "zp1qbfzy",
+    "kappa": 0.7832871675491333,
+    "erank": 7.476236844497025,
+    "rankme": 367.835393604266,
+    "ssl_final": 0.5580837652087212
+   },
+   {
+    "fid": 45.0,
+    "wandb": "rtrelhae",
+    "kappa": 0.7832871675491333,
+    "erank": 7.476236844497025,
+    "rankme": 367.835393604266,
+    "ssl_final": 0.3904384672641754
+   },
+   {
+    "fid": 100.0,
+    "wandb": "k2z1imc2",
+    "kappa": 0.7899139523506165,
+    "erank": 10.05571682506115,
+    "rankme": 247.37645624679809,
+    "ssl_final": 0.31483636144548655
+   },
+   {
+    "fid": 200.0,
+    "wandb": "rd4urpkz",
+    "kappa": 0.7832871675491333,
+    "erank": 7.476236844497025,
+    "rankme": 367.835393604266,
+    "ssl_final": 0.27981108194217086
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00004": [
+   {
+    "fid": 5.0,
+    "wandb": "u4rql56k",
+    "kappa": 0.7811655402183533,
+    "erank": 39.8693175390502,
+    "rankme": 561.6285223400038,
+    "ssl_final": 1.0326989106833935
+   },
+   {
+    "fid": 15.0,
+    "wandb": "19ermv1z",
+    "kappa": 0.7820721864700317,
+    "erank": 39.63457639809645,
+    "rankme": 881.0718065163688,
+    "ssl_final": 0.8349078614264727
+   },
+   {
+    "fid": 45.0,
+    "wandb": "wvvo5vs6",
+    "kappa": 0.7736492156982422,
+    "erank": 31.332205992802873,
+    "rankme": 739.7558718736883,
+    "ssl_final": 0.7167885396629572
+   },
+   {
+    "fid": 100.0,
+    "wandb": "vv7z6msw",
+    "kappa": 0.7866614460945129,
+    "erank": 24.705053971014788,
+    "rankme": 685.7059337416391,
+    "ssl_final": 0.6547984965145588
+   },
+   {
+    "fid": 200.0,
+    "wandb": "qqnr8yam",
+    "kappa": 0.778148353099823,
+    "erank": 17.543897857293057,
+    "rankme": 645.8480350659219,
+    "ssl_final": 0.6200237609446049
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00014": [
+   {
+    "fid": 5.0,
+    "wandb": "gw45tudc",
+    "kappa": 0.777839183807373,
+    "erank": 5.926851647489701,
+    "rankme": 506.769570853199,
+    "ssl_final": 1.2796051986515522
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00012": [
+   {
+    "fid": 5.0,
+    "wandb": "zz436vun",
+    "kappa": 0.7676772475242615,
+    "erank": 3.339263605607438,
+    "rankme": 391.77121126836846,
+    "ssl_final": 0.9073440823704004
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00001": [
+   {
+    "fid": 5.0,
+    "wandb": "el84xttx",
+    "kappa": 0.724875807762146,
+    "erank": 3.578930801871495,
+    "rankme": 15.568993087637388,
+    "ssl_final": 5.048664137721062
+   },
+   {
+    "fid": 15.0,
+    "wandb": "pxf8wn53",
+    "kappa": 0.7241073846817017,
+    "erank": 1.339531733410295,
+    "rankme": 9.021169780309986,
+    "ssl_final": 1.2755388729274273
+   },
+   {
+    "fid": 45.0,
+    "wandb": "4pz16fmx",
+    "kappa": 0.7356982231140137,
+    "erank": 1.9353964616303454,
+    "rankme": 13.868216236271033,
+    "ssl_final": 1.0242261625826359
+   },
+   {
+    "fid": 100.0,
+    "wandb": "znkmlvpb",
+    "kappa": 0.7301836013793945,
+    "erank": 2.157073684087804,
+    "rankme": 14.362183470540671,
+    "ssl_final": 0.8196988068521023
+   },
+   {
+    "fid": 200.0,
+    "wandb": "n0mskeik",
+    "kappa": 0.7321329116821289,
+    "erank": 1.2999901827996558,
+    "rankme": 7.757208992820133,
+    "ssl_final": 0.6389548927545547
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00009": [
+   {
+    "fid": 5.0,
+    "wandb": "vnvhmh5u",
+    "kappa": 0.7140436768531799,
+    "erank": 2.1613480788333783,
+    "rankme": 78.12535374879347,
+    "ssl_final": 1.1238953992724419
+   }
+  ],
+  "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00002": [
+   {
+    "fid": 5.0,
+    "wandb": "tcs6xnac",
+    "kappa": 0.6511803269386292,
+    "erank": 6.438777369464114,
+    "rankme": 243.97476352130673,
+    "ssl_final": 0.4533236790448427
+   },
+   {
+    "fid": 15.0,
+    "wandb": "d9m925tj",
+    "kappa": 0.6631620526313782,
+    "erank": 6.6118642525218405,
+    "rankme": 236.20831733495964,
+    "ssl_final": 0.36235694866627455
+   },
+   {
+    "fid": 45.0,
+    "wandb": "fjji9hbh",
+    "kappa": 0.6457512378692627,
+    "erank": 7.512625363893569,
+    "rankme": 245.95728909138913,
+    "ssl_final": 0.3276697834953666
+   },
+   {
+    "fid": 100.0,
+    "wandb": "0kwh5s6b",
+    "kappa": 0.6280485987663269,
+    "erank": 4.807046345603031,
+    "rankme": 215.72689562600496,
+    "ssl_final": 0.2973171351477504
+   },
+   {
+    "fid": 200.0,
+    "wandb": "zwu9oomn",
+    "kappa": 0.6493744850158691,
+    "erank": 8.718717664189882,
+    "rankme": 222.5852139803446,
+    "ssl_final": 0.2839292846620083
+   }
+  ]
+ },
+ "control": [
+  {
+   "origin": "spifil",
+   "wandb": "4scny4kd",
+   "kappa": 0.3120191693305969,
+   "params": 1058424,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00047/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "3633xupn",
+   "kappa": 0.43498289585113525,
+   "params": 452864,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00015/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "m1m8fmgh",
+   "kappa": 0.46579110622406006,
+   "params": 309954,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00020/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "6kee1mir",
+   "kappa": 0.3955165147781372,
+   "params": 316200,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00059/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "sc2ctvdk",
+   "kappa": 0.45904213190078735,
+   "params": 1868159,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00042/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "98oqtuwi",
+   "kappa": 0.35550951957702637,
+   "params": 25266,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00058/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "bwcweny6",
+   "kappa": 0.18241053819656372,
+   "params": 3774093,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00040/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "blrfoyri",
+   "kappa": 0.4646698832511902,
+   "params": 159232,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00014/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "74k7m4pk",
+   "kappa": 0.41431331634521484,
+   "params": 23232,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00009/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "u6dpviex",
+   "kappa": 0.4400191903114319,
+   "params": 531222,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00048/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "l4h8k8jk",
+   "kappa": 0.4529419541358948,
+   "params": 190536,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00043/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "q0h7bq0b",
+   "kappa": 0.26190370321273804,
+   "params": 3242200,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00039/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "jy4q12gn",
+   "kappa": 0.17623752355575562,
+   "params": 6008476,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00045/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "38s3gb8w",
+   "kappa": 0.48664921522140503,
+   "params": 316800,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00008/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "ekn93e5n",
+   "kappa": 0.38628894090652466,
+   "params": 24592,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00002/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "cqd4vv0b",
+   "kappa": 0.39498770236968994,
+   "params": 45100,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00003/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "xax2mcej",
+   "kappa": 0.45845162868499756,
+   "params": 309602,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00007/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "6dajtmcl",
+   "kappa": 0.42026209831237793,
+   "params": 464640,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00016/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "stzow34e",
+   "kappa": 0.4390679597854614,
+   "params": 8972956,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00018/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "c9rlpupk",
+   "kappa": 0.41788697242736816,
+   "params": 103032,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00005/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "vn32azhy",
+   "kappa": 0.373357892036438,
+   "params": 313060,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00030/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "stkuvzs8",
+   "kappa": 0.4360221028327942,
+   "params": 1121700,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00046/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "bidu834h",
+   "kappa": 0.29949843883514404,
+   "params": 19818404,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00036/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "hf10gbit",
+   "kappa": 0.36366432905197144,
+   "params": 26944,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00010/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "jmi50nl3",
+   "kappa": 0.40475356578826904,
+   "params": 117624,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00049/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "m7r1i42p",
+   "kappa": 0.47823232412338257,
+   "params": 52512,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00004/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "ubvgu3px",
+   "kappa": 0.36708807945251465,
+   "params": 52240,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00011/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "b1b4a6lq",
+   "kappa": 0.3234635591506958,
+   "params": 3948976,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00017/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "ddokyev6",
+   "kappa": 0.3595166802406311,
+   "params": 19620,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00023/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "t5ijcb2u",
+   "kappa": 0.4228176474571228,
+   "params": 2201800,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00031/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "xudbv59r",
+   "kappa": 0.4095158576965332,
+   "params": 204384,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00052/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "fer5wkqu",
+   "kappa": 0.36116689443588257,
+   "params": 131424,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00013/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "5al1jf4u",
+   "kappa": 0.40925782918930054,
+   "params": 407138,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00044/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "8bl1bc1t",
+   "kappa": 0.39339590072631836,
+   "params": 61824,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00012/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "5w6mxkkt",
+   "kappa": 0.375838041305542,
+   "params": 21426,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00001/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "6h5fsyqf",
+   "kappa": 0.43668806552886963,
+   "params": 122176,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3_old/remote_sensing/state/seed42/candidates/c00006/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "h8kjrg0a",
+   "kappa": 0.4657678008079529,
+   "params": 2081288,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00015/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "4xg232sx",
+   "kappa": 0.4712522625923157,
+   "params": 309954,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00020/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "hfdjhfjo",
+   "kappa": 0.4177601933479309,
+   "params": 700672,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00014/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "lfruiq24",
+   "kappa": 0.37814199924468994,
+   "params": 91272,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00009/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "1c27s5po",
+   "kappa": 0.5141010284423828,
+   "params": 628480,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00008/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "z9yhb3su",
+   "kappa": 0.4110598564147949,
+   "params": 47424,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00002/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "51cf28ll",
+   "kappa": 0.40293431282043457,
+   "params": 88080,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00003/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "7h7xk3ce",
+   "kappa": 0.4649505615234375,
+   "params": 614144,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00007/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "ymfv0d98",
+   "kappa": 0.45251280069351196,
+   "params": 2137344,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00016/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "zwdcwkbw",
+   "kappa": 0.3978846073150635,
+   "params": 8972956,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00018/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "wmdtgtec",
+   "kappa": 0.4108543395996094,
+   "params": 228122,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00005/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "fdwiri2x",
+   "kappa": 0.4452682137489319,
+   "params": 107008,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00010/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "u9lienus",
+   "kappa": 0.4429115653038025,
+   "params": 102784,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00004/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "zij311vh",
+   "kappa": 0.42461639642715454,
+   "params": 241562,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00011/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "exeeu1jm",
+   "kappa": 0.3038036823272705,
+   "params": 3948976,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00017/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "os6g89ac",
+   "kappa": 0.36528342962265015,
+   "params": 19620,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00023/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "xnodebt0",
+   "kappa": 0.4575040340423584,
+   "params": 675926,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00013/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "cfo8voru",
+   "kappa": 0.43423736095428467,
+   "params": 258816,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00012/f5/result.json"
+  },
+  {
+   "origin": "spifil",
+   "wandb": "1kdoecxi",
+   "kappa": 0.41330987215042114,
+   "params": 41152,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00001/f5/result.json"
+  },
+  {
+   "origin": "random_he",
+   "wandb": "9q9zv1bn",
+   "kappa": 0.48743194341659546,
+   "params": 241152,
+   "path": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/modehb_v3/remote_sensing/state/seed42/candidates/c00006/f5/result.json"
+  }
+ ]
+}

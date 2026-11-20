@@ -1,0 +1,10 @@
+# coconut_trees: melhor por validacao de cada (kind, estrato); md5 em checkpoints_E0_E8.csv
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00009/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00014/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00007/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00004/f100/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00012/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00001/f45/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00002/f15/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00003/f200/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00004/f100/encoder.pt

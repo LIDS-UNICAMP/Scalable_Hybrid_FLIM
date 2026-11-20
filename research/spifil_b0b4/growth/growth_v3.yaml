@@ -1,0 +1,62 @@
+# growth v3 (EXEMPLO): cadeia B0 -> B4 com cabeça de 2ª ordem fixa na fitness/teste, genes de SSL/DA/whitening/
+# SoftHebb, ops novas e saturação. Use com --growth-config ga_search/config/hmodehb_b0b4/growth_v3.yaml e um --out NOVO
+# (fitness_sig nova). Base: growth.yaml (inalterado).
+# Cadeia de crescimento progressivo B0 -> B4 (ga_search/hmodehb/growth_chain.py). Config de CRESCIMENTO;
+# treino/dados/régua vêm do base.yaml do H-MODEHB (fitness v2 ORIG). O hash dos dois vai para o estado.
+n_parents: 4            # pais por faixa (frente de Pareto kappa ORIG-val x FLOPs 2·MAC)
+n_children: 8           # filhos por geração
+generations: 2          # gerações por faixa
+eta: 3                  # promoção f_low -> f_high: ceil(aceitos / eta)
+fid_low: 15             # triagem
+fid_high: 45            # aceitação final
+delta: 0.0              # aceita se kappa_val(filho) >= kappa_val(pai) + delta
+require_improvement: false   # true: alpha=0 (= pai) não conta como aceito
+protect: lowlr          # herdados: lowlr (0,01 x lr) | freeze | full; novos: lr cheio
+init_method: spifil0    # KernelInitializer do A2 nos canais novos: spifil0 | spifil1 | spifil2
+init_config: {}
+spifil_images_per_class: 4
+start_band: B0
+end_band: B4
+hard_cap: 5500000
+max_ops: 12
+residual_act: silu
+seeds:
+  registry: research/spifil_b0b4/agent1/seed_registry.csv
+  regua: ORIG
+  bands: [B0]
+  checkpoints: []
+  external_small: true  # "SPiFiL pequeno" (entra na faixa em que cair; RS ~B2)
+  top_k: 2             # v3: melhor B0 da base + SPiFiL pequeno
+ssl: lejepa             # growth_fix4: 'none' = ablação sem SSL global (só AE local nos blocos novos)
+reg: sigreg
+ae_target: pixel
+ae_schedule: joint
+lr: 1.0e-3
+lr_ae: 1.0e-3
+wise_alphas: [0.0, 0.25, 0.5, 0.75, 1.0]
+preservation_images: 8
+preservation_tol: 1.0e-5
+oom: {retries: 10, sleep_s: 300}
+test_channel: true
+debug_train: null
+debug_val: null
+mem: {grad_checkpoint: true, wise_on_cpu: true, empty_cache: true, embed_batch_size: null, ssl_amp_bf16: false,
+      max_gpu_gb: null, oom_capacity_margin_gib: 1.0}
+v3:
+  readout: so2_4096_pca          # (1) mu+sigma+Cov do último bloco, PCA só no treino, 4096, signed-sqrt+L2 (sem treino)
+  so2: {dim: 4096, n_px: 64}
+  aux_gap: true                  # kappa da cabeça antiga (GAP/proj) só como coluna aux
+  genes:                         # listas -> rodízio determinístico no produto cartesiano (registrado por filho)
+    ssl: [none, lejepa, simclr, vicreg]      # (2) none = só AE local nos blocos novos (ae_local_only)
+    aug: [weak, medium, strong]              # (3) DA do SSL (crop/jitter/blur/flips/rot90), AugConfig registrado
+    whiten_new: [none, zca, dbn]             # (4d) norm do bloco novo (deepen_residual_zero)
+    softhebb: [false, true]                  # (4e) SoftHebb nos filtros novos, antes do AE/SSL
+  ops: [inception_branch_add, dense_concat, replace_bad_filters]   # (4a)(4b)(4f) + widen/residual históricos
+  families: null                 # lista restringe o braço: [widen, residual, inception_branch_add, dense_concat, ...]
+  branch_kernels: [1, 3, 5]
+  branch_frac: 0.25
+  replace: {corr_thr: 0.95, var_rel_eps: 1.0e-6, max_frac: 0.25, n_images: 64}
+  softhebb_cfg: {epochs: 1, lr: 0.01, temperature: 1.0, n_images: 128}
+  freeze_head_in_ssl: true       # a projeção antiga da cabeça fica congelada no SSL (a so2 não tem parâmetros)
+  saturation: {adopt_parent: true}   # (6) faixa sem melhora -> o melhor da anterior é adotado; curva kappa x faixa
+  test_tta8: true                # (5) coluna extra TTA8 no canal de teste (nunca na seleção)

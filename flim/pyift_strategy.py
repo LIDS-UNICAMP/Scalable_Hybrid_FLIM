@@ -85,7 +85,8 @@ def _load_local(paths: list[str]) -> list[np.ndarray]:
 
     results: list[np.ndarray] = []
     for path in paths:
-        image  = ift.ReadImageByExt(str(path))
+        from core.data.loaders import _ext_consistent_path   # PNG bytes under .jpg (aid)
+        image  = ift.ReadImageByExt(_ext_consistent_path(path))
         mimage = ift.ImageToMImage(image, color_space=ift.LABNorm2_CSPACE)
         arr    = mimage.AsNumPy().squeeze().astype(np.float32)
         results.append(arr)

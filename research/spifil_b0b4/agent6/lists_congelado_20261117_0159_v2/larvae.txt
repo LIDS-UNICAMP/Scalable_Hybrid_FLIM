@@ -1,0 +1,10 @@
+# larvae (congelado_20261117_0159_v2): melhor por validacao de cada (kind, estrato)
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00021/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00026/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00027/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00004/f15/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/larvae/state/seed42/candidates/c00024/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/larvae/state/seed42/candidates/c00001/f100/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/larvae/state/seed42/candidates/c00009/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/larvae/state/seed42/candidates/c00006/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/larvae/state/seed42/candidates/c00007/f5/encoder.pt

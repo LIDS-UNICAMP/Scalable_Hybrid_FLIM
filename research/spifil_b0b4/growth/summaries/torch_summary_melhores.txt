@@ -1,0 +1,114 @@
+================================================================================================
+COCONUT — GA híbrido c00001 f200 (κ teste 0,813; passa os 5 FMs)
+================================================================================================
+Layer                            Tipo                         Saída                  Param #  Operação
+blocks.0.conv.branches.b1        Conv2d k1 3→2                [2, 224, 224]                8  
+blocks.0.conv.branches.b3        Conv2d k3 3→2                [2, 224, 224]               56  
+blocks.0.conv.branches.b5        Conv2d k5 3→2                [2, 224, 224]              152  
+blocks.0.conv.branches.pool.pool MaxPool2d                    [3, 224, 224]                0  não muda shape: MaxPool2d
+blocks.0.conv.branches.pool.proj Conv2d k1 3→2                [2, 224, 224]                8  
+blocks.0.norm.0                  BatchNorm2d                  [8, 224, 224]               16  não muda shape: BatchNorm2d
+blocks.0.norm.1                  DecorrelatedBatchNorm        [8, 224, 224]               16  não muda shape: DecorrelatedBatchNorm
+blocks.0.activation              GELU                         [8, 224, 224]                0  não muda shape: GELU
+blocks.0.pool                    MaxPool2d                    [8, 112, 112]                0  
+blocks.1.conv.depthwise          Conv2d k5 8→8 g8             [8, 112, 112]              208  não muda shape: Conv2d k5 8→8 g8
+blocks.1.conv.pointwise          Conv2d k1 8→16               [16, 112, 112]             144  
+blocks.1.norm                    ZCAWhitening                 [16, 112, 112]               0  não muda shape: ZCAWhitening
+blocks.1.activation              ReLU                         [16, 112, 112]               0  não muda shape: ReLU
+head.proj.0                      Conv2d k1 16→1280            [1280, 112, 112]        21,760  
+Total 22,368 | encoder 608 | cabeça 21,760 | entrada 1×3×224×224 | embedding [1280]
+================================================================================================
+FLOWERS — B0 seed01 (c00003 spifil) (κ teste 0,784 com 2ª ordem 4096)
+================================================================================================
+Layer                            Tipo                         Saída                  Param #  Operação
+blocks.0.conv                    Conv2d k7 3→60               [60, 224, 224]           8,880  
+blocks.0.norm                    DecorrelatedBatchNorm        [60, 224, 224]             120  não muda shape: DecorrelatedBatchNorm
+blocks.0.activation              GELU                         [60, 224, 224]               0  não muda shape: GELU
+blocks.0.pool                    MaxPool2d                    [60, 112, 112]               0  
+blocks.1.conv.branches.b1        Conv2d k1 60→30              [30, 112, 112]           1,830  
+blocks.1.conv.branches.b3        Conv2d k3 60→30              [30, 112, 112]          16,230  
+blocks.1.conv.branches.b5        Conv2d k5 60→30              [30, 112, 112]          45,030  
+blocks.1.conv.branches.pool.pool MaxPool2d                    [60, 112, 112]               0  não muda shape: MaxPool2d
+blocks.1.conv.branches.pool.proj Conv2d k1 60→30              [30, 112, 112]           1,830  
+blocks.1.norm.0                  BatchNorm2d                  [120, 112, 112]            240  não muda shape: BatchNorm2d
+blocks.1.norm.1                  DecorrelatedBatchNorm        [120, 112, 112]            240  não muda shape: DecorrelatedBatchNorm
+blocks.1.activation              SiLU                         [120, 112, 112]              0  não muda shape: SiLU
+blocks.1.skip                    Conv2d k1 60→120             [120, 112, 112]          7,320  
+blocks.1.pool                    MaxPool2d                    [120, 56, 56]                0  
+head.proj.0                      Conv2d k1 120→1280           [1280, 56, 56]         154,880  
+Total 236,600 | encoder 81,720 | cabeça 154,880 | entrada 1×3×224×224 | embedding [1280]
+================================================================================================
+AID — GA híbrido c00025 f5 (κ teste 0,719)
+================================================================================================
+Layer                            Tipo                         Saída                  Param #  Operação
+blocks.0.conv.branches.b1        Conv2d k1 3→8                [8, 224, 224]               32  
+blocks.0.conv.branches.b3        Conv2d k3 3→7                [7, 224, 224]              196  
+blocks.0.conv.branches.b5        Conv2d k5 3→7                [7, 224, 224]              532  
+blocks.0.conv.branches.pool.pool MaxPool2d                    [3, 224, 224]                0  não muda shape: MaxPool2d
+blocks.0.conv.branches.pool.proj Conv2d k1 3→7                [7, 224, 224]               28  
+blocks.0.activation              SELU                         [29, 224, 224]               0  não muda shape: SELU
+blocks.0.pool                    MaxPool2d                    [29, 112, 112]               0  
+blocks.1.conv.branches.b1        Conv2d k1 29→8               [8, 112, 112]              240  
+blocks.1.conv.branches.b3        Conv2d k3 29→7               [7, 112, 112]            1,834  
+blocks.1.conv.branches.b5        Conv2d k5 29→7               [7, 112, 112]            5,082  
+blocks.1.conv.branches.pool.pool MaxPool2d                    [29, 112, 112]               0  não muda shape: MaxPool2d
+blocks.1.conv.branches.pool.proj Conv2d k1 29→7               [7, 112, 112]              210  
+blocks.1.norm.0                  BatchNorm2d                  [29, 112, 112]              58  não muda shape: BatchNorm2d
+blocks.1.norm.1                  ZCAWhitening                 [29, 112, 112]               0  não muda shape: ZCAWhitening
+blocks.1.activation              SELU                         [29, 112, 112]               0  não muda shape: SELU
+blocks.1.pool                    AvgPool2d                    [29, 56, 56]                 0  
+blocks.2.conv.branches.b1        Conv2d k1 29→20              [20, 56, 56]               600  
+blocks.2.conv.branches.b3        Conv2d k3 29→17              [17, 56, 56]             4,454  
+blocks.2.conv.branches.b5        Conv2d k5 29→17              [17, 56, 56]            12,342  
+blocks.2.conv.branches.pool.pool MaxPool2d                    [29, 56, 56]                 0  não muda shape: MaxPool2d
+blocks.2.conv.branches.pool.proj Conv2d k1 29→17              [17, 56, 56]               510  
+blocks.2.norm.0                  BatchNorm2d                  [71, 56, 56]               142  não muda shape: BatchNorm2d
+blocks.2.norm.1                  ZCAWhitening                 [71, 56, 56]                 0  não muda shape: ZCAWhitening
+blocks.2.activation              SiLU                         [71, 56, 56]                 0  não muda shape: SiLU
+blocks.2.skip                    Conv2d k1 29→71              [71, 56, 56]             2,130  
+head.proj.0                      Conv2d k1 71→2560            [2560, 56, 56]         184,320  
+Total 212,710 | encoder 28,390 | cabeça 184,320 | entrada 1×3×224×224 | embedding [2560]
+================================================================================================
+REMOTE_SENSING — SPiFiL pequeno (pai do B3g0c02; o B3 sem LeJEPA dá κ teste 0,646 com 2ª ordem)
+================================================================================================
+Layer                            Tipo                         Saída                  Param #  Operação
+blocks.0.conv                    Conv2d k3 3→40               [40, 224, 224]           1,120  
+blocks.0.activation              ReLU                         [40, 224, 224]               0  não muda shape: ReLU
+blocks.0.pool                    MaxPool2d                    [40, 111, 111]               0  
+blocks.1.conv                    Conv2d k3 40→80              [80, 111, 111]          28,880  
+blocks.1.activation              ReLU                         [80, 111, 111]               0  não muda shape: ReLU
+blocks.1.pool                    MaxPool2d                    [80, 55, 55]                 0  
+blocks.2.conv                    Conv2d k3 80→152             [152, 55, 55]          109,592  
+blocks.2.activation              ReLU                         [152, 55, 55]                0  não muda shape: ReLU
+blocks.2.pool                    MaxPool2d                    [152, 27, 27]                0  
+blocks.3.conv                    Conv2d k3 152→152            [152, 27, 27]          208,088  não muda shape: Conv2d k3 152→152
+blocks.3.activation              ReLU                         [152, 27, 27]                0  não muda shape: ReLU
+blocks.3.pool                    MaxPool2d                    [152, 13, 13]                0  
+blocks.4.conv                    Conv2d k3 152→152            [152, 13, 13]          208,088  não muda shape: Conv2d k3 152→152
+blocks.4.activation              ReLU                         [152, 13, 13]                0  não muda shape: ReLU
+blocks.5.conv                    Conv2d k3 152→312            [312, 13, 13]          427,128  
+blocks.5.activation              ReLU                         [312, 13, 13]                0  não muda shape: ReLU
+head.proj.0                      Conv2d k1 312→1280           [1280, 13, 13]         400,640  
+Total 1,383,536 | encoder 982,896 | cabeça 400,640 | entrada 1×3×224×224 | embedding [1280]
+================================================================================================
+AID — SPiFiL pequeno (B4, κ val 0,746, melhor val do aid)
+================================================================================================
+Layer                            Tipo                         Saída                  Param #  Operação
+blocks.0.conv                    Conv2d k3 3→216              [216, 224, 224]          6,048  
+blocks.0.activation              ReLU                         [216, 224, 224]              0  não muda shape: ReLU
+blocks.0.pool                    MaxPool2d                    [216, 111, 111]              0  
+blocks.1.conv                    Conv2d k3 216→216            [216, 111, 111]        420,120  não muda shape: Conv2d k3 216→216
+blocks.1.activation              ReLU                         [216, 111, 111]              0  não muda shape: ReLU
+blocks.1.pool                    MaxPool2d                    [216, 55, 55]                0  
+blocks.2.conv                    Conv2d k3 216→216            [216, 55, 55]          420,120  não muda shape: Conv2d k3 216→216
+blocks.2.activation              ReLU                         [216, 55, 55]                0  não muda shape: ReLU
+blocks.2.pool                    MaxPool2d                    [216, 27, 27]                0  
+blocks.3.conv                    Conv2d k5 216→216            [216, 27, 27]        1,166,616  não muda shape: Conv2d k5 216→216
+blocks.3.activation              ReLU                         [216, 27, 27]                0  não muda shape: ReLU
+blocks.3.pool                    MaxPool2d                    [216, 13, 13]                0  
+blocks.4.conv                    Conv2d k5 216→216            [216, 13, 13]        1,166,616  não muda shape: Conv2d k5 216→216
+blocks.4.activation              ReLU                         [216, 13, 13]                0  não muda shape: ReLU
+blocks.5.conv                    Conv2d k5 216→216            [216, 13, 13]        1,166,616  não muda shape: Conv2d k5 216→216
+blocks.5.activation              ReLU                         [216, 13, 13]                0  não muda shape: ReLU
+head.proj.0                      Conv2d k1 216→1280           [1280, 13, 13]         277,760  
+Total 4,623,896 | encoder 4,346,136 | cabeça 277,760 | entrada 1×3×224×224 | embedding [1280]

@@ -1,0 +1,28 @@
+# Ablação de família única: varia SÓ 'training_mode'. Nada de produto cartesiano.
+name: progressive_vs_direct
+description: "Treino progressivo bloco a bloco vs direto"
+base: ga_search/config/modehb/search.yaml
+factor: training_mode
+levels: [progressive, direct]
+fixed:                       # todo o resto fixo no valor da base
+  architecture: best_stage2_pareto_knee   # mesma arquitetura para todos os níveis
+  encoder_init: spifil
+  activation: relu
+  pooling: gap
+  batchnorm: true
+  whitening: none
+  softhebb: false
+  local_ae: true
+  ssl: lejepa
+  ssl_regularizer: sigreg
+  tta: 1
+  # training_mode: variado
+seeds: [42, 43, 44]          # mesmas seeds da busca
+budget:
+  epochs: 45                 # fidelidade máxima; AE:SSL = 1:2
+  batch_size: 64
+  lr_new: 1.0e-3
+  lr_old: 1.0e-4
+datasets: [larvae, remote_sensing, flowers, ham10000, aid, eggs, coconut_trees, protozoan, food101]
+metrics: [quality, flops, knn_view_consistency, clustering_stability]
+output_dir: "artifacts/modehb/{dataset}/ablations/progressive_vs_direct"

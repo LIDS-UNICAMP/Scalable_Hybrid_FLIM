@@ -1,0 +1,37 @@
+name: eggs
+layout: organized
+root: /dados/home/moliveira/datasets/organized/Eggs
+images_dir: "{root}/pre/orig"
+masks_dir: "{root}/pre/label"
+split_json: "{root}/splits/split{split}_modehb.json"   # split1_modehb: split1 original (nomes raw/) remapeado para os nomes atuais de pre/orig; ver splits/split1_modehb_README.md e split1_modehb_mapping.csv
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: 1d4268ac6b2d49ebd4dab7e2e562580f2c44f04327c50c4dc175035f95c44dab   # split1_modehb.json (original split1.json: c7b123f4ca72f6dbfbb8cf154dcfc9477fd433b35df48471cf3f4c3da2da56ae)
+expected_counts:
+  train: 8885
+  validation: 1903
+  test: 1903
+image_size: 224
+image_ext: png
+labels_csv: "{root}/Eggs_9.csv"   # rótulo oficial; o prefixo do nome do arquivo codifica 16 grupos, NÃO usar como rótulo
+label_source: csv
+classes:
+  1: "H.nana"
+  2: "H.diminuta"
+  3: Ancilostomideo
+  4: "E.vermicularis"
+  5: "A.lumbricoides"
+  6: "T.trichiura"
+  7: "S.mansoni"
+  8: "Taenia parasites"
+  9: impurities
+n_classes: 9
+impurity_class: 9
+has_mask: true
+labels_external_eval_only: true   # rótulos de 9 classes (Eggs_9.csv) só na avaliação externa; busca usa validation sem rótulo

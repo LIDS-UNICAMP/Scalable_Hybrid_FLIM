@@ -1,0 +1,236 @@
+[
+ {
+  "kind": "modehb_hybrid",
+  "base": "eggs_raw",
+  "seed": 42,
+  "src": "artifacts/_staging_gpu3/modehb_hybrid/eggs_raw",
+  "dest": "artifacts/modehb_hybrid/eggs_raw",
+  "state_dir_dest": "artifacts/modehb_hybrid/eggs_raw/state/seed42",
+  "checks": {
+   "state": {
+    "ok": true,
+    "n_jobs": 51,
+    "status": {
+     "ok": 51
+    },
+    "done": false,
+    "brackets_done": 0,
+    "bracket": 0,
+    "gpu_hours": 22.58,
+    "updated": "2026-11-16 22:12:04",
+    "fidelities_cfg": [
+     5,
+     15,
+     45,
+     100,
+     200
+    ],
+    "max_brackets": 10,
+    "last_job": {
+     "job": 50,
+     "cand_id": "c00031",
+     "fidelity": 5.0,
+     "status": "ok",
+     "role": "search"
+    },
+    "sha256": "8b3284b1170010cfe7a695945421948bb26d5b6dcccd2851bd0f4f0c88de3eb7",
+    "failed_jobs": [],
+    "md5": "3ee5651f036f7480c71c4e9142cbd1d1"
+   },
+   "manifest": {
+    "sources": [
+     "artifacts/_staging_gpu3/modehb_hybrid_eggs_raw.ok",
+     "research/spifil_b0b4/agent5/gpu3_migration_manifest.csv"
+    ],
+    "csv_row": {
+     "kind": "modehb_hybrid",
+     "base": "eggs_raw",
+     "seed": "seed42",
+     "origem_athena": "artifacts/modehb_hybrid/eggs_raw",
+     "destino_jaci_staging": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/_staging_gpu3/modehb_hybrid/eggs_raw/",
+     "jobs_athena": "51",
+     "jobs_jaci": "51",
+     "md5_search_state_athena": "3ee5651f036f7480c71c4e9142cbd1d1",
+     "md5_search_state_jaci": "3ee5651f036f7480c71c4e9142cbd1d1",
+     "encoder_pt_conferidos": "47",
+     "encoder_pt_iguais": "True",
+     "rsync_rc": "0",
+     "marcador": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/_staging_gpu3/modehb_hybrid_eggs_raw.ok",
+     "tmux_laco_original": "modehb_gpu3_eraw",
+     "comando_original": "/exps/moliveira/queues/gpu3_migracao/loops/modehb_gpu3_eraw.txt",
+     "original_preservado_athena": "True",
+     "concluido_em": "2026-11-17_01:12:37"
+    },
+    "n_jobs": 51,
+    "md5": {
+     "md5_search_state_athena": "3ee5651f036f7480c71c4e9142cbd1d1",
+     "md5_search_state_jaci": "3ee5651f036f7480c71c4e9142cbd1d1"
+    },
+    "state_md5_ok": true
+   },
+   "checkpoints": {
+    "ok_jobs": 51,
+    "missing": 0,
+    "missing_examples": [],
+    "embeddings_missing": 0,
+    "absolute_paths": 0,
+    "max_fidelity": 200.0,
+    "n_max_fidelity": 4,
+    "loaded": 9,
+    "load_failed": [],
+    "loaded_detail": [
+     {
+      "job": 11,
+      "cand_id": "c00003",
+      "fid": 15.0,
+      "blocks": 4,
+      "MB": 16.2
+     },
+     {
+      "job": 40,
+      "cand_id": "c00021",
+      "fid": 5.0,
+      "blocks": 3,
+      "MB": 1.3
+     },
+     {
+      "job": 5,
+      "cand_id": "c00002",
+      "fid": 5.0,
+      "blocks": 5,
+      "MB": 7.0
+     },
+     {
+      "job": 16,
+      "cand_id": "c00004",
+      "fid": 15.0,
+      "blocks": 5,
+      "MB": 20.5
+     },
+     {
+      "job": 33,
+      "cand_id": "c00014",
+      "fid": 5.0,
+      "blocks": 4,
+      "MB": 6.8
+     },
+     {
+      "job": 4,
+      "cand_id": "c00001",
+      "fid": 200.0,
+      "blocks": 2,
+      "MB": 0.2
+     },
+     {
+      "job": 9,
+      "cand_id": "c00002",
+      "fid": 200.0,
+      "blocks": 5,
+      "MB": 7.1
+     },
+     {
+      "job": 14,
+      "cand_id": "c00003",
+      "fid": 200.0,
+      "blocks": 4,
+      "MB": 16.2
+     },
+     {
+      "job": 19,
+      "cand_id": "c00004",
+      "fid": 200.0,
+      "blocks": 5,
+      "MB": 20.5
+     }
+    ]
+   },
+   "config_search_diff": [],
+   "config_resolved_diff": [],
+   "controller": {
+    "fit_sig_jaci": "C100_kw1",
+    "fit_sig_resolved": "C100_kw1",
+    "controller_id_jaci": "ctrl-26e9134cfb5e9fb7",
+    "controller_ids_in_logs": [
+     "ctrl-1b0deebe20ccb085",
+     "ctrl-6fd841a31fe99bab"
+    ],
+    "fitness_modes_jobs": [
+     "svm_kappa"
+    ],
+    "note": "id NOVO na Jaci (esperado: o artifacts do athena é symlink, o resolve() muda); o state/jobs continuam; só o painel W&B do controller recomeça"
+   },
+   "dataset": {
+    "yaml": "ga_search/config/modehb/datasets/eggs_raw.yaml",
+    "root_exists": true,
+    "images_dir": "/dados/home/moliveira/datasets/organized/Eggs/raw_modehb/orig",
+    "images_dir_exists": true,
+    "split_json": "/dados/home/moliveira/datasets/organized/Eggs/splits/split1_modehb_raw.json",
+    "split_json_exists": true,
+    "split_sha256_ok": true,
+    "data_sha256_jobs": [
+     "0fe322af96585dd167e08562cca72f6cc7294d3670e54e1ba2d25429b4a06b08"
+    ],
+    "identity_sha256_jaci": "0fe322af96585dd167e08562cca72f6cc7294d3670e54e1ba2d25429b4a06b08",
+    "n_train": 8885,
+    "n_val": 1903,
+    "spifil_pool_sizes_jaci": [
+     32,
+     32,
+     32,
+     32,
+     32,
+     32,
+     32,
+     32,
+     32
+    ],
+    "spifil_pool_sizes_state": [
+     32,
+     32,
+     32,
+     32,
+     32,
+     32,
+     32,
+     32,
+     32
+    ]
+   },
+   "replay": {
+    "ok": true,
+    "replayed": 51,
+    "logged_identical": true,
+    "extra_cached_jobs": [],
+    "next_job": 51,
+    "next_fidelity": 5.0,
+    "next_role": "search",
+    "next_cand": "c00032",
+    "next_inherit_ckpt": null,
+    "outcome": "replay reproduziu todos os jobs e parou no próximo job novo",
+    "seconds": 3.3
+   }
+  },
+  "errors": [],
+  "warnings": [],
+  "validated_at": "2026-11-16 22:25:02",
+  "run_cmd": {
+   "config": "ga_search/config/modehb/search_v3.yaml",
+   "dataset": "eggs_raw",
+   "seed": 42,
+   "sets": [
+    "output_dir=artifacts/modehb_hybrid/eggs_raw/state/seed42",
+    "search.stratified.memory_budget_gb=12",
+    "gpu_process_cap_gb=14"
+   ]
+  },
+  "resources": {
+   "memory_budget_gb": 12,
+   "gpu_process_cap_gb": 14,
+   "peak_gpu_reserved_gb_max": 9.47,
+   "gate_free_mib": 22528
+  },
+  "tmpdir": "/tmp/claude-1014/-dados-home-moliveira-Scalable-Hybrid-FLIM/05a95f35-17a2-4976-a2bd-9c4d1e4ff9eb/scratchpad/resumeval_modehb_hybrid_eggs_raw_s42_293enpdk",
+  "seconds": 18.3,
+  "verdict": "VALIDADA"
+ }
+]

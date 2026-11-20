@@ -1,0 +1,208 @@
+{
+ "case": "rs306_w455",
+ "ops": [
+  {
+   "op": "widen",
+   "widths": {
+    "0": 455,
+    "1": 455
+   },
+   "seed": 7
+  }
+ ],
+ "fid": 1,
+ "ae_epochs": 1,
+ "gset": [],
+ "blocks": [
+  {
+   "block": 0,
+   "curve": [
+    0.3986588418483734,
+    2.5743963718414307,
+    1.8234689235687256,
+    1.6360502243041992,
+    1.1592363119125366,
+    0.7190883159637451,
+    0.6333922147750854,
+    0.7479092478752136,
+    0.5576876997947693,
+    0.48165521025657654
+   ],
+   "ae": {
+    "target": "pixel",
+    "initial_recon_loss": 0.3986588418483734,
+    "final_recon_loss": 1.0731543362140656,
+    "recon_ratio": 2.6919115382927616,
+    "stability": 0.6808832936507693,
+    "time_s": 119.28548373607919,
+    "effective_rank": 20.349306726866022,
+    "effective_rank_ratio": 0.04472375104805719,
+    "out_channels": 455,
+    "steps": 10,
+    "skipped_steps": 0,
+    "epochs": 1
+   },
+   "pre": {
+    "in_abs_mean": 0.5578698515892029,
+    "out_abs_mean": 0.8097334504127502,
+    "out_std": 1.0401644706726074,
+    "C_out": 455,
+    "old_ch_rms": 1.051507830619812,
+    "new_ch_rms": 1.0562812089920044,
+    "n_new": 245,
+    "w": {
+     "conv.weight": {
+      "old_row_norm": 11.666278839111328,
+      "new_row_norm": 11.611371040344238,
+      "fan_in": 27
+     }
+    }
+   },
+   "post": {
+    "in_abs_mean": 0.5578698515892029,
+    "out_abs_mean": 0.7212888598442078,
+    "out_std": 0.938704252243042,
+    "C_out": 455,
+    "old_ch_rms": 0.7778686881065369,
+    "new_ch_rms": 1.0753440856933594,
+    "n_new": 245,
+    "w": {
+     "conv.weight": {
+      "old_row_norm": 11.666258811950684,
+      "new_row_norm": 11.609177589416504,
+      "fan_in": 27
+     }
+    }
+   },
+   "grad_first": [
+    {
+     "ae/grad_norm/new_block.conv.weight": 0.027664829045534134,
+     "ae/grad_norm/new_block.conv.bias": 5.102837263848414e-08,
+     "ae/grad_norm/new_block.norm.weight": 0.05638502910733223,
+     "ae/grad_norm/new_block.norm.bias": 0.11945602297782898,
+     "ae/grad_norm/decoder": 6.835933208465576
+    },
+    {
+     "ae/grad_norm/new_block.conv.weight": 0.10676959902048111,
+     "ae/grad_norm/new_block.conv.bias": 5.526518620513343e-08,
+     "ae/grad_norm/new_block.norm.weight": 0.2818143367767334,
+     "ae/grad_norm/new_block.norm.bias": 0.22173960506916046,
+     "ae/grad_norm/decoder": 26.862958908081055
+    },
+    {
+     "ae/grad_norm/new_block.conv.weight": 0.12512046098709106,
+     "ae/grad_norm/new_block.conv.bias": 8.463292999749683e-08,
+     "ae/grad_norm/new_block.norm.weight": 0.22529558837413788,
+     "ae/grad_norm/new_block.norm.bias": 0.23104500770568848,
+     "ae/grad_norm/decoder": 29.361164093017578
+    }
+   ]
+  },
+  {
+   "block": 1,
+   "curve": [
+    0.5925849080085754,
+    2.9793150424957275,
+    1.2300982475280762,
+    1.4264936447143555,
+    0.8941575884819031,
+    0.39517465233802795,
+    0.7255889177322388,
+    0.7423209547996521,
+    0.39171501994132996,
+    0.1553708165884018
+   ],
+   "ae": {
+    "target": "pixel",
+    "initial_recon_loss": 0.5925849080085754,
+    "final_recon_loss": 0.9532819792628289,
+    "recon_ratio": 1.608684200997292,
+    "stability": 0.7680375457362826,
+    "time_s": 289.9502379577607,
+    "effective_rank": 84.18450081766404,
+    "effective_rank_ratio": 0.18502088091794294,
+    "out_channels": 455,
+    "steps": 10,
+    "skipped_steps": 0,
+    "epochs": 1
+   },
+   "pre": {
+    "in_abs_mean": 0.7212888598442078,
+    "out_abs_mean": 0.8420211672782898,
+    "out_std": 1.0697327852249146,
+    "C_out": 455,
+    "old_ch_rms": NaN,
+    "new_ch_rms": 1.1222108602523804,
+    "n_new": 455,
+    "w": {
+     "conv.depthwise.weight": {
+      "old_row_norm": 3.1526684761047363,
+      "new_row_norm": 0.5763591527938843,
+      "fan_in": 49
+     },
+     "conv.pointwise.weight": {
+      "old_row_norm": null,
+      "new_row_norm": 0.43057048320770264,
+      "fan_in": 455
+     }
+    }
+   },
+   "post": {
+    "in_abs_mean": 0.7212888598442078,
+    "out_abs_mean": 2.691209077835083,
+    "out_std": 4.440755844116211,
+    "C_out": 455,
+    "old_ch_rms": NaN,
+    "new_ch_rms": 5.021688461303711,
+    "n_new": 455,
+    "w": {
+     "conv.depthwise.weight": {
+      "old_row_norm": 3.152662515640259,
+      "new_row_norm": 0.5768177509307861,
+      "fan_in": 49
+     },
+     "conv.pointwise.weight": {
+      "old_row_norm": null,
+      "new_row_norm": 0.4371297061443329,
+      "fan_in": 455
+     }
+    }
+   },
+   "grad_first": [
+    {
+     "ae/grad_norm/new_block.conv.depthwise.weight": 0.02237534150481224,
+     "ae/grad_norm/new_block.conv.depthwise.bias": 3.96864674456765e-09,
+     "ae/grad_norm/new_block.conv.pointwise.weight": 0.5918652415275574,
+     "ae/grad_norm/new_block.conv.pointwise.bias": 9.848101001352916e-08,
+     "ae/grad_norm/new_block.norm.0.weight": 0.011909023858606815,
+     "ae/grad_norm/new_block.norm.0.bias": 1.7361909954161092e-07,
+     "ae/grad_norm/new_block.norm.1.weight": 0.05080188438296318,
+     "ae/grad_norm/new_block.norm.1.bias": 0.07368107885122299,
+     "ae/grad_norm/decoder": 10.309137344360352
+    },
+    {
+     "ae/grad_norm/new_block.conv.depthwise.weight": 0.07048265635967255,
+     "ae/grad_norm/new_block.conv.depthwise.bias": 2.0430702463158923e-08,
+     "ae/grad_norm/new_block.conv.pointwise.weight": 2.17681622505188,
+     "ae/grad_norm/new_block.conv.pointwise.bias": 4.6682578158652177e-07,
+     "ae/grad_norm/new_block.norm.0.weight": 0.04457245394587517,
+     "ae/grad_norm/new_block.norm.0.bias": 3.588064032555849e-07,
+     "ae/grad_norm/new_block.norm.1.weight": 0.17223933339118958,
+     "ae/grad_norm/new_block.norm.1.bias": 0.1828596591949463,
+     "ae/grad_norm/decoder": 33.18739318847656
+    },
+    {
+     "ae/grad_norm/new_block.conv.depthwise.weight": 0.031998246908187866,
+     "ae/grad_norm/new_block.conv.depthwise.bias": 7.4470847266638884e-09,
+     "ae/grad_norm/new_block.conv.pointwise.weight": 0.8988108038902283,
+     "ae/grad_norm/new_block.conv.pointwise.bias": 1.71475676324917e-07,
+     "ae/grad_norm/new_block.norm.0.weight": 0.023828446865081787,
+     "ae/grad_norm/new_block.norm.0.bias": 1.1593947135679628e-07,
+     "ae/grad_norm/new_block.norm.1.weight": 0.05942823365330696,
+     "ae/grad_norm/new_block.norm.1.bias": 0.07206016778945923,
+     "ae/grad_norm/decoder": 17.496795654296875
+    }
+   ]
+  }
+ ]
+}

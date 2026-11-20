@@ -1,0 +1,43 @@
+# Familia SPiFiL densa: E1/E2/E3, 81 treinamentos num pool Ray so.
+#   e1  SPiFiL + Especificacao 1 (crescimento por bloco, rede inteira destravada, MSE mascarada)
+#   e2  hibrido do commit 7d8bd0c (prefixo congelado, BCE) + GELU + recorte da Especificacao 2
+#   e3  igual ao e1, partindo de pesos aleatorios
+# 3 experimentos x 3 datasets x 3 splits x 3 fracoes = 81 celulas. Cada celula treina e, se
+# terminar ok, roda o SVM (src.evaluate.svm_spifil_dense) no CSV da familia.
+#
+#   python -m experiments.ray.launch experiments/autoencoder/spifil_e123.yaml --dry-run
+
+name:   spifil_e123
+method: autoencoder
+runner: spifil_dense
+
+grid:
+  datasets:
+    - helminth-eggs
+    - helminth-larvae
+    - protozoan-cysts
+  splits: [1, 2, 3]
+  percentages: [5, 50, 100]
+
+resources:
+  gpu_ids: [0]
+  # Pico medido por run: passo do encoder ate 5 GiB (e2, DB7; e1/e3 3.8 GiB), treino do H
+  # em micro-batches de 4 (head_batch_size) ~2.8 GiB, +~0.6 GiB de contexto CUDA.
+  # 10 x ~6.5 GB = ~65 GB nos 96 GB, com folga para os outros usuarios da GPU.
+  max_per_gpu:         10
+  # vira OMP_NUM_THREADS do filho e num_cpus da task Ray (128 nucleos na maquina)
+  cpus_per_experiment: 8
+
+output:
+  # == output_root dos tres configs (checagem 17 do preflight)
+  work_dir: /dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/spifil_e123
+  # um log por celula: logs/spifil_e123/<run_name>.log
+  log_dir:  logs/spifil_e123
+
+skip: state
+
+runner_args:
+  configs:
+    e1: configs/model/spifil_e1_spifil.yaml
+    e2: configs/model/spifil_e2_hybrid.yaml
+    e3: configs/model/spifil_e3_random.yaml

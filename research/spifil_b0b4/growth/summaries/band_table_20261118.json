@@ -1,0 +1,464 @@
+{
+ "growth/athena_gpu2/flowers": {
+  "B0": {
+   "node": "seed01",
+   "ops": [],
+   "params": 236600,
+   "kappa_val": 0.6718,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil:c00003:f15",
+   "fid": 0
+  },
+  "B1": {
+   "node": "B1g0c00",
+   "ops": [
+    "widen",
+    "deepen_residual_zero"
+   ],
+   "params": 413570,
+   "kappa_val": 0.6656,
+   "pai": "seed01",
+   "kappa_pai": 0.6718,
+   "alpha": 0.0,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B2": {
+   "node": "seed02",
+   "ops": [],
+   "params": 1143720,
+   "kappa_val": 0.6563,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil_pequeno",
+   "fid": 0
+  },
+  "B3": null,
+  "B4": null
+ },
+ "growth/athena_gpu2/flowers_fix4": {
+  "B0": {
+   "node": "seed01",
+   "ops": [],
+   "params": 236600,
+   "kappa_val": 0.6471,
+   "kappa_test": 0.6351,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil:c00003:f15",
+   "fid": 0
+  },
+  "B1": null,
+  "B2": {
+   "node": "seed02",
+   "ops": [],
+   "params": 1143720,
+   "kappa_val": 0.6562,
+   "kappa_test": 0.6593,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil_pequeno",
+   "fid": 0
+  },
+  "B3": {
+   "node": "B3g0c00",
+   "ops": [
+    "widen"
+   ],
+   "params": 1749156,
+   "kappa_val": 0.6719,
+   "pai": "seed02",
+   "kappa_pai": 0.6562,
+   "alpha": 0.5,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B4": null
+ },
+ "growth/athena_gpu2/remote_sensing": {
+  "B0": {
+   "node": "seed01",
+   "ops": [],
+   "params": 196990,
+   "kappa_val": 0.5719,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil:c00306:f100",
+   "fid": 0
+  },
+  "B1": {
+   "node": "B1g0c00",
+   "ops": [
+    "widen"
+   ],
+   "params": 414616,
+   "kappa_val": 0.5719,
+   "pai": "seed01",
+   "kappa_pai": 0.5719,
+   "alpha": 0.0,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B2": {
+   "node": "seed02",
+   "ops": [],
+   "params": 1383536,
+   "kappa_val": 0.5025,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil_pequeno",
+   "fid": 0
+  },
+  "B3": null,
+  "B4": null
+ },
+ "growth/athena_gpu3/aid_fix5_nossl": {
+  "B0": {
+   "node": "seed01",
+   "ops": [],
+   "params": 158928,
+   "kappa_val": 0.6863,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "c00065",
+   "fid": 0
+  },
+  "B1": {
+   "node": "B1g0c02",
+   "ops": [
+    "widen"
+   ],
+   "params": 388968,
+   "kappa_val": 0.6926,
+   "pai": "seed01",
+   "kappa_pai": 0.6863,
+   "alpha": 1.0,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B2": null,
+  "B3": null,
+  "B4": {
+   "node": "seed02",
+   "ops": [],
+   "params": 4623896,
+   "kappa_val": 0.7463,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil_pequeno",
+   "fid": 0
+  }
+ },
+ "growth/athena_gpu3/coconut_trees_fix5_nossl": {
+  "B0": {
+   "node": "seed01",
+   "ops": [],
+   "params": 200944,
+   "kappa_val": 0.6871,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "c00001",
+   "fid": 0
+  },
+  "B1": {
+   "node": "B1g0c00",
+   "ops": [
+    "widen",
+    "widen"
+   ],
+   "params": 415312,
+   "kappa_val": 0.6919,
+   "pai": "seed01",
+   "kappa_pai": 0.6871,
+   "alpha": 0.0,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B2": {
+   "node": "seed02",
+   "ops": [],
+   "params": 1143720,
+   "kappa_val": 0.6516,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil_pequeno",
+   "fid": 0
+  },
+  "B3": null,
+  "B4": null
+ },
+ "growth/athena_gpu3/flowers_fix5_nossl": {
+  "B0": {
+   "node": "seed01",
+   "ops": [],
+   "params": 236600,
+   "kappa_val": 0.6471,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil:c00003:f15",
+   "fid": 0
+  },
+  "B1": {
+   "node": "B1g0c00",
+   "ops": [
+    "widen"
+   ],
+   "params": 358100,
+   "kappa_val": 0.6685,
+   "pai": "seed01",
+   "kappa_pai": 0.6471,
+   "alpha": 1.0,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B2": {
+   "node": "seed02",
+   "ops": [],
+   "params": 1143720,
+   "kappa_val": 0.6562,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil_pequeno",
+   "fid": 0
+  },
+  "B3": null,
+  "B4": null
+ },
+ "growth/athena_gpu3/ham10000_fix5_nossl": {
+  "B0": {
+   "node": "seed00",
+   "ops": [],
+   "params": 169748,
+   "kappa_val": 0.4786,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "c00025",
+   "fid": 0
+  },
+  "B1": {
+   "node": "B1g0c00",
+   "ops": [
+    "widen",
+    "widen",
+    "widen",
+    "widen"
+   ],
+   "params": 527823,
+   "kappa_val": 0.4779,
+   "pai": "seed00",
+   "kappa_pai": 0.4786,
+   "alpha": 0.0,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B2": null,
+  "B3": null,
+  "B4": {
+   "node": "seed02",
+   "ops": [],
+   "params": 5334928,
+   "kappa_val": 0.4775,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil_pequeno",
+   "fid": 0
+  }
+ },
+ "growth/athena_gpu3/remote_sensing_fix4": {
+  "B0": {
+   "node": "seed01",
+   "ops": [],
+   "params": 196990,
+   "kappa_val": 0.5714,
+   "kappa_test": 0.5344,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil:c00306:f100",
+   "fid": 0
+  },
+  "B1": {
+   "node": "B1g0c00",
+   "ops": [
+    "deepen_residual_zero"
+   ],
+   "params": 594100,
+   "kappa_val": 0.5924,
+   "kappa_test": 0.577,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": 0.25,
+   "adotado_do_pai": false,
+   "source": null,
+   "fid": 45
+  },
+  "B2": {
+   "node": "B2g1c02",
+   "ops": [
+    "deepen_residual_zero"
+   ],
+   "params": 991210,
+   "kappa_val": 0.5931,
+   "kappa_test": 0.5288,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": 0.5,
+   "adotado_do_pai": false,
+   "source": null,
+   "fid": 45
+  },
+  "B3": {
+   "node": "B3g0c00",
+   "ops": [
+    "deepen_residual_zero",
+    "widen"
+   ],
+   "params": 2499136,
+   "kappa_val": 0.5931,
+   "pai": "B2g1c02",
+   "kappa_pai": 0.5931,
+   "alpha": 0.0,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B4": null
+ },
+ "growth/athena_gpu3/remote_sensing_fix5_nossl": {
+  "B0": {
+   "node": "seed01",
+   "ops": [],
+   "params": 196990,
+   "kappa_val": 0.5714,
+   "kappa_test": 0.5344,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil:c00306:f100",
+   "fid": 0
+  },
+  "B1": {
+   "node": "B1g0c00",
+   "ops": [
+    "widen"
+   ],
+   "params": 537540,
+   "kappa_val": 0.5714,
+   "pai": "seed01",
+   "kappa_pai": 0.5714,
+   "alpha": 0.0,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B2": {
+   "node": "seed02",
+   "ops": [],
+   "params": 1383536,
+   "kappa_val": 0.5024,
+   "kappa_test": 0.5837,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "alpha": null,
+   "adotado_do_pai": false,
+   "source": "spifil_pequeno",
+   "fid": 0
+  },
+  "B3": {
+   "node": "B3g0c00",
+   "ops": [
+    "widen",
+    "widen"
+   ],
+   "params": 1540616,
+   "kappa_val": 0.5107,
+   "pai": "seed02",
+   "kappa_pai": 0.5024,
+   "alpha": 0.25,
+   "fid": 15,
+   "kappa_test": null,
+   "kappa_test_tta8": null,
+   "kappa_test_gap": null,
+   "adotado_do_pai": false,
+   "em_andamento": true
+  },
+  "B4": null
+ }
+}

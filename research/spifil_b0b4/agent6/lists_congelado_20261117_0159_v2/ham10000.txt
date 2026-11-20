@@ -1,0 +1,9 @@
+# ham10000 (congelado_20261117_0159_v2): melhor por validacao de cada (kind, estrato)
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/ham10000/state/seed42/candidates/c00025/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/ham10000/state/seed42/candidates/c00034/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/ham10000/state/seed42/candidates/c00043/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/ham10000/state/seed42/candidates/c00020/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/ham10000/state/seed42/candidates/c00012/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/ham10000/state/seed42/candidates/c00002/f45/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/ham10000/state/seed42/candidates/c00003/f15/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_lemonade/ham10000/state/seed42/candidates/c00007/f5/encoder.pt

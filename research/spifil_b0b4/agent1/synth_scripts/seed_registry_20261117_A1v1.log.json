@@ -1,0 +1,25 @@
+{
+ "script": "/dados/home/moliveira/Scalable_Hybrid_FLIM/research/spifil_b0b4/agent1/synth_scripts/seed_registry.py",
+ "script_md5": "f77be056f3716a58d6e38b192132020c",
+ "version": "v1.1",
+ "snapshot": "/dados/home/moliveira/Scalable_Hybrid_FLIM/research/spifil_b0b4/agent1/synth_scripts/snapshot_20261117_A1v1",
+ "snapshot_manifest_md5": "55fcccffce2be92ab2b03c5cbe4c411f",
+ "generated": "2026-11-16 23:52:59 -03",
+ "out": "/dados/home/moliveira/Scalable_Hybrid_FLIM/research/spifil_b0b4/agent1/seed_registry.csv",
+ "out_md5": "9f4106c653f520e84bd69c17e324056e",
+ "n_rows": 114,
+ "n_jobs_lidos": 1589,
+ "mde_provisorio": {
+  "remote_sensing": 0.03,
+  "ham10000": 0.02,
+  "flowers": 0.02,
+  "eggs": 0.02,
+  "larvae": 0.03,
+  "protozoan": 0.02,
+  "eggs_raw": 0.02,
+  "larvae_raw": 0.03,
+  "protozoan_raw": 0.02,
+  "coconut_trees": 0.02,
+  "aid": 0.02
+ }
+}

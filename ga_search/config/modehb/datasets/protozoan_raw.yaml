@@ -1,0 +1,35 @@
+name: protozoan_raw
+layout: organized
+root: /dados/home/moliveira/datasets/organized/Protozoan
+images_dir: "{root}/raw_modehb/orig"   # fundo ORIGINAL (raw/orig, tamanhos variaveis); symlinks <rotulo:06d>_<nome raw> -> ../../raw/orig, pois o prefixo raw é o grupo fino 16/12, não o rótulo
+masks_dir: "{root}/raw_modehb/label"
+split_json: "{root}/splits/split{split}_modehb_raw.json"   # mesma partição/teste de split{split}_modehb.json, nomes raw; ver splits/split1_modehb_raw_build.py
+split: 1
+splits: [1]
+pcts: [100]
+train_key: train
+eval:
+  source: validation         # busca: SÓ validation, sem rótulo
+  search_uses_labels: false
+  final_test_key: test       # tocado apenas na avaliação externa final
+split_sha256: 92215e0486dd457a50450f9402080e8dbe7c3a039ea00bca0f5d92f5e54ecc4b   # split1_modehb_raw.json
+expected_counts:
+  train: 26159
+  validation: 5607
+  test: 5606
+# 4 imagens do split1 original não existem em pre/orig (puladas por iftPreProcProtozoa.c): 3 train, 1 test
+image_size: 224
+image_ext: png
+labels_csv: "{root}/Pro_7.csv"
+label_source: csv
+classes:
+  1: "E.coli"
+  2: "E.histolytica"
+  3: "E.nana"
+  4: Giardia
+  5: "I.butschlii"
+  6: "B.hominis parasites"
+  7: Impurities
+n_classes: 7
+impurity_class: 7
+has_mask: true

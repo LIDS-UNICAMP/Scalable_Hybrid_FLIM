@@ -1,0 +1,40 @@
+Layer                              Tipo                       Saída (por imagem)       Param #  Operação
+0.0.conv                           Conv2d k5 3→4              [4, 224, 224]                304  
+0.0.norm.0                         BatchNorm2d                [4, 224, 224]                  8  não muda shape: BatchNorm2d
+0.0.norm.1                         DecorrelatedBatchNorm      [4, 224, 224]                  8  não muda shape: DecorrelatedBatchNorm
+0.0.activation                     GELU                       [4, 224, 224]                  0  não muda shape: GELU
+0.0.dropout                        Identity                   [4, 224, 224]                  0  não muda shape: Identity
+0.0.pool                           MaxPool2d                  [4, 112, 112]                  0  
+0.1.conv.depthwise                 Conv2d k5 4→4 g4           [4, 112, 112]                104  não muda shape: Conv2d k5 4→4 g4
+0.1.conv.pointwise                 Conv2d k1 4→44             [44, 112, 112]               220  
+0.1.norm                           Identity                   [44, 112, 112]                 0  não muda shape: Identity
+0.1.activation                     ReLU                       [44, 112, 112]                 0  não muda shape: ReLU
+0.1.dropout                        Identity                   [44, 112, 112]                 0  não muda shape: Identity
+0.1.skip                           Conv2d k1 4→44             [44, 112, 112]               220  
+0.1.pool                           MaxPool2d                  [44, 56, 56]                   0  
+0.2.conv.branches.b1               Conv2d k1 44→20            [20, 56, 56]                 900  
+0.2.conv.branches.b3               Conv2d k3 44→20            [20, 56, 56]               7,940  
+0.2.conv.branches.b5               Conv2d k5 44→20            [20, 56, 56]              22,020  
+0.2.conv.branches.pool.pool        MaxPool2d                  [44, 56, 56]                   0  não muda shape: MaxPool2d
+0.2.conv.branches.pool.proj        Conv2d k1 44→20            [20, 56, 56]                 900  
+0.2.norm.0                         BatchNorm2d                [80, 56, 56]                 160  não muda shape: BatchNorm2d
+0.2.norm.1                         ZCAWhitening               [80, 56, 56]                   0  não muda shape: ZCAWhitening
+0.2.activation                     GELU                       [80, 56, 56]                   0  não muda shape: GELU
+0.2.dropout                        Identity                   [80, 56, 56]                   0  não muda shape: Identity
+0.2.skip                           Conv2d k1 44→80            [80, 56, 56]               3,600  
+0.2.pool                           AvgPool2d                  [80, 28, 28]                   0  
+0.3.conv                           Conv2d k3 80→348           [348, 28, 28]            250,908  
+0.3.norm.0                         BatchNorm2d                [348, 28, 28]                696  não muda shape: BatchNorm2d
+0.3.norm.1                         DecorrelatedBatchNorm      [348, 28, 28]                696  não muda shape: DecorrelatedBatchNorm
+0.3.activation                     SELU                       [348, 28, 28]                  0  não muda shape: SELU
+0.3.dropout                        Identity                   [348, 28, 28]                  0  não muda shape: Identity
+0.3.pool                           MaxPool2d                  [348, 14, 14]                  0  
+0.4.conv.depthwise                 Conv2d k5 348→348 g348     [348, 14, 14]              9,048  não muda shape: Conv2d k5 348→348 g348
+0.4.conv.pointwise                 Conv2d k1 348→436          [436, 14, 14]            152,164  
+0.4.norm                           BatchNorm2d                [436, 14, 14]                872  não muda shape: BatchNorm2d
+0.4.activation                     SiLU                       [436, 14, 14]                  0  não muda shape: SiLU
+0.4.dropout                        Identity                   [436, 14, 14]                  0  não muda shape: Identity
+0.4.pool                           MaxPool2d                  [436, 7, 7]                    0  
+1.proj.0                           Conv2d k1 436→1536         [1536, 7, 7]             671,232  
+Total 1,122,000 | encoder 450,768 | cabeça 671,232 | entrada 1 imagem 3×224×224 (no treino: 4 vistas × 64 imagens = 256 por passo)
+genoma: {'ssl': 'lejepa', 'reg': 'sigreg', 'protect': 'lowlr', 'pooling': 'gem', 'embed_dim': 1536, 'ae_target': 'feature'}

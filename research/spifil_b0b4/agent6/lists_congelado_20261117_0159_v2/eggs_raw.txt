@@ -1,0 +1,5 @@
+# eggs_raw (congelado_20261117_0159_v2): melhor por validacao de cada (kind, estrato)
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00025/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00030/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00023/f5/encoder.pt
+/dados/home/moliveira/exps/attn6/ckpts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00004/f200/encoder.pt

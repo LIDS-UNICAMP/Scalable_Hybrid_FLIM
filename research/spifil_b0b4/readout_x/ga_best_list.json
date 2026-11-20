@@ -1,0 +1,1074 @@
+{
+ "rule": "por base: melhor por fitness_kappa (validacao, result.json) em cada estrato de cada busca + melhor geral por validacao; teste nunca consultado; <=12 por base",
+ "bases": {
+  "flowers": {
+   "searches": {
+    "modehb_hybrid": {
+     "n_results_ok": 46,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    },
+    "modehb_lemonade": {
+     "n_results_ok": 32,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    }
+   },
+   "models": [
+    {
+     "search": "modehb_hybrid",
+     "dataset": "flowers",
+     "cand": "c00020",
+     "fid": 5,
+     "stratum": "huge",
+     "params": 2490840,
+     "kappa_val_search": 0.7748567461967468,
+     "f1_val_search": 0.8188756704330444,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00020/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/huge",
+      "best_val_overall"
+     ],
+     "id": "flowers_hybrid_c00020_f5_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "flowers",
+     "cand": "c00029",
+     "fid": 5,
+     "stratum": "tiny",
+     "params": 234110,
+     "kappa_val_search": 0.7747652530670166,
+     "f1_val_search": 0.8193966150283813,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00029/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/tiny"
+     ],
+     "id": "flowers_hybrid_c00029_f5_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "flowers",
+     "cand": "c00003",
+     "fid": 15,
+     "stratum": "medium",
+     "params": 1311920,
+     "kappa_val_search": 0.7568478584289551,
+     "f1_val_search": 0.8053697943687439,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/flowers/state/seed42/candidates/c00003/f15/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/medium"
+     ],
+     "id": "flowers_lemonade_c00003_f15_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "flowers",
+     "cand": "c00003",
+     "fid": 45,
+     "stratum": "medium",
+     "params": 894960,
+     "kappa_val_search": 0.7565227746963501,
+     "f1_val_search": 0.8017644286155701,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00003/f45/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/medium"
+     ],
+     "id": "flowers_hybrid_c00003_f45_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "flowers",
+     "cand": "c00002",
+     "fid": 200,
+     "stratum": "small",
+     "params": 683680,
+     "kappa_val_search": 0.747552752494812,
+     "f1_val_search": 0.7979114651679993,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00002/f200/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/small"
+     ],
+     "id": "flowers_hybrid_c00002_f200_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "flowers",
+     "cand": "c00004",
+     "fid": 15,
+     "stratum": "huge",
+     "params": 2182290,
+     "kappa_val_search": 0.7261366844177246,
+     "f1_val_search": 0.7807139158248901,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/flowers/state/seed42/candidates/c00004/f15/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/huge"
+     ],
+     "id": "flowers_lemonade_c00004_f15_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "flowers",
+     "cand": "c00013",
+     "fid": 5,
+     "stratum": "small",
+     "params": 481535,
+     "kappa_val_search": 0.7050561904907227,
+     "f1_val_search": 0.7622851133346558,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/flowers/state/seed42/candidates/c00013/f5/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/small"
+     ],
+     "id": "flowers_lemonade_c00013_f5_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "flowers",
+     "cand": "c00001",
+     "fid": 45,
+     "stratum": "tiny",
+     "params": 181715,
+     "kappa_val_search": 0.7018725275993347,
+     "f1_val_search": 0.7632454633712769,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/flowers/state/seed42/candidates/c00001/f45/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/tiny"
+     ],
+     "id": "flowers_lemonade_c00001_f45_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    }
+   ]
+  },
+  "remote_sensing": {
+   "searches": {
+    "modehb_hybrid": {
+     "n_results_ok": 39,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    },
+    "modehb_lemonade": {
+     "n_results_ok": 201,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    },
+    "modehb_hybrid_C01_final": {
+     "n_results_ok": 130,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     },
+     "archived": true
+    },
+    "modehb_lemonade_C01_final": {
+     "n_results_ok": 172,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     },
+     "archived": true
+    }
+   },
+   "models": [
+    {
+     "search": "modehb_lemonade",
+     "dataset": "remote_sensing",
+     "cand": "c00028",
+     "fid": 5,
+     "stratum": "huge",
+     "params": 1815554,
+     "kappa_val_search": 0.6109581589698792,
+     "f1_val_search": 0.6336360573768616,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00028/f5/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/huge",
+      "best_val_overall"
+     ],
+     "id": "remote_sensing_lemonade_c00028_f5_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid_C01_final",
+     "dataset": "remote_sensing",
+     "cand": "c00020",
+     "fid": 45,
+     "stratum": "huge",
+     "params": 2755294,
+     "kappa_val_search": 0.6051496267318726,
+     "f1_val_search": 0.5905014872550964,
+     "svm_C_search": 0.1,
+     "ckpt": "artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00020/f45/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid_C01_final/overall (arquivada, fitness com svm_C=0.1)"
+     ],
+     "id": "remote_sensing_hybrid_C01_final_c00020_f45_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 0.75
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "remote_sensing",
+     "cand": "c00020",
+     "fid": 5,
+     "stratum": "huge",
+     "params": 2376496,
+     "kappa_val_search": 0.5990958213806152,
+     "f1_val_search": 0.5797573328018188,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00020/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/huge"
+     ],
+     "id": "remote_sensing_hybrid_c00020_f5_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "remote_sensing",
+     "cand": "c00107",
+     "fid": 15,
+     "stratum": "medium",
+     "params": 1260772,
+     "kappa_val_search": 0.5960755348205566,
+     "f1_val_search": 0.5862463712692261,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00107/f15/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/medium"
+     ],
+     "id": "remote_sensing_lemonade_c00107_f15_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "remote_sensing",
+     "cand": "c00009",
+     "fid": 5,
+     "stratum": "tiny",
+     "params": 132620,
+     "kappa_val_search": 0.5913842916488647,
+     "f1_val_search": 0.5842304229736328,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00009/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/tiny"
+     ],
+     "id": "remote_sensing_hybrid_c00009_f5_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade_C01_final",
+     "dataset": "remote_sensing",
+     "cand": "c00081",
+     "fid": 15,
+     "stratum": "huge",
+     "params": 1777866,
+     "kappa_val_search": 0.5906354188919067,
+     "f1_val_search": 0.5551132559776306,
+     "svm_C_search": 0.1,
+     "ckpt": "artifacts/modehb_lemonade_C01_final/remote_sensing/state/seed42/candidates/c00081/f15/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade_C01_final/overall (arquivada, fitness com svm_C=0.1)"
+     ],
+     "id": "remote_sensing_lemonade_C01_final_c00081_f15_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 0.75
+    },
+    {
+     "search": "modehb_hybrid_C01_final",
+     "dataset": "remote_sensing",
+     "cand": "c00010",
+     "fid": 200,
+     "stratum": "tiny",
+     "params": 245586,
+     "kappa_val_search": 0.5774224996566772,
+     "f1_val_search": 0.5943318605422974,
+     "svm_C_search": 0.1,
+     "ckpt": "artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00010/f200/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid_C01_final/tiny"
+     ],
+     "id": "remote_sensing_hybrid_C01_final_c00010_f200_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 0.75
+    },
+    {
+     "search": "modehb_hybrid_C01_final",
+     "dataset": "remote_sensing",
+     "cand": "c00058",
+     "fid": 45,
+     "stratum": "small",
+     "params": 373472,
+     "kappa_val_search": 0.5703264474868774,
+     "f1_val_search": 0.542956531047821,
+     "svm_C_search": 0.1,
+     "ckpt": "artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00058/f45/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid_C01_final/small"
+     ],
+     "id": "remote_sensing_hybrid_C01_final_c00058_f45_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 0.75
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "remote_sensing",
+     "cand": "c00015",
+     "fid": 5,
+     "stratum": "medium",
+     "params": 1481220,
+     "kappa_val_search": 0.5697263479232788,
+     "f1_val_search": 0.5387569665908813,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00015/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/medium"
+     ],
+     "id": "remote_sensing_hybrid_c00015_f5_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "remote_sensing",
+     "cand": "c00054",
+     "fid": 45,
+     "stratum": "small",
+     "params": 735774,
+     "kappa_val_search": 0.5693315267562866,
+     "f1_val_search": 0.5534625053405762,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00054/f45/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/small"
+     ],
+     "id": "remote_sensing_lemonade_c00054_f45_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "remote_sensing",
+     "cand": "c00012",
+     "fid": 45,
+     "stratum": "tiny",
+     "params": 29888,
+     "kappa_val_search": 0.5562919974327087,
+     "f1_val_search": 0.569932222366333,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/remote_sensing/state/seed42/candidates/c00012/f45/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/tiny"
+     ],
+     "id": "remote_sensing_lemonade_c00012_f45_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "remote_sensing",
+     "cand": "c00006",
+     "fid": 5,
+     "stratum": "small",
+     "params": 322734,
+     "kappa_val_search": 0.5279426574707031,
+     "f1_val_search": 0.512668788433075,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/remote_sensing/state/seed42/candidates/c00006/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/small"
+     ],
+     "id": "remote_sensing_hybrid_c00006_f5_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    }
+   ]
+  },
+  "ham10000": {
+   "searches": {
+    "modehb_hybrid": {
+     "n_results_ok": 133,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    },
+    "modehb_lemonade": {
+     "n_results_ok": 131,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    }
+   },
+   "models": [
+    {
+     "search": "modehb_lemonade",
+     "dataset": "ham10000",
+     "cand": "c00061",
+     "fid": 5,
+     "stratum": "medium",
+     "params": 1046364,
+     "kappa_val_search": 0.6144594550132751,
+     "f1_val_search": 0.6502035856246948,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/ham10000/state/seed42/candidates/c00061/f5/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/medium",
+      "best_val_overall"
+     ],
+     "id": "ham10000_lemonade_c00061_f5_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "ham10000",
+     "cand": "c00043",
+     "fid": 45,
+     "stratum": "medium",
+     "params": 1352854,
+     "kappa_val_search": 0.6119623184204102,
+     "f1_val_search": 0.6286112070083618,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/ham10000/state/seed42/candidates/c00043/f45/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/medium"
+     ],
+     "id": "ham10000_hybrid_c00043_f45_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "ham10000",
+     "cand": "c00034",
+     "fid": 45,
+     "stratum": "small",
+     "params": 466666,
+     "kappa_val_search": 0.6008814573287964,
+     "f1_val_search": 0.5977970957756042,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/ham10000/state/seed42/candidates/c00034/f45/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/small"
+     ],
+     "id": "ham10000_hybrid_c00034_f45_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "ham10000",
+     "cand": "c00048",
+     "fid": 15,
+     "stratum": "small",
+     "params": 397136,
+     "kappa_val_search": 0.5982507467269897,
+     "f1_val_search": 0.6093423366546631,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/ham10000/state/seed42/candidates/c00048/f15/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/small"
+     ],
+     "id": "ham10000_lemonade_c00048_f15_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "ham10000",
+     "cand": "c00020",
+     "fid": 5,
+     "stratum": "huge",
+     "params": 2534920,
+     "kappa_val_search": 0.5857022404670715,
+     "f1_val_search": 0.5939702987670898,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/ham10000/state/seed42/candidates/c00020/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/huge"
+     ],
+     "id": "ham10000_hybrid_c00020_f5_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "ham10000",
+     "cand": "c00025",
+     "fid": 5,
+     "stratum": "tiny",
+     "params": 169748,
+     "kappa_val_search": 0.5856157541275024,
+     "f1_val_search": 0.5912954807281494,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/ham10000/state/seed42/candidates/c00025/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/tiny"
+     ],
+     "id": "ham10000_hybrid_c00025_f5_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "ham10000",
+     "cand": "c00044",
+     "fid": 5,
+     "stratum": "tiny",
+     "params": 298668,
+     "kappa_val_search": 0.5843864679336548,
+     "f1_val_search": 0.5761418342590332,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/ham10000/state/seed42/candidates/c00044/f5/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/tiny"
+     ],
+     "id": "ham10000_lemonade_c00044_f5_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "ham10000",
+     "cand": "c00070",
+     "fid": 45,
+     "stratum": "huge",
+     "params": 1532164,
+     "kappa_val_search": 0.583104133605957,
+     "f1_val_search": 0.5577468872070312,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/ham10000/state/seed42/candidates/c00070/f45/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/huge"
+     ],
+     "id": "ham10000_lemonade_c00070_f45_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    }
+   ]
+  },
+  "aid": {
+   "searches": {
+    "modehb_hybrid": {
+     "n_results_ok": 110,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    },
+    "modehb_lemonade": {
+     "n_results_ok": 2,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    }
+   },
+   "models": [
+    {
+     "search": "modehb_hybrid",
+     "dataset": "aid",
+     "cand": "c00020",
+     "fid": 5,
+     "stratum": "huge",
+     "params": 2137000,
+     "kappa_val_search": 0.8448668122291565,
+     "f1_val_search": 0.8472800850868225,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/aid/state/seed42/candidates/c00020/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/huge",
+      "best_val_overall"
+     ],
+     "id": "aid_hybrid_c00020_f5_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "aid",
+     "cand": "c00043",
+     "fid": 5,
+     "stratum": "medium",
+     "params": 1258340,
+     "kappa_val_search": 0.8372772932052612,
+     "f1_val_search": 0.8392316102981567,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/aid/state/seed42/candidates/c00043/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/medium"
+     ],
+     "id": "aid_hybrid_c00043_f5_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "aid",
+     "cand": "c00038",
+     "fid": 15,
+     "stratum": "small",
+     "params": 502304,
+     "kappa_val_search": 0.8324667811393738,
+     "f1_val_search": 0.8389374017715454,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/aid/state/seed42/candidates/c00038/f15/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/small"
+     ],
+     "id": "aid_hybrid_c00038_f15_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "aid",
+     "cand": "c00025",
+     "fid": 15,
+     "stratum": "tiny",
+     "params": 212710,
+     "kappa_val_search": 0.8200573921203613,
+     "f1_val_search": 0.8255829215049744,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/aid/state/seed42/candidates/c00025/f15/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/tiny"
+     ],
+     "id": "aid_hybrid_c00025_f15_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "aid",
+     "cand": "c00001",
+     "fid": 15,
+     "stratum": "tiny",
+     "params": 147950,
+     "kappa_val_search": 0.7055952548980713,
+     "f1_val_search": 0.7143091559410095,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/aid/state/seed42/candidates/c00001/f15/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/tiny"
+     ],
+     "id": "aid_lemonade_c00001_f15_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    }
+   ]
+  },
+  "coconut_trees": {
+   "searches": {
+    "modehb_hybrid": {
+     "n_results_ok": 35,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    },
+    "modehb_lemonade": {
+     "n_results_ok": 21,
+     "strata": {
+      "tiny": [
+       0,
+       300000
+      ],
+      "small": [
+       300000,
+       800000
+      ],
+      "medium": [
+       800000,
+       1500000
+      ],
+      "huge": [
+       1500000,
+       3500000
+      ]
+     }
+    }
+   },
+   "models": [
+    {
+     "search": "modehb_lemonade",
+     "dataset": "coconut_trees",
+     "cand": "c00003",
+     "fid": 200,
+     "stratum": "medium",
+     "params": 1341376,
+     "kappa_val_search": 0.7952079176902771,
+     "f1_val_search": 0.8975210189819336,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00003/f200/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/medium",
+      "best_val_overall"
+     ],
+     "id": "coconut_trees_lemonade_c00003_f200_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "coconut_trees",
+     "cand": "c00007",
+     "fid": 5,
+     "stratum": "medium",
+     "params": 1477350,
+     "kappa_val_search": 0.7899593114852905,
+     "f1_val_search": 0.8949289321899414,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00007/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/medium"
+     ],
+     "id": "coconut_trees_hybrid_c00007_f5_medium",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "coconut_trees",
+     "cand": "c00004",
+     "fid": 100,
+     "stratum": "huge",
+     "params": 2297872,
+     "kappa_val_search": 0.7899139523506165,
+     "f1_val_search": 0.8949276208877563,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00004/f100/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/huge"
+     ],
+     "id": "coconut_trees_hybrid_c00004_f100_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "coconut_trees",
+     "cand": "c00004",
+     "fid": 100,
+     "stratum": "huge",
+     "params": 2223066,
+     "kappa_val_search": 0.7866614460945129,
+     "f1_val_search": 0.8932369947433472,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00004/f100/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/huge"
+     ],
+     "id": "coconut_trees_lemonade_c00004_f100_huge",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "coconut_trees",
+     "cand": "c00014",
+     "fid": 5,
+     "stratum": "small",
+     "params": 336140,
+     "kappa_val_search": 0.777839183807373,
+     "f1_val_search": 0.8888686895370483,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00014/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/small"
+     ],
+     "id": "coconut_trees_hybrid_c00014_f5_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "coconut_trees",
+     "cand": "c00001",
+     "fid": 45,
+     "stratum": "tiny",
+     "params": 200944,
+     "kappa_val_search": 0.7356982231140137,
+     "f1_val_search": 0.8678121566772461,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00001/f45/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/tiny"
+     ],
+     "id": "coconut_trees_lemonade_c00001_f45_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_hybrid",
+     "dataset": "coconut_trees",
+     "cand": "c00009",
+     "fid": 5,
+     "stratum": "tiny",
+     "params": 81448,
+     "kappa_val_search": 0.7140436768531799,
+     "f1_val_search": 0.8569989204406738,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00009/f5/encoder.pt",
+     "why": [
+      "best_val modehb_hybrid/tiny"
+     ],
+     "id": "coconut_trees_hybrid_c00009_f5_tiny",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    },
+    {
+     "search": "modehb_lemonade",
+     "dataset": "coconut_trees",
+     "cand": "c00002",
+     "fid": 15,
+     "stratum": "small",
+     "params": 593840,
+     "kappa_val_search": 0.6631620526313782,
+     "f1_val_search": 0.8315235376358032,
+     "svm_C_search": 100,
+     "ckpt": "artifacts/modehb_lemonade/coconut_trees/state/seed42/candidates/c00002/f15/encoder.pt",
+     "why": [
+      "best_val modehb_lemonade/small"
+     ],
+     "id": "coconut_trees_lemonade_c00002_f15_small",
+     "fitness_readout_search": "cov_head",
+     "fitness_scaler_search": "standard",
+     "fitness_kappa_weight_search": 1.0
+    }
+   ]
+  }
+ },
+ "note": "fitness_kappa (val GA) = SVM sobre a leitura da busca (eval.svm_fitness: readout cov_head k=64, StandardScaler, C=100 nas buscas atuais; C=0.1 e kappa_weight 0.75 nas *_C01_final), NAO o GAP oficial. Buscas seeded (artifacts/modehb_seeded, modehb_lemonade_seeded) nao existem na Jaci em 17/11 21h."
+}

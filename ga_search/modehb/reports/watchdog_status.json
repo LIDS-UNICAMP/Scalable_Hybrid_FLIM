@@ -1,0 +1,154 @@
+{
+ "time": 1795138868.9756112,
+ "searches": {
+  "artifacts/modehb_hybrid/flowers/state/seed42/search_state.json": {
+   "jobs": 119,
+   "failed": 1,
+   "bracket": 0,
+   "gpu_hours": 21.73,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/protozoan/state/seed42/search_state.json": {
+   "jobs": 120,
+   "failed": 2,
+   "bracket": 0,
+   "gpu_hours": 35.57,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/protozoan_raw/state/seed42/search_state.json": {
+   "jobs": 112,
+   "failed": 0,
+   "bracket": 0,
+   "gpu_hours": 32.12,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/eggs_raw/state/seed42/search_state.json": {
+   "jobs": 51,
+   "failed": 0,
+   "bracket": 0,
+   "gpu_hours": 22.58,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/aid/state/seed42/search_state.json": {
+   "jobs": 177,
+   "failed": 2,
+   "bracket": 1,
+   "gpu_hours": 51.31,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/coconut_trees/state/seed42/search_state.json": {
+   "jobs": 39,
+   "failed": 1,
+   "bracket": 0,
+   "gpu_hours": 23.24,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/remote_sensing/state/seed42/search_state.json": {
+   "jobs": 114,
+   "failed": 3,
+   "bracket": 0,
+   "gpu_hours": 17.39,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/larvae_raw/state/seed42/search_state.json": {
+   "jobs": 162,
+   "failed": 3,
+   "bracket": 1,
+   "gpu_hours": 24.31,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/ham10000/state/seed42/search_state.json": {
+   "jobs": 190,
+   "failed": 0,
+   "bracket": 2,
+   "gpu_hours": 53.23,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/larvae/state/seed42/search_state.json": {
+   "jobs": 161,
+   "failed": 3,
+   "bracket": 1,
+   "gpu_hours": 24.08,
+   "done": false
+  },
+  "artifacts/modehb_hybrid/eggs/state/seed42/search_state.json": {
+   "jobs": 55,
+   "failed": 0,
+   "bracket": 0,
+   "gpu_hours": 22.85,
+   "done": false
+  },
+  "artifacts/modehb_lemonade/flowers/state/seed42/search_state.json": {
+   "jobs": 154,
+   "failed": 0,
+   "bracket": 1,
+   "gpu_hours": 26.62,
+   "done": false
+  },
+  "artifacts/modehb_lemonade/aid/state/seed42/search_state.json": {
+   "jobs": 2,
+   "failed": 0,
+   "bracket": 0,
+   "gpu_hours": 0.34,
+   "done": false
+  },
+  "artifacts/modehb_lemonade/coconut_trees/state/seed42/search_state.json": {
+   "jobs": 24,
+   "failed": 0,
+   "bracket": 0,
+   "gpu_hours": 13.77,
+   "done": false
+  },
+  "artifacts/modehb_lemonade/remote_sensing/state/seed42/search_state.json": {
+   "jobs": 208,
+   "failed": 1,
+   "bracket": 3,
+   "gpu_hours": 28.78,
+   "done": true
+  },
+  "artifacts/modehb_lemonade/ham10000/state/seed42/search_state.json": {
+   "jobs": 199,
+   "failed": 0,
+   "bracket": 2,
+   "gpu_hours": 47.99,
+   "done": false
+  },
+  "artifacts/modehb_lemonade/larvae/state/seed42/search_state.json": {
+   "jobs": 167,
+   "failed": 2,
+   "bracket": 1,
+   "gpu_hours": 22.09,
+   "done": false
+  },
+  "artifacts/modehb_lemonade/eggs/state/seed42/search_state.json": {
+   "jobs": 147,
+   "failed": 0,
+   "bracket": 1,
+   "gpu_hours": 29.97,
+   "done": false
+  },
+  "artifacts/modehb_lemonade_seeded/remote_sensing/state/seed42/search_state.json": {
+   "jobs": 139,
+   "failed": 0,
+   "bracket": 0,
+   "gpu_hours": 10.32,
+   "done": false
+  }
+ },
+ "gpus": {
+  "0": {
+   "used_gb": 37.6,
+   "total_gb": 95.6,
+   "util": 100.0
+  }
+ },
+ "gpu": {
+  "used_gb": 37.6,
+  "total_gb": 95.6,
+  "util": 100.0
+ },
+ "sessions": [
+  "modehb_monitor",
+  "modehb_watchdog"
+ ]
+}

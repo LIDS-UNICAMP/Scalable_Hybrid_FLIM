@@ -1,0 +1,230 @@
+[
+ {
+  "kind": "modehb_hybrid",
+  "base": "coconut_trees",
+  "seed": 42,
+  "src": "artifacts/_staging_gpu3/modehb_hybrid/coconut_trees",
+  "dest": "artifacts/modehb_hybrid/coconut_trees",
+  "state_dir_dest": "artifacts/modehb_hybrid/coconut_trees/state/seed42",
+  "checks": {
+   "state": {
+    "ok": true,
+    "n_jobs": 39,
+    "status": {
+     "ok": 38,
+     "failed": 1
+    },
+    "done": false,
+    "brackets_done": 0,
+    "bracket": 0,
+    "gpu_hours": 23.24,
+    "updated": "2026-11-16 22:04:30",
+    "fidelities_cfg": [
+     5,
+     15,
+     45,
+     100,
+     200
+    ],
+    "max_brackets": 10,
+    "last_job": {
+     "job": 38,
+     "cand_id": "c00019",
+     "fidelity": 5.0,
+     "status": "ok",
+     "role": "search"
+    },
+    "sha256": "db0813424f1007b4bd2c3823f733abf0d2fb2b39d57514102498b36a4423523a",
+    "failed_jobs": [
+     [
+      31,
+      "c00012",
+      5.0,
+      "params 3541364 > cap 3500000"
+     ]
+    ],
+    "md5": "def7dccada05c6a59f1b9930e1664e20"
+   },
+   "manifest": {
+    "sources": [
+     "artifacts/_staging_gpu3/modehb_hybrid_coconut_trees.ok",
+     "research/spifil_b0b4/agent5/gpu3_migration_manifest.csv"
+    ],
+    "csv_row": {
+     "kind": "modehb_hybrid",
+     "base": "coconut_trees",
+     "seed": "seed42",
+     "origem_athena": "artifacts/modehb_hybrid/coconut_trees",
+     "destino_jaci_staging": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/_staging_gpu3/modehb_hybrid/coconut_trees/",
+     "jobs_athena": "39",
+     "jobs_jaci": "39",
+     "md5_search_state_athena": "def7dccada05c6a59f1b9930e1664e20",
+     "md5_search_state_jaci": "def7dccada05c6a59f1b9930e1664e20",
+     "encoder_pt_conferidos": "35",
+     "encoder_pt_iguais": "True",
+     "rsync_rc": "0",
+     "marcador": "/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/_staging_gpu3/modehb_hybrid_coconut_trees.ok",
+     "tmux_laco_original": "modehb_gpu3c",
+     "comando_original": "/exps/moliveira/queues/gpu3_migracao/loops/modehb_gpu3c.txt",
+     "original_preservado_athena": "True",
+     "concluido_em": "2026-11-17_01:05:09"
+    },
+    "n_jobs": 39,
+    "md5": {
+     "md5_search_state_athena": "def7dccada05c6a59f1b9930e1664e20",
+     "md5_search_state_jaci": "def7dccada05c6a59f1b9930e1664e20"
+    },
+    "state_md5_ok": true
+   },
+   "checkpoints": {
+    "ok_jobs": 38,
+    "missing": 0,
+    "missing_examples": [],
+    "embeddings_missing": 0,
+    "absolute_paths": 0,
+    "max_fidelity": 200.0,
+    "n_max_fidelity": 4,
+    "loaded": 9,
+    "load_failed": [],
+    "loaded_detail": [
+     {
+      "job": 35,
+      "cand_id": "c00016",
+      "fid": 5.0,
+      "blocks": 4,
+      "MB": 23.8
+     },
+     {
+      "job": 12,
+      "cand_id": "c00003",
+      "fid": 45.0,
+      "blocks": 3,
+      "MB": 12.1
+     },
+     {
+      "job": 23,
+      "cand_id": "c00004",
+      "fid": 5.0,
+      "blocks": 4,
+      "MB": 27.7
+     },
+     {
+      "job": 33,
+      "cand_id": "c00014",
+      "fid": 5.0,
+      "blocks": 3,
+      "MB": 4.7
+     },
+     {
+      "job": 2,
+      "cand_id": "c00001",
+      "fid": 45.0,
+      "blocks": 2,
+      "MB": 0.3
+     },
+     {
+      "job": 4,
+      "cand_id": "c00001",
+      "fid": 200.0,
+      "blocks": 2,
+      "MB": 0.3
+     },
+     {
+      "job": 9,
+      "cand_id": "c00002",
+      "fid": 200.0,
+      "blocks": 3,
+      "MB": 5.9
+     },
+     {
+      "job": 14,
+      "cand_id": "c00003",
+      "fid": 200.0,
+      "blocks": 3,
+      "MB": 12.1
+     },
+     {
+      "job": 19,
+      "cand_id": "c00004",
+      "fid": 200.0,
+      "blocks": 4,
+      "MB": 27.7
+     }
+    ]
+   },
+   "config_search_diff": [],
+   "config_resolved_diff": [],
+   "controller": {
+    "fit_sig_jaci": "C100_kw1",
+    "fit_sig_resolved": "C100_kw1",
+    "controller_id_jaci": "ctrl-3f0ecd85783def06",
+    "controller_ids_in_logs": [
+     "ctrl-0ea8a3ceda16f0d0",
+     "ctrl-3e06c5adb87b9ad2"
+    ],
+    "fitness_modes_jobs": [
+     "svm_kappa"
+    ],
+    "note": "id NOVO na Jaci (esperado: o artifacts do athena é symlink, o resolve() muda); o state/jobs continuam; só o painel W&B do controller recomeça"
+   },
+   "dataset": {
+    "yaml": "ga_search/config/modehb/datasets/coconut_trees.yaml",
+    "root_exists": true,
+    "images_dir": "/dados/home/moliveira/datasets/organized/coconut_trees/orig",
+    "images_dir_exists": true,
+    "split_json": "/dados/home/moliveira/datasets/organized/coconut_trees/splits/split1.json",
+    "split_json_exists": true,
+    "split_sha256_ok": true,
+    "data_sha256_jobs": [
+     "5d692db886233f89f4675d1962880ec0b04187447f2b4a593b62b2c09bbd910d"
+    ],
+    "identity_sha256_jaci": "5d692db886233f89f4675d1962880ec0b04187447f2b4a593b62b2c09bbd910d",
+    "n_train": 9511,
+    "n_val": 2038,
+    "spifil_pool_sizes_jaci": [
+     32,
+     32
+    ],
+    "spifil_pool_sizes_state": [
+     32,
+     32
+    ]
+   },
+   "replay": {
+    "ok": true,
+    "replayed": 39,
+    "logged_identical": true,
+    "extra_cached_jobs": [],
+    "next_job": 39,
+    "next_fidelity": 5.0,
+    "next_role": "search",
+    "next_cand": "c00020",
+    "next_inherit_ckpt": null,
+    "outcome": "replay reproduziu todos os jobs e parou no próximo job novo",
+    "seconds": 0.8
+   }
+  },
+  "errors": [],
+  "warnings": [],
+  "validated_at": "2026-11-16 22:24:36",
+  "run_cmd": {
+   "config": "ga_search/config/modehb/search_v3.yaml",
+   "dataset": "coconut_trees",
+   "seed": 42,
+   "sets": [
+    "output_dir=artifacts/modehb_hybrid/coconut_trees/state/seed42",
+    "search.stratified.memory_budget_gb=34",
+    "gpu_process_cap_gb=44"
+   ]
+  },
+  "resources": {
+   "memory_budget_gb": 34,
+   "gpu_process_cap_gb": 44,
+   "peak_gpu_reserved_gb_max": 25.07,
+   "gate_free_mib": 33863
+  },
+  "tmpdir": "/tmp/claude-1014/-dados-home-moliveira-Scalable-Hybrid-FLIM/05a95f35-17a2-4976-a2bd-9c4d1e4ff9eb/scratchpad/resumeval_modehb_hybrid_coconut_trees_s42_b4jrb0nm",
+  "seconds": 8.4,
+  "verdict": "VALIDADA"
+ }
+]

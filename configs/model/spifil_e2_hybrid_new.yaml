@@ -1,0 +1,145 @@
+# NEW: versao ate DB8 -> H (re-treino das celulas que nao completaram em spifil_e123).
+# E2 (hibrido) — protocolo do commit (spifil_dense_growth_db7_aug.yaml) com duas mudancas:
+#   1. ativacao GELU em todo bloco (conv -> GELU, pos-ativacao, sem BN);
+#   2. crop por objeto da Spec 2 (bloco `crop:`) somado a lab_augment.
+# Resto identico: prefixo congelado, so bloco novo + decoder treinam, BCE, SPiFiL por bloco.
+# Consumido por: python -m src.modules.spifil_dense_growth_module --config <este arquivo>
+# Grade E1/E2/E3: experiments/ray (runner spifil_dense), 3 datasets x 3 splits x {5, 50, 100}.
+#
+# Cada passo nasce do SPiFiL sobre as features da rede congelada ate ali; os passos
+# com train=true ganham um decoder descartavel de resolucao equivalente e treinam
+# so a conv nova + decoder. O encoder de cada estagio e salvo; o decoder nunca.
+#
+# type: stem | dense | transition | head
+#   dense      -> concat(entrada, gelu(conv_kxk(entrada)))   out = in + k
+#   stem/transition/head -> gelu(conv(entrada)), sem concat     out = out_channels
+# act: gelu | relu (ausente = relu, configs antigas)
+architecture:
+  - {name: S,   type: stem,       kernel_size: 3, stride: 2, out_channels: 24, act: gelu}
+  - {name: DB1, type: dense,      kernel_size: 3, stride: 1, growth: 24, act: gelu}
+  - {name: DB2, type: dense,      kernel_size: 3, stride: 1, growth: 32, act: gelu}
+  - {name: TL1, type: transition, kernel_size: 1, stride: 2, out_channels: 64, act: gelu}
+  - {name: DB3, type: dense,      kernel_size: 3, stride: 1, growth: 48, act: gelu}
+  - {name: DB4, type: dense,      kernel_size: 3, stride: 1, growth: 64, act: gelu}
+  - {name: TL2, type: transition, kernel_size: 1, stride: 2, out_channels: 128, act: gelu}
+  - {name: DB5, type: dense,      kernel_size: 3, stride: 1, growth: 96, act: gelu}
+  - {name: DB6, type: dense,      kernel_size: 3, stride: 1, growth: 128, act: gelu}
+  - {name: DB7, type: dense,      kernel_size: 3, stride: 1, growth: 160, act: gelu}
+  - {name: DB8, type: dense,      kernel_size: 3, stride: 1, growth: 192, act: gelu}   # new: DB8 logo apos o DB7, a 25 px
+  - {name: H,   type: head,       kernel_size: 1, stride: 1, out_channels: 1280, act: gelu}   # so no final: SPiFiL 1x1 + backprop
+
+# (canais de saida, resolucao) que a rede montada TEM de reproduzir — checado no build.
+expected_table:
+  S: [24, 100]
+  DB1: [48, 100]
+  DB2: [80, 100]
+  TL1: [64, 50]
+  DB3: [112, 50]
+  DB4: [176, 50]
+  TL2: [128, 25]
+  DB5: [224, 25]
+  DB6: [352, 25]
+  DB7: [512, 25]
+  DB8: [704, 25]
+  H: [1280, 25]
+
+# S e so SPiFiL (o protocolo comeca a treinar no DB1).
+train_steps: [DB1, DB2, TL1, DB3, DB4, TL2, DB5, DB6, DB7, DB8, H]
+
+name_prefix: E2_hybrid_commit_new   # hibrido do commit + GELU + recorte; runs: E2_hybrid_commit_new_<ds>_split<s>_pct<p>
+name_suffix: _e2              # ignorado no nome (name_prefix manda); fallback de evaluate.family
+
+# REGRA: augmentation so onde ha backprop (bloco novo + decoder, training_step).
+# O SPiFiL monta os kernels das imagens originais na posicao original; validacao e SVM
+# tambem veem a original. So transformacoes que nao misturam L, a, b (src/transforms/lab_augment.py).
+augment:
+  enabled: true
+  # geometricas: so movem pixels; bordas preenchidas com o fundo de cada imagem
+  hflip: 0.5                   # probabilidade
+  vflip: 0.5
+  rot90: true                  # k em {0,1,2,3}, uniforme
+  rotation_deg: 15             # angulo livre em [-15, 15]
+  translate: 0.1               # fracao da imagem, em [-0.1, 0.1]
+  scale: [0.9, 1.1]
+  elastic: {p: 0.3, alpha: 30.0, sigma: 5.0}   # leve: forma e informacao de classe
+  # so no L (luminosidade); a e b intactos
+  l_contrast: [0.9, 1.1]       # L' = c*L + b
+  l_brightness: 0.05           # b em [-0.05, 0.05]
+  l_gamma: [0.9, 1.1]          # L' = L**g
+
+# Spec 2 — crop por objeto (src/transforms/object_crop.py). Treino: augmentation por epoca;
+# val/teste: so o crop base deterministico. Chaves fixadas no contrato A0 (iguais em E1/E2/E3).
+crop:
+  enabled: true
+  margin: 0.10             # por lado, crop base
+  min_bbox: 32             # bbox (px originais) menor que isso -> fora do TREINO
+  max_upscale: 2.0         # crop base nunca amplia > 2x: se lado*2 < image_size, o contexto quadrado cresce
+  patch: 16                # regra de n_obj (igual §4): patch e objeto se >= object_threshold dos pixels e mascara
+  object_threshold: 0.25
+  elongated: {ratio: 2.0, strategy: auto}   # auto = compara "pad" (aspecto + reflect) x "pca" (gira ao eixo principal)
+                                            # no treino, fica o de maior mediana de n_obj; ou force pad|pca
+  rrc: {scale: [0.70, 1.00], ratio: [0.85, 1.18], min_keep: 0.60, min_obj: 12, max_tries: 10}
+  margin_jitter: {p: 0.30, range: [0.05, 0.25]}   # substitui o RRC em 30% das amostras
+  hflip: 0.5
+  vflip: 0.5
+  rot90: 0.5
+  rotation: {p: 0.3, deg: 15}   # preenchimento reflect
+  cache_dir: artifacts/object_crops
+
+grid:
+  datasets: [eggs, larvae, protozoan]
+  splits: [1, 2, 3]
+  percentages: [5, 50, 100]
+
+spifil:
+  # Imagens do treino (percentual da celula) por classe de onde sai cada passo. larvae tem
+  # 2 classes e objetos finos: precisa de mais imagens para o H (1280 filtros) achar candidatos.
+  images_per_class: {eggs: 40, larvae: 150, protozoan: 40}
+  # Impurezas ficam fora, como no SPiFiL (README: "excluding impurities").
+  exclude_classes: {eggs: [9], larvae: [], protozoan: [7]}
+  superpixels: disf            # disf (paper) | slic
+  n_superpixels: 50
+  max_candidates: 10000        # teto do conjunto pontuado (Fisher e O(N^2))
+  alpha: 0.5                   # DiversitySelector
+  pool_factor: 3
+  stdev_factor: 0.01
+
+train:
+  batch_size: 32               # M1 (RTX 5080 16 GB): pico 7.9 GB no H com expandable_segments; 64 deixa 6% livre; 128 estoura
+  head_batch_size: 4           # treino do H (1280 canais a ate 100x100) em micro-batches de 4 acumulados ate 32: mesmo batch efetivo; com 8 o pico ainda e ~11 GB, com 4 ~3 GB
+  num_workers: 16
+  max_epochs: 1000
+  patience: 10
+  lr: 5.0e-4
+  weight_decay: 5.0e-2
+  image_size: 200
+  seed: 42
+
+output_root: artifacts/spifil_e123_new     # compartilhado por E1/E2/E3 (== output.work_dir do YAML Ray)
+
+# Um run W&B por celula (id = nome + hash da config: mesma config continua o run, config nova abre outro).
+# Metricas por estagio: <ESTAGIO>/{train,val}_recon_loss contra <ESTAGIO>/epoch.
+wandb:
+  enabled: true
+  project: journal_02_2026_hybrid_FLIM
+  entity: ophira-ai
+  tags: [journal_02_2026_hybrid_FLIM, spifil_dense_growth, unsupervised, spifil_e123, e2_hybrid, gelu, crop, augment, E2_hybrid_commit, new, db8]
+
+# Avaliacao: python -m src.evaluate.svm_spifil_dense --config <este arquivo>
+# SVM linear (fit_svm do repo) no GAP de cada estagio salvo; fit no treino (percentual da celula),
+# score no teste. So celulas com run_metadata status ok; linhas ja no CSV sao puladas.
+# O runner Ray spifil_dense chama por celula, logo apos o treino (--dataset/--split/--percentage).
+evaluate:
+  family: e2_hybrid_new
+  datasets: [eggs, larvae, protozoan]
+  out_csv: results/svm_spifil_e2_hybrid_new_results.csv
+  max_iter: -1                 # -1 = solver convergido, como eval_avg_pooling_48d
+  batch_size: 64
+  num_workers: 8
+
+# Execucao da grade (python -m src.modules.spifil_dense_growth_module --config <este arquivo>):
+# uma celula por subprocesso, log em <log_dir>/<dataset>_split<s>.log.
+run:
+  log_dir: logs/spifil_e123_new
+  concurrency: 1               # M1: 2 celulas = cada epoca 2x mais lenta, sem ganho
+  cuda_alloc_conf: expandable_segments:True   # M1: pico do H 10.6 -> 7.9 GB, mesma velocidade

@@ -1,0 +1,119 @@
+# Progressive MO-DEHB NAS (prompt §7.4, §12, §14). Busca sem rótulo: só a validation de cada dataset.
+# Valores antes marcados "MEASURED_IN_Q1" foram medidos no Q1 (jaci, 13/11/2026); ver comentários em resources.
+project: progressive_mo_dehb
+entity: ophira-ai
+seed: 42
+seeds: [42, 43, 44]            # repetições independentes da busca; ablações usam os mesmos
+dataset_config_dir: ga_search/config/modehb/datasets
+datasets: [larvae, remote_sensing, flowers, ham10000, aid, eggs, coconut_trees, protozoan]   # food101 removido (tempo)
+split: 1
+search_split_key: validation   # NUNCA train/test na busca; rótulos não são lidos
+image_size: 224
+# SPiFiL estendido (ga_search/modehb/spifil_ops.py): true = SPiFiL também para kernel 1/7, pointwise,
+# depthwise, dwsep, gelu/selu/prelu/leaky_relu, avgpool, norms e residual (aproximações marcadas em
+# provenance["spifil_variant"]). false (default) = comportamento atual: repair_for_spifil + fit_new_block.
+spifil_ops: true
+# Nº de imagens de TREINO por classe usadas pelo SPiFiL para aprender os kernels: gene global
+# `spifil_images_per_class` do genoma (escolhido entre estes valores). Pool estratificado e fixo
+# por seed do dataset, só do split de treino; subconjuntos aninhados (k=2 ⊂ k=4 ...); k=1 = protocolo antigo.
+spifil_images_choices: [1, 2, 4, 8, 16]
+
+# --- DEHB: fidelidade = épocas (AE + SSL na razão 1:2) ---
+fidelities: [5, 15, 45]        # orçamento total de épocas por fidelidade
+max_brackets: 10              # rodadas do MO-DEHB (brackets Hyperband); era 6
+eta: 3
+fidelity_split:
+  ae: 1                        # AE:SSL = 1:2 → 5 = (≈2 AE, 3 SSL) arredondado para baixo no AE
+  ssl: 2
+  rounding: floor_ae
+
+population:
+  initial_size: 16             # >= 16; 4 larguras × 2 inits × 2 profundidades
+  initial_grid:
+    filters: [16, 32, 64, 128]
+    init: [spifil, random]
+    depth: [2, 3]
+  spifil_offspring_share: 0.75 # 75% dos filhos com init SPiFiL, 25% random
+  random_twin_at_max_fidelity: true   # toda SPiFiL promovida a 45 ganha gêmea random (mesma arquitetura, mesma seed)
+  exploration_epsilon: 0.1     # prob. de amostra uniforme do espaço em vez de mutação/crossover DE
+  de:
+    mutation_factor: 0.5
+    crossover_prob: 0.5
+    strategy: rand1_bin
+
+stages:
+  stage1:
+    name: macro
+    search: [channels, depth, embed_dim]
+    space:
+      channels: [16, 32, 64, 128]
+      depth: [1, 2, 3, 4, 5]
+      embed_dim: [48, 128, 256, 512]
+    fixed: {operator: conv, kernel: 3, activation: relu, pooling: gap, batchnorm: true}
+  stage2:
+    name: operators
+    search: [operator, kernel, activation, pooling, batchnorm, whitening]
+    space:
+      operator: [conv, dwsep_conv, softhebb_conv]
+      kernel: [3, 5, 7]
+      activation: [relu, gelu, silu, selu]
+      pooling: [gap, gem, moments]
+      batchnorm: [true, false]
+      whitening: [none, stat, dbn]
+    inherit_from: stage1_pareto_front
+
+# --- Objetivos multiobjetivo ---
+objectives:
+  - {name: quality, direction: max}
+  - {name: flops, direction: min, unit: gflops}
+  # - {name: latency_ms, direction: min}   # adicionado depois (fase posterior)
+hypervolume:
+  # Ponto de referência no espaço (quality, flops), dominado por todo candidato válido:
+  # quality ∈ [0,1] → ref 0.0 (pior possível); flops → 1.1 × max_flops do espaço (folga de 10%).
+  # HV é calculado após normalizar flops por max_flops, logo ref = (0.0, 1.1) fixo entre datasets.
+  reference_point: {quality: 0.0, flops: 1.1}
+  flops_normalizer: max_flops_in_space
+  max_flops_in_space: 1.0e+11   # Q1: = modehb.FLOPS_HI (MACs, log-normalised); medido 2.83e10 p/ 5x256ch k5 @224
+
+fitness:                       # quality sem rótulo
+  knn_view_consistency: 0.5    # concordância de k-NN entre duas views aumentadas
+  clustering_stability: 0.5    # ARI médio entre reclusterizações bootstrap
+  knn_k: 10
+  clustering_bootstrap: 5
+
+collapse:                      # candidato com colapso → quality = 0, não entra na frente
+  min_embedding_std: 1.0e-4
+  min_effective_rank_frac: 0.05   # rank efetivo / embed_dim
+  max_mean_cosine: 0.95
+  nan_is_collapse: true
+
+tta:
+  search: 1                    # FIXO durante a busca; 4/8 só na ablação de TTA
+training:
+  batch_size: 64               # FIXO; nunca autoajustado
+  lr_new: 1.0e-3               # camadas novas do bloco progressivo
+  lr_old: 1.0e-4               # camadas herdadas
+  auto_adjust_batch_size: false
+  auto_adjust_lr: false
+  optimizer: adamw
+  weight_decay: 1.0e-4
+  ssl: lejepa
+  local_ae: true
+
+spectral_every: 5              # diagnóstico espectral (rank efetivo / espectro) a cada N épocas
+
+resources:
+  host: jaci
+  gpu_memory_target_gb: {min: 88, max: 91}   # total na GPU do jaci (monitor_gpu.py)
+  # Q1 (13/11, jaci): decode IFT-LAB satura em ~800-900 img/s com 32-96 workers; 120 piora (590 img/s).
+  num_workers: 64
+  # cache float32 = 0.60 MB/img @224 -> food101 42.6 GB (+2x transitório no torch.cat); RAM livre ~235 GB.
+  ram_cache_gb: 96
+  max_concurrent_trials: 1     # MO-DEHB síncrono; 1 processo/GPU (5x256ch k5 sozinho: 58 GB alloc, 82 GB reservado)
+  gpu_process_cap_gb: 76       # 91 GB alvo - ~13 GB do root - contexto CUDA; acima disso o candidato vira OOM/infeasible
+
+paths:
+  state_dir: "artifacts/modehb/{dataset}/state"          # estado do DEHB (retomável)
+  checkpoint_dir: "artifacts/modehb/{dataset}/checkpoints"
+  log_dir: "artifacts/modehb/{dataset}/logs"
+  pareto_dir: "artifacts/modehb/{dataset}/pareto"
