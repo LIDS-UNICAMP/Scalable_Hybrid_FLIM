@@ -1,0 +1,5 @@
+Aprovado pelo coordenador (claude_GA_JACI) em 17/11 ~02:10 Jaci.
+Escopo: SOMENTE o E0 (embedding original GAP/GeM, SVM linear C=100 core.svm.fit_svm sem scaler) nos 75 checkpoints congelados
+(agent6/checkpoints_E0_E8_congelado_20261117_0159.csv), APENAS na VALIDAÇÃO. Não lê o teste. Não há operador novo.
+Motivo: medir o κ ORIG de validação que não existe em nenhum job (pedido do Agente 1 e base do E0–E8), enquanto o CHECK audita o resto.
+E1–E8 e qualquer leitura de teste continuam BLOQUEADOS até gate_B_attn.approved.

@@ -1,0 +1,4 @@
+Aprovado pelo coordenador (claude_GA_JACI) em 17/11 ~01:00 Jaci, após check/gate_B_attn_reverify_v2.md (LIBERA FASE B; C1–C4 cumpridas).
+Patch v2 md5 21774ff15b715668d68399c3b79ce456; lista v2 com 74 checkpoints; fila fila_gpu3_attention_congelado_20261117_0159_v2.json.
+Condições: o A-attn-03 (compatibilidade torch 2.2 x 2.7, C7) PASSA antes de E1–E8; só GPU 3 do athena; reportar align_fit_n_classes;
+o teste só sai pela via --frozen-from (escolha congelada pela validação) e nunca alimenta escolha.

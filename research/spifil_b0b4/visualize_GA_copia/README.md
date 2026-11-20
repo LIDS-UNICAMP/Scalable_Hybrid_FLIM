@@ -124,6 +124,14 @@ Ponto = média entre splits (duplicatas de split viram média antes); **barra co
   apontando para esse mesmo CSV (hoje: protozoan), desenha uma curva só, vermelha, "melhor nosso = AE outubro (SPiFiL camada a camada + AE), GeM+TTA+pw".
 - Base sem nenhuma curva nossa: só os FMs.
 
+## Splits e vazamento — `<base>/ga_splits_classes.png` e `<base>/ga_vazamento.png` (gerados na Jaci)
+- `ga_splits_classes.png` (+ `splits_classes.md` / `.tex`): nº de imagens de treino/val/teste por % do treino e por classe (split1),
+  com a mesma regra do `--train-pct` (val e teste fixos, os da busca; só o treino da SVM muda).
+- `ga_vazamento.png`: % das imagens de teste já vistas no treino, por split; FMs = treino do mesmo split,
+  nossos = treino do SSL da busca (split1). Resumo das 11 bases: `vazamento_resumo.md`.
+- Scripts na Jaci (que tem os encoders): `research/spifil_b0b4/readout_x/plot_splits_classes.py` e `leak_stats.py`.
+  Aqui são só cópias puxadas de `jaci:.../research/spifil_b0b4/visualize_GA_copia/`; o `plot_ga.py` e o watcher não os geram nem apagam.
+
 ## marcados.csv
 
 Coluna `versao` (melhorada/semTTA/comTTA). Todos os pontos marcados de cada figura (seta "melhor nosso", estrelas dos FMs, losangos do AE outubro, X do aleatório), uma linha por (figura, ponto):

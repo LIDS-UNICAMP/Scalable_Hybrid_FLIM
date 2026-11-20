@@ -1,0 +1,5 @@
+Aprovado pelo coordenador (claude_GA_JACI) em 17/11 ~00:30 Jaci, após check/gate_A1_audit.md (APROVADO COM CONDIÇÕES).
+C1–C6 e C10–C12: corrigidas pelo Agente 1. C13: decidida pelo usuário ("Dois números": test_full oficial + test_lesion_clean ao lado).
+evaluation_contract.md v1.2 md5 7367b52c00f555b1cc5724f7defdd5df.
+C7 (CPU×GPU), C8 (sub4000×full) e C9 (FLOPs sem parâmetros) são pré-requisitos do X00 e da fitness nova (X00a/X00b/X00c).
+Sementes ORIG NÃO congeladas até o X00.
