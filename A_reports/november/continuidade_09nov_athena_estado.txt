@@ -1,0 +1,37 @@
+Mon 09 Nov 2026 02:02:24 AM UTC
+== sessoes
+bench_athena: 1 windows (created Sun Nov  8 15:23:35 2026)
+claude: 1 windows (created Sat Oct 24 11:32:45 2026)
+claude_explore: 1 windows (created Thu Oct 29 21:02:35 2026)
+claude_explore_data: 1 windows (created Thu Nov  5 19:15:48 2026)
+claude_explore_models: 1 windows (created Thu Nov  5 22:01:00 2026)
+claudio_athena: 1 windows (created Wed Nov  4 01:34:00 2026)
+codex: 1 windows (created Mon Oct 26 00:42:10 2026)
+disc_md_e07_off: 1 windows (created Mon Nov  9 00:43:56 2026)
+disc_md_ext_g0: 1 windows (created Sun Nov  8 01:42:57 2026)
+disc_md_ext_g1: 1 windows (created Sun Nov  8 01:43:48 2026)
+disc_md_ext_g2: 1 windows (created Sun Nov  8 01:42:57 2026)
+disc_md_ext_g3: 1 windows (created Sun Nov  8 01:43:06 2026)
+disc_md_ext_gate: 1 windows (created Sun Nov  8 02:30:25 2026)
+disc_md_ext_h0: 1 windows (created Sun Nov  8 01:59:26 2026)
+disc_md_ext_h1: 1 windows (created Sun Nov  8 01:59:26 2026)
+disc_md_ext_h2: 1 windows (created Sun Nov  8 01:59:26 2026)
+disc_md_ext_h3: 1 windows (created Sun Nov  8 01:59:26 2026)
+disc_md_gelu: 1 windows (created Sun Nov  8 18:09:27 2026)
+disc_md_leis_p1b: 1 windows (created Sun Nov  8 15:37:00 2026)
+disc_md_leis_p1c_s43: 1 windows (created Sun Nov  8 16:00:47 2026)
+disc_md_pf_res448_off: 1 windows (created Mon Nov  9 01:04:34 2026)
+disc_md_plano_helminth: 1 windows (created Mon Nov  9 00:01:43 2026)
+fila_athena: 1 windows (created Mon Nov  9 00:43:40 2026)
+hyb_ham10000_oficial: 1 windows (created Mon Nov  9 01:17:24 2026)
+svm_layerwise5: 1 windows (created Sat Oct 31 18:54:09 2026)
+watch_disc: 1 windows (created Fri Oct 30 18:24:29 2026)
+== fila_athena pendente
+== progresso
+gelu total=36 ok=16
+leis_p1b total=6 ok=4
+leis_p1c_s43 total=6 ok=4
+disc_md_plano_helminth total=12 ok=8
+disc_md_e07_off total=4 ok=0
+disc_md_pf_res448_off total=4 ok=1
+hyb_ham10000_oficial total=3 ok=0

@@ -1,0 +1,21 @@
+# Prompt do usuário, 07/11 22:15 UTC: investigação sistemática SPiFiL sem backprop ("SOL")
+
+Ordem do usuário: ver o que já foi feito e o que não foi; o que faltar vai para a fila do Jaci, e o que sobrar para o Athena; tirar conclusões junto com o que já temos.
+
+Regras: primeiro auditar (Rodada 0), depois implementar só o ausente, piloto antes de rodada grande, não repetir o equivalente, não sobrescrever, não interromper jobs, nunca teste para escolher, sem backprop no SPiFiL. Resultados em /exps/moliveira/results_sol/{audit,normalization,polarity,filter_diversity,saliency,pooling,alternative_encoders,architecture_scaling,ablations,statistical_analysis,figures,tables,reports}; relatórios versionáveis no repositório.
+
+Regimes, sempre separados: A não supervisionado (filtros sem rótulo, sem máscara, sem backprop); B SPiFiL original com rótulo na escolha de exemplos; C aprendizado local (SoftHebb); D aleatório fixo. Comparação principal: A contra D, mesmo orçamento.
+
+Datasets: T1 com nome, família, imagens, classes, distribuição, tamanho, canais, fundo, fração de primeiro plano, splits, duplicatas entre bases derivadas (subgroup vs completa). Dois níveis: por base e por família independente. Controle de variáveis pareado (split, semente, arquitetura, profundidade, filtros, kernel, stride, padding, pooling, classificador, pré-processamento, exemplos, ajuste).
+
+P1 normalização: N0 atual, N1 Z-score por patch, N2 Z-score global, N3 por dimensão/canal, N4 whitening dos filtros, N5 whitening entre camadas, N6 Z-score + whitening entre camadas, N7 mediana/MAD. Em aleatório, geodésico, FPS e melhor inicializador; em várias camadas. 10 figuras (histogramas, média e desvio por camada, autovalores, correlação, energia, fração perto de zero, valores singulares, condicionamento, desempenho × regularização, Δκ).
+P2 polaridade: A0 ReLU, A1 R+ e R−, A2 |R|, A3 Leaky fixo, A4 sinal e magnitude, A5 agregação separada; controle de orçamento (não dobrar canais sem controle). 8 figuras.
+P3 diversidade funcional: candidatos (crus, geodésico, SIFT filtrado, FPS, objeto), seleção por patch (aleatória, FPS, K-medoids, cosseno, correlação, DPP) e por ativação (F0 aleatória, F1 FPS patch, F2 FPS ativação, F3 baixa correlação, F4 cobertura, F5 visual + funcional, F6 redundância mínima + estabilidade multiescala). Mesmo número final de filtros. 10 figuras.
+P4 saliência e fundo: mapas clássicos; S0 sem atenção, S1 melhor mapa, S2 média, S3 fusão ponderada, S4 fusão regional, S5 adaptativa, S6 estabilidade entre escalas; avaliação do fundo (cor, textura, periferia, iluminação, resolução, fundo complexo, substituição de fundo com segmentação confiável). 10 figuras.
+P5 pooling: R0 atual, R1 GAP, R2 GMP, R3 GeM, R4 GeM p fixo por validação, R5 SPP, R6 regional, R7 concatenação, R8 multiescala, R9 segunda ordem/covariância, R10 combinações; controle de dimensão. 9 figuras.
+P6 encoders alternativos: Wavelet Scattering (escalas, ordens, resolução, pooling), SoftHebb (regime C), Random CNN, PCANet se viável; parâmetros, FLOPs, tempo, memória, dimensão.
+Profundidade 3, 4, 5, 6, 8 e largura 64, 256 nos finalistas.
+Ablação A0–A9 (normalização, polaridade, diversidade, saliência, pooling), triagem progressiva, sem produto cartesiano.
+Estatística: Δκ pareado contra aleatório; κ, acurácia, acurácia balanceada, macro-F1, precisão e recall por classe, matriz de confusão, média, mediana, desvio, IC; tempos, memória, filtros, dimensão; 5 sementes no confirmatório; bootstrap pela unidade certa, testes pareados não paramétricos, correção de comparações múltiplas, tamanho do efeito; critério inicial: ganho em ≥3 de 5 famílias, mais magnitude e incerteza.
+Tabelas T1–T18 em CSV e Markdown. Figuras PNG e SVG/PDF, sem valores fictícios.
+Rodadas: 0 auditoria, 1 mecanismos individuais (P1–P5), 2 encoders alternativos (P6), 3 combinações, 4 escala, 5 confirmação, 6 análise. Relatório final com introdução, trabalhos relacionados (FLIM, Multi-Step FLIM, normalização em FLIM, PCANet, Saak, PixelHop, Coates e Ng, SoftHebb, Scattering, diversidade, multiescala, saliência clássica), metodologia, resultados, ablação, robustez, interpretabilidade, eficiência, discussão, limitações, e as 20 perguntas.
