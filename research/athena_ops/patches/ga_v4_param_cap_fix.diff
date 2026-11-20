@@ -1,0 +1,253 @@
+--- a/ga_search/modehb/strata.py
++++ b/ga_search/modehb/strata.py
+@@ -41,7 +41,8 @@
+                      mem_scale=1.0,              # calibration of mem_estimate_gb (measured peak/est, 1699 jobs)
+                      oom_fallback=[],            # OOM ladder: [{amp_dtype: bf16}, {amp_dtype: bf16, batch_div: 2}]
+                      oom_fast_retries=None,      # with oom_fallback: transient retries before the ladder
+-                     oom_retry_sleep_s=None)
++                     oom_retry_sleep_s=None,
++                     cap_count="estimate")       # "spifil_ops": param_cap checked BEFORE training on param_count_built
+ 
+ 
+ def strat_config(cfg: Optional[dict]) -> dict:
+@@ -92,6 +93,27 @@
+     return int(n)
+ 
+ 
++def param_count_built(genome: dict) -> int:
++    """Upper bound of the MEASURED ``result["params"]`` (encoder + EmbeddingHead) with ``spifil_ops``:
++    the blocks the evaluator builds (SpifilOpsBlock: conv bias + 1x1 residual projection) at the
++    requested widths (SPiFiL only builds fewer), every residual counted as a projection (when SPiFiL
++    narrows the previous layer an identity skip becomes one). ``param_estimate`` (ConvBlock) skips
++    both: remote_sensing v4 c00015 = 5,251,641 estimated, 5,612,872 measured, 5,797,782 here."""
++    import torch
++    from ga_search.modehb.pooling_head import EmbeddingHead
++    from ga_search.modehb.spifil_ops import SpifilOpsBlock, to_ops_spec
++    n, cin = 0, 3
++    with torch.device("meta"):
++        for i in range(int(genome["depth"])):
++            spec = to_ops_spec(genome["layers"][i], cin)
++            if spec["residual"]:
++                spec["skip"] = "project"
++            n += sum(p.numel() for p in SpifilOpsBlock(spec).parameters())
++            cin = int(spec["channels"])
++        n += sum(p.numel() for p in EmbeddingHead(cin, int(genome["embed_dim"]), genome["pooling"]).parameters())
++    return int(n)
++
++
+ def _scaled(genome: dict, s: float, cmax: int) -> dict:
+     g = {**genome, "layers": [dict(L) for L in genome["layers"]]}
+     for i in range(int(g["depth"])):
+--- a/ga_search/modehb/modehb.py
++++ b/ga_search/modehb/modehb.py
+@@ -724,6 +724,10 @@
+         # opt-in parameter-stratified search (YAML ``stratified:``); None = original MO-DEHB
+         self.strat = S.strat_config(sc) if sc.get("enabled") else None
+         self.param_fn = param_fn or S.param_estimate
++        # v4 ``stratified.cap_count: spifil_ops``: param_cap on strata.param_count_built (>= the measured
++        # params) BEFORE training; absent = the ConvBlock estimate, cap checked only after training (v3)
++        self._cap_built = (self.strat or {}).get("cap_count") == "spifil_ops"
++        self.cap_fn = S.param_count_built if self._cap_built else self.param_fn
+         self.evaluate_fn = evaluate
+         self.out = Path(output_dir)
+         self.out.mkdir(parents=True, exist_ok=True)
+@@ -850,8 +854,8 @@
+             why = None
+             if ES.active_layers(g) != ES.active_layers(g0):
+                 why = "changed by repair"
+-            elif self.strat is not None and self.param_fn(g) > self.strat["param_cap"]:
+-                why = f"params {self.param_fn(g)} > cap {self.strat['param_cap']}"
++            elif self.strat is not None and self.cap_fn(g) > self.strat["param_cap"]:
++                why = f"params {self.cap_fn(g)} > cap {self.strat['param_cap']}"
+             elif self.strat is not None and self.strat.get("memory_budget_gb") and S.mem_estimate_gb(
+                     g, int(self.cfg["image_size"]), n_classes=n_cls or None, seeds_per_image=spp,
+                     pool_sizes=pools) > float(self.strat["memory_budget_gb"]):
+@@ -1376,9 +1380,27 @@
+                and (fidelity is None or j["fidelity"] == fidelity) and (role is None or j["role"] == role)]
+         return out
+ 
++    def _cap_project(self, genome, vector):
++        """v4 hard cap BEFORE training: a genome whose ``cap_fn`` count is above ``param_cap`` is shrunk
++        by ``strata.enforce_cap`` (top band, then widths x0.9) with an rng drawn from the genome, so a
++        restart replays it; a job logged with the raw genome (search started before this fix, e.g.
++        remote_sensing c00015) replays raw. Still above the cap: rejected untrained in ``_call``."""
++        from ga_search.modehb import strata as S
++        if self.cap_fn(genome) <= self.strat["param_cap"]:
++            return genome, vector
++        k, log = len(self.state["jobs"]), getattr(self, "_replay", [])
++        if k < len(log) and log[k]["arch_hash"] == arch_hash(genome):
++            return genome, vector
++        rng = np.random.default_rng([int(self.cfg["seed"]), int(arch_hash(genome)[:8], 16), 0xCA9])
++        g = S.enforce_cap(genome, self.strat, self._rep, rng, count=self.cap_fn)
++        print(f"[modehb] cap: {self.cap_fn(genome)} -> {self.cap_fn(g)} params (built count), reprojected", flush=True)
++        return g, None
++
+     def _evaluate(self, genome, fid, *, parent_id, generation, rung, cand_id=None, vector=None,
+                   role="search", twin_of=None, twin_source=None, inherit=None, extra_ctx=None):
+         genome = repair(genome, **self.repair_kw)
++        if getattr(self, "_cap_built", False) and inherit is None:   # v4: hard cap before training
++            genome, vector = self._cap_project(genome, vector)
+         cached = self._find(genome, fid, role=role)
+         lower = [j for j in self._find(genome, role=role) if j["fidelity"] < fid and j["status"] == "ok"
+                  and j["result"].get("checkpoint")]
+@@ -1403,7 +1425,7 @@
+         if self.strat is not None:
+             from ga_search.modehb import strata as S
+             p_est = self.param_fn(genome)
+-            p_meas = result.get("params") if result.get("status", "ok") == "ok" else None
++            p_meas = result.get("params") if result.get("status", "ok") == "ok" or result.get("not_trained") else None
+             stratum = S.stratum_of(p_meas if p_meas is not None else p_est, self.strat)
+             if result.get("status", "ok") == "ok" and p_meas is not None and int(p_meas) > self.strat["param_cap"]:
+                 result = {**result, "status": "failed", "infeasible": "param_cap",
+@@ -1438,6 +1460,10 @@
+                 raise ReplayMismatch(f"job {k}: logged {old['arch_hash']}@{old['fidelity']} "
+                                      f"vs {arch_hash(genome)}@{fid}")
+             return old["result"]
++        if getattr(self, "_cap_built", False) and self.cap_fn(genome) > self.strat["param_cap"]:
++            n = int(self.cap_fn(genome))              # v4: never trained above the cap
++            return {"status": "failed", "infeasible": "param_cap", "not_trained": True, "params": n,
++                    "gpu_hours": 0.0, "error": f"params {n} > cap {self.strat['param_cap']} (built count, before training)"}
+         ladder = list((getattr(self, "strat", None) or {}).get("oom_fallback") or [])
+         if ladder:
+             return self._call_oom_ladder(genome, fid, ctx, ladder)
+@@ -1803,7 +1829,7 @@
+         pc = self.pnas
+         return PC.fit_level(base, alpha, beta, PC.budget_of(pc, level), self._count,
+                             self._rep if fresh else self._pnas_rep,
+-                            cap_params=int(self.strat["param_cap"]), cap_count=self.param_fn,
++                            cap_params=int(self.strat["param_cap"]), cap_count=self.cap_fn,
+                             feasible=None if fresh else self._pnas_mem_ok, tol=float(pc["tolerance"]),
+                             max_depth=int(self.cfg["max_depth"]),
+                             cmax=int((self.repair_kw.get("channel_space") or {}).get("max", 1024)),
+@@ -1817,7 +1843,7 @@
+         from ga_search.modehb import strata as S
+         fit = self._pnas_fit(base, alpha, beta, level, fresh=True)
+         if fit is None:                       # nothing admissible: the old repairs (memory + cap) on the base
+-            g = S.enforce_cap(self._rep(base), self.strat, self._rep, self.rng, count=self.param_fn)
++            g = S.enforce_cap(self._rep(base), self.strat, self._rep, self.rng, count=self.cap_fn)
+             g, info = self._rep(g), {"phi": 0.0, "within_tol": False, "params_est": int(self._count(g))}
+         else:
+             g, info = fit
+@@ -2032,7 +2058,7 @@
+                 if m is None:
+                     continue
+                 child = self._pnas_rep(m[0])
+-                if (arch_hash(child) != arch_hash(par["genome"]) and int(self.param_fn(child)) <= int(self.strat["param_cap"])
++                if (arch_hash(child) != arch_hash(par["genome"]) and int(self.cap_fn(child)) <= int(self.strat["param_cap"])
+                         and self._pnas_mem_ok(child)):
+                     found = (op, par, m[1], child)
+                     break
+--- a/ga_search/modehb/pnas_cs.py
++++ b/ga_search/modehb/pnas_cs.py
+@@ -64,7 +64,7 @@
+ N_EXTRA_GENES = 2          # alpha, beta appended to the MO-DEHB vector
+ 
+ DEFAULTS = dict(enabled=False, dataset=None, budgets=list(DEFAULT_BUDGETS), level_names=list(LEVEL_NAMES),
+-                tolerance=0.10, cap_factor=1.05, alphas=list(ALPHAS), betas=list(BETAS),
++                tolerance=0.10, cap_factor=1.05, param_cap=None, alphas=list(ALPHAS), betas=list(BETAS),
+                 seed_alpha=1.2, seed_beta=1.1, deepen="auto", residual_activation="silu", plain_grid=True,
+                 grow_prob=0.4, mutate_prob=0.3,
+                 mutations=list(MUTATIONS), widen_factors=[1.25, 1.5], inherit_fidelity="le_child",
+@@ -112,7 +112,9 @@
+ 
+ 
+ def cap(pc: dict) -> int:
+-    """Hard parameter cap (budget of the last level x cap_factor)."""
++    """Hard parameter cap: ``param_cap`` when set (v4: 5.5M), else budget of the last level x cap_factor."""
++    if pc.get("param_cap"):
++        return int(pc["param_cap"])
+     return int(round(pc["budgets"][-1] * float(pc["cap_factor"])))
+ 
+ 
+--- a/ga_search/config/modehb/search_v4.yaml
++++ b/ga_search/config/modehb/search_v4.yaml
+@@ -102,6 +102,8 @@
+     B3: [1500000, 3000000]
+     B4: [3000000, 5500000]
+   param_cap: 5500000           # teto DURO (medido > 5.5M = infeasible param_cap)
++  cap_count: spifil_ops        # teto checado ANTES do treino na contagem dos blocos construídos (strata.param_count_built,
++                               # >= params medidos); acima: reprojetado (enforce_cap) ou rejeitado sem treino (c00015 RS, 18/11)
+   tiny_floor: 5000
+   # v4: quotas por faixa em CADA bracket; as grandes valem mais (B4 >= B3 >= B2 >= B1 = B0)
+   band_weights: {B0: 1.0, B1: 1.0, B2: 1.25, B3: 1.5, B4: 1.75}
+--- a/tests/modehb/test_ga_v4.py
++++ b/tests/modehb/test_ga_v4.py
+@@ -157,3 +157,57 @@
+         z_ref = ref.so2_vector(enc(xva), mu, V, 4096)
+     z = r.embed(enc, xva, "cpu", bs=2)
+     assert z.shape == (5, 4096) and torch.allclose(z, z_ref, atol=1e-6)
++
++
++C00015 = [dict(conv="inception", kernel=7, channels=15, activation="relu", norm="batch_zca", pool="avg", residual=False),
++          dict(conv="conv", kernel=5, channels=62, activation="gelu", norm="batch", pool="max", residual=True),
++          dict(conv="conv", kernel=5, channels=192, activation="silu", norm="dbn", pool="max", residual=False),
++          dict(conv="dwsep", kernel=7, channels=586, activation="silu", norm="dbn", pool="avg", residual=True),
++          dict(conv="conv", kernel=3, channels=733, activation="silu", norm="dbn", pool="none", residual=True)]
++
++
++def test_cap_checked_before_training(tmp_path, monkeypatch):
++    """remote_sensing v4 c00015: ConvBlock estimate 5,251,641 (under 5.5M), measured 5,612,872 (bias +
++    1x1 residual projections). cap_count: spifil_ops counts the built blocks (>= measured) and no genome
++    above the cap is trained: reprojected, or rejected untrained; a job logged raw replays raw."""
++    g15 = {"depth": 5, "embed_dim": 1280, "pooling": "gem", "layers": C00015}
++    assert S.param_estimate(g15) == 5_251_641 and S.param_count_built(g15) == 5_797_782 > sc()["param_cap"]
++    assert sc()["cap_count"] == "spifil_ops"
++    trained = []
++
++    def ev(g, fid, ctx):
++        trained.append(S.param_count_built(g))
++        return {"status": "ok", "quality": .5, "flops": 1e9, "params": trained[-1], "gpu_hours": 0.0}
++    s = M.MODEHB({"fidelities": [1, 3], "seed": 42, "image_size": 224, "random_baseline": False,
++                  "stratified": {"enabled": True, "calibration": False, "cap_count": "spifil_ops"}}, ev, tmp_path)
++    g = M.initial_population(0, (64,), (4,), image_size=224, min_spatial=6)[0]
++    raw = M.repair({**g, "layers": [{**L, "residual": True} for L in g["layers"]]}, **s.repair_kw)
++    est, built = S.param_estimate(raw), S.param_count_built(raw)
++    cap = (est + built) // 2                      # the c00015 case: estimate under the cap, built count above
++    s.strat = S.strat_config({**s.strat, "strata": {"lo": [0, cap // 2], "hi": [cap // 2, cap]}, "param_cap": cap})
++    s.state, s._replay = s._fresh_state(), []
++    rec = s._evaluate(raw, 1.0, parent_id=None, generation=0, rung=0)
++    assert rec["status"] == "ok" and trained and max(trained) <= cap and rec["arch_hash"] != M.arch_hash(raw)
++    monkeypatch.setattr(S, "enforce_cap", lambda x, *a, **k: x)          # cannot shrink -> rejected untrained
++    rec = s._evaluate(raw, 3.0, parent_id=None, generation=0, rung=1)
++    assert len(trained) == 1 and rec["result"]["not_trained"] and rec["result"]["infeasible"] == "param_cap"
++    assert rec["result"]["params"] == built and rec["stratum"] is None
++    monkeypatch.undo()
++    old = {"status": "failed", "infeasible": "param_cap", "params": built + 1}
++    s.state, s._replay = s._fresh_state(), [{"arch_hash": M.arch_hash(raw), "fidelity": 1.0, "role": "search",
++                                             "result": old}]
++    rec = s._evaluate(raw, 1.0, parent_id=None, generation=0, rung=0)
++    assert rec["arch_hash"] == M.arch_hash(raw) and rec["result"] == old and len(trained) == 1
++
++
++def test_pnas_v4_cap_from_config():
++    from ga_search.modehb import pnas_cs as PC
++    p4 = ROOT / "ga_search/config/modehb/pnas_cs_v4.yaml"
++    if not p4.exists():
++        pytest.skip("pnas_cs_v4.yaml not present")
++    v4, old = yaml.safe_load(p4.read_text()), yaml.safe_load((ROOT / "ga_search/config/modehb/pnas_cs.yaml").read_text())
++    pc4 = PC.pnas_config(v4["pnas_cs"])
++    assert PC.cap(pc4) == 5_500_000 and PC.level_strata(pc4)["P4"][1] == 5_500_000
++    assert PC.level_strata(pc4)["P3"] == PC.level_strata(PC.pnas_config(old["pnas_cs"]))["P3"]   # levels unchanged
++    assert PC.cap(PC.pnas_config(old["pnas_cs"])) == 5_775_000           # old PNAS (replay): 5.5M x 1.05
++    assert v4["stratified"]["cap_count"] == "spifil_ops"
+--- a/ga_search/config/modehb/pnas_cs_v4.yaml
++++ b/ga_search/config/modehb/pnas_cs_v4.yaml
+@@ -102,7 +102,8 @@
+ stratified:
+   enabled: true
+   # PNAS-CS: os estratos são os níveis P0..P4 (faixas = médias geométricas entre os orçamentos de
+-  # pnas_cs.budgets) e o teto = 5.5M x 1.05; calculados no código (strata/param_cap daqui são ignorados).
++  # pnas_cs.budgets) e o teto = pnas_cs.param_cap (5.5M); calculados no código (strata/param_cap daqui são ignorados).
++  cap_count: spifil_ops        # teto checado ANTES do treino na contagem dos blocos construídos (>= params medidos)
+   tiny_floor: 5000             # alvo mínimo ao projetar um Tiny
+   min_share: 0.25              # >= 25% das promoções por categoria (fase de promoção, se houver candidatos)
+   protected_brackets: 5        # brackets com promoção protegida (= os 5 brackets com successive halving)
+@@ -213,7 +214,7 @@
+   budgets: [500000, 1000000, 2000000, 3500000, 5500000]   # P0..P4 (params do encoder + projeção 1x1 final)
+   level_names: [P0, P1, P2, P3, P4]
+   tolerance: 0.10              # |params/orçamento - 1| <= 10% (registrado em genome.pnas.within_tol)
+-  cap_factor: 1.05             # teto duro = 5.5M x 1.05 (medido acima = infeasible; o gerador nunca passa)
++  param_cap: 5500000           # teto DURO = 5.5M, igual ao GA v4 (usuário via Jaci, 18/11; antes 5.5M x 1.05, que fica só no pnas_cs.yaml)
+   alphas: [1.0, 1.1, 1.2, 1.3, 1.4]    # coeficiente de profundidade (gene do DE)
+   betas: [1.05, 1.1, 1.15, 1.2, 1.3]   # coeficiente de largura (gene do DE); resolução fixa em 224
+   seed_alpha: 1.2              # coeficientes das famílias das sementes importadas

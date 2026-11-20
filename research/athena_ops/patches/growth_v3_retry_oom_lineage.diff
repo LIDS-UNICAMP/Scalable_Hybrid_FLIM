@@ -1,0 +1,125 @@
+--- a/ga_search/hmodehb/growth_chain.py
++++ b/ga_search/hmodehb/growth_chain.py
+@@ -99,7 +99,8 @@
+     "ae_dec_in_norm": True, "ae_grad_clip": None, "ae_lr_scale_fanin": True, "ae_warmup_steps": 0,
+     "ae_diverge_guard": 1.0, "ae_smoke_strict": False,
+     "preservation_images": 8, "preservation_tol": 1.0e-5,
+-    "oom": {"retries": 10, "sleep_s": 300},
++    # oom.retry_failed: no resume, re-roda (em vez de adotar) nó failed com reason "oom" (só contenção)
++    "oom": {"retries": 10, "sleep_s": 300, "retry_failed": False},
+     "test_channel": True, "debug_train": None, "debug_val": None,
+     # memória (growth_mem). Ligados por padrão SÓ os que não mudam a ciência (bit a bit; ver mem_status.md):
+     #   grad_checkpoint: recomputa a ativação de cada bloco no backward do SSL (BN/DBN com momentum 0 na
+@@ -2532,19 +2533,22 @@
+         if self.lineage_path.exists():
+             for line in self.lineage_path.read_text().splitlines():
+                 try:
+-                    keys.add(json.loads(line)["cand_key"])
++                    r = json.loads(line)
++                    keys.add((r["cand_key"], r.get("retry_of")))
+                 except Exception:          # linha parcial de um kill -9: ignorada (a entrada é reescrita)
+                     pass
+         return keys
+ 
+     def _lineage(self, rec: dict):
+-        if rec["cand_key"] in self._lin_keys:
++        # dedup por (cand_key, retry_of): um retry de OOM acrescenta registro novo; leitor usa o ÚLTIMO por cand_key
++        k = (rec["cand_key"], rec.get("retry_of"))
++        if k in self._lin_keys:
+             return
+         with self.lineage_path.open("a") as f:
+             f.write(json.dumps(rec, sort_keys=True, default=str) + "\n")
+             f.flush()
+             os.fsync(f.fileno())
+-        self._lin_keys.add(rec["cand_key"])
++        self._lin_keys.add(k)
+ 
+     # ---- sementes
+     def _seed_sources(self) -> List[dict]:
+@@ -2634,15 +2638,24 @@
+              resume_from: Optional[dict] = None, genes: Optional[dict] = None) -> dict:
+         ndir = self.out / "nodes" / node / f"f{fid}"
+         done = I.read_json(ndir / "result.json")
+-        if done is not None and I.adoptable(done, ckey=ckey, fitness_sig=self.gev.fitness_sig) is None:
+-            done["adopted"] = True
+-            return done
+         oc = self.g.get("oom") or {}
++        retry_of = None
++        if done is not None and I.adoptable(done, ckey=ckey, fitness_sig=self.gev.fitness_sig) is None:
++            if not (oc.get("retry_failed") and done.get("status") == "failed" and done.get("reason") == "oom"):
++                done["adopted"] = True
++                return done
++            # oom.retry_failed: OOM de contenção re-roda; o result.json antigo é arquivado, nunca apagado.
++            # retry_of (= sufixo do arquivo) vai no result e abre um registro NOVO no lineage (mesma cand_key)
++            retry_of = time.strftime('%Y%m%d_%H%M%S')
++            (ndir / "result.json").rename(ndir / f"result.json.oom_{retry_of}")
+         retries, sleep_s = int(oc.get("retries", 10)), float(oc.get("sleep_s", 300))
+         for attempt in range(retries + 1):
+             try:
+                 out = (self._run_job(parent, ops, theta, fid, node, seed, ckey, ndir, genes=genes) if resume_from is None
+                        else self._run_resume_job(parent, resume_from, fid, node, seed, ckey, ndir, genes=genes))
++                if retry_of:
++                    out["retry_of"] = retry_of
++                    I.atomic_write_json(ndir / "result.json", _jsonable(out))
+                 if os.environ.get("GROWTH_CRASH") == f"{node}:f{fid}":      # SÓ TESTE: kill -9 real
+                     import signal
+                     os.kill(os.getpid(), signal.SIGKILL)
+@@ -2683,7 +2696,7 @@
+                        "error": f"{type(exc).__name__}: {exc}", "traceback": traceback.format_exc()[-4000:]}
+                 break
+         rec.update(node_id=node, cand_key=ckey, fitness_sig=self.gev.fitness_sig, fid=fid, parent=parent["node_id"],
+-                   ops=ops, theta=theta, kappa_val_orig=None, genes=genes or {})
++                   ops=ops, theta=theta, kappa_val_orig=None, genes=genes or {}, **({"retry_of": retry_of} if retry_of else {}))
+         if resume_from is not None:
+             rec["promotion"] = {"mode": "resume", "from_fid": resume_from.get("fid"),
+                                 "from_cand_key": resume_from.get("cand_key")}
+@@ -3078,7 +3091,7 @@
+                 "adopted": bool(r.get("adopted", False)), "used_for_selection": "validation_only",
+                 # growth v3: genes, leitura, DA, SSL efetivo, aux GAP, replace
+                 **({k: r.get(k) for k in ("genes", "readout", "ssl", "ssl_method", "reg", "aug", "aug_gene",
+-                                          "whiten_new", "softhebb", "anchor", "so2_head_sha256", "v3_replace")
++                                          "whiten_new", "softhebb", "anchor", "so2_head_sha256", "v3_replace", "retry_of")
+                     if r.get(k) is not None}),
+                 **({"kappa_val_gap_aux": ((r.get("aux") or {}).get("gap") or {}).get("kappa_val_gap")}
+                    if (r.get("aux") or {}).get("gap") else {}),
+--- a/ga_search/hmodehb/integrity.py
++++ b/ga_search/hmodehb/integrity.py
+@@ -16,7 +16,7 @@
+ from typing import Iterable, Optional
+ 
+ # chaves fora do hash de config: nao mudam o experimento (modo do W&B, dispositivo)
+-DRIFT_EXCLUDE = ("wandb.mode", "device", "hmodehb.allow_drift")
++DRIFT_EXCLUDE = ("wandb.mode", "device", "hmodehb.allow_drift", "growth.oom.retry_failed")  # só política de resume
+ ARMS = ("A", "B", "C", "D0", "D", "E")
+ ID_PREFIX = "h4"
+ 
+--- a/tests/hmodehb/test_growth_fix5.py
++++ b/tests/hmodehb/test_growth_fix5.py
+@@ -237,9 +237,11 @@
+     ndir = tmp_path / "nodes/B1g1c00/f15"
+     r = {"status": "ok", "node_id": "B1g1c00", "cand_key": "ck", "kappa_val_orig": 0.7, "delta_kappa": 0.2,
+          "kappa_parent_rescored": 0.5, "wise_alpha": 0.5}
+-    tool._record(G, G.I, ch, tmp_path, ndir, r, par, [], 15, ch.g, "20261118_210000", closed=True)
++    cv = {"growth_chain_md5": "abc", "path": "/x/growth_chain.py", "mtime": "2026-11-18 02:02"}
++    tool._record(G, G.I, ch, tmp_path, ndir, r, par, [], 15, ch.g, "20261118_210000", closed=True, code_version=cv)
+     assert len((tmp_path / "lineage.jsonl").read_text().splitlines()) == 2
+     last = _last_by_ckey(tmp_path)["ck"]
+     assert last["retry_of"] == "20261118_210000" and last["family"] == "fam" and last["kappa_val_orig"] == 0.7
+     assert last["used_for_selection"].startswith("never")
+     assert G.I.read_json(ndir / "result.json")["retry_of"] == "20261118_210000"
++    assert last["code_version"] == cv and G.I.read_json(ndir / "result.json")["code_version"] == cv
+--- a/tests/hmodehb/test_growth_chain.py
++++ b/tests/hmodehb/test_growth_chain.py
+@@ -305,7 +305,11 @@
+     lin = [json.loads(x) for x in (out / "lineage.jsonl").read_text().splitlines()]
+     assert st["members"]["B0"], "sem semente B0"
+     kids = [r for r in lin if r.get("op") not in ("seed", None)]
+-    assert any(r["band"] == "B1" for r in kids) and any(r["band"] == "B2" for r in kids), kids
++    assert any(r["band"] == "B1" for r in kids), kids
++    # B2 só nasce se B1 ganhou membro. O WiSE pode escolher alpha=0 (filho = pai, adopted_as_parent) e aí B1 fica sem
++    # pai: resultado válido. Qual lado sai depende da seed do filho = hash do sha do checkpoint do pai, e o TorchScript
++    # grava caminho/linha do código nesse checkpoint -> o teste não pode exigir um dos lados.
++    assert any(r["band"] == "B2" for r in kids) == bool(st["members"]["B1"]), (kids, st["members"]["B1"])
+     for r in kids:
+         assert r["status"] == "ok", r
+         assert r["preservation_rel_l2"] <= 1e-5
