@@ -22,7 +22,8 @@ import torch
 ROOT_GLOBS = ["artifacts/modehb_hybrid", "artifacts/modehb_lemonade",
               "artifacts/modehb_hybrid_C01_*", "artifacts/modehb_lemonade_C01_*",
               "artifacts/modehb_seeded", "artifacts/modehb_lemonade_seeded",   # external-seed searches
-              "artifacts/pnas_cs"]                                           # PNAS-CS (pnas_cs.py)
+              "artifacts/pnas_cs",                                           # PNAS-CS (pnas_cs.py)
+              "artifacts/hmodehb_b0b4/arm_*"]                                # H-MODEHB B0-B4 (ga_search/hmodehb)
 # roles reported on TEST (never fed back): search jobs + the PNAS-CS Phase-0 AE ablation arms
 REPORT_ROLES = ("search", "phase0_ae", "phase0_noae")
 OUT_JSONL = Path("ga_search/modehb/reports/test_svm_C100.jsonl")   # C=100 sempre; o C=0.1 antigo fica em test_svm.jsonl
@@ -39,7 +40,13 @@ FM = {"remote_sensing": {"AIMv2": 0.746, "DINOv2": 0.719, "ResNet-50": 0.704, "I
       "protozoan": {"AIMv2": 0.968, "DINOv2": 0.956, "I-JEPA": 0.938, "ConvNeXtV2-pico": 0.853, "ResNet-50": 0.822}}
 
 
-def _kind(root):
+def _kind(root, state=None):
+    # H-MODEHB B0-B4 (ga_search/hmodehb) first: own kind h4_<arm> from its state (ids h4-<arm>-c#####),
+    # never folded into hybrid/lemonade even when a directory name contains those substrings
+    if (state or {}).get("kind", "").startswith("h4_"):
+        return state["kind"]
+    if "hmodehb_b0b4" in Path(root).parts:
+        return "h4_" + Path(root).name.replace("arm_", "")
     if "pnas_cs" in Path(root).name:
         return "pnas_cs"
     kind = "lemonade" if "lemonade" in Path(root).name else "hybrid"
@@ -50,6 +57,8 @@ def _fit_sig(state, root=None):
     """Fitness signature of a search. search_state.json does not store the eval block, so fall back to the
     directory convention: archives named *_C01_* hold the old C=0.1/kw=0.75 runs; every live / seeded / pnas
     directory was (re)started after 15/11 20:50 with C=100, kappa_weight=1.0."""
+    if state.get("fitness_sig"):           # H-MODEHB: the state carries its fitness_v2 signature
+        return f"v2_{state['fitness_sig']}"
     sv = ((state.get("config") or {}).get("eval") or {}).get("svm_fitness") or {}
     if sv:
         return f"C{float(sv.get('C', 100.0)):g}_kw{float(sv.get('kappa_weight', 1.0)):g}"
@@ -111,7 +120,7 @@ def pending():
                     s = json.loads(st.read_text())
                 except Exception:
                     continue
-                sig, kind = _fit_sig(s, root), _kind(root)
+                sig, kind = _fit_sig(s, root), _kind(root, s)
                 if st.parts[-2] != "seed42":          # other search seeds get their own keys (cand ids restart)
                     kind = f"{kind}_{st.parts[-2]}"
                 for k, j in enumerate(s["jobs"]):
@@ -244,7 +253,7 @@ def write_csv():
                     s = json.loads(st.read_text())
                 except Exception:
                     continue
-                sig, kind = _fit_sig(s, root), _kind(root)
+                sig, kind = _fit_sig(s, root), _kind(root, s)
                 if st.parts[-2] != "seed42":
                     kind = f"{kind}_{st.parts[-2]}"
                 for j in s["jobs"]:
@@ -259,7 +268,8 @@ def write_csv():
         w.writerow(["tecnica", "base", "tipo", "pct", "split", "conjunto", "metrica", "valor", "params", "flops",
                     "fidelidade_epocas", "estrato", "cand_id", "fitness", "regua", "genoma", "fonte"])
         for key, (i, r) in sorted(best.items(), key=lambda kv: (kv[1][1]["dataset"], -kv[1][1]["test_kappa"])):
-            tec = ("Hybrid SPiFiL PNAS-CS" if r["kind"].startswith("pnas_cs") else
+            tec = (f"H-MODEHB B0-B4 braco {r['kind'].split('_')[1]}" if r["kind"].startswith("h4_") else
+                   "Hybrid SPiFiL PNAS-CS" if r["kind"].startswith("pnas_cs") else
                    ("Hybrid SPiFiL MO-DEHB" if r["kind"].startswith("hybrid") else "Hybrid SPiFiL LEMONADE") +
                    (" semeada (SPiFiL pequeno + LeJEPA)" if "_seeded" in r["kind"] else "")) + \
                 (f" ({r['kind'].rsplit('_', 1)[-1]})" if "_seed4" in r["kind"] else "")

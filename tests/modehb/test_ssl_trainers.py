@@ -131,7 +131,7 @@ def test_method_names():
     with pytest.raises(ValueError):
         method_name("lejepa", "none")
     with pytest.raises(ValueError):
-        method_name("byol", "none")
+        method_name("swav", "none")          # growth v3.1: byol passou a existir (bloco 7)
 
 
 # --------------------------------------------------------------------- param groups

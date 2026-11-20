@@ -306,12 +306,26 @@ class DecorrelatedBatchNorm(nn.Module):
             out = torch.cat([self._whiten_group(work[a:b], i)
                              for i, (a, b) in enumerate(self.bounds)], 0).to(x.dtype)
         else:
-            xc = flat - self.running_mean[:, None].to(x.dtype)
-            out = torch.cat([getattr(self, f"running_W{i}").to(x.dtype) @ xc[a:b]
-                             for i, (a, b) in enumerate(self.bounds)], 0)
+            # memória (growth_mem): centra e branqueia POR GRUPO direto no buffer de saída, sem a cópia
+            # centrada inteira (C, M) nem o cat. Mesmas fatias contíguas, mesmo GEMM -> bit a bit igual.
+            rm = self.running_mean[:, None].to(x.dtype)
+            if torch.is_grad_enabled() and (x.requires_grad or any(
+                    getattr(self, f"running_W{i}").requires_grad for i in range(len(self.bounds)))):
+                xc = flat - rm
+                out = torch.cat([getattr(self, f"running_W{i}").to(x.dtype) @ xc[a:b]
+                                 for i, (a, b) in enumerate(self.bounds)], 0)
+            else:
+                out = torch.empty_like(flat)
+                for i, (a, b) in enumerate(self.bounds):
+                    torch.matmul(getattr(self, f"running_W{i}").to(x.dtype), flat[a:b] - rm[a:b], out=out[a:b])
+            del flat
         out = out.reshape(C, N, H, W).permute(1, 0, 2, 3)
         if self.weight is not None:
-            out = out * self.weight.view(1, -1, 1, 1) + self.bias.view(1, -1, 1, 1)
+            if (torch.is_grad_enabled() and (out.requires_grad or self.weight.requires_grad)) \
+                    or out.dtype != self.weight.dtype or self.bias.dtype != self.weight.dtype:
+                out = out * self.weight.view(1, -1, 1, 1) + self.bias.view(1, -1, 1, 1)
+            else:                                   # sem autograd: in-place, mesmas 2 operações elementares
+                out.mul_(self.weight.view(1, -1, 1, 1)).add_(self.bias.view(1, -1, 1, 1))
         return out
 
 

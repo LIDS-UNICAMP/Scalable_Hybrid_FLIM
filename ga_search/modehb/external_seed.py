@@ -572,12 +572,15 @@ class ElementProtect:
 
     def _pre(self, opt, args, kwargs):
         ids = {id(q) for g in opt.param_groups for q in g["params"]}
-        self._snap[id(opt)] = [(p, m, p.detach()[m].clone()) for p, m in self.entries if id(p) in ids]
+        # growth_fix8: snapshot do tensor inteiro + torch.where (sem sincronizar). A indexação booleana
+        # ``p[m]`` fazia um nonzero (sincronização GPU->CPU) por parâmetro, 2x por passo. Mesma conta por
+        # elemento mascarado (old + scale*(new - old)); os não mascarados ficam intocados -> bit a bit igual.
+        self._snap[id(opt)] = [(p, m, p.detach().clone()) for p, m in self.entries if id(p) in ids]
 
     def _post(self, opt, args, kwargs):
         with torch.no_grad():
             for p, m, old in self._snap.pop(id(opt), []):
-                p.data[m] = old + self.scale * (p.data[m] - old)
+                p.data.copy_(torch.where(m, old + self.scale * (p.data - old), p.data))
 
     def __exit__(self, *exc):
         for h in self._hooks:

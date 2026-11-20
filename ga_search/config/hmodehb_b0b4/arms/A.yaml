@@ -1,0 +1,3 @@
+# Braco A: MO-DEHB independente por porte (B0-B4), SEM heranca e sem transferencia; init SPiFiL-0.
+# Nada a sobrescrever alem do base.yaml (lemonade ausente = sem morfismos).
+arm_note: "A: MO-DEHB independente por porte, sem heranca"

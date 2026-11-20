@@ -287,14 +287,29 @@ class AutoAllocator:
         return UniformAllocator()(layer, spec, patches, scores)
 
 
-def _learner(features, seeds, data, in_ch, kernel, out_ch, device, budget_check, allocator=None):
+class _SkipEncode:
+    """Callback: stop ``Learner._fit_layer`` right after the filters are installed
+    (``after_model_build``), via the library's own ``CancelLayerException``.
+
+    ``fit_dense`` reads only ``model.block(1).conv`` / ``selected`` / ``state[0]``; the
+    skipped steps 5-7 encode EVERY donor image at full resolution and keep it on the device
+    (417 imgs x 281 ch x 224^2 fp32 = 23.5 GB for remote_sensing job 43) and, with a single
+    layer, never re-score. Weights/bias are bit-identical (installed before the cut)."""
+
+    def after_model_build(self, learner):
+        from spifil.learner import CancelLayerException
+        raise CancelLayerException
+
+
+def _learner(features, seeds, data, in_ch, kernel, out_ch, device, budget_check, allocator=None,
+             cbs=()):
     from spifil import ArchSpec, LayerSpec, Learner
     from spifil.learner import LayerState
     from flim.spifil import GrowOneLayer
     spec = LayerSpec(kernel_size=int(kernel), out_channels=int(out_ch),
                      pool_type="none", pool_stride=1, relu=False)
     learner = Learner(data, ArchSpec(layers=[spec]), color=_Bands(in_ch), allocator=allocator,
-                      strategy=GrowOneLayer(budget_check), device=device)
+                      strategy=GrowOneLayer(budget_check), device=device, cbs=cbs)
     learner.state[0] = LayerState(features=[f.to(device) for f in features], seeds=list(seeds))
     return learner
 
@@ -317,7 +332,8 @@ def fit_dense(features, seeds, data, in_ch, kernel, out_ch, *, device, budget_ch
     """
     if allocator is None:
         allocator = AutoAllocator()
-    learner = _learner(features, seeds, data, in_ch, kernel, out_ch, device, budget_check, allocator)
+    learner = _learner(features, seeds, data, in_ch, kernel, out_ch, device, budget_check, allocator,
+                       cbs=[_SkipEncode()])
     n, d = _budget(learner, budget_check, f"dense k{kernel}")
     learner.fit()
     conv = learner.model.block(1).conv
@@ -427,6 +443,8 @@ def fit_ops_block(prefix, samples, ops_spec, config, *, prefix_id=None, exact_wi
     """
     from flim.progressive import InfeasibleCandidate, _fingerprint
     from flim.spifil import Cropped, Trunk, build_layer0
+    from ga_search.modehb.spifil_oom import install as _install_oom_fallback
+    _install_oom_fallback()          # Fisher scorer: blocked recompute only on CUDA OOM
     spec, cfg = dict(ops_spec), dict(config)
     if not ops_supported(spec):
         raise InfeasibleCandidate(f"unsupported spifil_ops spec {spec}")

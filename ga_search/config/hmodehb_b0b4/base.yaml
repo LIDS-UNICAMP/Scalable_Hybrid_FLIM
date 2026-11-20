@@ -1,0 +1,121 @@
+# H-MODEHB B0-B4 (Agente 4) — config BASE, autocontido (schema I11 do search_v3; nao herda arquivos).
+# Desenho: research/spifil_b0b4/agent4/prep_desenho_modehb_hierarquico.md (secoes 5, 6, 7, 10).
+# Uso: python -m ga_search.hmodehb.run_hsearch --arm A --dataset remote_sensing [--seed 42]
+# O braco (arms/<X>.yaml) e mesclado por cima deste arquivo. O hash do config COMPLETO vai para o
+# search_state.json: mudar qualquer chave e retomar = ConfigDrift (salvo --allow-drift chave).
+# [H] = valor de desenho ainda a validar na Fase A do Agente 5 (GPU 3 da athena, 49 GB).
+project: progressive_mo_dehb
+entity: ophira-ai
+seed: 42
+seeds: [42, 43, 44]            # 3 seeds de busca por (dataset, braco)
+dataset_config_dir: ga_search/config/modehb/datasets   # mesmos datasets/splits do search_v3 (imutaveis)
+datasets: [remote_sensing, ham10000, flowers, eggs, larvae, protozoan, aid, coconut_trees]
+split: 1
+val_max_samples: null           # validacao INTEIRA (a fitness v2 recusa subamostrar a validacao)
+search_split_key: validation    # teste NUNCA na busca (o monitor_report mede o teste fora do controller)
+image_size: 224
+spifil_ops: true
+spifil_images_choices: [1, 2, 4, 8, 16, 32]
+channel_space:
+  type: int_range
+  min: 1
+  max: 1024
+  scale: log
+  monotonic: true
+
+# --- DEHB: fidelidade = epocas (AE + SSL 1:2). Busca em 5/15/45; 100/200 so como extensao (fora do HV) [H]
+fidelities: [5, 15, 45]
+max_brackets: 6
+eta: 3
+fidelity_split: {ae: 1, ssl: 2, rounding: floor_ae}
+operators_from_start: true
+search_space_from_yaml: true
+
+population:
+  random_baseline: false        # so SPiFiL (gemeas random so em braco de controle declarado)
+  initial_operators: sampled
+  initial_size: 15              # 3 sementes por B_k (round-robin B0..B4)
+  initial_grid:
+    filters: [16, 32, 64, 128]
+    init: [spifil]
+    depth: [2, 3]
+    pyramid_growth: 2.0
+  spifil_offspring_share: 1.0
+  random_twin_at_max_fidelity: false
+  exploration_epsilon: 0.1
+  de: {mutation_factor: 0.5, crossover_prob: 0.5, strategy: rand1_bin}
+
+stages:
+  stage2:
+    space:                      # vocabulario por gene (search_space_from_yaml). embed_dim fica no codigo (>= 1280)
+      operator: [conv, dwsep, inception]
+      softhebb: [true, false]
+      kernel: [3, 5, 7]
+      activation: [relu, gelu, silu, selu]
+      norm: [none, batch, zca, dbn, batch_zca, batch_dbn]
+      pool: [none, max, avg]
+      residual: [true, false]
+      pooling: [gap, gem, moments]
+      protect: [full, lowlr, freeze]
+      projector: [true, false]
+      ae_schedule: [decoder_first, joint]
+
+# --- Subpopulacoes B0-B4: FAIXAS FIXAS (o codigo recusa outras) e teto DURO de 5,5M (sem fator 1,05).
+# Parametros = encoder + cabeca (embedding >= 1280); decoders/projetores registrados a parte.
+stratified:
+  enabled: true
+  strata:
+    B0: [0, 300000]
+    B1: [300000, 800000]
+    B2: [800000, 1500000]
+    B3: [1500000, 3000000]
+    B4: [3000000, 5500000]
+  param_cap: 5500000
+  tiny_floor: 5000
+  min_share: 0.2                # 1 quota por B_k em cada promocao
+  protected_brackets: 3
+  cross_category_prob: 0.3
+  projection_prob: 0.7
+  explore_extra: 1
+  explore_min_slope: 0.0
+  explore_strata: [B2, B3, B4]
+  calibration: true
+  extension_fidelities: [100, 200]
+  extension_min_gain: 0.01
+  extension_max_per_bracket: 2
+  memory_budget_gb: 38          # [H] GPU 3 da athena (49 GB) com cap de processo 44
+  spifil_seeds_per_image: 100
+
+# --- Fitness v2 (regua ORIG): head(encoder(x)) >= 1280, core.svm.fit_svm linear C=100, SEM scaler,
+# SEM whitening, tta 1, kappa_weight 1.0. COV/GTP/label-free so em result["aux"].
+fitness_mode: svm_kappa
+svm_fitness: {C: 100, scaler: none, readout: head, kappa_weight: 1.0, tta: 1, whiten: none, solver: libsvm,
+              max_train: 4000, wise_alphas: [0.0, 0.25, 0.5, 0.75, 1.0], gram_reduce: false}
+
+collapse:
+  min_embedding_std: 1.0e-4
+  min_effective_rank_frac: 0.05
+tta:
+  search: 1
+training:
+  batch_size: 64
+  max_images_per_epoch: 2048
+  lr_new: 1.0e-3
+  lr_old: 1.0e-4
+  ssl: lejepa
+  local_ae: true
+
+resources:
+  host: athena_gpu3
+  num_workers: 16
+  ram_cache_gb: 96
+  max_concurrent_trials: 1
+  gpu_process_cap_gb: 44        # [H] GPU 3 da athena: 49 GB - contexto/margem
+
+paths:
+  state_dir: "artifacts/hmodehb_b0b4/arm_{arm}/{dataset}/state"
+
+# --- Integridade H-MODEHB (ga_search/hmodehb/integrity.py)
+hmodehb:
+  oom: {retries: 4, sleep_s: 180}   # R5 (FILA_E_INSTRUCOES): 4 x 180 s, depois failed/oom
+  allow_drift: []                   # chaves que podem mudar no resume (preferir --allow-drift na linha de comando)

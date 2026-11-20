@@ -1,0 +1,34 @@
+# Braco B: LEMONADE (lemonade.py existente) sobre as subpopulacoes B0-B4 e a fitness v2.
+# Morfismos + heranca lamarckiana; a cand_key inclui o checkpoint do pai (sha256), entao um filho
+# herdado nunca recebe o resultado em cache de um candidato de mesma arquitetura treinado do zero.
+# Desvio declarado: sem a amostragem por KDE do paper (lemonade.py nao a implementa).
+arm_note: "B: LEMONADE (sem KDE) + heranca, faixas B0-B4"
+lemonade:
+  enabled: true
+  seeds:
+    - name: seed_B
+      widths: [40, 80, 152, 152, 152, 312]
+      kernel: 3
+      activation: relu
+      norm: zca
+      pool: [max, max, max, max, none, none]
+      pooling: gem
+      protect: lowlr
+      ae_schedule: decoder_first
+    - name: seed_A
+      widths: [32, 48, 64]
+      kernel: 5
+      activation: relu
+      norm: none
+      pool: [max, max, max]
+      pooling: gap
+      protect: lowlr
+      ae_schedule: decoder_first
+  n_descendants: 5
+  morph_prob: 0.5
+  morph_random_fill: true
+  operators: [deepen, widen, residual, kernel]
+  widen_factors: [1.25, 1.5, 2.0]
+  kernels: [3, 5, 7]
+  inherit: true
+  inherit_fidelity: le_child

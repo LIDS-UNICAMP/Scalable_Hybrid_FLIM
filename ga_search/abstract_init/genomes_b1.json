@@ -1,0 +1,314 @@
+{
+ "flowers_b1": {
+  "ae_schedule": "joint",
+  "ae_target": "pixel",
+  "depth": 4,
+  "embed_dim": 1280,
+  "init": "spifil",
+  "layers": [
+   {
+    "activation": "relu",
+    "active": true,
+    "channels": 15,
+    "conv": "conv",
+    "kernel": 5,
+    "norm": "batch_zca",
+    "pool": "max",
+    "residual": false,
+    "softhebb": true
+   },
+   {
+    "activation": "gelu",
+    "active": true,
+    "channels": 54,
+    "conv": "conv",
+    "kernel": 3,
+    "norm": "zca",
+    "pool": "avg",
+    "residual": false,
+    "softhebb": true
+   },
+   {
+    "activation": "selu",
+    "active": true,
+    "channels": 136,
+    "conv": "conv",
+    "kernel": 3,
+    "norm": "dbn",
+    "pool": "max",
+    "residual": true,
+    "softhebb": false
+   },
+   {
+    "activation": "relu",
+    "active": true,
+    "channels": 1024,
+    "conv": "dwsep",
+    "kernel": 5,
+    "norm": "zca",
+    "pool": "none",
+    "residual": true,
+    "softhebb": true
+   },
+   {
+    "activation": "relu",
+    "active": false,
+    "channels": 512,
+    "conv": "conv",
+    "kernel": 7,
+    "norm": "dbn",
+    "pool": "avg",
+    "residual": true,
+    "softhebb": false
+   },
+   {
+    "activation": "selu",
+    "active": false,
+    "channels": 1024,
+    "conv": "dwsep",
+    "kernel": 7,
+    "norm": "dbn",
+    "pool": "max",
+    "residual": true,
+    "softhebb": true
+   },
+   {
+    "activation": "silu",
+    "active": false,
+    "channels": 1024,
+    "conv": "conv",
+    "kernel": 5,
+    "norm": "none",
+    "pool": "avg",
+    "residual": true,
+    "softhebb": false
+   },
+   {
+    "activation": "relu",
+    "active": false,
+    "channels": 1024,
+    "conv": "inception",
+    "kernel": 3,
+    "norm": "dbn",
+    "pool": "avg",
+    "residual": true,
+    "softhebb": false
+   }
+  ],
+  "pooling": "moments",
+  "projector": true,
+  "protect": "freeze",
+  "reg": "sigreg",
+  "seed": 42,
+  "spifil_images_per_class": 32,
+  "ssl": "lejepa"
+ },
+ "rs_b1": {
+  "ae_schedule": "joint",
+  "ae_target": "pixel",
+  "depth": 2,
+  "embed_dim": 1280,
+  "init": "spifil",
+  "layers": [
+   {
+    "activation": "relu",
+    "active": true,
+    "channels": 73,
+    "conv": "conv",
+    "kernel": 3,
+    "norm": "batch_dbn",
+    "pool": "max",
+    "residual": false,
+    "softhebb": false
+   },
+   {
+    "activation": "gelu",
+    "active": true,
+    "channels": 287,
+    "conv": "dwsep",
+    "kernel": 3,
+    "norm": "none",
+    "pool": "max",
+    "residual": true,
+    "softhebb": false
+   },
+   {
+    "activation": "silu",
+    "active": false,
+    "channels": 64,
+    "conv": "dwsep",
+    "kernel": 7,
+    "norm": "none",
+    "pool": "avg",
+    "residual": false,
+    "softhebb": false
+   },
+   {
+    "activation": "silu",
+    "active": false,
+    "channels": 128,
+    "conv": "inception",
+    "kernel": 5,
+    "norm": "batch_dbn",
+    "pool": "none",
+    "residual": false,
+    "softhebb": true
+   },
+   {
+    "activation": "selu",
+    "active": false,
+    "channels": 256,
+    "conv": "conv",
+    "kernel": 3,
+    "norm": "none",
+    "pool": "max",
+    "residual": true,
+    "softhebb": false
+   },
+   {
+    "activation": "selu",
+    "active": false,
+    "channels": 512,
+    "conv": "conv",
+    "kernel": 7,
+    "norm": "batch_dbn",
+    "pool": "max",
+    "residual": false,
+    "softhebb": true
+   },
+   {
+    "activation": "selu",
+    "active": false,
+    "channels": 1024,
+    "conv": "conv",
+    "kernel": 7,
+    "norm": "batch",
+    "pool": "none",
+    "residual": false,
+    "softhebb": true
+   },
+   {
+    "activation": "relu",
+    "active": false,
+    "channels": 1024,
+    "conv": "conv",
+    "kernel": 7,
+    "norm": "batch_zca",
+    "pool": "avg",
+    "residual": false,
+    "softhebb": true
+   }
+  ],
+  "pooling": "moments",
+  "projector": false,
+  "protect": "freeze",
+  "reg": "sigreg",
+  "seed": 42,
+  "spifil_images_per_class": 4,
+  "ssl": "lejepa"
+ },
+ "rs_b1_band": {
+  "ae_schedule": "joint",
+  "ae_target": "masked",
+  "depth": 6,
+  "embed_dim": 2560,
+  "init": "spifil",
+  "layers": [
+   {
+    "activation": "gelu",
+    "active": true,
+    "channels": 42,
+    "conv": "conv",
+    "kernel": 5,
+    "norm": "batch",
+    "pool": "max",
+    "residual": false,
+    "softhebb": true
+   },
+   {
+    "activation": "relu",
+    "active": true,
+    "channels": 53,
+    "conv": "inception",
+    "kernel": 7,
+    "norm": "zca",
+    "pool": "avg",
+    "residual": true,
+    "softhebb": false
+   },
+   {
+    "activation": "selu",
+    "active": true,
+    "channels": 53,
+    "conv": "conv",
+    "kernel": 7,
+    "norm": "batch",
+    "pool": "max",
+    "residual": true,
+    "softhebb": true
+   },
+   {
+    "activation": "relu",
+    "active": true,
+    "channels": 139,
+    "conv": "inception",
+    "kernel": 7,
+    "norm": "batch_zca",
+    "pool": "max",
+    "residual": true,
+    "softhebb": false
+   },
+   {
+    "activation": "gelu",
+    "active": true,
+    "channels": 188,
+    "conv": "inception",
+    "kernel": 3,
+    "norm": "dbn",
+    "pool": "max",
+    "residual": true,
+    "softhebb": false
+   },
+   {
+    "activation": "relu",
+    "active": true,
+    "channels": 188,
+    "conv": "inception",
+    "kernel": 7,
+    "norm": "batch_zca",
+    "pool": "none",
+    "residual": false,
+    "softhebb": true
+   },
+   {
+    "activation": "gelu",
+    "active": false,
+    "channels": 24,
+    "conv": "conv",
+    "kernel": 5,
+    "norm": "batch_zca",
+    "pool": "avg",
+    "residual": false,
+    "softhebb": false
+   },
+   {
+    "activation": "gelu",
+    "active": false,
+    "channels": 18,
+    "conv": "inception",
+    "kernel": 3,
+    "norm": "batch_dbn",
+    "pool": "none",
+    "residual": false,
+    "softhebb": false
+   }
+  ],
+  "pooling": "moments",
+  "projector": false,
+  "protect": "freeze",
+  "reg": "sigreg",
+  "seed": 42,
+  "spifil_images_per_class": 16,
+  "ssl": "lejepa"
+ }
+}

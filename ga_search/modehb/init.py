@@ -188,6 +188,9 @@ def init_block(genome: dict, layer_idx: int, prefix, samples, config: dict,
     Raises ``flim.progressive.InfeasibleCandidate`` from SPiFiL unchanged.
     ``config["spifil_ops"]`` (default False) switches to ``_init_block_ops``.
     """
+    if genome.get("init", "spifil") == "spifil":
+        from ga_search.modehb.spifil_oom import install as _install_oom_fallback
+        _install_oom_fallback()      # Fisher scorer: blocked recompute only on CUDA OOM
     if (config or {}).get("spifil_ops", False):
         return _init_block_ops(genome, layer_idx, prefix, samples, config, prefix_id)
     layer = repair_for_spifil(genome["layers"][layer_idx])

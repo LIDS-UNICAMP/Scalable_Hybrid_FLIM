@@ -481,7 +481,8 @@ class Evaluator:
         from ga_search.modehb.pooling_head import encode_tta
         encoder.eval(), head.eval()
         bs = int(self.cfg["data"].get("batch_size", 32))
-        amp = self.device.type == "cuda"
+        # growth_fix4: ``embed_amp=False`` (atributo da instância) = leitura fp32; padrão histórico inalterado
+        amp = self.device.type == "cuda" and bool(getattr(self, "embed_amp", True))
         out = []
         with torch.no_grad():
             for b in x.split(bs):

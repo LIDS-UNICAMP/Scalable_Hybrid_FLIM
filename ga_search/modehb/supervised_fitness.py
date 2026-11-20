@@ -101,7 +101,7 @@ def span_coordinates(Xtr, Xva, standardize: bool = True, device=None):
 def svm_fitness(train_emb, train_y, val_emb, val_y, *, C: float = 100.0,
                 scaler: str = "none", max_train: int | None = 10000, solver: str = "libsvm",
                 seed: int = 0, kappa_weight: float = 0.75, whiten: str = "none",
-                gram_reduce: bool = False) -> dict:
+                gram_reduce: bool = False, return_pred: bool = False) -> dict:
     """Fit the repo's linear SVM on train embeddings, score on validation.
 
     Returns {"kappa", "macro_f1", "balanced_acc", "quality", "fit_s",
@@ -173,7 +173,10 @@ def svm_fitness(train_emb, train_y, val_emb, val_y, *, C: float = 100.0,
     if not np.isfinite(f1):
         f1 = 0.0
     q = kappa_weight * max(kappa, 0.0) + (1.0 - kappa_weight) * f1
-    return {"kappa": kappa, "macro_f1": f1,
-            "balanced_acc": float(balanced_accuracy_score(yva0, pred)),
-            "quality": float(np.clip(q, 0.0, 1.0)),
-            "fit_s": float(fit_s), "n_train_used": int(len(idx))}
+    out = {"kappa": kappa, "macro_f1": f1,
+           "balanced_acc": float(balanced_accuracy_score(yva0, pred)),
+           "quality": float(np.clip(q, 0.0, 1.0)),
+           "fit_s": float(fit_s), "n_train_used": int(len(idx))}
+    if return_pred:            # growth v3.1 (opt-in): predições da validação (bootstrap da aceitação); SVM inalterada
+        out["pred"], out["y_true"] = np.asarray(pred, dtype=np.int64), yva0
+    return out
