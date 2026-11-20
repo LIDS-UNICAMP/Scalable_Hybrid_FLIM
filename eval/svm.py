@@ -56,7 +56,7 @@ from torchvision.transforms import v2
 from tqdm import tqdm
 
 from core.constants import DATASET_NUM_CLASSES, IMAGE_SIZE, PROJECT_ROOT
-from core.data.parasite_dataset import ParasiteDataset
+from core.data.parasite_dataset import ParasiteDataset, image_cache_path
 from core.data.transforms import build_test
 from core.metrics import compute_metrics
 from core.svm import fit_svm
@@ -306,8 +306,10 @@ EMBED_MODE = DEFAULT_EMBED_MODE
 # "gem_dense": GeM da penultima + da ultima camada concatenados (leitura densa, A5).
 # "avgpool2d_fg" / "gem_fg": o mesmo pooling, mas so nas celulas do mapa que tocam o objeto.
 # "gem_tta": media do gem nas 8 rotacoes/flips da imagem (TTA, Shanmugam et al. 2021).
+# "gemgrid4" / "gemgrid2": GeM p=3 em cada celula de uma grade 4x4 / 2x2 do mapa final (C*16 / C*4);
+# no "_tta" a rotacao/flip de cada vista e desfeita na grade antes da media.
 EMBED_MODES = ("avgpool2d", "flatten", "spp", "l2flat", "gem", "gem_dense", "avgpool2d_fg", "gem_fg",
-               "gem_tta")
+               "gem_tta", "gem_cat", "gem_cat_tta", "gemgrid4", "gemgrid4_tta", "gemgrid2", "gemgrid2_tta")
 
 
 def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torch.Tensor:
@@ -327,12 +329,26 @@ def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torc
         raise ValueError(
             f"embed mode inválido: {mode!r}; use um de {EMBED_MODES}"
         )
-    if mode == "gem_tta":
-        return torch.stack([_encode_pooled(model, torch.rot90(x, k, (2, 3)), "gem")
+    if mode in ("gem_tta", "gem_cat_tta"):
+        return torch.stack([_encode_pooled(model, torch.rot90(x, k, (2, 3)), mode.removesuffix("_tta"))
                             for x in (inputs, inputs.flip(3)) for k in range(4)]).mean(0)
+    if mode.startswith("gemgrid"):
+        def grid(x):
+            for n in range(1, getattr(model, "n_layers", 3) + 1):
+                x = getattr(model, f"conv{n}")(x)
+            return F.adaptive_avg_pool2d(x.clamp(min=1e-6).pow(3), int(mode[7])).pow(1 / 3)
+        if not mode.endswith("_tta"):
+            return grid(inputs).flatten(1).detach().cpu()
+        views = [torch.rot90(grid(torch.rot90(x, k, (2, 3))), -k, (2, 3)).flip(3 if f else ())
+                 for f, x in enumerate((inputs, inputs.flip(3))) for k in range(4)]
+        return torch.stack(views).mean(0).flatten(1).detach().cpu()
     out = inputs
     for n in range(1, getattr(model, "n_layers", 3) + 1):
         prev, out = out, getattr(model, f"conv{n}")(out)
+        if mode == "gem_cat":  # `cat` do spf_grade: GeM de toda camada, concatenado
+            cat = [*(cat if n > 1 else []), F.adaptive_avg_pool2d(out.clamp(min=1e-6).pow(3), 1).pow(1 / 3).flatten(1)]
+    if mode == "gem_cat":
+        return torch.cat(cat, dim=1).detach().cpu()
     if mode == "gem_dense":
         return torch.cat([F.adaptive_avg_pool2d(z.clamp(min=1e-6).pow(3), 1).pow(1 / 3).flatten(1)
                           for z in (prev, out)], dim=1).detach().cpu()
@@ -360,6 +376,17 @@ def _encode_pooled(model, inputs: torch.Tensor, mode: str | None = None) -> torc
         return F.adaptive_avg_pool2d(out.clamp(min=1e-6).pow(3), 1).pow(1 / 3).flatten(
             start_dim=1).detach().cpu()
     return F.adaptive_avg_pool2d(out, 1).flatten(start_dim=1).detach().cpu()
+
+
+def pw_whiten(X_train, *others):
+    """PCA-whitening com shrinkage + L2 do vetor (Jegou & Chum 2012), fitado em `X_train`."""
+    from sklearn.decomposition import PCA  # noqa: PLC0415
+    from sklearn.preprocessing import normalize  # noqa: PLC0415
+    # whitening com shrinkage: sem o eps, os componentes de variancia ~0 viram ruido
+    # amplificado e o SVM colapsa numa classe (kappa ~0 em larvae, 02/11)
+    pca = PCA().fit(X_train)
+    s = (pca.explained_variance_ + 0.1 * pca.explained_variance_.mean()) ** -0.5
+    return [normalize(pca.transform(z) * s) for z in (X_train, *others)]
 
 
 # ─── SVM solver diagnostics ───────────────────────────────────────────────────
@@ -575,7 +602,7 @@ def extract_proj_features(student, proj_kd, dataloader: DataLoader) -> tuple[np.
 
 _JOB_FIELDS = ["method", "run_name", "source", "stage_label", "dataset_short",
                "dataset_name", "split", "percentage", "dim", "kappa", "acc",
-               "f1", "ckpt_epoch", "ckpt", "status", "error"]
+               "f1", "ckpt_epoch", "ckpt", "status", "error", "width"]
 
 # Rodar o mesmo job duas vezes SOBRESCREVE a linha: quem colide nesta chave sai
 # do CSV velho antes do concat.
@@ -701,6 +728,12 @@ def _run_svm_job(config: str) -> str:
             aug8, mode = mode.endswith("_aug8"), mode.removesuffix("_aug8")
             # sufixo "_pwlw": o mesmo _pw, mas covariancia Ledoit-Wolf (guarda as C direcoes com n << C)
             lw, mode = mode.endswith("_pwlw"), mode.removesuffix("_pwlw")
+            # sufixo "_zw": ZCA da covariancia Ledoit-Wolf — guarda as D colunas da camada mesmo com
+            # n_treino < D (o _pw corta para n-1: L6 2048 -> 344 em remote_sensing 50%)
+            zw, mode = mode.endswith("_zw"), mode.removesuffix("_zw")
+            # sufixo "_cw": whitening so por canal (media/desvio de cada dimensao no treino) + L2; guarda as D colunas
+            cw, mode = mode.endswith("_cw"), mode.removesuffix("_cw")
+            lw = lw or zw
             pw, mode = lw or mode.endswith("_pw"), mode.removesuffix("_pw")
             def _feats(loader):
                 return extract_features(encoder, loader, mode)
@@ -712,7 +745,7 @@ def _run_svm_job(config: str) -> str:
             student = _load_student_from_ckpt(ckpt_path, DEVICE)
             epoch = _ckpt_epoch(ckpt_path)
             imagenet_norm = True
-            aug8 = False
+            aug8 = zw = False
             def _feats(loader):
                 return extract_features_encode(student, loader)
         else:
@@ -722,7 +755,10 @@ def _run_svm_job(config: str) -> str:
             )
 
         row["ckpt_epoch"] = epoch
-        transform = build_test(IMAGE_SIZE, imagenet_norm=imagenet_norm)
+        size, no_crop = job.get("image_size", IMAGE_SIZE), job.get("no_crop", False)
+        transform = build_test(size, imagenet_norm=imagenet_norm, no_crop=no_crop)
+        cache_dir = (job.get("image_cache_dir")
+                     and image_cache_path(job["image_cache_dir"], dataset_name, size, no_crop))
 
         def _loader(set_name: str, tf=transform) -> DataLoader:
             # `svm_train_pct`: encoder do pct da grade, SVM treinado so com os rotulos deste pct
@@ -731,7 +767,7 @@ def _run_svm_job(config: str) -> str:
                 ParasiteDataset(
                     set_name=set_name, split=split, percentage=pct,
                     transform=tf, loader="ift_lab",
-                    path_dataset=dataset_name,
+                    path_dataset=dataset_name, cache_dir=cache_dir,
                 ),
                 batch_size=32, shuffle=False, num_workers=4, pin_memory=True,
             )
@@ -744,20 +780,20 @@ def _run_svm_job(config: str) -> str:
         else:
             X_train, y_train = _feats(_loader("train"))
         feats, y_true = _feats(_loader("validation" if eval_set == "val" else "test"))
-        if source == "growth_stages" and pw:
-            from sklearn.decomposition import PCA  # noqa: PLC0415
+        if source == "growth_stages" and cw:
             from sklearn.preprocessing import normalize  # noqa: PLC0415
-            # whitening com shrinkage: sem o eps, os componentes de variancia ~0 viram ruido
-            # amplificado e o SVM colapsa numa classe (kappa ~0 em larvae, 02/11)
+            mu, sd = X_train.mean(0), X_train.std(0) + 1e-6
+            X_train, feats = (normalize((z - mu) / sd) for z in (X_train, feats))
+        if source == "growth_stages" and pw:
             if lw:
                 from sklearn.covariance import LedoitWolf  # noqa: PLC0415
+                from sklearn.preprocessing import normalize  # noqa: PLC0415
                 cov = LedoitWolf().fit(X_train)
                 ev, U = np.linalg.eigh(cov.covariance_)
-                X_train, feats = (normalize((z - cov.location_) @ U / np.sqrt(ev)) for z in (X_train, feats))
+                W = U / np.sqrt(ev) @ U.T if zw else U / np.sqrt(ev)
+                X_train, feats = (normalize((z - cov.location_) @ W) for z in (X_train, feats))
             else:
-                pca = PCA().fit(X_train)
-                s = (pca.explained_variance_ + 0.1 * pca.explained_variance_.mean()) ** -0.5
-                X_train, feats = (normalize(pca.transform(z) * s) for z in (X_train, feats))
+                X_train, feats = pw_whiten(X_train, feats)
         clf = fit_svm(X_train, y_train, tag=row["method"])
 
         y_pred = clf.predict(feats)
@@ -765,6 +801,9 @@ def _run_svm_job(config: str) -> str:
         metrics = compute_metrics(y_true=y_true, y_pred=y_pred,
                                   num_classes=num_classes)
         row.update({"dim": int(feats.shape[1]), **metrics})
+        if source == "growth_stages":  # canais da ultima camada (dim = width * celulas da grade)
+            row["width"] = [p for p in getattr(encoder, f"conv{getattr(encoder, 'n_layers', 3)}").parameters()
+                            if p.ndim == 4][-1].shape[0]
         print(f"  [RESULT] kappa={metrics['kappa']:.4f}  "
               f"acc={metrics['acc']:.4f}  f1={metrics['f1']:.4f}")
     except Exception as exc:
