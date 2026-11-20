@@ -1,3 +1,21 @@
+# saídas grandes / reproduzíveis (nunca versionar)
+runs/
 third_party/
 __pycache__/
-runs/
+*.pyc
+.pytest_cache/
+# pesos, tensores, caches
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+*.pkl
+*.memmap
+# temporários do pipeline
+_graph_items_*.jsonl
+_graph_err_*.log
+_gspan_*.txt
+*.tmp
+*.log
+*.jsonl.prev
