@@ -198,21 +198,21 @@ def load_lejepa_svm_metrics() -> pd.DataFrame:
 
 # ── Source 3: ijepa_svm_aggregated.csv ────────────────────────────────────────
 
-def normalize_ijepa_svm() -> pd.DataFrame:
-    """Normalize results/ijepa_svm_aggregated.csv to canonical schema.
+def normalize_ijepa_svm(fname: str = "ijepa_svm_aggregated.csv", method: str = "SVM_IJEPA") -> pd.DataFrame:
+    """Normalize an I-JEPA aggregated CSV in results/ to canonical schema.
 
     Source columns: dataset, dataset_short, pretrained_pct, n_splits,
                     embedding, kappa, kappa_std, acc, acc_std, f1, f1_std
-    Returns canonical DataFrame with method=SVM_IJEPA, init=ijepa.
+    Returns canonical DataFrame with the given method, init=ijepa.
     """
-    src = _RESULTS / "ijepa_svm_aggregated.csv"
+    src = _RESULTS / fname
     if not src.exists():
-        raise FileNotFoundError(f"ijepa_svm_aggregated.csv not found at {src}")
+        raise FileNotFoundError(f"{fname} not found at {src}")
 
     df = pd.read_csv(src)
 
     result = pd.DataFrame({
-        "method":        "SVM_IJEPA",
+        "method":        method,
         "init":          "ijepa",
         "dataset_short": df["dataset_short"],
         "pretrained_pct": df["pretrained_pct"].astype(int),
@@ -224,7 +224,7 @@ def normalize_ijepa_svm() -> pd.DataFrame:
         "f1":            df["f1"],
         "f1_std":        df["f1_std"],
     })
-    print(f"[NORM] SVM_IJEPA : {len(result)} rows from results/ijepa_svm_aggregated.csv")
+    print(f"[NORM] {method} : {len(result)} rows from results/{fname}")
     return result[_CANONICAL_COLS]
 
 
@@ -825,22 +825,30 @@ def _normalize_flim_backprop_stage2() -> pd.DataFrame | None:
     return result
 
 
-def _normalize_spifil_hybrid() -> pd.DataFrame | None:
-    """discovery (02/11): bp01w64c1280 + gem_tta_pw, teste. SVM_SPiFiL_Hybrid = encoder treinado
-    no proprio pct; SVM_SPiFiL_Hybrid_SSL100 = encoder de 100% sem rotulo, SVM com 1/5% dos rotulos
-    (o pct da curva e o do SVM, lido do nome do arquivo)."""
-    curve = _RESULTS / "svm_disc_bp01w64c1280_pcts_test_gemttapwr.csv"
-    if not curve.exists():
-        print(f"[SKIP] {curve.name} nao encontrado")
+def _normalize_disc_bp01w64c1280() -> pd.DataFrame | None:
+    """results/svm_main_disc_bp01w64c1280_{bg1,bg1_rand,bg1_impuro}_*: L4 no teste, gem_tta_pw.
+
+    `pcts` e o melhor (encoder treinado em cada pct). `ssl100_svm{k}` e o justo: encoder
+    do pct 100 sem rotulo, SVM com k% dos rotulos, entao a porcentagem da curva e k.
+    """
+    dfs = []
+    for tag, method in (("bg1", "SVM_SPiFiL_Hybrid"), ("bg1_rand", "SVM_Random_Hybrid"),
+                        ("bg1_impuro", "SVM_Impuro_Hybrid")):
+        for kind, pct in (("pcts", None), ("ssl100_svm1", 1), ("ssl100_svm5", 5), ("ssl100_svm25", 25)):
+            path = _RESULTS / f"svm_main_disc_bp01w64c1280_{tag}_{kind}_test_gemttapwr.csv"
+            if not path.exists():
+                continue
+            df = pd.read_csv(path)
+            df = df[(df["status"] == "ok") & (df["stage_label"] == "L4")].copy()
+            df["method"] = method if pct is None else f"{method}_SSL100"
+            if pct is not None:
+                df["percentage"] = pct
+            dfs.append(df)
+    if not dfs:
+        print("[SKIP] svm_main_disc_bp01w64c1280_bg1*.csv nao encontrados")
         return None
-    df = pd.read_csv(curve).assign(method="SVM_SPiFiL_Hybrid")
-    for s in (1, 5):
-        p = _RESULTS / f"svm_disc_bp01w64c1280_ssl100_svm{s}_test_gemttapwr.csv"
-        if p.exists():
-            df = pd.concat([df, pd.read_csv(p).assign(method="SVM_SPiFiL_Hybrid_SSL100", percentage=s)])
-    df = df[(df["status"] == "ok") & df["kappa"].notna()].copy()
-    result = _agg_splits(df)
-    print(f"[NORM] SPiFiL hybrid: {len(result)} rows")
+    result = _agg_splits(pd.concat(dfs))
+    print(f"[NORM] disc_bp01w64c1280: {len(result)} rows")
     return result
 
 
@@ -884,6 +892,7 @@ def main() -> None:
     flim_df           = _safe(normalize_felipe_svm, partial)
     lejepa_df         = _safe(load_lejepa_svm_metrics, partial)
     ijepa_df          = _safe(normalize_ijepa_svm, partial)
+    ijepa_impuro_df   = _safe(lambda: normalize_ijepa_svm("ijepa_impuro_svm_aggregated.csv", "SVM_IJEPA_Impuro"), partial)
     distil_conv_df    = _safe(normalize_distillation_conv_svm, partial)
     distil_flim_frozen_df = _safe(_normalize_distill_flim_frozen, partial)
     distil_proj_df    = _safe(_normalize_distill_proj1280, partial)
@@ -898,7 +907,7 @@ def main() -> None:
     flim_residual_df  = _safe(_normalize_flim_residual, partial)
     layerwise_df      = _safe(_normalize_layerwise, partial)
     stage2_df         = _safe(_normalize_flim_backprop_stage2, partial)
-    hybrid_df         = _safe(_normalize_spifil_hybrid, partial)
+    disc_df           = _safe(_normalize_disc_bp01w64c1280, partial)
 
     # ── Save normalized FLIM SVM aggregated (if available) ────────────────────
     if flim_df is not None:
@@ -907,7 +916,7 @@ def main() -> None:
         print(f"[SAVE] {flim_path.relative_to(_ROOT)}  ({len(flim_df)} rows)")
 
     # ── Build and save unified comparison ─────────────────────────────────────
-    dfs = [df for df in [flim_df, lejepa_df, ijepa_df] if df is not None]
+    dfs = [df for df in [flim_df, lejepa_df, ijepa_df, ijepa_impuro_df] if df is not None]
     if distil_conv_df is not None:
         dfs.append(distil_conv_df)
     if distil_flim_frozen_df is not None:
@@ -936,8 +945,8 @@ def main() -> None:
         dfs.append(layerwise_df)
     if stage2_df is not None:
         dfs.append(stage2_df)
-    if hybrid_df is not None:
-        dfs.append(hybrid_df)
+    if disc_df is not None:
+        dfs.append(disc_df)
 
     if not dfs:
         print("[ERROR] No data sources available. Nothing to save.")
