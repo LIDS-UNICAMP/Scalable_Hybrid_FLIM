@@ -466,8 +466,8 @@ passe `config='meu.yaml'`.
 
 A busca evolutiva com crescimento SPiFiL, projeções de 1280 canais e seleção
 por HDBSCAN/Hoyer está disponível como modo opcional do runner `growth`.
-Veja [configuração, comandos e validação do NAS progressivo](ga_search/PROGRESSIVE_NAS.md).
-O [guia de logging GA e W&B](ga_search/GA_LOGGING.md) descreve os eventos,
+Veja [configuração, comandos e validação do NAS progressivo](A_reports/2026-10/29/PROGRESSIVE_NAS.md).
+O [guia de logging GA e W&B](A_reports/2026-10/29/GA_LOGGING.md) descreve os eventos,
 artefatos e o monitor das buscas de 50%.
 
 `src/`, `scripts/` e `tools/` ainda existem como **legado** e ainda não foram apagados.

@@ -19,7 +19,7 @@ Os quatro primeiros scripts responderam ao Revisor 3 (um-contra-todos, baseline 
 > colapsa), **FLIM e I-JEPA tornam-se equivalentes em F1 e acurácia dentro de ±0.024** — empate
 > demonstrado, não apenas não-refutado. Toda afirmação de equivalência precisa declarar o regime
 > de supervisão a que se aplica. Ver §3 de
-> [`wilcoxon_equivalence.md`](wilcoxon_equivalence.md).
+> [`wilcoxon_equivalence.md`](../../A_reports/2026-08/02/wilcoxon_equivalence.md).
 
 Os 8 modelos oficiais são os mesmos das figuras do artigo: FLIM (59.504), LeJEPA (59.504),
 I-JEPA (632M), Distill 4 (889K), Distill 3 (615K), Distill 1 (123K), Distill 2 (402K) e

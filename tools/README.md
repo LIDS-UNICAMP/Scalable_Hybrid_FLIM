@@ -33,7 +33,7 @@ source /dados/home/moliveira/miniforge3/etc/profile.d/conda.sh && conda activate
 
 # Parte I — O gráfico das curvas de κ
 
-**Os dois `eval_*` que alimentam este gráfico moram em [`src/evaluate/`](../src/evaluate/), não aqui** — `eval_avg_pooling_48d.py` (GAP 48-d) e `eval_svm_flim_flatten.py` (conv3 achatado 27.648-d). Como rodar cada um: [`src/evaluate/README.md`](../src/evaluate/README.md). O diagrama dos três pipelines está em [`artifacts/plots/comparacao_flim_protocolo_original/pipelines.md`](../artifacts/plots/comparacao_flim_protocolo_original/pipelines.md).
+**Os dois `eval_*` que alimentam este gráfico moram em [`src/evaluate/`](../src/evaluate), não aqui** — `eval_avg_pooling_48d.py` (GAP 48-d) e `eval_svm_flim_flatten.py` (conv3 achatado 27.648-d). Como rodar cada um: [`src/evaluate/README.md`](../src/evaluate/README.md). O diagrama dos três pipelines está em [`artifacts/plots/comparacao_flim_protocolo_original/pipelines.md`](../artifacts/plots/comparacao_flim_protocolo_original/pipelines.md).
 
 Aqui fica só o plotter.
 
