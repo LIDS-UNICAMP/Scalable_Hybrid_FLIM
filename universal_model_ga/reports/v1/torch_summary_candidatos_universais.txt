@@ -1,0 +1,322 @@
+Candidatos à rede universal (9 arquiteturas do draw_io em avaliação cruzada nas 5 bases).
+Padrões do gSpan a procurar: MaxPool↓2 → conv3×3 (forte, nas 5 bases); Inception (ramos + concat) → BN (4 de 5 bases); evitar BN → ZCA.
+Pesos = checkpoint ORIGINAL da base-fonte (na avaliação cruzada a mesma topologia é refeita só com SPiFiL em cada base).
+
+================================================================================================================
+modehb_hybrid__aid__c00091_f45  (base-fonte: aid)
+artifacts/modehb_hybrid/aid/state/seed42/candidates/c00091/f45/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k3 3→30             [30, 224, 224]                840  
+encoder.0.norm                               ZCAWhitening               [30, 224, 224]                  0  não muda shape: ZCAWhitening
+encoder.0.activation                         GELU                       [30, 224, 224]                  0  não muda shape: GELU
+encoder.0.dropout                            Identity                   [30, 224, 224]                  0  não muda shape: Identity
+encoder.0.pool                               MaxPool2d                  [30, 112, 112]                  0  
+encoder.1.conv                               Conv2d k3 30→330           [330, 112, 112]            89,430  
+encoder.1.norm                               DecorrelatedBatchNorm      [330, 112, 112]               660  não muda shape: DecorrelatedBatchNorm
+encoder.1.activation                         GELU                       [330, 112, 112]                 0  não muda shape: GELU
+encoder.1.dropout                            Identity                   [330, 112, 112]                 0  não muda shape: Identity
+encoder.1.pool                               AvgPool2d                  [330, 56, 56]                   0  
+encoder.2.conv.depthwise                     Conv2d k5 330→330 g330     [330, 56, 56]               8,580  não muda shape: Conv2d k5 330→330 g330
+encoder.2.conv.pointwise                     Conv2d k1 330→510          [510, 56, 56]             168,810  
+encoder.2.norm                               DecorrelatedBatchNorm      [510, 56, 56]               1,020  não muda shape: DecorrelatedBatchNorm
+encoder.2.activation                         SiLU                       [510, 56, 56]                   0  não muda shape: SiLU
+encoder.2.dropout                            Identity                   [510, 56, 56]                   0  não muda shape: Identity
+encoder.2.pool                               AvgPool2d                  [510, 28, 28]                   0  
+encoder.3.conv.depthwise                     Conv2d k5 510→510 g510     [510, 28, 28]              13,260  não muda shape: Conv2d k5 510→510 g510
+encoder.3.conv.pointwise                     Conv2d k1 510→510          [510, 28, 28]             260,610  não muda shape: Conv2d k1 510→510
+encoder.3.norm.0                             BatchNorm2d                [510, 28, 28]               1,020  não muda shape: BatchNorm2d
+encoder.3.norm.1                             ZCAWhitening               [510, 28, 28]                   0  não muda shape: ZCAWhitening
+encoder.3.activation                         SiLU                       [510, 28, 28]                   0  não muda shape: SiLU
+encoder.3.dropout                            Identity                   [510, 28, 28]                   0  não muda shape: Identity
+encoder.3.skip                               Identity                   [510, 28, 28]                   0  não muda shape: Identity
+encoder.3.pool                               MaxPool2d                  [510, 14, 14]                   0  
+head.proj.0                                  Conv2d k1 510→384          [384, 14, 14]             196,224  
+----------------------------------------------------------------------------------------------------------------
+Total params: 740,454 | encoder 544,230 | cabeça 196,224 | entrada 1×3×224×224 | mapa final [510, 14, 14] | embedding [1536]
+Genes globais: {'init': 'spifil', 'ssl': 'ae', 'reg': 'none', 'pooling': 'moments', 'embed_dim': 1536, 'protect': 'lowlr', 'ae_target': 'feature', 'projector': True}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
+================================================================================================================
+modehb_hybrid__coconut_trees__c00015_f5  (base-fonte: coconut_trees)
+artifacts/modehb_hybrid/coconut_trees/state/seed42/candidates/c00015/f5/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k3 3→32             [32, 224, 224]                896  
+encoder.0.norm                               DecorrelatedBatchNorm      [32, 224, 224]                 64  não muda shape: DecorrelatedBatchNorm
+encoder.0.activation                         GELU                       [32, 224, 224]                  0  não muda shape: GELU
+encoder.0.dropout                            Identity                   [32, 224, 224]                  0  não muda shape: Identity
+encoder.0.pool                               MaxPool2d                  [32, 112, 112]                  0  
+encoder.1.conv                               Conv2d k3 32→102           [102, 112, 112]            29,478  
+encoder.1.norm                               DecorrelatedBatchNorm      [102, 112, 112]               204  não muda shape: DecorrelatedBatchNorm
+encoder.1.activation                         SiLU                       [102, 112, 112]                 0  não muda shape: SiLU
+encoder.1.dropout                            Identity                   [102, 112, 112]                 0  não muda shape: Identity
+encoder.1.skip                               Conv2d k1 32→102           [102, 112, 112]             3,366  
+encoder.1.pool                               MaxPool2d                  [102, 56, 56]                   0  
+encoder.2.conv                               Conv2d k5 102→256          [256, 56, 56]             653,056  
+encoder.2.norm.0                             BatchNorm2d                [256, 56, 56]                 512  não muda shape: BatchNorm2d
+encoder.2.norm.1                             DecorrelatedBatchNorm      [256, 56, 56]                 512  não muda shape: DecorrelatedBatchNorm
+encoder.2.activation                         GELU                       [256, 56, 56]                   0  não muda shape: GELU
+encoder.2.dropout                            Identity                   [256, 56, 56]                   0  não muda shape: Identity
+encoder.2.skip                               Conv2d k1 102→256          [256, 56, 56]              26,368  
+encoder.2.pool                               Identity                   [256, 56, 56]                   0  não muda shape: Identity
+head.proj.0                                  Conv2d k1 256→1280         [1280, 56, 56]            328,960  
+----------------------------------------------------------------------------------------------------------------
+Total params: 1,043,416 | encoder 714,456 | cabeça 328,960 | entrada 1×3×224×224 | mapa final [256, 56, 56] | embedding [1280]
+Genes globais: {'init': 'spifil', 'ssl': 'lejepa', 'reg': 'sigreg', 'pooling': 'gap', 'embed_dim': 1280, 'protect': 'lowlr', 'ae_target': 'pixel', 'projector': False}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
+================================================================================================================
+modehb_lemonade__eggs__c00032_f15  (base-fonte: eggs)
+artifacts/modehb_lemonade/eggs/state/seed42/candidates/c00032/f15/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k7 3→5              [5, 224, 224]                 740  
+encoder.0.norm                               BatchNorm2d                [5, 224, 224]                  10  não muda shape: BatchNorm2d
+encoder.0.activation                         SELU                       [5, 224, 224]                   0  não muda shape: SELU
+encoder.0.dropout                            Identity                   [5, 224, 224]                   0  não muda shape: Identity
+encoder.0.pool                               MaxPool2d                  [5, 112, 112]                   0  
+encoder.1.conv                               Conv2d k5 5→9              [9, 112, 112]               1,134  
+encoder.1.norm.0                             BatchNorm2d                [9, 112, 112]                  18  não muda shape: BatchNorm2d
+encoder.1.norm.1                             ZCAWhitening               [9, 112, 112]                   0  não muda shape: ZCAWhitening
+encoder.1.activation                         GELU                       [9, 112, 112]                   0  não muda shape: GELU
+encoder.1.dropout                            Identity                   [9, 112, 112]                   0  não muda shape: Identity
+encoder.1.skip                               Conv2d k1 5→9              [9, 112, 112]                  54  
+encoder.1.pool                               MaxPool2d                  [9, 56, 56]                     0  
+encoder.2.conv.branches.b1                   Conv2d k1 9→18             [18, 56, 56]                  180  
+encoder.2.conv.branches.b3                   Conv2d k3 9→18             [18, 56, 56]                1,476  
+encoder.2.conv.branches.b5                   Conv2d k5 9→18             [18, 56, 56]                4,068  
+encoder.2.conv.branches.pool.pool            MaxPool2d                  [9, 56, 56]                     0  não muda shape: MaxPool2d
+encoder.2.conv.branches.pool.proj            Conv2d k1 9→18             [18, 56, 56]                  180  
+encoder.2.norm                               ZCAWhitening               [72, 56, 56]                    0  não muda shape: ZCAWhitening
+encoder.2.activation                         GELU                       [72, 56, 56]                    0  não muda shape: GELU
+encoder.2.dropout                            Identity                   [72, 56, 56]                    0  não muda shape: Identity
+encoder.2.pool                               MaxPool2d                  [72, 28, 28]                    0  
+encoder.3.conv                               Conv2d k5 72→648           [648, 28, 28]           1,167,048  
+encoder.3.norm.0                             BatchNorm2d                [648, 28, 28]               1,296  não muda shape: BatchNorm2d
+encoder.3.norm.1                             DecorrelatedBatchNorm      [648, 28, 28]               1,296  não muda shape: DecorrelatedBatchNorm
+encoder.3.activation                         SELU                       [648, 28, 28]                   0  não muda shape: SELU
+encoder.3.dropout                            Identity                   [648, 28, 28]                   0  não muda shape: Identity
+encoder.3.skip                               Conv2d k1 72→648           [648, 28, 28]              47,304  
+encoder.3.pool                               MaxPool2d                  [648, 14, 14]                   0  
+head.proj.0                                  Conv2d k1 648→1280         [1280, 14, 14]            830,720  
+----------------------------------------------------------------------------------------------------------------
+Total params: 2,055,524 | encoder 1,224,804 | cabeça 830,720 | entrada 1×3×224×224 | mapa final [648, 14, 14] | embedding [1280]
+Genes globais: {'init': 'spifil', 'ssl': 'lejepa', 'reg': 'sigreg', 'pooling': 'gem', 'embed_dim': 1280, 'protect': 'full', 'ae_target': 'pixel', 'projector': False}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
+================================================================================================================
+modehb_hybrid__eggs_raw__c00027_f5  (base-fonte: eggs_raw)
+artifacts/modehb_hybrid/eggs_raw/state/seed42/candidates/c00027/f5/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k7 3→8              [8, 224, 224]               1,184  
+encoder.0.norm                               ZCAWhitening               [8, 224, 224]                   0  não muda shape: ZCAWhitening
+encoder.0.activation                         SELU                       [8, 224, 224]                   0  não muda shape: SELU
+encoder.0.dropout                            Identity                   [8, 224, 224]                   0  não muda shape: Identity
+encoder.0.pool                               AvgPool2d                  [8, 112, 112]                   0  
+encoder.1.conv                               Conv2d k5 8→45             [45, 112, 112]              9,045  
+encoder.1.norm                               Identity                   [45, 112, 112]                  0  não muda shape: Identity
+encoder.1.activation                         GELU                       [45, 112, 112]                  0  não muda shape: GELU
+encoder.1.dropout                            Identity                   [45, 112, 112]                  0  não muda shape: Identity
+encoder.1.skip                               Conv2d k1 8→45             [45, 112, 112]                405  
+encoder.1.pool                               MaxPool2d                  [45, 56, 56]                    0  
+encoder.2.conv.branches.b1                   Conv2d k1 45→36            [36, 56, 56]                1,656  
+encoder.2.conv.branches.b3                   Conv2d k3 45→27            [27, 56, 56]               10,962  
+encoder.2.conv.branches.b5                   Conv2d k5 45→27            [27, 56, 56]               30,402  
+encoder.2.conv.branches.pool.pool            MaxPool2d                  [45, 56, 56]                    0  não muda shape: MaxPool2d
+encoder.2.conv.branches.pool.proj            Conv2d k1 45→27            [27, 56, 56]                1,242  
+encoder.2.norm                               BatchNorm2d                [117, 56, 56]                 234  não muda shape: BatchNorm2d
+encoder.2.activation                         SiLU                       [117, 56, 56]                   0  não muda shape: SiLU
+encoder.2.dropout                            Identity                   [117, 56, 56]                   0  não muda shape: Identity
+encoder.2.pool                               AvgPool2d                  [117, 28, 28]                   0  
+encoder.3.conv.branches.b1                   Conv2d k1 117→63           [63, 28, 28]                7,434  
+encoder.3.conv.branches.b3                   Conv2d k3 117→63           [63, 28, 28]               66,402  
+encoder.3.conv.branches.b5                   Conv2d k5 117→63           [63, 28, 28]              184,338  
+encoder.3.conv.branches.pool.pool            MaxPool2d                  [117, 28, 28]                   0  não muda shape: MaxPool2d
+encoder.3.conv.branches.pool.proj            Conv2d k1 117→63           [63, 28, 28]                7,434  
+encoder.3.norm.0                             BatchNorm2d                [252, 28, 28]                 504  não muda shape: BatchNorm2d
+encoder.3.norm.1                             DecorrelatedBatchNorm      [252, 28, 28]                 504  não muda shape: DecorrelatedBatchNorm
+encoder.3.activation                         SiLU                       [252, 28, 28]                   0  não muda shape: SiLU
+encoder.3.dropout                            Identity                   [252, 28, 28]                   0  não muda shape: Identity
+encoder.3.skip                               Conv2d k1 117→252          [252, 28, 28]              29,736  
+encoder.3.pool                               Identity                   [252, 28, 28]                   0  não muda shape: Identity
+head.proj.0                                  Conv2d k1 252→2560         [2560, 28, 28]            647,680  
+----------------------------------------------------------------------------------------------------------------
+Total params: 999,162 | encoder 351,482 | cabeça 647,680 | entrada 1×3×224×224 | mapa final [252, 28, 28] | embedding [2560]
+Genes globais: {'init': 'spifil', 'ssl': 'lejepa', 'reg': 'sigreg', 'pooling': 'gap', 'embed_dim': 2560, 'protect': 'freeze', 'ae_target': 'masked', 'projector': True}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
+================================================================================================================
+modehb_hybrid__flowers__c00064_f5  (base-fonte: flowers)
+artifacts/modehb_hybrid/flowers/state/seed42/candidates/c00064/f5/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k7 3→20             [20, 224, 224]              2,960  
+encoder.0.norm.0                             BatchNorm2d                [20, 224, 224]                 40  não muda shape: BatchNorm2d
+encoder.0.norm.1                             DecorrelatedBatchNorm      [20, 224, 224]                 40  não muda shape: DecorrelatedBatchNorm
+encoder.0.activation                         ReLU                       [20, 224, 224]                  0  não muda shape: ReLU
+encoder.0.dropout                            Identity                   [20, 224, 224]                  0  não muda shape: Identity
+encoder.0.pool                               MaxPool2d                  [20, 112, 112]                  0  
+encoder.1.conv.branches.b1                   Conv2d k1 20→15            [15, 112, 112]                315  
+encoder.1.conv.branches.b3                   Conv2d k3 20→15            [15, 112, 112]              2,715  
+encoder.1.conv.branches.b5                   Conv2d k5 20→15            [15, 112, 112]              7,515  
+encoder.1.conv.branches.pool.pool            MaxPool2d                  [20, 112, 112]                  0  não muda shape: MaxPool2d
+encoder.1.conv.branches.pool.proj            Conv2d k1 20→15            [15, 112, 112]                315  
+encoder.1.norm                               DecorrelatedBatchNorm      [60, 112, 112]                120  não muda shape: DecorrelatedBatchNorm
+encoder.1.activation                         SELU                       [60, 112, 112]                  0  não muda shape: SELU
+encoder.1.dropout                            Identity                   [60, 112, 112]                  0  não muda shape: Identity
+encoder.1.skip                               Conv2d k1 20→60            [60, 112, 112]              1,260  
+encoder.1.pool                               MaxPool2d                  [60, 56, 56]                    0  
+encoder.2.conv                               Conv2d k3 60→520           [520, 56, 56]             281,320  
+encoder.2.norm                               ZCAWhitening               [520, 56, 56]                   0  não muda shape: ZCAWhitening
+encoder.2.activation                         GELU                       [520, 56, 56]                   0  não muda shape: GELU
+encoder.2.dropout                            Identity                   [520, 56, 56]                   0  não muda shape: Identity
+encoder.2.pool                               Identity                   [520, 56, 56]                   0  não muda shape: Identity
+head.proj.0                                  Conv2d k1 520→2560         [2560, 56, 56]          1,333,760  
+----------------------------------------------------------------------------------------------------------------
+Total params: 1,630,360 | encoder 296,600 | cabeça 1,333,760 | entrada 1×3×224×224 | mapa final [520, 56, 56] | embedding [2560]
+Genes globais: {'init': 'spifil', 'ssl': 'simclr', 'reg': 'none', 'pooling': 'gem', 'embed_dim': 2560, 'protect': 'freeze', 'ae_target': 'pixel', 'projector': False}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
+================================================================================================================
+modehb_lemonade__larvae__c00078_f15  (base-fonte: larvae)
+artifacts/modehb_lemonade/larvae/state/seed42/candidates/c00078/f15/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k5 3→32             [32, 224, 224]              2,432  
+encoder.0.norm                               Identity                   [32, 224, 224]                  0  não muda shape: Identity
+encoder.0.activation                         ReLU                       [32, 224, 224]                  0  não muda shape: ReLU
+encoder.0.dropout                            Identity                   [32, 224, 224]                  0  não muda shape: Identity
+encoder.0.pool                               MaxPool2d                  [32, 112, 112]                  0  
+encoder.1.conv                               Conv2d k5 32→48            [48, 112, 112]             38,448  
+encoder.1.norm                               Identity                   [48, 112, 112]                  0  não muda shape: Identity
+encoder.1.activation                         ReLU                       [48, 112, 112]                  0  não muda shape: ReLU
+encoder.1.dropout                            Identity                   [48, 112, 112]                  0  não muda shape: Identity
+encoder.1.pool                               MaxPool2d                  [48, 56, 56]                    0  
+encoder.2.conv                               Conv2d k5 48→64            [64, 56, 56]               76,864  
+encoder.2.norm                               Identity                   [64, 56, 56]                    0  não muda shape: Identity
+encoder.2.activation                         ReLU                       [64, 56, 56]                    0  não muda shape: ReLU
+encoder.2.dropout                            Identity                   [64, 56, 56]                    0  não muda shape: Identity
+encoder.2.skip                               Conv2d k1 48→64            [64, 56, 56]                3,136  
+encoder.2.pool                               MaxPool2d                  [64, 28, 28]                    0  
+head.proj.0                                  Conv2d k1 64→1280          [1280, 28, 28]             83,200  
+----------------------------------------------------------------------------------------------------------------
+Total params: 204,080 | encoder 120,880 | cabeça 83,200 | entrada 1×3×224×224 | mapa final [64, 28, 28] | embedding [1280]
+Genes globais: {'init': 'spifil', 'ssl': 'lejepa', 'reg': 'sigreg', 'pooling': 'gap', 'embed_dim': 1280, 'protect': 'lowlr', 'ae_target': 'pixel', 'projector': False}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
+================================================================================================================
+modehb_hybrid__larvae_raw__c00023_f15  (base-fonte: larvae_raw)
+artifacts/modehb_hybrid/larvae_raw/state/seed42/candidates/c00023/f15/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k3 3→56             [56, 224, 224]              1,568  
+encoder.0.norm                               ZCAWhitening               [56, 224, 224]                  0  não muda shape: ZCAWhitening
+encoder.0.activation                         GELU                       [56, 224, 224]                  0  não muda shape: GELU
+encoder.0.dropout                            Identity                   [56, 224, 224]                  0  não muda shape: Identity
+encoder.0.pool                               MaxPool2d                  [56, 112, 112]                  0  
+encoder.1.conv                               Conv2d k3 56→328           [328, 112, 112]           165,640  
+encoder.1.norm                               Identity                   [328, 112, 112]                 0  não muda shape: Identity
+encoder.1.activation                         GELU                       [328, 112, 112]                 0  não muda shape: GELU
+encoder.1.dropout                            Identity                   [328, 112, 112]                 0  não muda shape: Identity
+encoder.1.pool                               MaxPool2d                  [328, 56, 56]                   0  
+encoder.2.conv.depthwise                     Conv2d k5 328→328 g328     [328, 56, 56]               8,528  não muda shape: Conv2d k5 328→328 g328
+encoder.2.conv.pointwise                     Conv2d k1 328→512          [512, 56, 56]             168,448  
+encoder.2.norm                               DecorrelatedBatchNorm      [512, 56, 56]               1,024  não muda shape: DecorrelatedBatchNorm
+encoder.2.activation                         SiLU                       [512, 56, 56]                   0  não muda shape: SiLU
+encoder.2.dropout                            Identity                   [512, 56, 56]                   0  não muda shape: Identity
+encoder.2.pool                               MaxPool2d                  [512, 28, 28]                   0  
+encoder.3.conv.depthwise                     Conv2d k5 512→512 g512     [512, 28, 28]              13,312  não muda shape: Conv2d k5 512→512 g512
+encoder.3.conv.pointwise                     Conv2d k1 512→512          [512, 28, 28]             262,656  não muda shape: Conv2d k1 512→512
+encoder.3.norm.0                             BatchNorm2d                [512, 28, 28]               1,024  não muda shape: BatchNorm2d
+encoder.3.norm.1                             ZCAWhitening               [512, 28, 28]                   0  não muda shape: ZCAWhitening
+encoder.3.activation                         SiLU                       [512, 28, 28]                   0  não muda shape: SiLU
+encoder.3.dropout                            Identity                   [512, 28, 28]                   0  não muda shape: Identity
+encoder.3.skip                               Identity                   [512, 28, 28]                   0  não muda shape: Identity
+encoder.3.pool                               AvgPool2d                  [512, 14, 14]                   0  
+head.proj.0                                  Conv2d k1 512→512          [512, 14, 14]             262,656  não muda shape: Conv2d k1 512→512
+----------------------------------------------------------------------------------------------------------------
+Total params: 884,856 | encoder 622,200 | cabeça 262,656 | entrada 1×3×224×224 | mapa final [512, 14, 14] | embedding [2048]
+Genes globais: {'init': 'spifil', 'ssl': 'ae', 'reg': 'none', 'pooling': 'moments', 'embed_dim': 2048, 'protect': 'lowlr', 'ae_target': 'feature', 'projector': True}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
+================================================================================================================
+modehb_lemonade_seeded__remote_sensing__c00002_f200  (base-fonte: remote_sensing)
+artifacts/modehb_lemonade_seeded/remote_sensing/state/seed42/candidates/c00002/f200/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k3 3→40             [40, 224, 224]              1,120  
+encoder.0.norm                               Identity                   [40, 224, 224]                  0  não muda shape: Identity
+encoder.0.activation                         ReLU                       [40, 224, 224]                  0  não muda shape: ReLU
+encoder.0.dropout                            Identity                   [40, 224, 224]                  0  não muda shape: Identity
+encoder.0.pool                               MaxPool2d                  [40, 111, 111]                  0  
+encoder.1.conv                               Conv2d k3 40→80            [80, 111, 111]             28,880  
+encoder.1.norm                               Identity                   [80, 111, 111]                  0  não muda shape: Identity
+encoder.1.activation                         ReLU                       [80, 111, 111]                  0  não muda shape: ReLU
+encoder.1.dropout                            Identity                   [80, 111, 111]                  0  não muda shape: Identity
+encoder.1.pool                               MaxPool2d                  [80, 55, 55]                    0  
+encoder.2.conv                               Conv2d k3 80→152           [152, 55, 55]             109,592  
+encoder.2.norm                               Identity                   [152, 55, 55]                   0  não muda shape: Identity
+encoder.2.activation                         ReLU                       [152, 55, 55]                   0  não muda shape: ReLU
+encoder.2.dropout                            Identity                   [152, 55, 55]                   0  não muda shape: Identity
+encoder.2.pool                               MaxPool2d                  [152, 27, 27]                   0  
+encoder.3.conv                               Conv2d k3 152→152          [152, 27, 27]             208,088  não muda shape: Conv2d k3 152→152
+encoder.3.norm                               Identity                   [152, 27, 27]                   0  não muda shape: Identity
+encoder.3.activation                         ReLU                       [152, 27, 27]                   0  não muda shape: ReLU
+encoder.3.dropout                            Identity                   [152, 27, 27]                   0  não muda shape: Identity
+encoder.3.pool                               MaxPool2d                  [152, 13, 13]                   0  
+encoder.4.conv                               Conv2d k3 152→152          [152, 13, 13]             208,088  não muda shape: Conv2d k3 152→152
+encoder.4.norm                               Identity                   [152, 13, 13]                   0  não muda shape: Identity
+encoder.4.activation                         ReLU                       [152, 13, 13]                   0  não muda shape: ReLU
+encoder.4.dropout                            Identity                   [152, 13, 13]                   0  não muda shape: Identity
+encoder.4.pool                               Identity                   [152, 13, 13]                   0  não muda shape: Identity
+encoder.5.conv                               Conv2d k3 152→312          [312, 13, 13]             427,128  
+encoder.5.norm                               Identity                   [312, 13, 13]                   0  não muda shape: Identity
+encoder.5.activation                         ReLU                       [312, 13, 13]                   0  não muda shape: ReLU
+encoder.5.dropout                            Identity                   [312, 13, 13]                   0  não muda shape: Identity
+encoder.5.pool                               Identity                   [312, 13, 13]                   0  não muda shape: Identity
+head.proj.0                                  Conv2d k1 312→1280         [1280, 13, 13]            400,640  
+----------------------------------------------------------------------------------------------------------------
+Total params: 1,383,536 | encoder 982,896 | cabeça 400,640 | entrada 1×3×224×224 | mapa final [312, 13, 13] | embedding [1280]
+Genes globais: {'init': 'spifil', 'ssl': 'lejepa', 'reg': 'sigreg', 'pooling': 'gem', 'embed_dim': 1280, 'protect': 'lowlr', 'ae_target': 'pixel', 'projector': False}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
+================================================================================================================
+modehb_hybrid_C01_final__remote_sensing__c00015_f15  (base-fonte: remote_sensing)
+artifacts/modehb_hybrid_C01_final/remote_sensing/state/seed42/candidates/c00015/f15/encoder.pt
+================================================================================================================
+Layer (nome)                                 Tipo                       Saída                     Param #  Operação
+----------------------------------------------------------------------------------------------------------------
+encoder.0.conv                               Conv2d k3 3→70             [70, 224, 224]              1,960  
+encoder.0.norm                               DecorrelatedBatchNorm      [70, 224, 224]                140  não muda shape: DecorrelatedBatchNorm
+encoder.0.activation                         GELU                       [70, 224, 224]                  0  não muda shape: GELU
+encoder.0.dropout                            Identity                   [70, 224, 224]                  0  não muda shape: Identity
+encoder.0.pool                               MaxPool2d                  [70, 112, 112]                  0  
+encoder.1.conv                               Conv2d k3 70→140           [140, 112, 112]            88,340  
+encoder.1.norm                               DecorrelatedBatchNorm      [140, 112, 112]               280  não muda shape: DecorrelatedBatchNorm
+encoder.1.activation                         SiLU                       [140, 112, 112]                 0  não muda shape: SiLU
+encoder.1.dropout                            Identity                   [140, 112, 112]                 0  não muda shape: Identity
+encoder.1.skip                               Conv2d k1 70→140           [140, 112, 112]             9,940  
+encoder.1.pool                               MaxPool2d                  [140, 56, 56]                   0  
+encoder.2.conv                               Conv2d k5 140→280          [280, 56, 56]             980,280  
+encoder.2.norm.0                             BatchNorm2d                [280, 56, 56]                 560  não muda shape: BatchNorm2d
+encoder.2.norm.1                             DecorrelatedBatchNorm      [280, 56, 56]                 560  não muda shape: DecorrelatedBatchNorm
+encoder.2.activation                         GELU                       [280, 56, 56]                   0  não muda shape: GELU
+encoder.2.dropout                            Identity                   [280, 56, 56]                   0  não muda shape: Identity
+encoder.2.skip                               Conv2d k1 140→280          [280, 56, 56]              39,480  
+encoder.2.pool                               Identity                   [280, 56, 56]                   0  não muda shape: Identity
+head.proj.0                                  Conv2d k1 280→1280         [1280, 56, 56]            359,680  
+----------------------------------------------------------------------------------------------------------------
+Total params: 1,481,220 | encoder 1,121,540 | cabeça 359,680 | entrada 1×3×224×224 | mapa final [280, 56, 56] | embedding [1280]
+Genes globais: {'init': 'spifil', 'ssl': 'lejepa', 'reg': 'sigreg', 'pooling': 'gap', 'embed_dim': 1280, 'protect': 'lowlr', 'ae_target': 'pixel', 'projector': False}
+Leitura 2ª ordem (sem treino, fora do modelo): μ+σ+√Cov do mapa final, PCA k=88 (treino) → 4096
+
