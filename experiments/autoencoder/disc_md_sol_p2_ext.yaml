@@ -1,0 +1,46 @@
+# Irmao _ext de disc_md_sol_p2.yaml: so coconut_trees e food101, resto igual (max_per_gpu 1).
+# SOL Rodada 1, P2: A2 |R|, A3 leaky 0,1, A1 R+ e R- (crelu, dobra os canais; crelu_h, metade das direcoes e o mesmo orcamento) contra A0; A5 e a leitura pol.
+name: svm_disc_md_sol_p2_ext
+method: autoencoder
+runner: eval
+grid:
+  datasets: [coconut_trees, food101]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_sol_p2_ext
+  results_csv: /exps/moliveira/results_sol/polarity/svm_disc_md_sol_p2_ext
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    fontes: /exps/moliveira/fontes_filtros/sol
+    shards: 3
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    saliency: {map: gmr, cuts: []}
+    ativacao: [relu, abs, leaky, crelu, crelu_h]
+    leituras: [gem, pol]
+    methods: [crus@geodesic, fps, fpsw@mapa_peso]
+    controls: [random_z, xavier, orth]
+    twin_controls: [random_z, xavier, orth]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_sol_p2_ext
+skip: state

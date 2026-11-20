@@ -1,0 +1,44 @@
+# Irmao _ext de disc_md_spfcombo_a.yaml: so coconut_trees e food101, resto igual (max_per_gpu 1).
+# Combo (a): banco unico por camada, whitening so na leitura; ingredientes sozinhos e ablacao tirando um por vez.
+name: svm_disc_md_spfcombo_a_ext
+method: autoencoder
+runner: eval
+grid:
+  datasets: [food101]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_spfcombo_a_ext_food101
+  results_csv: results/svm_disc_md_spfcombo_a_ext
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    combo: {words: 512}
+    soma: true
+    methods: [fps@combo, cos@combo, fps@geodesic, fps@centroid, fps@sift_nms, fps@obj, fps@dic, fps@combo_sg, fps@combo_sc, fps@combo_sn, fps@combo_so, fps@combo_sd]
+    controls: [orth, xavier, tnorm, random_z]
+    twin_controls: [orth, xavier, random_z]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 3
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_spfcombo_a_ext_food101
+skip: state

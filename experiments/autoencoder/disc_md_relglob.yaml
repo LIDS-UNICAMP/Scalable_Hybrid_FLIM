@@ -1,0 +1,58 @@
+# Relacoes globais sem parametros (pedido do usuario 11/11): remote_sensing e flowers, 3 splits, 50%, 200 px, so validacao.
+# Leituras de 2a ordem pareadas no mesmo encoder, so na ultima camada (o random_z fica sem elas: regua pura):
+#   cov60  iSQRT-COV (Li et al. CVPR 2018): PCA sem rotulo 256->60, raiz Newton-Schulz 5 it., sinal*raiz + L2, 1830-d
+#   mscp   MSCP (He et al. TGRS 2018): L3-L6 na grade da L6, 15 PCs por camada, uma covariancia iSQRT, 1830-d
+#   gram   Gram deslocado (Berger & Memisevic ICLR 2017): 24 PCs, deslocamentos 1/2/4 celulas (~18/36/73 px), 1728-d
+#   fisher Fisher vector (Cimpoi et al. CVPR 2015): 32 PCs, GMM diagonal 16, 1a+2a ordem, sinal*raiz + L2, 1024-d
+# Modo (b) `ss`: self-self sem treino (SCLIP/ClearCLIP/GEM 2024) em L3, L4 ou L5 (um braco cada); so nos bracos da receita.
+# Receita: fps em remote_sensing, fpsw@mapa_w0.5_1 em flowers (os dois rodam nas duas bases). Regua: random_z puro.
+name: svm_disc_md_relglob
+method: autoencoder
+runner: eval
+grid:
+  datasets: [remote_sensing, flowers]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_relglob
+  results_csv: results/svm_disc_md_relglob
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5, 0.75], g: [1, 2], foco: 400}
+    fontes: /exps/moliveira/fontes_filtros/receita_tta
+    shards: 3
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    combo: {words: 512}
+    entre_camadas: true
+    methods: [fps, fpsw@mapa_w0.5_1]
+    controls: [random_z]
+    twin_controls: [random_z]
+    leituras: [gem, cov60, mscp, gram, fisher]
+    atencao: {mecanismos: [ss], camadas: [3, 4, 5], modo: b, alpha: 0.5}
+    salvar_encoder: /exps/moliveira/encoders/relglob
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 2
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_relglob
+skip: state

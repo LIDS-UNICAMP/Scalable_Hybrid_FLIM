@@ -1,0 +1,52 @@
+# Pedido do slide 18 (12/11): mesma receita nas 3 bases de fundo preto.
+# Receita sem backprop (L6 cat, 256, whitening entre camadas, 200 px) com e sem TTA (amostra.tta: L/cat e L_tta/cat_tta pareados).
+# Sem por-base no codigo: fps e fpsw@mapa_w0.5_1 rodam nas 6; a receita le fpsw nas bases de objeto e fps em aid/remote_sensing.
+name: svm_disc_md_receita_tta_fundopreto
+method: autoencoder
+runner: eval
+grid:
+  datasets: [helminth_eggs, helminth_larvae, protozoan_cysts]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_receita_tta_fundopreto
+  results_csv: results/svm_disc_md_receita_tta_fundopreto
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5, 0.75], g: [1, 2], foco: 400}
+    fontes: /exps/moliveira/fontes_filtros/receita_tta
+    salvar_encoder: /exps/moliveira/encoders/hyb_receita_inteira
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    combo: {words: 512}
+    entre_camadas: true
+    tta: true
+    methods: [fps, fpsw@mapa_w0.5_1]
+    controls: [orth, random_z]
+    twin_controls: [orth, random_z]
+resources:
+  gpu_ids: [2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_receita_tta_fundopreto
+skip: state

@@ -1,0 +1,53 @@
+# X2: ponto geodesic, 200 px por superpixel, L1 = 128 filtros
+name:   spifil_growth_disc_md_x2_geodesic_s640_p0200_w128
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [remote_sensing]
+  splits:      [1, 2, 3]
+  percentages: [50]
+
+resources:
+  gpu_ids:             [2]
+  max_per_gpu:         1
+  cpus_per_experiment: 10
+
+runner_args:
+  layerwise:  1                   # so L1: decoder de 1 bloco
+  impurities: true
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+  image_size: 640
+  layer_channels: [128]
+  layer_kernels:  [5]
+  layer_pools:    [2]
+  superpixels: disf
+  n_superpixels: 2048
+  budget_check: false
+  embed_mode: avgpool2d
+  seed_point: geodesic
+
+output:
+  work_dir: /exps/moliveira/spifil_growth/disc_md_x2_geodesic_s640_p0200_w128
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false
+
+overrides:
+  model.init_args.max_epochs: 20
+  trainer.max_epochs: 20
+  model.init_args.warmup_epochs: 2
+  model.init_args.recon_bg_weight: 1.0
+  data.init_args.num_workers: 8
+  data.init_args.batch_size: 8
+  trainer.accumulate_grad_batches: 4
+  model.init_args.epoch_probe: gem
+  model.init_args.best_by_probe: true

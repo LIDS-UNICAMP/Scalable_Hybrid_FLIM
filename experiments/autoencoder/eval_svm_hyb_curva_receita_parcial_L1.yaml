@@ -1,0 +1,26 @@
+# Avaliacao PARCIAL pedida pelo usuario: so a camada 1 ja treinada com backprop (Protozoan split 1, 1% e 5%), para ver como esta; nao e o resultado final.
+# SVM da curva do hibrido (hyb_curva_receita.yaml), leitura final gem + TTA + whitening, conjunto: val. Rodar so depois do treino.
+name: svm_hyb_curva_receita_parcial_L1
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Protozoan]
+  splits: [1]
+  percentages: [1, 5, 25, 50]
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: hyb_curva_receita
+  artifacts_dir: /exps/moliveira/eval/espelho_growth
+  ckpt_selection: best
+  results_csv: results/svm_hyb_curva_receita_parcial_L1.csv
+  embed_mode: gem_tta_pw
+  eval_set: val
+  stages: [L1]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 1   # SVM um por vez (CPU satura)
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/svm_hyb_curva_receita_parcial_L1
+skip: state

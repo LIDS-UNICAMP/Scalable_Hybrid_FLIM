@@ -1,0 +1,11 @@
+# Saliencia nas 3 bases que faltavam, mesma amostra de lote.yaml; pasta propria porque o resumo reescreve os CSV juntos.
+datasets: [helminth_eggs, helminth_larvae, protozoan_cysts]
+split: 1
+percentage: 50
+images: 30
+seed: 42
+top_k: 3
+max_side: 640
+workers: 6
+out: /exps/moliveira/saliency_helminth
+figures: A_reports/november/multi_dataset/saliencia_helminth

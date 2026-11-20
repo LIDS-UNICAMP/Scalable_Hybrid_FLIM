@@ -1,0 +1,28 @@
+# SVM de validacao da ablacao de tamanho, 320 px: um por estagio. Rodar so depois do treino, um por vez.
+name: svm_disc_md_eval_res_s0320_val_gemttapw
+method: autoencoder
+runner: eval
+grid:
+  datasets: [helminth_eggs, flowers, Larvae, aid, Eggs]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: growth_stages
+  artifacts_dir: /exps/moliveira/spifil_growth
+  family: disc_md_res_s0320_*
+  ckpt_selection: best
+  results_csv: results/svm_disc_md_eval_res_s0320_val_gemttapw.csv
+  embed_mode: gem_tta_pw
+  eval_set: val
+  stages: [L1, L2, L3, L4, L5]
+  image_size: 320
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+resources:
+  gpu_ids: [1]
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/disc_md_eval_res_s0320_val_gemttapw
+skip: state

@@ -1,0 +1,27 @@
+# SVM de validacao do teste de kernels K1 e do ponto de comparacao.
+name: svm_disc_md_eval_k1base_val_gemttapw
+method: autoencoder
+runner: eval
+grid:
+  datasets: [helminth_eggs, helminth_larvae, protozoan_cysts]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: growth_stages
+  artifacts_dir: /exps/moliveira/spifil_growth
+  family: disc_md_x1_s200_p0800_w064
+  ckpt_selection: best
+  results_csv: results/svm_disc_md_eval_k1base_val_gemttapw.csv
+  embed_mode: gem_tta_pw
+  eval_set: val
+  stages: [L1]
+  image_size: 200
+  no_crop: true
+resources:
+  gpu_ids: [1]
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/disc_md_eval_k1base_val_gemttapw
+skip: state

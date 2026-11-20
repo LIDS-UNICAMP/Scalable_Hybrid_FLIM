@@ -1,0 +1,90 @@
+# Q1 temporario de g2_vicreg.yaml: aid split1 pct50, 3 epocas, paciencia 2, n_imagens 100
+name: g2_vicreg_q1
+method: autoencoder
+runner: growth
+grid:
+  init:
+  - flim
+  datasets:
+  - aid
+  splits:
+  - 1
+  percentages:
+  - 50
+resources:
+  gpu_ids:
+  - 2
+  max_per_gpu: 2
+  cpus_per_experiment: 8
+  num_workers: 4
+runner_args:
+  layerwise: 6
+  layer_channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  - 384
+  - 2048
+  layer_kernels:
+  - 5
+  - 5
+  - 5
+  - 3
+  - 3
+  - 1
+  layer_pools:
+  - 2
+  - 2
+  - 2
+  - 2
+  - 1
+  - 1
+  layerwise_spf:
+    selecao: fps
+    n_imagens: 100
+    entre_camadas: true
+    softhebb:
+      steps: 300
+      batch: 8
+      images: 2000
+      lr: 0.005
+      inv_temp: 0.65
+      delta_norm: tensor
+      init_radius: 1.414
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+  embed_mode: gem
+  unfreeze_phase: true
+  ckpt_by: val_kappa
+  early_stop_patience: 2
+  parasite_aug:
+    flip: true
+    rot90: true
+    bc: 0.0
+  aug_by_dataset:
+    flowers:
+      hflip: true
+      vflip: false
+      rot90: false
+      bc: 0.0
+  probe_max_dim: 2048
+  lejepa:
+    objective: vicreg
+    expander: 8192-8192-8192
+    vicreg:
+      inv: 25
+      var: 25
+      cov: 1
+output:
+  work_dir: /exps/moliveira/tmp/q1/vicreg
+wandb:
+  enabled: false
+  project: phd_thesis_layerwise
+evaluate:
+  SVM: false
+overrides:
+  model.init_args.max_epochs: 3
+  trainer.max_epochs: 3
+  data.init_args.num_workers: 4

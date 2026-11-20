@@ -1,0 +1,41 @@
+# Piloto SoftHebb fiel a referencia (Journe et al. 2023), auditoria em /exps/moliveira/reports/rodada2/hebb_4_1_auditoria.md.
+# Uma celula fps por largura gera os 3 bracos:
+#   H01 = fps fixo, calibracao da BN com 1 lote          -> config fps_w<W>_c1, steps 0
+#   H03 = fps so calibracao, 300 lotes com lr 0           -> config fps_w<W>,    steps 0
+#   H05 = fps + SoftHebb receita da referencia            -> config fps_w<W>,    steps 300
+#         inv_temp 1 / 0,65, lr 0,08 / 0,005 (a 3a camada repete o ultimo), delta_norm por tensor, 300 updates por camada.
+# H00 (aleatorio fixo) e H06 (geodesico + Hebb) vem do sol_hebb1 e nao rodam de novo. Aleatorio nunca recebe tecnica.
+# 5 bases, split 1, sorteio 42, larguras 64 e 256. Athena.
+name: svm_disc_md_sol_hebb3
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Eggs, Larvae, aid, flowers, remote_sensing]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: alt_encoders
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_sol_hebb3
+  results_csv: /exps/moliveira/results_sol/alternative_encoders/svm_disc_md_sol_hebb3
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    draws: [42]
+    fontes: /exps/moliveira/fontes_filtros/ms
+    hebb_init: {inits: [fps], widths: [64, 256], depth: 3, kernel: 5, pool: 2, steps: [300],
+                batch: 8, images: 2000, lr: [0.08, 0.005], inv_temp: [1.0, 0.65], delta_norm: tensor,
+                calib_steps: 300, calib: [1], bank_images: 500, readouts: [gem_pw]}
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_sol_hebb3
+skip: state

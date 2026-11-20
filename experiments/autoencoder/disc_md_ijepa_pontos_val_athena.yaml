@@ -1,0 +1,53 @@
+# Pontos do SPiFiL escolhidos por FPS nos tokens do I-JEPA ViT-H/14 congelado (pedido do usuario, 10/11), sem superpixel e sem rotulo.
+# Bracos: (a) receita atual = fps (aid) e fpsw@mapa_w0.5_1 (flowers), DISF + gmr; (b) fps@grade = grade de tokens 16x16, FPS no patch;
+# (c) fpsd@ijepa = mesma grade, FPS no token L2 do I-JEPA; (c') fpsdw@ijepa_w0.5_1 = (c) com o peso gmr da receita.
+# Resto igual a receita: 6x256 k5, pools 2-2-2-2-1-1, whitening entre camadas, GeM + PCA-whitening + SVM, com e sem TTA.
+# avaliar: val -> o mesmo encoder (construido so no treino) pontuado em val.
+name: svm_disc_md_ijepa_pontos_val
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, aid]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_ijepa_pontos_val_athena
+  results_csv: /exps/moliveira/results_sol/ijepa_pontos_athena/svm_disc_md_ijepa_pontos_val
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    avaliar: val
+    saliency:
+      map: gmr
+      cuts: []
+      pesos: {t: [0.5], g: [1], foco: 400}
+    ijepa: {modelo: ijepa_vith14_1k, entrada: 224, pesos: [[0.5, 1]]}
+    shards: 5
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    tta: true
+    methods: [fps, fpsw@mapa_w0.5_1, fps@grade, fpsd@ijepa, fpsdw@ijepa_w0.5_1]
+    controls: []
+    twin_controls: []
+resources:
+  gpu_ids: [1, 2, 3]
+  max_per_gpu: 2  # 2 val + 2 test simultaneos (~4.5 GB cada), prioridade receita_inteira
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_ijepa_pontos_val_athena
+skip: state

@@ -1,0 +1,35 @@
+# Pool foco (rodada 2), F3 controle aleatorio PURO (H00) do SoftHebb L3: init random (kaiming), lr nunca aplicado (steps [0]), mesma arquitetura,
+# BN, larguras e leituras de disc_md_pf_hebb_d3_off/_on; 4 bases. random_w<W>_c1 pareia com H01, random_w<W> p0 com H03. Nunca recebe SoftHebb.
+# steps [0]: a celula random_w<W> escreve o p0 duas vezes (linhas identicas, mesmo sorteio); deduplique na leitura.
+name: svm_disc_md_pf_hebb_rand_d3
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid, remote_sensing, flowers, coconut_trees]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: alt_encoders
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_pf_hebb_rand_d3
+  results_csv: /exps/moliveira/results_sol/pool_foco/svm_disc_md_pf_hebb_rand_d3
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    draws: [42, 43]
+    hebb_init: {inits: [random], widths: [256, 512], depth: 3, kernel: 5, pool: 2, steps: [0],
+                batch: 8, images: 2000, lr: [0.08, 0.005], inv_temp: [1.0, 0.65], delta_norm: tensor,
+                calib_steps: 300, calib: [1], bank_images: 500, readouts: [gem_pw, gem_tta_pw]}
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_pf_hebb_rand_d3
+skip: state

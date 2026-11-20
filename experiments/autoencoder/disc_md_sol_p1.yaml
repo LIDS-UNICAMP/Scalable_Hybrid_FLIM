@@ -1,0 +1,45 @@
+# SOL Rodada 1, P1: N2 (z-score global), N3 (por banda) e N7 (mediana/MAD) contra N0, nos 6 bracos de referencia.
+name: svm_disc_md_sol_p1
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Eggs_subgroup, Protozoan_subgroup, Larvae_subgroup, aid, flowers, helminth_eggs]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_sol_p1
+  results_csv: /exps/moliveira/results_sol/normalization/svm_disc_md_sol_p1
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    fontes: /exps/moliveira/fontes_filtros/sol
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    saliency: {map: gmr, cuts: []}
+    norm: [n0, global, canal, mad]
+    leituras: [gem]
+    methods: [crus@geodesic, fps, fpsw@mapa_peso]
+    controls: [random_z, xavier, orth]
+    twin_controls: [random_z, xavier, orth]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_sol_p1
+skip: state

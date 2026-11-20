@@ -1,0 +1,28 @@
+# SVM do ssl_pequeno_dino: L0 (encoder pequeno intacto) e L<n> (menor val_ssl_loss, sem rotulo; projetor descartado), leitura gem_cat_tta_pw, conjunto test. So depois do treino.
+name: svm_ssl_pequeno_dino_test_catttapw_athena
+method: autoencoder
+runner: eval
+grid:
+  datasets:    [remote_sensing, flowers, coconut_trees, aid]
+  splits: [1, 2, 3]
+  percentages: [50, 100]
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: ssl_pequeno_dino
+  artifacts_dir: /exps/moliveira/spifil_growth
+  ckpt_selection: best
+  results_csv: results/svm_ssl_pequeno_dino_test_catttapw_athena.csv
+  embed_mode: gem_tta_pw
+  eval_set: test
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+  stages: [L0, L2, L3, L4, L5, L6]
+resources:
+  gpu_ids: [1, 2, 3]
+  max_per_gpu: 1   # SVM um por vez (CPU satura)
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/svm_ssl_pequeno_dino_test_catttapw
+skip: state

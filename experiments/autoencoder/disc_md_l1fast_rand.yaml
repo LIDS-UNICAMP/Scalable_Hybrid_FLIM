@@ -1,0 +1,33 @@
+# Controle aleatorio ao fim: split 1 a 448 e 640, sem Protozoan; n = 100 so sorteia a direcao.
+name: svm_disc_md_l1fast_rand
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid, Eggs, protozoan_cysts, Protozoan_subgroup, helminth_eggs, Eggs_subgroup, flowers, Larvae, remote_sensing, helminth_larvae, Larvae_subgroup]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: l1_fast
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_l1fast
+  results_csv: results/svm_disc_md_l1fast
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [640, 448]
+  l1_superpixels: []
+  l1_random: [100]
+  l1_readouts: [gem_tta_pw]
+  l1_grow:
+    out_channels: 64
+    kernel_size: 5
+    pool_stride: 2
+    impurities: true
+    superpixels: disf
+    budget_check: false
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 3
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/disc_md_l1fast_rand
+skip: state

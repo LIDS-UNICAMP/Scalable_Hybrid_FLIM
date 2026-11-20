@@ -1,0 +1,46 @@
+# Banco do SPiFiL de k imagens de treino por classe (regime B, a classe escolhe QUAIS imagens) contra o mesmo total sorteado sem classe (A); k em 1, 5, 10, 15, 30; sem backprop, sem mascara.
+name: svm_disc_md_porclasse_piloto
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_porclasse_piloto
+  results_csv: results/svm_disc_md_porclasse_piloto
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5], g: [1], foco: 400}
+    shards: 1
+    svm_workers: 1
+    por_classe: [1, 5, 10, 15, 30]
+    draws: [42]
+    widths: [64]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    methods: [fps, fpsw@mapa_w0_1, fps@foco_w0.5_1]
+    controls: [orth, xavier, tnorm, random_z]
+    twin_controls: [orth, xavier, random_z]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_porclasse_piloto
+skip: state

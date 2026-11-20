@@ -1,0 +1,46 @@
+# Combinacao, parte 320 px (pedido do usuario): aid e remote_sensing a 320 px (como disc_md_pf_res320_conf: fps, sem saliencia) + atencao + TTA.
+# 3 splits, 50%, sorteio 42, so validacao; "tudo junto" = cat_tta_att_* deste CSV. Fontes proprias: o .pt nao leva o tamanho no nome.
+name: svm_disc_md_atencao_combo320
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid, remote_sensing]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_atencao_combo320
+  results_csv: results/svm_disc_md_atencao_combo320
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [320]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    fontes: /exps/moliveira/fontes_filtros/atencao_combo320
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    methods: [fps]
+    controls: [random_z]
+    twin_controls: [random_z]
+    tta: true
+    atencao: {mecanismos: [espacial, simam], camadas: [5, final], modo: a, alpha: 0.5}
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_atencao_combo320
+skip: state

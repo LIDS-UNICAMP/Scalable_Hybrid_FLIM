@@ -1,0 +1,43 @@
+# Multiescala, rodada A: efeito da escala (geodesico cru e S1 a S8), 5 bases.
+name: svm_disc_md_ms_a
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, Protozoan_subgroup, Eggs_subgroup, Larvae_subgroup, aid]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_ms_a
+  results_csv: results/svm_disc_md_ms_a
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    multiescala: true
+    fontes: /exps/moliveira/fontes_filtros/ms
+    shards: 3
+    svm_workers: 1
+    images: 500
+    draws: [42, 43, 44, 45, 46]
+    widths: [64]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    methods: [crus@geodesic, crus@s1, crus@s2, crus@s3, crus@s4, crus@s5, trio@s6, crus@s7, quota@s8]
+    controls: []
+    twin_controls: [xavier, random_z]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 2
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_ms_a
+skip: state

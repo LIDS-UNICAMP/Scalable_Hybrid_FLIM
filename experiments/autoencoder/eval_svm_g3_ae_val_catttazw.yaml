@@ -1,0 +1,31 @@
+# SVM final por camada da Rede 3 (g3q_ae.yaml): GeM de cada camada L1..L6 concatenado (2048) + TTA + whitening ZCA Ledoit-Wolf (D colunas, sem corte), conjunto de val, depois do treino.
+# Estagios = pastas que o growth grava (<work_dir>/<braco>/L{k} e L{k}_ft, runners/growth.py _stage_dir).
+# 100% e 75%: o mesmo YAML com --set grid.percentages=[100] (ou [75]).
+name: svm_g3_ae_val_catttazw
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid, remote_sensing, flowers, coconut_trees, ham10000, food101, Eggs, Larvae, Protozoan]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: growth_stages
+  artifacts_dir: /exps/moliveira/artifacts
+  family: g3_ae
+  ckpt_selection: best
+  results_csv: results/svm_g3_ae_val_catttazw.csv
+  embed_mode: gem_cat_tta_zw
+  eval_set: val
+  # a mesma geometria do treino (g3q_ae.yaml)
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+  stages: [L1, L1_ft, L2, L2_ft, L3, L3_ft, L4, L4_ft, L5, L5_ft, L6, L6_ft]
+resources:
+  gpu_ids: [2]
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/artifacts/eval/svm_g3_ae_val_catttazw
+skip: state

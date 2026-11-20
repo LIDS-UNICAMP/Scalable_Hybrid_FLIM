@@ -1,0 +1,30 @@
+# P6 piloto: encoders alternativos sem backprop (Scattering, SoftHebb, PCANet), 6 bases, split 1, 1 sorteio.
+# O aleatorio (regime D) nao roda: e o xavier/random_z de disc_md_ms_ctl e disc_md_ms_ctl2.
+name: svm_disc_md_sol_p6_piloto
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, aid, remote_sensing, Eggs_subgroup, Larvae_subgroup, Protozoan_subgroup]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: alt_encoders
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_sol_p6_piloto
+  results_csv: /exps/moliveira/results_sol/alternative_encoders/svm_disc_md_sol_p6_piloto
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  amostra:
+    draws: [42]
+    scattering: {J: [2, 3, 4], L: 8, readouts: [avg_pw, gem_pw]}
+    pcanet: {filters: [8, 7], kernel: 7, images: 500, patches_per_image: 100, readouts: [avg_pw]}
+    softhebb: {widths: [64, 256], depth: 3, kernel: 5, pool: 2, steps: 300, batch: 8, images: 2000, lr: 0.05,
+               inv_temp: 4.0, readouts: [gem_pw]}
+resources:
+  gpu_ids: [1]
+  max_per_gpu: 3
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_sol_p6_piloto
+skip: state

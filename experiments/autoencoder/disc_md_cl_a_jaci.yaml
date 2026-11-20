@@ -1,0 +1,45 @@
+# Agrupamento, rodada barata: C3 a C9, K-means e saliencia, 64 filtros; C0 vem de `cl_ctl`, C1 e C2 de `ms_a` e `ms_b`.
+name: svm_disc_md_cl_a
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, Protozoan_subgroup, Eggs_subgroup, Larvae_subgroup, aid]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_cl_a
+  results_csv: results/svm_disc_md_cl_a
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [400]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: slic
+    budget_check: false
+  amostra:
+    agrupamento: {eps: 0.01, rows: 20000}
+    combo: {words: 512}
+    saliency: {map: gmr, cuts: [otsu]}
+    fontes: /dados/home/moliveira/exps/tmp/cl_fontes
+    shards: 3
+    svm_workers: 1
+    images: 500
+    draws: [42, 43, 44, 45, 46]
+    widths: [64]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    methods: [gr_m, gr, bovw_w_m@sift, bovw_sil_m@sift, bovw_w@sift, bovw_sil@sift, km_w@sift, km_w_m@sift, hib@sift, hib_m@sift, gr_m@uniao, km_w_m@uniao, km_w_m@combo, km_w, km_w_m, gr_m@mapa_otsu, km_w_m@mapa_otsu]
+    controls: []
+    twin_controls: [xavier, random_z]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 8
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_cl_a
+skip: state

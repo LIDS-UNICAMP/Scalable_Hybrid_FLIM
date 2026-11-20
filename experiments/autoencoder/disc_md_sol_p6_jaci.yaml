@@ -1,0 +1,32 @@
+# P6 (Rodada 2): encoders alternativos sem backprop, 12 bases, 3 splits, 2 sorteios. Jaci.
+# Scattering (regime A, fixo: so o 1o sorteio), PCANet (A), SoftHebb (C, regra local). O aleatorio (D)
+# nao roda: e o xavier/random_z de disc_md_ms_ctl e disc_md_ms_ctl2. Mesmo protocolo do piloto.
+name: svm_disc_md_sol_p6
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Protozoan, Eggs, aid, Protozoan_subgroup, protozoan_cysts, helminth_eggs, Eggs_subgroup,
+             helminth_larvae, flowers, Larvae, remote_sensing, Larvae_subgroup]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: alt_encoders
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_sol_p6
+  results_csv: /dados/home/moliveira/exps/results_sol/alternative_encoders/svm_disc_md_sol_p6
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  amostra:
+    draws: [42, 43]
+    scattering: {J: [2, 3, 4], L: 8, readouts: [avg_pw, gem_pw]}
+    pcanet: {filters: [8, 7], kernel: 7, images: 500, patches_per_image: 100, readouts: [avg_pw]}
+    softhebb: {widths: [64, 256], depth: 3, kernel: 5, pool: 2, steps: 300, batch: 8, images: 2000, lr: 0.05,
+               inv_temp: 4.0, readouts: [gem_pw]}
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 8
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_sol_p6
+skip: state

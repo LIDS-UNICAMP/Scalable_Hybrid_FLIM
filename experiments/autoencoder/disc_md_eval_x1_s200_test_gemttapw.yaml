@@ -1,0 +1,27 @@
+# SVM de teste de x1, pedido pelo usuario em 06/11: so reportar, nunca decidir com ele.
+name: svm_disc_md_eval_x1_s200_test_gemttapw
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Eggs_subgroup, Larvae_subgroup, Protozoan, Protozoan_subgroup, helminth_eggs, helminth_larvae, protozoan_cysts]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: growth_stages
+  artifacts_dir: /exps/moliveira/spifil_growth
+  family: disc_md_x1_s200_*
+  ckpt_selection: best
+  results_csv: results/svm_disc_md_eval_x1_s200_test_gemttapw.csv
+  embed_mode: gem_tta_pw
+  eval_set: test
+  stages: [L1]
+  image_size: 200
+  no_crop: true
+resources:
+  gpu_ids: [1]
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/disc_md_eval_x1_s200_test_gemttapw
+skip: state

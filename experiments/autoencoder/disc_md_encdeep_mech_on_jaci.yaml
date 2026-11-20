@@ -1,0 +1,63 @@
+# G3 piloto encdeep, mecanismos (§6-§8) na geometria G1 — PROVISORIA ate disc_md_encdeep_geo fechar.
+# ~z0/~hebb com e sem whitening (~nw: H0-H3), ~clapp (C0 global), ~clapp2 (C1 2x2), ~sfa (128 lentos + 128 residuo), ~sfa0 (so lentos);
+# controles aleatorios puros random_z, orth na mesma geometria.
+# SAL-ON: fpsw@mapa_w0.5_1 (receita), saliencia gmr. Tronco 256 x 5, kernels 5-5-5-3-3, entre_camadas, leituras L/cat + L_eq256/cat_eq256, erros de validacao. Split 1, sorteio 42, 200 px
+# (a varredura de resolucao roda a parte). Chaves de encdeep: experiments/ray/schema.py ENCDEEP_KEYS; codigo: eval/encdeep.py.
+name: svm_disc_md_encdeep_mech_on
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, coconut_trees]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_encdeep_mech_on
+  results_csv: /dados/home/moliveira/exps/results_sol/encdeep/svm_disc_md_encdeep_mech_on
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0.5], g: [1], foco: 400}
+    fontes: /dados/home/moliveira/exps/fontes_filtros/encdeep_on
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 5
+    pool: [2, 2, 2, 2, 1]
+    entre_camadas: true
+    methods: [fpsw@mapa_w0.5_1]
+    controls: [random_z, orth]
+    twin_controls: [random_z, orth]
+    encdeep:
+      kernels: [5, 5, 5, 3, 3]
+      camadas: [4, 5]
+      geometrias: [g1]
+      mecanismos: [z0, hebb, clapp, clapp2, sfa, sfa0, z0~nw, hebb~nw]
+      vistas: {l_jitter: 0.05, ab_jitter: 0.016}
+      hebb: {steps: 300, batch: 8, images: 2000, lr: 0.005, inv_temp: 0.65, delta_norm: tensor, init_radius: 1.414}
+      clapp: {steps: 300, batch: 8, images: 2000, lr: 0.01, lr_p: 0.0001}
+      sfa: {steps: 100, batch: 8, images: 2000, lentos: 128, residuo: 128}
+      salvar: true
+      erros: true
+      dim_eq: 256
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 8
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_encdeep_mech_on
+skip: state

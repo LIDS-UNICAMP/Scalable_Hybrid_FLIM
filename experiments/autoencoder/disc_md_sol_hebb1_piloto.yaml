@@ -1,0 +1,36 @@
+# Fila 1 (E00-E03), SoftHebb por inicializacao, piloto: random (kaiming), fps e crus@geodesic do spf_grade; 0, 30, 90 e 300 passos;
+# fps tambem preso a bola de raio 0,5 |w0| em torno do inicial (E03). Kernels e vitorias em <csv>/hebb/
+# 6 bases, split 1, sorteio 42, 1 processo por vez. As fontes SPiFiL sao as do sorteio em ms_fontes (500 imagens).
+name: svm_disc_md_sol_hebb1_piloto
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, aid, remote_sensing, Eggs_subgroup, Larvae_subgroup, Protozoan_subgroup]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: alt_encoders
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_sol_hebb1_piloto
+  results_csv: /exps/moliveira/results_sol/alternative_encoders/svm_disc_md_sol_hebb1_piloto
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    draws: [42]
+    fontes: /exps/moliveira/fontes_filtros/ms
+    hebb_init: {inits: [random, fps, crus@geodesic], widths: [64, 256], depth: 3, kernel: 5, pool: 2, steps: [30, 90, 300],
+                batch: 8, images: 2000, lr: 0.05, inv_temp: 4.0, bank_images: 500, readouts: [gem_pw],
+                radius: 0.5, restricted: [fps]}
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_sol_hebb1_piloto
+skip: state

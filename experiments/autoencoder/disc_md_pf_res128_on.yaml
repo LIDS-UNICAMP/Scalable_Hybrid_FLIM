@@ -1,0 +1,49 @@
+# Pool foco (rodada 2), F1 resolucao: receita sol_wsal (L6 256, entre_camadas, cat) com a entrada a 128 px. SAL-ON, coconut_trees (90 px nativo, hoje ampliado a 200): braco da receita fpsw@mapa_w0.5_1; larguras 64 (melhor a 200) e 256.
+# Superpixels fixos em 50 por imagem em toda resolucao (l1_superpixels; foco 400 so nos pontos de saliencia). Fontes por tamanho: o .pt de amostra.fontes nao leva o tamanho no nome.
+# Ancora 200 px pareada (mesmos sorteios): fpsw@mapa_w0.5_1 a 200 px, larguras 64 e 256, sorteios 42 e 43, em disc_md_largura_jaci (Jaci). Controles aleatorios puros, sem tecnica. Piloto: split 1, sorteios 42 e 43.
+name: svm_disc_md_pf_res128_on
+method: autoencoder
+runner: eval
+grid:
+  datasets: [coconut_trees]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_pf_res128_on
+  results_csv: /exps/moliveira/results_sol/pool_foco/svm_disc_md_pf_res128_on
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [128]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0.5], g: [1], foco: 400}
+    fontes: /exps/moliveira/fontes_filtros/pf_res128_on
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    methods: [fpsw@mapa_w0.5_1]
+    controls: [random_z, orth]
+    twin_controls: [random_z, orth]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_pf_res128_on
+skip: state

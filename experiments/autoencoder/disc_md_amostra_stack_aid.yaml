@@ -1,0 +1,38 @@
+# Parte 1, pilha sem backprop: L1 da grade, L2 e L3 do B0, cada camada nascida dos mapas da anterior.
+name: svm_disc_md_amostra_stack_aid
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: l1_amostras
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_amostra_stack
+  results_csv: results/svm_disc_md_amostra_stack
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    ipc: [1, 2, 3, 5, 10, 20, 50]
+    widths: [32, 64, 128, 256]
+    draws: [42]
+    rand_seeds: [42, 43]
+    channels: [0, 60, 60]   # B0 de P4; 0 = a largura da celula
+    kernels: [5, 5, 5]
+    pools: [2, 2, 2]
+    depth: 3
+resources:
+  gpu_ids: [1, 3]
+  max_per_gpu: 2
+  cpus_per_experiment: 4
+output:
+  work_dir: /exps/moliveira/eval/disc_md_amostra_stack_aid
+skip: state

@@ -1,0 +1,58 @@
+# HAM10000, receita fps (sem saliencia; TTA so na avaliacao): encoder inteiro (spf_grade, 6x256, k5, pools 2-2-2-2-1-1, entre_camadas, 200 px) como partida,
+# depois AUTOENCODER com decoder: backprop nas 6 camadas juntas so pela reconstrucao (BCE), lr 5e-5 igual em todas; decoder descartado na avaliacao.
+# Zero rotulo no treino e na escolha: checkpoint = ultima epoca (ckpt_last), parada so pela val/loss de reconstrucao; kappa da sonda por epoca so gravado; L0 = o encoder intacto.
+# HAM a 100%: validation == train (core/data/splits.py:9) -> a sonda por epoca e a val/loss leem o treino; so o SVM no TESTE vale.
+# Encoders: 50% de hyb_receita_inteira_encoder_ham50_fps_jaci (fps) e _bases_obj_jaci (random_z); 100% de hyb_receita_inteira_encoder_ham100_jaci (fps e random_z).
+# Nos parasitos o AE derrubou o kappa (Eggs 0,77 -> 0,53 em 10 epocas); aqui mede-se se no HAM e diferente.
+name:   spifil_growth_hyb_receita_inteira_ham_ae_jaci
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [ham10000]
+  splits:      [1, 2, 3]
+  percentages: [50, 100]
+
+resources:
+  gpu_ids:             [0]
+  max_per_gpu:         3   # pico medido 21,4 GB por job (smoke athena); 3 x 21,4 = 64 GB < 80 - 4 do root
+  cpus_per_experiment: 10
+  num_workers:         2
+
+runner_args:
+  init_flim_dir: /dados/home/moliveira/exps/encoders/hyb_receita_inteira/fps
+  layerwise:  6
+  layerwise_from_flim: 6          # as 6 camadas vem do init_flim_dir; nenhum grow, um estagio L6 com tudo solto
+  layer_channels: [256, 256, 256, 256, 256, 256]
+  layer_kernels:  [5, 5, 5, 5, 5, 5]
+  layer_pools:    [2, 2, 2, 2, 1, 1]
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  embed_mode: avgpool2d
+  seed: 42
+
+output:
+  work_dir: /dados/home/moliveira/exps/spifil_growth/hyb_receita_inteira_ham_ae
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false
+
+overrides:
+  seed_everything: 42
+  model.init_args.seed: 42
+  model.init_args.max_epochs: 200
+  trainer.max_epochs: 200
+  model.init_args.lr: 5.0e-5
+  model.init_args.recon_bg_weight: 1.0
+  data.init_args.num_workers: 2
+  model.init_args.epoch_probe: gem
+  model.init_args.best_by_probe: false
+  model.init_args.ckpt_last: true          # sem rotulo: ultima epoca; EarlyStopping na val/loss; a sonda por epoca so e gravada

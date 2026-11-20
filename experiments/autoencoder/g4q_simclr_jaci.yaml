@@ -1,0 +1,71 @@
+# Rede 4 (Apendice A, A_reports/november/growth_simclr_vicreg_plano.md): L1-L3 5-5-3 (32-64-128); L4 Inception 1x1|3x3|5x5 (64 por ramo) + pool;
+# L5 Inception (96 por ramo), sem pool; L6 1x1 -> 1024 (regra 13/11: ultima camada >= 1024; a versao de 512 ficou em artifacts/g4_*_final512); leitura gem_tta global = 1024. Ramo = um SPiFiL proprio (layer_branches, flim.arch.Branches).
+# Cada camada nasce do SPiFiL (FPS + SoftHebb, eval/spf_grade.montar_camada) sobre L1..L(k-1) ja treinadas; nada aleatorio.
+# Por camada: L{k} congelado (so a nova + decoder novo) e L{k}_ft tudo solto; cada fase ate 1000 epocas,
+# ckpt e parada (paciencia 50) pelo kappa de validacao da sonda linear gem. Objetivo: SimCLR (NT-Xent tau 0,1, cabeca MLP ->2048->2048->64; vistas = parasite_aug).
+# Irmaos identicos fora o objetivo: g4q_ae.yaml, g4q_vicreg.yaml.
+# SoftHebb: a config `hebb` do encdeep (disc_md_encdeep_geo_on.yaml), igual em todas as camadas.
+# parasite_aug flip H/V + rot90, bc 0 (nenhuma base tem fundo preto), em todas as bases.
+# flowers: so flip horizontal (aug_by_dataset).
+# probe_max_dim 2048 herdado da rede 2; aqui a sonda gem por epoca da L6 tem 1024.
+# Eggs/Larvae/Protozoan = fundo real (organized/<base>/raw/orig, core/constants.py:69-72 + config.py:101-114).
+# 100% e 75%: o mesmo YAML com --set grid.percentages=[100] (ou [75]); a pasta do braco ja leva o pct.
+# SVM final por camada (gem_tta global sem whitening, L6 = 1024-d, val e test: eval_svm_g4_<metodo>_{val,test}_gemtta): YAML a parte do runner eval, source growth_stages, depois do treino.
+name:   g4k_simclr_jaci
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [aid, remote_sensing, flowers, coconut_trees, ham10000, food101, Eggs, Larvae, Protozoan]
+  splits:      [1, 2, 3]
+  percentages: [50]
+
+resources:
+  gpu_ids:             [0]
+  max_per_gpu:         3
+  cpus_per_experiment: 8
+  num_workers: 8
+
+runner_args:
+  layerwise:      6
+  layer_channels: [32, 64, 128, 192, 288, 1024]
+  layer_kernels:  [5, 5, 3, 0, 0, 1]   # 0 = camada Inception (layer_branches)
+  layer_pools:    [2, 2, 2, 2, 1, 1]
+  layer_branches: [null, null, null, [1, 3, 5], [1, 3, 5], null]
+  layerwise_spf:
+    selecao: fps
+    n_imagens: 500
+    entre_camadas: true
+    whiten_between: true   # whitening fixo da entrada de cada conv no forward (flim.arch.Whiten), nao dobrado no conv
+    image_cache_dir: /dados/home/moliveira/exps/image_cache   # jaci: o padrao do montar_camada e /exps/moliveira
+    softhebb: {steps: 300, batch: 8, images: 2000, lr: 0.005, inv_temp: 0.65, delta_norm: tensor, init_radius: 1.414}
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  embed_mode: gem
+  unfreeze_phase: true
+  ckpt_by: val_kappa
+  early_stop_patience: 50
+  parasite_aug: {flip: true, rot90: true, bc: 0.0}
+  aug_by_dataset:
+    flowers: {hflip: true, vflip: false, rot90: false, bc: 0.0}
+  probe_max_dim: 2048
+  lejepa: {objective: simclr, tau: 0.1, head: mlp, proj_hidden: 2048, proj_dim: 64}
+
+output:
+  work_dir: /dados/home/moliveira/exps/artifacts/g4k_simclr
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false   # SVM so depois do treino; quem escolhe o ckpt e a sonda linear (ckpt_by)
+
+overrides:
+  model.init_args.max_epochs: 1000
+  trainer.max_epochs: 1000
+  data.init_args.num_workers: 8

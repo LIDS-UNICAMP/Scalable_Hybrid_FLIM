@@ -1,0 +1,51 @@
+# Piloto E1-E7 (decisao_E0_E7): numa so passada, sobre a receita L6 256 entre_camadas, flowers e coconut_trees, receita fpsw com saliencia gmr (f3/f5 sem saliencia: F2-F6 nao levam pontos).
+# E3 = L_spp - L; E1 = cat_ms_eq - cat (mesma dimensao); E2 = f3/f5 - ancora em cat; E1+E2 = f3/f5 em cat_ms_eq.
+# E6 (ms + spp) e E7 (ms + diversidade + spp) NAO cabem aqui: cada leitura de `leituras` e lida sozinha (ver decisao.md).
+name: svm_disc_md_e07_on
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, coconut_trees]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_e07_on
+  results_csv: /dados/home/moliveira/exps/results_sol/pooling/svm_disc_md_e07_on
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: []
+      pesos: {t: [0.5], g: [1], foco: 400}
+    fontes: /dados/home/moliveira/exps/fontes_filtros/disc_md_e07_on
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    leituras: [gem, ms, spp]
+    eq: true
+    methods: [fpsw@mapa_w0.5_1, f3, f5]
+    controls: [random_z, orth]
+    twin_controls: [random_z, orth]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 8
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_e07_on
+skip: state

@@ -1,0 +1,42 @@
+# Irmao _ext de disc_md_spf_r1.yaml: so coconut_trees e food101, resto igual (max_per_gpu 1).
+# Rodada 1: todos os metodos, 64 e 256, 1 a 3 camadas, flowers e o parasito com fundo.
+name: svm_disc_md_spf_r1_ext
+method: autoencoder
+runner: eval
+grid:
+  datasets: [coconut_trees, food101]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_spf_r1_ext
+  results_csv: results/svm_disc_md_spf_r1_ext
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    shards: 4
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    methods: [crus, crus@centroid, crus@geodesic, crus@sift_sp, crus@sift, crus@sift_nms, crus@uniao, crus@obj, crus@fundo, crus@sal, crus@l1obj, spifil, spifil_dd, zca2, zca2h, zca2@sift_sp, zca2@sift, zca2@obj, zca2@sal, pca, pca2, pca2@sift, zca_km2, km_w, km_w_m, km_sil, km_sil_m, hdbscan, hdbscan_m, fps, qr, cos, fps@sift, fpsd@sift, cosd@sift, bovw_w@sift, bovw_sil@sift]
+    controls: [xavier, he, orth, tnorm, random_z, whrand, rz2, whrand2]
+    twin_controls: [random_z, orth, whrand]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_spf_r1_ext
+skip: state

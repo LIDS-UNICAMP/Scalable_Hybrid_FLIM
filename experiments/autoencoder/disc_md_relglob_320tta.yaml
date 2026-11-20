@@ -1,0 +1,48 @@
+# Ultimo teste (pedido 11/11): remote_sensing a 320 px + TTA (8 vistas rot90 x flip, `amostra.leituras_tta`) com cat+mscp (`somar`).
+# A TTA passa pela leitura nova: GeM (L, cat) e mscp sao a media das 8 vistas; random_z fica sem TTA e sem mecanismo (regua pura).
+# Receita fps sem saliencia, como disc_md_atencao_combo320 (comparar com 320 + espacial@L5 + TTA). 3 splits, 50%, so validacao.
+name: svm_disc_md_relglob_320tta
+method: autoencoder
+runner: eval
+grid:
+  datasets: [remote_sensing]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_relglob_320tta
+  results_csv: results/svm_disc_md_relglob_320tta
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [320]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    fontes: /exps/moliveira/fontes_filtros/atencao_combo320
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    methods: [fps]
+    controls: [random_z]
+    twin_controls: [random_z]
+    leituras: [gem, mscp]
+    leituras_tta: true
+    somar: true
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 2
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_relglob_320tta
+skip: state

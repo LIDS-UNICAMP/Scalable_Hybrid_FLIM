@@ -1,0 +1,34 @@
+# H3 entre datasets: mesma amostra de 150 imagens, sem reamostrar; 12 pontos, so exploratorio.
+name: svm_disc_md_amostra_imb_todos
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Larvae_subgroup, remote_sensing, Larvae, helminth_larvae, flowers, Eggs_subgroup, helminth_eggs, Protozoan_subgroup, protozoan_cysts, Eggs, aid, Protozoan]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: l1_sem_rotulo
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_amostra_imb
+  results_csv: results/svm_disc_md_amostra_imb
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow: {}
+  amostra:
+    modo: desbalanceio
+    images: 150
+    widths: [64]
+    draws: [42, 43, 44]
+    shares: []
+    methods: [uniform, fps, kmeans]
+    kernels: [5]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 1
+  cpus_per_experiment: 4
+output:
+  work_dir: /exps/moliveira/eval/disc_md_amostra_imb_todos
+skip: state

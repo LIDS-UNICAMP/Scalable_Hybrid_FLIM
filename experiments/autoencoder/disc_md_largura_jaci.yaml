@@ -1,0 +1,48 @@
+# Largura x tamanho da imagem: coconut_trees (90 px) e Protozoan (64 px) com 32/64/128/256 filtros, resto igual ao sol_wsal.
+name: svm_disc_md_largura
+method: autoencoder
+runner: eval
+grid:
+  datasets: [coconut_trees, Protozoan]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_largura
+  results_csv: results/svm_disc_md_largura
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5, 0.75], g: [1, 2], foco: 400}
+    fontes: /dados/home/moliveira/exps/tmp/largura_fontes
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [32, 64, 128, 256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    combo: {words: 512}
+    entre_camadas: true
+    methods: [fps, fpsw@mapa_w0.5_1]
+    controls: [orth, xavier, tnorm, random_z]
+    twin_controls: [orth, xavier, random_z]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 4
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_largura
+skip: state

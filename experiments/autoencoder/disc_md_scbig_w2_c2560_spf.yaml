@@ -1,0 +1,51 @@
+# Lei de escala: largura x cabeca x profundidade, 6 familias, SPiFiL contra aleatorio.
+name:   spifil_growth_disc_md_scbig_w2_c2560_spf
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [helminth_eggs, Protozoan_subgroup, Larvae_subgroup, flowers, aid, remote_sensing]
+  splits:      [1]
+  percentages: [50]
+
+resources:
+  gpu_ids:             [1]
+  max_per_gpu:         1
+  cpus_per_experiment: 10
+
+runner_args:
+  layerwise:  4
+  impurities: true                # mascara desligada no grow (nos 12 ela ja nem e lida)
+  image_size: 200
+  no_crop: true                   # letterbox: a imagem inteira entra; image_size: N muda grow, dados e decoder juntos
+  image_cache_dir: /exps/moliveira/image_cache
+  layer_channels: [64, 96, 128, 2560]
+  layer_kernels:  [5, 5, 5, 1]
+  layer_pools:    [2, 2, 2, 1]
+  fill_random_last: true          # 50 sp por imagem nao enchem a L4; resto aleatorio
+  superpixels: disf
+  n_superpixels: 50
+  budget_check: false
+  embed_mode: avgpool2d           # 1280x24x24 achatado = 737k-d, inviavel no kappa de treino
+  layerwise_backprop: 0.1
+
+output:
+  work_dir: /exps/moliveira/spifil_growth/disc_md_scbig_w2_c2560_spf
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false
+
+overrides:
+  model.init_args.max_epochs: 60
+  trainer.max_epochs: 60
+  model.init_args.recon_bg_weight: 1.0   # oficial _bg1: fundo pesa igual, sem pseudo-mascara na loss
+  data.init_args.num_workers: 8
+  model.init_args.epoch_probe: gem
+  model.init_args.best_by_probe: true

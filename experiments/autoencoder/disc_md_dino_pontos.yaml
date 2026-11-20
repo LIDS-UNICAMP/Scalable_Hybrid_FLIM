@@ -1,0 +1,53 @@
+# Onde cortar os patches 5x5: nos tokens de norma alta do DINOv2-giant ("registradores", Darcet et al. 2024)?
+# Receita de disc_md_receita_tta.yaml sem TTA; so muda o ponto. A = dino_alto (norma > 150), C = dino_rand (mesma
+# contagem por imagem), D = dino_baixo (normas mais baixas, mesma contagem); todos com fps. B (fps / fpsw@mapa_w0.5_1)
+# sai das linhas `cat` nao-TTA de results/svm_disc_md_receita_tta_*: mesmas imagens, mesmo cache `fontes`.
+# Normas: A_reports/november/analise_textura/dino_pontos.py, em /exps/moliveira/fontes_filtros/dino_pontos.
+name: svm_disc_md_dino_pontos
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid, remote_sensing, flowers]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_dino_pontos
+  results_csv: results/svm_disc_md_dino_pontos
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5, 0.75], g: [1, 2], foco: 400}
+    fontes: /exps/moliveira/fontes_filtros/receita_tta
+    dino: {dir: /exps/moliveira/fontes_filtros/dino_pontos, corte: 150}
+    shards: 3
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    combo: {words: 512}
+    entre_camadas: true
+    methods: [fps@dino_alto, fps@dino_rand, fps@dino_baixo]
+    controls: []
+    twin_controls: []
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_dino_pontos
+skip: state

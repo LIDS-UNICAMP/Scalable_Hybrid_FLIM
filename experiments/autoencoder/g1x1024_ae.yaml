@@ -1,0 +1,56 @@
+# Rede 1 fechando em 1024 (regra do Mateus 13/11 ~18h: toda rede termina com >= 1024 canais).
+# L1..L3 = as camadas ja treinadas do g1_ae (SPiFiL + crescimento, L3_ft exportado em L3_flim);
+# L4 nova = 1024 canais 1x1, sem pool, INICIALIZACAO ALEATORIA (random_layer_classic), treinada com decoder (AE).
+# Estagios: L3 (as 3 de partida, soltas) -> L4 (so a nova + decoder novo, L1..L3 congeladas) -> L4_ft (tudo solto).
+# Sonda kappa por epoca: gem global da L4 = 1024-d. SVM: eval_svm_g1x1024_ae_{val,test}_gemtta.yaml (gem_tta, 1024-d, sem whitening).
+name:   g1x1024_ae
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [remote_sensing]
+  splits:      [1]
+  percentages: [50]
+
+resources:
+  gpu_ids:             [2, 3]
+  max_per_gpu:         1
+  cpus_per_experiment: 8
+  num_workers:         4
+
+runner_args:
+  layerwise:      4
+  layer_channels: [32, 48, 64, 1024]
+  layer_kernels:  [5, 5, 5, 1]
+  layer_pools:    [2, 2, 2, 1]
+  init_flim_dir:  /exps/moliveira/encoders/g1_ae_L3
+  layerwise_from_flim: 3
+  random_layer_classic: true
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+  embed_mode: gem
+  unfreeze_phase: true
+  ckpt_by: val_kappa
+  early_stop_patience: 50
+  parasite_aug: {flip: true, rot90: true, bc: 0.0}
+  aug_by_dataset:
+    flowers: {hflip: true, vflip: false, rot90: false, bc: 0.0}
+
+output:
+  work_dir: /exps/moliveira/artifacts/g1x1024_ae
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false
+
+overrides:
+  model.init_args.max_epochs: 1000
+  trainer.max_epochs: 1000
+  data.init_args.num_workers: 4

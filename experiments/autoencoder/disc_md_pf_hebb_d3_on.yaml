@@ -1,0 +1,40 @@
+# Pool foco (rodada 2), F3 SoftHebb, receita hebb3 (inv_temp 1/0,65, lr 0,08/0,005, delta_norm tensor, 300 passos; camadas alem da 2a repetem o ultimo valor), L3.
+# SAL-ON (flowers, coconut_trees): init fps@foco_w0.5_1 (pontos da saliencia gmr), fontes com saliencia. Uma celula por largura (256, 512) gera H01 = fps@foco_w0.5_1_w<W>_c1 (fixo, BN de 1 lote), H03 = fps@foco_w0.5_1_w<W> p0 (so BN) e H05 = fps@foco_w0.5_1_w<W> p300.
+# Leituras gem_pw, gem_tta_pw (8 flips/rotacoes, eval/alt_encoders.embed) e as cat_ de cada uma. Controle aleatorio puro em disc_md_pf_hebb_rand_d3. Piloto: split 1, sorteios 42 e 43.
+name: svm_disc_md_pf_hebb_d3_on
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, coconut_trees]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: alt_encoders
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_pf_hebb_d3_on
+  results_csv: /exps/moliveira/results_sol/pool_foco/svm_disc_md_pf_hebb_d3_on
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0.5], g: [1], foco: 400}
+    draws: [42, 43]
+    fontes: /exps/moliveira/fontes_filtros/pf_hebb_d3_on
+    hebb_init: {inits: [fps@foco_w0.5_1], widths: [256, 512], depth: 3, kernel: 5, pool: 2, steps: [300],
+                batch: 8, images: 2000, lr: [0.08, 0.005], inv_temp: [1.0, 0.65], delta_norm: tensor,
+                calib_steps: 300, calib: [1], bank_images: 500, readouts: [gem_pw, gem_tta_pw]}
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_pf_hebb_d3_on
+skip: state

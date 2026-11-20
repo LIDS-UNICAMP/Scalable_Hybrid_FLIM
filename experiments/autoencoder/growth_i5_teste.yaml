@@ -1,0 +1,45 @@
+# prova do I5: 3 camadas pequenas, 2 epocas, L{k} congelado + L{k}_ft solto, ckpt por kappa de validacao
+name:   spifil_growth_i5_teste
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [helminth-eggs]
+  splits:      [1]
+  percentages: [50]
+
+resources:
+  gpu_ids:             [3]
+  max_per_gpu:         1
+  cpus_per_experiment: 10
+  num_workers:         2
+
+runner_args:
+  layerwise:  3
+  paper_classes: true
+  layer_channels: [16, 16, 16]
+  layer_kernels:  [3, 3, 3]
+  layer_pools:    [2, 2, 2]
+  superpixels: disf
+  n_superpixels: 50
+  budget_check: false
+  embed_mode: avgpool2d
+  unfreeze_phase: true
+  ckpt_by: val_kappa
+  early_stop_patience: 2
+
+output:
+  work_dir: /exps/moliveira/tmp/i5_teste/pat2
+
+wandb:
+  enabled: false
+  project: phd_thesis_layerwise
+
+evaluate:
+  SVM: false
+
+overrides:
+  model.init_args.max_epochs: 8
+  trainer.max_epochs: 8
+  model.init_args.warmup_epochs: 0

@@ -1,0 +1,11 @@
+# Fase 1 da saliencia: amostra de treino, sem rotulo; o label so mede depois. `python -m saliency.batch <este yaml>`.
+datasets: [Eggs, Larvae, Protozoan, Eggs_subgroup, Larvae_subgroup, Protozoan_subgroup, flowers, aid, remote_sensing]
+split: 1
+percentage: 50
+images: 30
+seed: 42
+top_k: 3
+max_side: 640
+workers: 8
+out: /exps/moliveira/saliency
+figures: A_reports/november/multi_dataset/saliencia

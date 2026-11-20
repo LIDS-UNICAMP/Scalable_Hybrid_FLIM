@@ -1,0 +1,41 @@
+# Hipotese do fundo nas duas raw grandes, depois das menores.
+name: svm_disc_md_spf_h_raw
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Eggs, Protozoan]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_spf_h_raw
+  results_csv: results/svm_disc_md_spf_h
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    shards: 4
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    methods: [spifil, spifil@m_obj, spifil@m_fundo, crus, crus@m_obj, crus@m_fundo, crus@centroid, crus@geodesic, crus@sift_sp, crus@sift, crus@sift_nms, crus@uniao, crus@obj, crus@fundo, crus@sal, crus@l1obj, zca2, zca2@m_obj, zca2@m_fundo]
+    controls: [random_z, orth, he, whrand]
+    twin_controls: [random_z, orth, whrand]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 3
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_spf_h_raw
+skip: state

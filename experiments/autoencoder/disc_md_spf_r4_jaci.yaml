@@ -1,0 +1,41 @@
+# Rodada 4: os melhores de r3 nos eixos que faltam: kernel 3 e 7, 128 px, 4 camadas, 32 e 128 filtros.
+name: svm_disc_md_spf_r4
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, Protozoan_subgroup, helminth_eggs, helminth_larvae, aid]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_spf_r4
+  results_csv: results/svm_disc_md_spf_r4
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [128, 200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [32, 64, 128, 256]
+    kernels: [3, 5, 7]
+    depth: 4
+    pool: 2
+    survivors: r3
+    top: 3
+    twin_controls: [random_z, orth, whrand]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 8
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_spf_r4
+skip: state

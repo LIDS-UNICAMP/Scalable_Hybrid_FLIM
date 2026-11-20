@@ -1,0 +1,27 @@
+# 6 replicas exatas da grade sc (w1, L3): ruido de GPU e do checkpoint no SVM.
+name: svm_disc_md_law_eval_replicas_l3
+method: autoencoder
+runner: eval
+grid:
+  datasets: [helminth_eggs]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: growth_stages
+  artifacts_dir: /exps/moliveira/spifil_growth
+  family: disc_md_sc_w1_*_spf
+  ckpt_selection: best
+  results_csv: results/svm_disc_md_law_eval_replicas_l3.csv
+  embed_mode: gem_tta_pw
+  eval_set: val
+  stages: [L3]
+  image_size: 200
+  no_crop: true
+resources:
+  gpu_ids: [3]
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/disc_md_law_eval_replicas_l3
+skip: state

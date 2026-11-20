@@ -1,0 +1,37 @@
+# Fila 2 (E04, E05): homeostase no SoftHebb, so na competicao; random e fps, 64 e 256, 300 passos. O par sem
+# homeostase (mesmo split, sorteio e lotes) e a Fila 1 (disc_md_sol_hebb1). E04 vies pela frequencia; E05 so inativos.
+# 12 bases, 3 splits, sorteios 42 e 43, 1 processo por GPU. Jaci. As fontes SPiFiL sao as do sorteio em ms_fontes (500 imagens).
+name: svm_disc_md_sol_hebb2
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Protozoan, Eggs, aid, Protozoan_subgroup, protozoan_cysts, helminth_eggs, Eggs_subgroup,
+             helminth_larvae, flowers, Larvae, remote_sensing, Larvae_subgroup]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: alt_encoders
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_sol_hebb2
+  results_csv: /dados/home/moliveira/exps/results_sol/alternative_encoders/svm_disc_md_sol_hebb2
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    draws: [42, 43]
+    fontes: /dados/home/moliveira/exps/tmp/ms_fontes
+    hebb_init: {inits: [], homeo_inits: [random, fps], widths: [64, 256], depth: 3, kernel: 5, pool: 2, steps: [300],
+                batch: 8, images: 2000, lr: 0.05, inv_temp: 4.0, bank_images: 500, readouts: [gem_pw],
+                homeo: {e04: {gain: 0.5, cap: 2.0, decay: 0.99}, e05: {window: 30, patience: 2, boost: 0.5}}}
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 8
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_sol_hebb2
+skip: state

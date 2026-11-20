@@ -1,0 +1,38 @@
+# Parte 1, L1 sem backprop: k imagens por classe x largura, com controles aleatorios na mesma largura real.
+name: svm_disc_md_amostra_l1_flowers
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: l1_amostras
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_amostra_l1
+  results_csv: results/svm_disc_md_amostra_l1
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]   # grade inteira sem TTA; gem_tta_pw so na confirmacao
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    ipc: [1, 2, 3, 5, 10, 20, 50]
+    widths: [32, 64, 128, 256]
+    draws: [42, 43, 44, 45, 46]
+    rand_seeds: [42, 43, 44, 45, 46]
+    channels: [0, 50, 65]   # B0 de P4; 0 = a largura da celula
+    kernels: [5, 5, 5]
+    pools: [2, 2, 2]
+    depth: 1
+resources:
+  gpu_ids: [1, 3]
+  max_per_gpu: 2
+  cpus_per_experiment: 4
+output:
+  work_dir: /exps/moliveira/eval/disc_md_amostra_l1_flowers
+skip: state

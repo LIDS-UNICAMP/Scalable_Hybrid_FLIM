@@ -1,0 +1,32 @@
+# Grade cortada, passo 2: splits 2 e 3 em 4 tamanhos, sem Protozoan.
+name: svm_disc_md_l1fast_k2x
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid, Eggs, protozoan_cysts, Protozoan_subgroup, helminth_eggs, Eggs_subgroup, flowers, Larvae]
+  splits: [2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: l1_fast
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_l1fast
+  results_csv: results/svm_disc_md_l1fast
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [640, 256, 128, 64]
+  l1_superpixels: [12, 25, 50, 100, 200, 400]
+  l1_readouts: [gem_tta_pw]
+  l1_grow:
+    out_channels: 64
+    kernel_size: 5
+    pool_stride: 2
+    impurities: true
+    superpixels: disf
+    budget_check: false
+resources:
+  gpu_ids: [0, 1, 2]
+  max_per_gpu: 3
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/disc_md_l1fast_k2
+skip: state

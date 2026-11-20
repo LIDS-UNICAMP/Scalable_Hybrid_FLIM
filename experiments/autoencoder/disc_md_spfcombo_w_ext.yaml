@@ -1,0 +1,45 @@
+# Irmao _ext de disc_md_spfcombo_w_jaci.yaml: so coconut_trees e food101, resto igual (Athena, max_per_gpu 1).
+# Combo (b) e (c): whitening entre camadas nos mapas; leitura sem whitening sai como <nome>_b, leitura com whitening como <nome>.
+name: svm_disc_md_spfcombo_w_ext
+method: autoencoder
+runner: eval
+grid:
+  datasets: [coconut_trees, food101]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_spfcombo_w_ext
+  results_csv: results/svm_disc_md_spfcombo_w_ext
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    combo: {words: 512}
+    soma: true
+    entre_camadas: true
+    methods: [fps@combo, cos@combo]
+    controls: [orth, xavier, tnorm, random_z]
+    twin_controls: [orth, xavier, random_z]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_spfcombo_w_ext
+skip: state

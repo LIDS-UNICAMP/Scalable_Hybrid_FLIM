@@ -1,0 +1,42 @@
+# SVM do aleatorio puro da rede 2 (rand_g2.yaml), estagio L0, GeM+TTA camada final cheia, sem whitening.
+name: svm_rand_g2_test_gemtta
+method: autoencoder
+runner: eval
+grid:
+  datasets:
+  - remote_sensing
+  - aid
+  - flowers
+  - Larvae
+  - Eggs
+  - Protozoan
+  - coconut_trees
+  - ham10000
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 50
+runner_args:
+  probe: svm
+  source: growth_stages
+  artifacts_dir: /exps/moliveira/artifacts
+  family: rand_g2
+  ckpt_selection: best
+  results_csv: results/svm_rand_g2_test_gemtta.csv
+  embed_mode: gem_tta
+  eval_set: test
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+  stages:
+  - L0
+resources:
+  gpu_ids:
+  - 3
+  max_per_gpu: 1
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/artifacts/eval/svm_rand_g2_test_gemtta
+skip: state

@@ -1,0 +1,51 @@
+# Bases ruins (obj, receita fpsw@mapa_w0.5_1). Passo 1 do hyb_receita_inteira_bases: monta a receita inteira (6x256, k5, pools 2-2-2-2-1-1, entre_camadas, fpsw@mapa_w0.5_1, 200 px)
+# e o controle random_z do mesmo tamanho, com o proprio spf_grade, e salva cada encoder em formato FLIM (amostra.salvar_encoder).
+# As linhas do CSV sao a receita sem backprop (L/cat, L_tta/cat_tta) no val: e a referencia da epoca 0.
+# Sem `fontes`: o cache de fontes e por split, sem pct, e aqui ha 3 pcts.
+name: svm_hyb_receita_inteira_encoder_bases_obj_jaci
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, ham10000]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/hyb_receita_inteira_encoder_bases_obj
+  results_csv: results/svm_hyb_receita_inteira_encoder_bases_obj_jaci
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5, 0.75], g: [1, 2], foco: 400}
+    salvar_encoder: /dados/home/moliveira/exps/encoders/hyb_receita_inteira
+    shards: 1
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    tta: true
+    methods: [fpsw@mapa_w0.5_1]
+    controls: [random_z]
+    twin_controls: []
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 3
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/hyb_receita_inteira_encoder_bases_obj
+skip: state

@@ -1,0 +1,68 @@
+# Rede 3 (D1, A_reports/november/growth_simclr_vicreg_plano.md, Prioridade nova): 6 camadas 64-128-192-320-512-1024 (soma 2240; regra 13/11: ultima camada >= 1024; a versao de 832 ficou em artifacts/g3_*_final832), k 5-5-3-1-1-1, pool 2-2-2-2-1-1.
+# Cada camada nasce do SPiFiL (FPS + SoftHebb, eval/spf_grade.montar_camada) sobre L1..L(k-1) ja treinadas; nada aleatorio.
+# Por camada: L{k} congelado (so a nova + decoder novo) e L{k}_ft tudo solto; cada fase ate 1000 epocas,
+# ckpt e parada (paciencia 50) pelo kappa de validacao da sonda linear gem. Objetivo: VICReg (expansor 8192-8192-8192, inv 25 var 25 cov 1; vistas = parasite_aug).
+# Irmaos identicos fora o objetivo: g3q_ae.yaml, g3q_simclr.yaml.
+# SoftHebb: a config `hebb` do encdeep (disc_md_encdeep_geo_on.yaml), igual em todas as camadas.
+# parasite_aug flip H/V + rot90, bc 0 (nenhuma base tem fundo preto), em todas as bases.
+# flowers: so flip horizontal (aug_by_dataset).
+# Sonda kappa por epoca: gem global da ultima camada = 1024-d, abaixo do probe_max_dim padrao (1999).
+# Eggs/Larvae/Protozoan = fundo real (organized/<base>/raw/orig, core/constants.py:69-72 + config.py:101-114).
+# 100% e 75%: o mesmo YAML com --set grid.percentages=[100] (ou [75]); a pasta do braco ja leva o pct.
+# SVM final por camada (gem_tta global sem whitening, L6 = 1024-d, val e test: eval_svm_g3_<metodo>_{val,test}_gemtta): YAML a parte do runner eval, source growth_stages, depois do treino.
+name: g3k_vicreg_jaci
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [aid, remote_sensing, flowers, coconut_trees, ham10000, food101, Eggs, Larvae, Protozoan]
+  splits:      [1, 2, 3]
+  percentages: [50]
+
+resources:
+  gpu_ids:             [0]
+  max_per_gpu:         3
+  cpus_per_experiment: 8
+  num_workers: 8
+
+runner_args:
+  layerwise:      6
+  layer_channels: [64, 128, 192, 320, 512, 1024]
+  layer_kernels:  [5, 5, 3, 1, 1, 1]
+  layer_pools:    [2, 2, 2, 2, 1, 1]
+  layerwise_spf:
+    selecao: fps
+    n_imagens: 500
+    entre_camadas: true
+    whiten_between: true   # whitening fixo da entrada de cada conv no forward (flim.arch.Whiten), nao dobrado no conv
+    image_cache_dir: /dados/home/moliveira/exps/image_cache   # jaci: o padrao do montar_camada e /exps/moliveira
+    softhebb: {steps: 300, batch: 8, images: 2000, lr: 0.005, inv_temp: 0.65, delta_norm: tensor, init_radius: 1.414}
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  embed_mode: gem
+  unfreeze_phase: true
+  ckpt_by: val_kappa
+  early_stop_patience: 50
+  parasite_aug: {flip: true, rot90: true, bc: 0.0}
+  aug_by_dataset:
+    flowers: {hflip: true, vflip: false, rot90: false, bc: 0.0}
+  lejepa: {objective: vicreg, expander: "8192-8192-8192", vicreg: {inv: 25, var: 25, cov: 1}}
+
+output:
+  work_dir: /dados/home/moliveira/exps/artifacts/g3k_vicreg
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false   # SVM so depois do treino; quem escolhe o ckpt e a sonda linear (ckpt_by)
+
+overrides:
+  model.init_args.max_epochs: 1000
+  trainer.max_epochs: 1000
+  data.init_args.num_workers: 8

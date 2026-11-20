@@ -1,0 +1,45 @@
+# Irmao _ext de disc_md_sol_p5.yaml: so coconut_trees e food101, resto igual (max_per_gpu 1).
+# SOL Rodada 1, P5: R1 GAP, R2 GMP, R3 GeM, R4 GeM p em {1,2,3,4,6} (p pela validacao), R5 SPP, R8 multiescala, R9 covariancia; dimensao final em dim e raw_dim.
+name: svm_disc_md_sol_p5_ext
+method: autoencoder
+runner: eval
+grid:
+  datasets: [food101]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_sol_p5_ext_food101
+  results_csv: /dados/home/moliveira/exps/results_sol/pooling/svm_disc_md_sol_p5_ext
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    fontes: /dados/home/moliveira/exps/tmp/sol_fontes
+    shards: 1
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    saliency: {map: gmr, cuts: []}
+    leituras: [gem, gap, gmp, gem_p2, gem_p4, gem_p6, spp, ms, cov]
+    methods: [crus@geodesic, fps, fpsw@mapa_peso]
+    controls: [random_z, xavier, orth]
+    twin_controls: [random_z, xavier, orth]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 3
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_sol_p5_ext_food101
+skip: state

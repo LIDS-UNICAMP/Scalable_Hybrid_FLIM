@@ -1,0 +1,57 @@
+# Ponto de partida do estudo SSL (A_reports/november/ssl_exploracao/contexto_comum.md): o melhor SPiFiL pequeno de coconut_trees
+# (104-104-104-104-104-104 k3-3-3-5-5-5, 1,01 M params, pools 2-2-2-2-1-1, 200 px, fps) e o random_z da MESMA forma, montados
+# pelo spf_grade com o protocolo de disc_md_restr5m_k3_cena_jaci.yaml e salvos em formato FLIM (amostra.salvar_encoder).
+# Um YAML por base: salvar_encoder grava em <dir>/<braco>/<dataset>_split<s>_pct<p>, sem a lei no caminho.
+# Fontes: o cache de restr5m_k3_cena vale a 50% (mesmas fontes do CSV de referencia); 100% ganha as suas (sufixo _pct100).
+# As linhas do CSV sao a epoca 0 (L0) dos runs SSL.
+name: svm_hyb_ssl_encoder_coconut_trees_athena
+method: autoencoder
+runner: eval
+grid:
+  datasets: [coconut_trees]
+  splits: [1, 2, 3]
+  percentages: [50, 100]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/hyb_ssl_encoder_coconut_trees
+  results_csv: results/svm_hyb_ssl_encoder_coconut_trees_athena
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5, 0.75], g: [1, 2], foco: 400}
+    fontes: /exps/moliveira/fontes_filtros/restr5m_k3_cena
+    salvar_encoder: /exps/moliveira/encoders/ssl_pequeno/coconut_trees
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [0]
+    kernels: [3]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    combo: {words: 512}
+    entre_camadas: true
+    tta: true
+    methods: [fps]
+    controls: [random_z]
+    twin_controls: []  # no restr5m a largura real sempre bateu com a pedida; um twin colidiria no mesmo diretorio random_z/
+    leis:
+      - {lei: W, w: "104-104-104-104-104-104", depth: 6, k: "3-3-3-5-5-5"}
+resources:
+  gpu_ids: [1, 2, 3]
+  max_per_gpu: 2   # GPU_CAP_MIB=4200 por processo; athena: teto 30 GB nosso por GPU (sol_fila_jaci_a/b ja usa ate ~20)
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/hyb_ssl_encoder_coconut_trees
+skip: state

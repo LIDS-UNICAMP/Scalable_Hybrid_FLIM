@@ -1,0 +1,53 @@
+# X3: redundancia both 0.9, sem reposicao, ponto fixo 800 px/sp e L1 = 64
+name:   spifil_growth_disc_md_x3_both90_norep_s200
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [Eggs_subgroup, helminth_eggs]
+  splits:      [1, 2, 3]
+  percentages: [50]
+
+resources:
+  gpu_ids:             [1]
+  max_per_gpu:         1
+  cpus_per_experiment: 10
+
+runner_args:
+  layerwise:  1                   # so L1: decoder de 1 bloco
+  impurities: true
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+  image_size: 200
+  layer_channels: [64]
+  layer_kernels:  [5]
+  layer_pools:    [2]
+  superpixels: disf
+  n_superpixels: 50
+  budget_check: false
+  embed_mode: avgpool2d
+  redundancy_replace: false
+  redundancy_cos: 0.9
+  redundancy_corr: 0.9
+
+output:
+  work_dir: /exps/moliveira/spifil_growth/disc_md_x3_both90_norep_s200
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false
+
+overrides:
+  model.init_args.max_epochs: 20
+  trainer.max_epochs: 20
+  model.init_args.warmup_epochs: 2
+  model.init_args.recon_bg_weight: 1.0
+  data.init_args.num_workers: 8
+  model.init_args.epoch_probe: gem
+  model.init_args.best_by_probe: true

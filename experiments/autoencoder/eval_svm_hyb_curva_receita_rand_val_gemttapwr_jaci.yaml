@@ -1,0 +1,25 @@
+# SVM da curva do hibrido (hyb_curva_receita_rand.yaml), leitura final gem + TTA + whitening, conjunto: val. Rodar so depois do treino.
+name: svm_hyb_curva_receita_rand_val_gemttapwr_jaci
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Larvae, Eggs]
+  splits: [1, 2, 3]
+  percentages: [1, 5, 25, 50, 75, 100]   # 10 fora: core/constants.py PERCENTAGES nao tem 10
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: hyb_curva_receita_rand
+  artifacts_dir: /dados/home/moliveira/exps/eval/espelho_growth_rand
+  ckpt_selection: best
+  results_csv: results/svm_hyb_curva_receita_rand_val_gemttapwr_jaci.csv
+  embed_mode: gem_tta_pw
+  eval_set: val
+  stages: [L6]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 1   # SVM um por vez (CPU satura)
+  cpus_per_experiment: 8
+output:
+  work_dir: /dados/home/moliveira/exps/eval/svm_hyb_curva_receita_rand_val_gemttapwr_jaci
+skip: state

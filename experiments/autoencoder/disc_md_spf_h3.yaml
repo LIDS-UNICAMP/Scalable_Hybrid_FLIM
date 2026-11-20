@@ -1,0 +1,41 @@
+# Atalho da grade h: fecha o split 3 do oraculo nas duas bases com fundo, sem esperar a fila; o que repetir a analise deduplica.
+name: svm_disc_md_spf_h3
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Protozoan_subgroup, Eggs_subgroup]
+  splits: [3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_spf_h3
+  results_csv: results/svm_disc_md_spf_h_x
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    methods: [spifil, spifil@m_obj, spifil@m_fundo, crus, crus@m_obj, crus@m_fundo]
+    controls: [random_z, orth, he, whrand]
+    twin_controls: [random_z, orth, whrand]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_spf_h3
+skip: state

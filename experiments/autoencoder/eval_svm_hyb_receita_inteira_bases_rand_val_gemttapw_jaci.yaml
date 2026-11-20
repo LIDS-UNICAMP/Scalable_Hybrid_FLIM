@@ -1,0 +1,28 @@
+# Bases ruins. SVM do hyb_receita_inteira_bases_rand.yaml: estagio L0 (receita intacta, epoca 0) e L6 (best por kappa da sonda), leitura gem_tta_pw, conjunto val. So depois do treino.
+name: svm_hyb_receita_inteira_bases_rand_val_gemttapw_jaci
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid, remote_sensing, flowers, ham10000]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: growth_stages
+  family: hyb_receita_inteira_bases_rand
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth
+  ckpt_selection: best
+  results_csv: results/svm_hyb_receita_inteira_bases_rand_val_gemttapw_jaci.csv
+  embed_mode: gem_tta_pw
+  eval_set: val
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  stages: [L0, L6]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 1   # SVM um por vez (CPU satura)
+  cpus_per_experiment: 8
+output:
+  work_dir: /dados/home/moliveira/exps/eval/svm_hyb_receita_inteira_bases_rand_val_gemttapw
+skip: state

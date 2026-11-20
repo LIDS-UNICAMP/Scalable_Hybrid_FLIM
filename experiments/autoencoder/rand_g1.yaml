@@ -1,0 +1,54 @@
+# ALEATORIO PURO da rede 1 (pedido do Mateus 13/11 ~23h): mesma arquitetura da fila, pesos = init He (kaiming_normal fan_in relu, bias 0, seed 0; a init padrao apagava o sinal na L6),
+# SEM treino (lr 0, 1 epoca), sem SPiFiL/SoftHebb/whitening/augment de nada. Encoder em /exps/moliveira/encoders/rand_puro/g1.
+# SVM: eval_svm_rand_g1_{val,test}_gemtta.yaml, estagio L0 (encoder intacto), camada final cheia, GeM+TTA.
+name: rand_g1
+method: autoencoder
+runner: growth
+grid:
+  init:
+  - flim
+  datasets:
+  - remote_sensing
+  splits:
+  - 1
+  - 2
+  - 3
+  percentages:
+  - 50
+resources:
+  gpu_ids:
+  - 3
+  max_per_gpu: 2
+  cpus_per_experiment: 8
+  num_workers: 4
+runner_args:
+  layerwise: 4
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /exps/moliveira/image_cache
+  embed_mode: gem
+  parasite_aug:
+    flip: true
+    rot90: true
+    bc: 0.0
+  aug_by_dataset:
+    flowers:
+      hflip: true
+      vflip: false
+      rot90: false
+      bc: 0.0
+  layerwise_from_flim: 4
+  init_flim_dir: /exps/moliveira/encoders/rand_puro/g1
+output:
+  work_dir: /exps/moliveira/artifacts/rand_g1
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+skip: state
+evaluate:
+  SVM: false
+overrides:
+  model.init_args.max_epochs: 1
+  trainer.max_epochs: 1
+  model.init_args.lr: 0.0
+  data.init_args.num_workers: 4

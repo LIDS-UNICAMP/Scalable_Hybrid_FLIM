@@ -1,0 +1,68 @@
+# Receita SPiFiL INTEIRA (spf_grade: 6x256, k5, pools 2-2-2-2-1-1, whitening dobrado nas convs, 200 px) como partida,
+# depois LeJEPA do artigo (Balestriero & LeCun, arXiv 2511.08544; rbalestr-lab/lejepa) no lugar da reconstrucao:
+# 0.05*SIGReg (Epps-Pulley, 1024 fatias) + 0.95*invariancia (cada vista puxada para a media das 2 globais),
+# projetor torchvision MLP 256->2048->2048->64 (BN so nas ocultas) sobre o GeM da L6, descartado na avaliacao.
+# Vistas: 2 globais 200 px (crop 0,3-1,0) + 6 locais 96 px (0,05-0,3), flip, jitter LAB p 0,8, cinza 0,2, blur 0,5, solarize L 0,2.
+# AdamW lr 5e-4, wd 5e-4, warmup 3 + cosseno, lote 64; epocas por orcamento de passos (epochs_by_dataset).
+# Zero rotulo no treino e na escolha: checkpoint = ultima epoca (ckpt_last), parada so pela val_ssl_loss; kappa da sonda por epoca so gravado; L0 = a receita intacta.
+# Antes: hyb_receita_inteira_encoder_ham100_jaci.yaml (monta e salva o encoder de 100%). Depois: eval_svm_hyb_receita_inteira_lejepa_ham100*_test_*_jaci.yaml
+# HAM10000 a 100%: validation == train (core/data/splits.py:9). A sonda por epoca (lin_val_kappa) e a val_ssl_loss
+# rodam sobre o proprio treino: a sonda NAO VALE NADA aqui, so o SVM no teste conta. Parada e checkpoint seguem sem rotulo (ultima epoca).
+name:   spifil_growth_hyb_receita_inteira_ham100_rand_lejepa_jaci
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [ham10000]
+  splits:      [1, 2, 3]
+  percentages: [100]
+
+resources:
+  gpu_ids:             [0]
+  max_per_gpu:         2   # lote 64: ~24 GB alocado por job (medido 371 MB/imagem no athena); 2 x ~27 = 54 < 80 - 4 do root
+  cpus_per_experiment: 10
+  num_workers:         2
+
+runner_args:
+  init_flim_dir: /dados/home/moliveira/exps/encoders/hyb_receita_inteira/random_z
+  layerwise:  6
+  layerwise_from_flim: 6          # as 6 camadas vem do init_flim_dir; nenhum grow, um estagio L6 com tudo solto
+  layer_channels: [256, 256, 256, 256, 256, 256]
+  layer_kernels:  [5, 5, 5, 5, 5, 5]
+  layer_pools:    [2, 2, 2, 2, 1, 1]
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  embed_mode: avgpool2d
+  seed: 42
+  train_aug: {p: 0.8, l_jitter: 0.2, ab_jitter: 0.02, stain: 0.2}   # so o jitter de cor; crop, flip, cinza, blur e solarize vem do lejepa
+  lejepa: {lam: 0.05, sigreg_type: real, num_slices: 1024, head: mlp, proj_hidden: 2048, proj_dim: 64, global_views: 2, global_size: 200, global_scale: [0.3, 1.0], local_views: 6, local_size: 96, local_scale: [0.05, 0.3], gray: 0.2, blur: 0.5, solarize: 0.2}
+  epochs_by_dataset: {ham10000: 25}   # orcamento de passos: o dobro de imagens do HAM 50%, metade das epocas
+
+output:
+  work_dir: /dados/home/moliveira/exps/spifil_growth/hyb_receita_inteira_ham100_rand_lejepa
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false
+
+overrides:
+  seed_everything: 42
+  model.init_args.seed: 42
+  model.init_args.max_epochs: 50          # so o fallback: cada base vem de epochs_by_dataset
+  trainer.max_epochs: 50
+  model.init_args.lr: 5.0e-4
+  model.init_args.weight_decay: 5.0e-4
+  model.init_args.warmup_epochs: 3
+  model.init_args.recon_bg_weight: 1.0
+  data.init_args.num_workers: 2
+  data.init_args.batch_size: 64
+  model.init_args.epoch_probe: gem          # a 100% le o treino (val == train): so gravada, nao vale nada
+  model.init_args.best_by_probe: false
+  model.init_args.ckpt_last: true          # sem rotulo: ultima epoca; EarlyStopping so na val_ssl_loss; a sonda por epoca so e gravada

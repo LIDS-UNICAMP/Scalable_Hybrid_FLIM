@@ -1,0 +1,51 @@
+# Pool foco (rodada 2), F2 leis + leitura, SAL-OFF (aid, remote_sensing): as 2 leis early-heavy melhores do P1 (A 512 r0.71 d6 = 512-512-256-256-128-128;
+# B late 512->32 d6 = 512-512-256-256-64-32) e a ancora uniforme 256x6 (lei A w0 256 r 1.0), cada uma com cat e cat_ms_eq (leituras [gem, ms], eq).
+# Braco fps, sem saliencia. Controles aleatorios puros na mesma arquitetura, leitura e protocolo. Piloto: split 1, sorteios 42 e 43.
+name: svm_disc_md_pf_leis_off
+method: autoencoder
+runner: eval
+grid:
+  datasets: [aid, remote_sensing]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_pf_leis_off
+  results_csv: /exps/moliveira/results_sol/pool_foco/svm_disc_md_pf_leis_off
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    fontes: /exps/moliveira/fontes_filtros/pf_leis_off
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [0]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    leituras: [gem, ms]
+    eq: true
+    leis:
+      - {lei: A, w0: 512, r: 0.71, depth: 6}
+      - {lei: B, w0: 512, wL: 32, f: late, depth: 6}
+      - {lei: A, w0: 256, r: 1.0, depth: 6}
+    methods: [fps]
+    controls: [random_z, orth]
+    twin_controls: [random_z, orth]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 1
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_pf_leis_off
+skip: state

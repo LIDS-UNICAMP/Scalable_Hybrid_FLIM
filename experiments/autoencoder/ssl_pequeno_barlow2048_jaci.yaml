@@ -1,0 +1,65 @@
+# Barlow Twins com o LOTE OFICIAL 2048 (main.py): c sobre o lote inteiro. 2048 direto nao cabe (~96 GB), entao
+# GradCache (lejepa.chunk 128): encoder em fatias com checkpoint, projetor + BN + c nos 2048 — gradiente identico.
+# patience_steps 100 = mesma paciencia em IMAGENS do run de lote 64 (3000 x 64 / 2048 ~ 94); 1 passo/epoca em bases < 2048.
+name:   spifil_growth_ssl_pequeno_barlow2048_jaci
+method: autoencoder
+runner: growth
+
+grid:
+  init:        [flim]
+  datasets:    [Larvae, Protozoan, Eggs, helminth_larvae, helminth_eggs, protozoan_cysts]
+  splits:      [1, 2, 3]
+  percentages: [50, 100]
+
+resources:
+  gpu_ids:             [0]
+  max_per_gpu:         3   # bf16, lote 48: 10 GB no modelo de 8 M (smoke athena); os pequenos cabem 3 x < 76 GB
+  cpus_per_experiment: 10
+  num_workers:         2
+
+runner_args:
+  init_flim_dir:
+    Larvae: /dados/home/moliveira/exps/encoders/ssl_pequeno/Larvae/fpsw@mapa_w0.5_1
+    Protozoan: /dados/home/moliveira/exps/encoders/ssl_pequeno/Protozoan/fpsw@mapa_w0.5_1
+    Eggs: /dados/home/moliveira/exps/encoders/ssl_pequeno/Eggs/fpsw@mapa_w0.5_1
+    helminth_larvae: /dados/home/moliveira/exps/encoders/ssl_pequeno/helminth_larvae/fpsw@mapa_w0.5_1
+    helminth_eggs: /dados/home/moliveira/exps/encoders/ssl_pequeno/helminth_eggs/fpsw@mapa_w0.5_1
+    protozoan_cysts: /dados/home/moliveira/exps/encoders/ssl_pequeno/protozoan_cysts/fpsw@mapa_w0.5_1
+  layerwise:  auto                # profundidade do architecture.json de cada encoder
+  layerwise_from_flim: auto       # todas as camadas vem do encoder pronto; um estagio L<n> com tudo solto
+  image_size: 200
+  no_crop: true
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  embed_mode: avgpool2d
+  seed: 42
+  train_aug: {p: 0.8, l_jitter: 0.2, ab_jitter: 0.02, stain: 0.2}   # so o jitter de cor; crop, flip, cinza, blur e solarize vem do lejepa
+  lejepa: {objective: barlow, projector: "8192-8192-8192", lambd: 0.0051, global_size: 200, global_scale: [0.08, 1.0], gray: 0.2, val_seed: 1234, patience_steps: 100, chunk: 128, min_delta_rel: 0.005, plateau_factor: 0.5, min_lr: 1.0e-6, save_last: true}
+
+output:
+  work_dir: /dados/home/moliveira/exps/spifil_growth/ssl_pequeno_barlow2048
+
+wandb:
+  enabled: true
+  project: phd_thesis_layerwise
+
+skip: state
+
+evaluate:
+  SVM: false
+
+overrides:
+  seed_everything: 42
+  model.init_args.seed: 42
+  model.init_args.max_epochs: 1000        # teto; quem para e o EarlyStopping na val_ssl_loss
+  trainer.max_epochs: 1000
+  trainer.precision: 16-mixed
+  model.init_args.lr: 5.0e-5
+  model.init_args.weight_decay: 5.0e-4
+  model.init_args.warmup_epochs: 3
+  model.init_args.recon_bg_weight: 1.0
+  data.init_args.num_workers: 2
+  data.init_args.batch_size: 2048     # lote oficial; base menor que 2048 = 1 lote com o treino inteiro (drop_last false, sem repetir imagem)
+  data.init_args.pin_memory: false     # pin de lote de 2048 (~1 GB) da "CUDA error: invalid argument" no thread de pin
+  model.init_args.epoch_probe: gem
+  model.init_args.best_by_probe: false
+  model.init_args.ckpt_last: false         # sem rotulo: best = menor val_ssl_loss (+ last.ckpt); a sonda por epoca so e gravada

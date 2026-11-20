@@ -1,0 +1,46 @@
+# Irmao _ext de disc_md_cl_ctl.yaml: so coconut_trees e food101, resto igual (max_per_gpu 1).
+# Agrupamento: aleatorio congelado na mesma dobra por patch e nos mesmos 400 SLIC; roda antes de `cl_a`, que le as fontes dele.
+name: svm_disc_md_cl_ctl_ext
+method: autoencoder
+runner: eval
+grid:
+  datasets: [food101]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_cl_ctl_ext_food101
+  results_csv: results/svm_disc_md_cl_ctl_ext
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [400]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: slic
+    budget_check: false
+  amostra:
+    agrupamento: {eps: 0.01, rows: 20000}
+    combo: {words: 512}
+    saliency: {map: gmr, cuts: [otsu]}
+    fontes: /dados/home/moliveira/exps/tmp/cl_fontes
+    shards: 1
+    svm_workers: 1
+    images: 500
+    draws: [42, 43, 44, 45, 46]
+    widths: [64]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    methods: []
+    controls: [xavier, random_z]
+    twin_controls: [xavier, random_z]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 3
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_cl_ctl_ext_food101
+skip: state

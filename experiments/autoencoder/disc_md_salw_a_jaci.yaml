@@ -1,0 +1,46 @@
+# Saliencia como peso w = clip((S - t) / (1 - t), 0, 1) ** g, sem mascara real: na selecao (`fpsw@mapa_w*`) e nos pontos (`fps@foco_w*`).
+name: svm_disc_md_salw_a
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, Protozoan_subgroup, Eggs_subgroup, Larvae_subgroup, aid, Larvae]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_salw_a
+  results_csv: results/svm_disc_md_salw_a
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.25, 0.5, 0.75], g: [1, 2, 4], foco: 400}
+    fontes: /dados/home/moliveira/exps/tmp/salw_fontes
+    shards: 1
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [64, 256]
+    kernels: [5]
+    depth: 3
+    pool: 2
+    methods: [fps, fps@mapa_otsu, fpsw@mapa_w0_1, fpsw@mapa_w0_2, fpsw@mapa_w0_4, fpsw@mapa_w0.25_1, fpsw@mapa_w0.25_2, fpsw@mapa_w0.25_4, fpsw@mapa_w0.5_1, fpsw@mapa_w0.5_2, fpsw@mapa_w0.5_4, fpsw@mapa_w0.75_1, fpsw@mapa_w0.75_2, fpsw@mapa_w0.75_4, fps@foco_otsu, fps@foco_w0_1, fps@foco_w0_2, fps@foco_w0_4, fps@foco_w0.25_1, fps@foco_w0.25_2, fps@foco_w0.25_4, fps@foco_w0.5_1, fps@foco_w0.5_2, fps@foco_w0.5_4, fps@foco_w0.75_1, fps@foco_w0.75_2, fps@foco_w0.75_4]
+    controls: [xavier, random_z]
+    twin_controls: [xavier, random_z]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 8
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_salw_a
+skip: state

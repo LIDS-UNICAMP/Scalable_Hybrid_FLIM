@@ -1,0 +1,32 @@
+# Grade cortada, passo 1: os 3 datasets em que n = 1600 ainda venceu.
+name: svm_disc_md_l1fast_k1n
+method: autoencoder
+runner: eval
+grid:
+  datasets: [remote_sensing, helminth_larvae, Larvae_subgroup]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: l1_fast
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_l1fast
+  results_csv: results/svm_disc_md_l1fast
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [640, 448]
+  l1_superpixels: [12, 25, 50, 100, 200, 400, 1600]
+  l1_readouts: [gem_tta_pw]
+  l1_grow:
+    out_channels: 64
+    kernel_size: 5
+    pool_stride: 2
+    impurities: true
+    superpixels: disf
+    budget_check: false
+resources:
+  gpu_ids: [3]
+  max_per_gpu: 3
+  cpus_per_experiment: 8
+output:
+  work_dir: /exps/moliveira/eval/disc_md_l1fast_k1n
+skip: state

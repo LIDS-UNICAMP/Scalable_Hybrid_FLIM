@@ -1,0 +1,54 @@
+# Pool foco (rodada 2), F2 leis + leitura, SAL-ON (flowers, coconut_trees): mesmas 3 arquiteturas e leituras do _off, com saliencia gmr:
+# fpsw@mapa_w0.5_1 (receita) e fps@foco_w0.5_1 (melhor de flowers, 0,690). Controles aleatorios puros. Piloto: split 1, sorteios 42 e 43.
+name: svm_disc_md_pf_leis_on
+method: autoencoder
+runner: eval
+grid:
+  datasets: [flowers, coconut_trees]
+  splits: [1]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_pf_leis_on_athena
+  results_csv: /exps/moliveira/results_sol/pool_foco_athena/svm_disc_md_pf_leis_on
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0.5], g: [1], foco: 400}
+    fontes: /exps/moliveira/fontes_filtros/pf_leis_on_athena
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42, 43]
+    widths: [0]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    entre_camadas: true
+    leituras: [gem, ms]
+    eq: true
+    leis:
+      - {lei: A, w0: 512, r: 0.71, depth: 6}
+      - {lei: B, w0: 512, wL: 32, f: late, depth: 6}
+      - {lei: A, w0: 256, r: 1.0, depth: 6}
+    methods: [fpsw@mapa_w0.5_1, fps@foco_w0.5_1]
+    controls: [random_z]
+    twin_controls: [random_z]
+resources:
+  gpu_ids: [1, 2, 3]
+  max_per_gpu: 4
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_pf_leis_on_athena
+skip: state

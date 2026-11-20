@@ -1,0 +1,51 @@
+# Ponto 100% do disc_md_receita_tta_ham, sem vazamento: no HAM10000 o perc100 tem validation == train (core/data/splits.py:9), entao aqui a leitura e no teste (avaliar: test).
+# fontes em pasta propria: o cache de fontes nao tem porcentagem na chave, e o da grade original veio do pct1 (50 imagens) nos splits 2 e 3.
+name: svm_disc_md_receita_tta_ham100_test
+method: autoencoder
+runner: eval
+grid:
+  datasets: [ham10000]
+  splits: [1, 2, 3]
+  percentages: [100]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /exps/moliveira/spifil_growth/disc_md_receita_tta_ham100_test
+  results_csv: results/svm_disc_md_receita_tta_ham100_test
+  image_cache_dir: /exps/moliveira/image_cache
+  no_crop: true
+  l1_sizes: [200]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    avaliar: test
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5, 0.75], g: [1, 2], foco: 400}
+    fontes: /exps/moliveira/fontes_filtros/receita_tta_ham100
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [256]
+    kernels: [5]
+    depth: 6
+    pool: [2, 2, 2, 2, 1, 1]
+    combo: {words: 512}
+    entre_camadas: true
+    tta: true
+    methods: [fps, fpsw@mapa_w0.5_1]
+    controls: [random_z]
+    twin_controls: [random_z]
+resources:
+  gpu_ids: [0, 1, 2, 3]
+  max_per_gpu: 3
+  cpus_per_experiment: 2
+output:
+  work_dir: /exps/moliveira/eval/disc_md_receita_tta_ham100_test
+skip: state

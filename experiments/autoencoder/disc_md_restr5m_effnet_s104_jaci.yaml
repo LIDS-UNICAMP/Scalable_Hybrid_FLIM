@@ -1,0 +1,51 @@
+# Restricao <= 5 M params (11/11), leis da literatura traduzidas para o SPiFiL: A_reports/november/multi_dataset/restricao_5M.md.
+# Protocolo de disc_md_receita_tta (TTA, entre_camadas, 50%, 3 splits, sorteio 42); controle puro random_z da MESMA arquitetura.
+# EfficientNet phi=-6 (1,29 M): 3 camadas x 160, k5, 104 px (escala de resolucao da lei), todas as 11 bases com fps e fpsw.
+name: svm_disc_md_restr5m_effnet_s104
+method: autoencoder
+runner: eval
+grid:
+  datasets: [Eggs, Protozoan, Larvae, flowers, ham10000, Eggs_subgroup, Protozoan_subgroup, Larvae_subgroup, aid, remote_sensing, coconut_trees]
+  splits: [1, 2, 3]
+  percentages: [50]
+runner_args:
+  probe: svm
+  source: spf_grade
+  artifacts_dir: /dados/home/moliveira/exps/spifil_growth/disc_md_restr5m_effnet_s104
+  results_csv: results/svm_disc_md_restr5m_effnet_s104
+  image_cache_dir: /dados/home/moliveira/exps/image_cache
+  no_crop: true
+  l1_sizes: [104]
+  l1_superpixels: [50]
+  l1_readouts: [gem_pw]
+  l1_grow:
+    impurities: true
+    superpixels: disf
+    budget_check: false
+  amostra:
+    saliency:
+      map: gmr
+      cuts: [otsu]
+      pesos: {t: [0, 0.5, 0.75], g: [1, 2], foco: 400}
+    fontes: /dados/home/moliveira/exps/fontes_filtros/restr5m_effnet_s104
+    shards: 2
+    svm_workers: 1
+    images: 500
+    draws: [42]
+    widths: [160]
+    kernels: [5]
+    depth: 3
+    pool: [2, 2, 2]
+    combo: {words: 512}
+    entre_camadas: true
+    tta: true
+    methods: [fps, fpsw@mapa_w0.5_1]
+    controls: [random_z]
+    twin_controls: [random_z]
+resources:
+  gpu_ids: [0]
+  max_per_gpu: 8   # GPU_CAP_MIB=4200 por processo
+  cpus_per_experiment: 2
+output:
+  work_dir: /dados/home/moliveira/exps/eval/disc_md_restr5m_effnet_s104
+skip: state
