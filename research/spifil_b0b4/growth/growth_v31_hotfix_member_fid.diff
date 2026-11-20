@@ -1,0 +1,136 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-18 12:24:13.080014619 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-18 12:24:13.081014630 -0300
+@@ -2269,6 +2269,46 @@
+     return model, out
+ 
+ 
++_SEL_FROM_LOW = ("kappa_val_orig", "quality", "wise_alpha", "checkpoint", "checkpoint_sha256", "aux", "so2_head",
++                  "so2_head_sha256", "so2_head_meta", "band", "params", "flops_2mac", "flops", "arch", "delta_kappa",
++                  "kappa_parent_rescored", "parent_kappa_val_orig", "decision_rulers", "preservation",
++                  "preservation_rel_l2_emb", "preservation_verdict", "bootstrap", "cov_gates", "cov_gates_trained",
++                  "cov_gate_head", "ssl_recipe", "growth_spec_id", "status")
++
++
++def select_low_high(r_low: dict, r_high: dict, fl: int, fh: int) -> dict:
++    """HOTFIX member_fid: o resultado PROMOVIDO é o melhor de f_low/f_high pela ORIG-val (empate = f_high; f_high
++    falho = f_low). Vale em todos os caminhos (retomada, retrain, ssl: none). Quando f_low vence, checkpoint, kappa,
++    alpha, aux (wise_kappas), so2 e o resto da decisão vêm de f_low; a cand_key continua a da promoção (linhagem)."""
++    r = dict(r_high)
++    if r.get("selected_fid") is not None and int(r["selected_fid"]) == int(fl):
++        return r                                    # a retomada já escolheu f_low (fix6)
++    k_low = r_low.get("kappa_val_orig")
++    if k_low is None or r_low.get("status", "ok") != "ok":   # f_low sem kappa (não deveria ser promovido): fica f_high
++        r.setdefault("selected_fid", int(fh))
++        return r
++    k_high = r.get("kappa_val_orig") if r.get("status") == "ok" else None
++    pick_high = k_high is not None and best_of_low_high(float(k_low), float(k_high)) == 1
++    r.setdefault("kappa_val_orig_f_low", float(k_low))
++    r.setdefault("wise_alpha_f_low", r_low.get("wise_alpha"))
++    r.setdefault("kappa_val_orig_f_high", None if k_high is None else float(k_high))
++    r.setdefault("wise_alpha_f_high", r.get("wise_alpha"))
++    r["fid_low"], r["fid_high"] = int(fl), int(fh)
++    if pick_high:
++        r["selected_fid"] = int(fh)
++        return r
++    r["checkpoint_f_high"], r["checkpoint_sha256_f_high"] = r_high.get("checkpoint"), r_high.get("checkpoint_sha256")
++    r["status_f_high"] = r_high.get("status")
++    r["aux_f_high"] = {"wise_kappas": (r_high.get("aux") or {}).get("wise_kappas")}
++    for k in _SEL_FROM_LOW:
++        if k in r_low:
++            r[k] = r_low[k]
++    r["selected_fid"] = int(fl)
++    r["selection"] = ("best_of_low_high (hotfix member_fid): f_low venceu pela ORIG-val"
++                      + ("" if k_high is not None else " (f_high falhou)") + "; teste nunca lido")
++    return r
++
++
+ def best_of_low_high(k_low: float, k_high: float) -> int:
+     """Seleção do nó promovido pela ORIG-val: f_high, a não ser que kappa_val(f_high) < kappa_val(f_low)
+     (empate fica com f_high). Devolve 0 (f_low) ou 1 (f_high). Nunca usa teste."""
+@@ -2780,15 +2820,15 @@
+             rkey = I.lineage_key({"resume_from": r_low["cand_key"], "extra_ssl_epochs": n_extra,
+                                   "format": RESUME_FORMAT}, meta["seed"], {"kind": "resume", "lkey": meta["lkey"]},
+                                  self.gev.fitness_sig)
+-            return self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
+-                             I.cand_key(rkey, fh), resume_from=r_low, **_gk(meta.get("genes")))
++            r = self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
++                          I.cand_key(rkey, fh), resume_from=r_low, **_gk(meta.get("genes")))
++            return select_low_high(r_low, r, fl, fh)
+         print(f"[growth] {meta['node']}: promoção f{fl}->f{fh} REFEITA do morfismo ({why})", flush=True)
+         r = self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
+                       I.cand_key(meta["lkey"], fh), **_gk(meta.get("genes")))
+         r = dict(r)
+         r["promotion"] = {**(r.get("promotion") or {}), "mode": "retrain", "reason": why}
+-        r.setdefault("selected_fid", fh)
+-        return r
++        return select_low_high(r_low, r, fl, fh)      # HOTFIX member_fid: melhor de f_low/f_high também no retrain
+ 
+     # ---- teste (canal separado; nunca lido aqui)
+     def _submit_test(self, member: dict):
+@@ -2895,6 +2935,7 @@
+                                    "checkpoint_sha256", "fid", "parent", "theta")}
+             if r.get("selected_fid") is not None and fh != fl:   # growth_fix6: qual fidelidade ficou (val)
+                 m["selected_fid"] = int(r["selected_fid"])
++                m["fid"] = int(r["selected_fid"])                # hotfix member_fid: o checkpoint é o dessa fid
+             mem = self.state["members"][target]
+             if r["band"] != target or r["params"] > HARD_CAP:
+                 continue
+diff -ruN a/tests/hmodehb/test_growth_hotfix_member_fid.py b/tests/hmodehb/test_growth_hotfix_member_fid.py
+--- a/tests/hmodehb/test_growth_hotfix_member_fid.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_hotfix_member_fid.py	2026-11-18 12:24:13.083014652 -0300
+@@ -0,0 +1,54 @@
++"""HOTFIX member_fid: o membro da faixa é o melhor de f_low/f_high pela ORIG-val em TODOS os caminhos da promoção
++(retomada, retrain, ssl: none); casos reais do athena (f15 > f45)."""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++
++import pytest
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++
++
++def _r(fid, k, a, ck, **kw):
++    return {"status": "ok", "fid": fid, "node_id": "B1g0c03", "cand_key": f"ck{fid}", "kappa_val_orig": k,
++            "quality": k, "wise_alpha": a, "checkpoint": ck, "checkpoint_sha256": ck + "sha", "band": "B1",
++            "params": 400000, "flops_2mac": 1, "aux": {"wise_kappas": {str(a): k}}, "kappa_parent_rescored": 0.5,
++            "preservation_verdict": "exact", "parent": "seed01", "theta": [0.5] * 4, **kw}
++
++
++@pytest.mark.parametrize("k15,k45", [(0.5714, 0.5293), (0.5913, 0.5219), (0.5493, 0.5370)])
++def test_low_wins(k15, k45):
++    s = G.select_low_high(_r(15, k15, 0.25, "low.pt"), _r(45, k45, 0.75, "high.pt"), 15, 45)
++    assert s["selected_fid"] == 15 and s["kappa_val_orig"] == k15 and s["checkpoint"] == "low.pt"
++    assert s["wise_alpha"] == 0.25 and s["aux"]["wise_kappas"] == {"0.25": k15}
++    assert s["kappa_val_orig_f_high"] == k45 and s["checkpoint_f_high"] == "high.pt" and s["cand_key"] == "ck45"
++    assert G.decide(s, 0.0, False) == ("accepted", True)
++
++
++def test_tie_and_high_wins_and_high_failed():
++    assert G.select_low_high(_r(15, 0.7415, 0.5, "l"), _r(45, 0.7415, 0.5, "h"), 15, 45)["checkpoint"] == "h"
++    assert G.select_low_high(_r(15, 0.60, 0.5, "l"), _r(45, 0.65, 0.5, "h"), 15, 45)["selected_fid"] == 45
++    f = G.select_low_high(_r(15, 0.60, 0.5, "l"), {"status": "failed", "cand_key": "ck45", "node_id": "x"}, 15, 45)
++    assert f["selected_fid"] == 15 and f["status"] == "ok" and f["checkpoint"] == "l"
++
++
++class _Gev:
++    fitness_sig = "s" * 12
++    readout = "so2_4096_pca"
++
++
++@pytest.mark.parametrize("mode,genes", [("retrain", {}), ("resume", {"ssl": "none"}), ("resume", {})])
++def test_promote_all_paths_select_best(tmp_path, monkeypatch, mode, genes):
++    g = G.load_growth_config(None, [f"promotion.mode={mode}"])
++    ch = G.GrowthChain({"seed": 42, "train": {}}, g, _Gev(), tmp_path)
++    low = _r(15, 0.5714, 0.25, "low.pt")                       # sem resume_state -> retrain fallback no 3º caso
++    monkeypatch.setattr(ch, "_job", lambda *a, **k: _r(45, 0.5293, 0.75, "high.pt"))
++    meta = {"parent": {"node_id": "seed01"}, "ops": [], "theta": None, "node": "B1g0c03", "seed": 1, "lkey": "lk",
++            "genes": genes}
++    r = ch._promote(low, meta, 15, 45)
++    assert r["selected_fid"] == 15 and r["checkpoint"] == "low.pt" and r["kappa_val_orig"] == 0.5714
++    assert r["promotion"]["mode"] == "retrain"

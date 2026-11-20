@@ -1,0 +1,299 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 22:32:46.795524102 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 22:32:46.796524115 -0300
+@@ -132,7 +132,11 @@
+            # v3.1 bloco 2 (receita fiel com batch maior): ssl_batch_size = batch do SSL (com ssl_recipe: paper);
+            #   OOM -> metade, até ssl_batch_min (registrado "adaptação: batch X por memória"); época = passada
+            #   completa; LARS (SimCLR/VICReg) / AdamW (LeJEPA) + warmup + cosseno pelo passo global
+-           "ssl_batch_size": None, "ssl_batch_min": 32},
++           "ssl_batch_size": None, "ssl_batch_min": 32,
++           # v3.1 bloco 4: zca_refit = re-ajusta a ZCA dos blocos novos depois do AE/SSL (whitening.md);
++           #   softhebb_paper = tau/lr por camada (1/tau = 1, .65, .25; lr .08, .005, .01), BN sem treino na entrada,
++           #   filtros SPiFiL levados ao raio R (3) durante o SoftHebb e devolvidos à norma original depois
++           "zca_refit": False, "zca_refit_images": 256, "softhebb_paper": False, "softhebb_radius": 3.0},
+ }
+ 
+ V3_SSL_REG = {"lejepa": "sigreg", "simclr": "none", "vicreg": "none"}
+@@ -750,6 +754,8 @@
+             self.fitness_spec["readout"] = self.readout
+             self.fitness_spec["head_v3"] = SO2.spec_entry(int(self.so2_cfg.get("dim", 4096)),
+                                                           int(self.so2_cfg.get("n_px", 64)))
++            if float(self.so2_cfg.get("eps_rel", 0.0) or 0.0) > 0:    # v3.1: Cov + eps*(tr/k)*I (muda a régua)
++                self.fitness_spec["head_v3"]["eps_rel"] = float(self.so2_cfg["eps_rel"])
+             if str(self.so2_cfg.get("seed_mode", "block_index")) != "block_index":
+                 # v3.1: semente da amostragem de pixels da PCA FIXA (não depende da profundidade): um bloco
+                 # inserido com g=0 dá exatamente a mesma leitura (sem ruído de leitura disfarçado de ganho)
+@@ -778,7 +784,8 @@
+                                                 block_index=(len(model.blocks) - 1 if str(self.so2_cfg.get(
+                                                     "seed_mode", "block_index")) == "block_index" else 0),
+                                                 tta=int(tta),
+-                                                gap_head=model.head if gap else None, head=head)
++                                                gap_head=model.head if gap else None, head=head,
++                                                eps_rel=float(self.so2_cfg.get("eps_rel", 0.0) or 0.0))
+         _free(self.device)
+         return head, outs, gaps
+ 
+@@ -1479,8 +1486,10 @@
+             continue
+         res = _apply(res, op, hook)
+     sh_log = []
++    shc = {**(v3.get("softhebb_cfg") or {}), "paper": bool(v3.get("softhebb_paper")),
++           "radius": float(v3.get("softhebb_radius", 3.0))}
+     if v3.get("softhebb") and nfi is not None:
+-        sh_log += softhebb_new_filters(res, nfi.gev, v3.get("softhebb_cfg") or {}, seed=nfi.seed)
++        sh_log += softhebb_new_filters(res, nfi.gev, shc, seed=nfi.seed)
+     if rep_ops:
+         if nfi is None:                      # planejamento / estimador: a arquitetura não muda
+             return res
+@@ -1490,7 +1499,7 @@
+             res, info = replace_bad_filters_data(res, int(op["layer"]), nfi, v3.get("replace") or {})
+             infos.append(info)
+         if v3.get("softhebb"):
+-            sh_log += softhebb_new_filters(res, nfi.gev, v3.get("softhebb_cfg") or {}, seed=nfi.seed + 1, skip_from=pre)
++            sh_log += softhebb_new_filters(res, nfi.gev, shc, seed=nfi.seed + 1, skip_from=pre)
+         if any(i.get("n_replaced", 0) for i in infos):
+             res.v3_pre_replace = pre
+         res.v3_replace = infos
+@@ -1581,13 +1590,28 @@
+             pre_pool = None
+             if name.startswith("conv.branches.") and isinstance(blk.conv.branches[name.split(".")[2]], nn.Sequential):
+                 continue
++            paper = bool(scfg.get("paper"))
++            if paper:                            # v3.1 (softhebb.md): tau/lr por camada, raio R, BN sem treino
++                inv_tau = [1.0, 0.65, 0.25][min(j, 2)]
++                lr_sh, temp = [0.08, 0.005, 0.01][min(j, 2)], 1.0 / inv_tau
++                bs_sh = int(scfg.get("batch", 10))
++                with torch.no_grad():
++                    norms = tmp.weight.flatten(1).norm(dim=1).clamp_min(1e-12)
++                    tmp.weight.mul_((float(scfg.get("radius", 3.0)) / norms).view(-1, 1, 1, 1))
++                bn = lambda t: torch.nn.functional.batch_norm(t, None, None, training=True)   # noqa: E731
++                tf = (lambda t, p=prefix: bn(p(t))) if j > 0 else bn
++            else:
++                lr_sh, temp, bs_sh = float(scfg.get("lr", 0.01)), float(scfg.get("temperature", 1.0)), 32
++                tf = (lambda t, p=prefix: p(t)) if j > 0 else None
+             try:
+-                info = fit_softhebb(tmp, [x[i:i + 32] for i in range(0, len(x), 32)], int(scfg.get("epochs", 1)),
+-                                    float(scfg.get("lr", 0.01)), float(scfg.get("temperature", 1.0)), "cpu",
+-                                    input_transform=(lambda t, p=prefix: p(t)) if j > 0 else None)
++                info = fit_softhebb(tmp, [x[i:i + bs_sh] for i in range(0, len(x), bs_sh)], int(scfg.get("epochs", 1)),
++                                    lr_sh, temp, "cpu", input_transform=tf)
+                 with torch.no_grad():
++                    if paper:                    # devolve cada filtro à norma SPiFiL original (só a direção muda)
++                        tmp.weight.mul_((norms / tmp.weight.flatten(1).norm(dim=1).clamp_min(1e-12)).view(-1, 1, 1, 1))
+                     mod.weight[torch.as_tensor(rows)] = tmp.weight.detach().to(mod.weight)
+-                log.append({"param": key, "rows": len(rows), "status": "ok",
++                log.append({"param": key, "rows": len(rows), "status": "ok", "paper": paper, "lr": lr_sh,
++                            "temperature": temp,
+                             **{k: v for k, v in (info or {}).items() if isinstance(v, (int, float, str, bool))}})
+             except Exception as exc:            # registrado; filtros SPiFiL ficam como estavam
+                 log.append({"param": key, "rows": len(rows), "status": f"falhou: {type(exc).__name__}: {str(exc)[:120]}"})
+@@ -1874,6 +1898,7 @@
+     for p in model.parameters():
+         p.grad = None
+     _free(dev, mem["empty_cache"])
++    zca_log = _zca_refit(gev, model, new_blocks, gcfg) if _v3(gcfg).get("zca_refit") else None
+     trained = snap(model)
+     ssl_finite = _finite_state(trained) and math.isfinite(float(ssl_log.get("final_loss_total") or 0.0))
+     if capture is not None:                  # growth_fix6: estado de retomada (pesos PRÉ-WiSE)
+@@ -1897,6 +1922,8 @@
+            "mem": dict(mem),
+            "status": "ok"}
+     _v3_fields(gev, model, out, ssl_log, gcfg, anchor_is_parent=anchor_state is not None)
++    if zca_log is not None:
++        out["zca_refit"] = zca_log
+     tg = _trained_gates(trained)
+     if tg:
+         out["cov_gates_trained"] = tg            # growth v3.1: g aprendido no AE/SSL (antes do WiSE)
+@@ -1904,6 +1931,37 @@
+     return model, out
+ 
+ 
++@torch.no_grad()
++def _zca_refit(gev: GrowthEvaluator, model: BB.Backbone, blocks: Sequence[int], gcfg: dict) -> List[dict]:
++    """v3.1 (whitening.md): ZCA estatística dos blocos NOVOS re-ajustada nas respostas de TREINO depois do AE/SSL
++    (a conv mudou; o branqueamento congelado do morfismo ficou velho). O WiSE mistura também mu/W: alpha=0
++    devolve o branqueamento do pai/morfismo bit a bit."""
++    from ga_search.modehb.ops_norm_act import ZCAWhitening
++    n = int(_v3(gcfg).get("zca_refit_images", 256))
++    x = gev.ev.svm_train_x[:n]
++    dev = gev.device
++    model.eval()
++    log = []
++    for j in sorted(set(int(b) for b in blocks)):
++        blk = model.blocks[j]
++        zs = [(nm, m) for nm, m in blk.named_modules() if isinstance(m, ZCAWhitening)]
++        if not zs or not hasattr(blk, "conv"):
++            continue
++        feats = []
++        for i0 in range(0, len(x), 32):
++            h = x[i0:i0 + 32].to(dev).float()
++            for b in model.blocks[:j]:
++                h = b(h)
++            feats.append(blk.conv(h).float())
++        f = torch.cat(feats)
++        for nm, z in zs:
++            before = z.W.detach().clone()
++            z.fit(f)
++            log.append({"block": j, "module": nm or "norm", "n_images": int(x.shape[0]), "split": "train",
++                        "W_rel_change": float((z.W - before).norm() / before.norm().clamp_min(1e-12))})
++    return log
++
++
+ def _trained_gates(sd: dict) -> dict:
+     """g de cada bloco cov_gate num state_dict (pré-WiSE): o que o AE/SSL aprendeu."""
+     out = {}
+diff -ruN a/ga_search/hmodehb/so2_head.py b/ga_search/hmodehb/so2_head.py
+--- a/ga_search/hmodehb/so2_head.py	2026-11-17 22:32:46.800524171 -0300
++++ b/ga_search/hmodehb/so2_head.py	2026-11-17 22:32:46.801524185 -0300
+@@ -65,13 +65,18 @@
+     return x.detach().double().cpu().permute(0, 2, 3, 1).reshape(x.shape[0], -1, x.shape[1])
+ 
+ 
+-def so2_vector(fmap, mu, V, D: int):
+-    """Leitura de 2a ordem de UM mapa: Norm(pad([mu, sigma, triu(sqrtm(Cov))])) -> [B, D] fp32."""
++def so2_vector(fmap, mu, V, D: int, eps_rel: float = 0.0):
++    """Leitura de 2a ordem de UM mapa: Norm(pad([mu, sigma, triu(sqrtm(Cov))])) -> [B, D] fp32.
++    ``eps_rel`` > 0 (v3.1, second_order_pooling.md): Cov + eps*(tr Cov / k)*I antes do sqrtm (0 = readout_x)."""
+     Y = (_flat(fmap) - mu) @ V
+     m = Y.mean(1)
+     Yc = Y - m[:, None, :]
+     cov = Yc.transpose(1, 2) @ Yc / Y.shape[1]
+     sd = cov.diagonal(dim1=1, dim2=2).clamp(min=0).sqrt()
++    if eps_rel:
++        k_ = cov.shape[-1]
++        tr = cov.diagonal(dim1=1, dim2=2).sum(-1).clamp(min=0) / k_
++        cov = cov + float(eps_rel) * tr[:, None, None] * torch.eye(k_, dtype=cov.dtype)
+     S = _sqrtm_psd(cov)
+     k = V.shape[1]
+     iu = torch.triu_indices(k, k)
+@@ -116,9 +121,10 @@
+ class So2Head(nn.Module):
+     """Cabeça de 2ª ordem fixa: buffers (mu [C], V [C, k]); ``forward(fmap) -> [B, D]``. Sem parâmetros."""
+ 
+-    def __init__(self, dim: int = 4096, n_px: int = 64, block_index: int = 0):
++    def __init__(self, dim: int = 4096, n_px: int = 64, block_index: int = 0, eps_rel: float = 0.0):
+         super().__init__()
+         self.dim, self.n_px, self.block_index = int(dim), int(n_px), int(block_index)
++        self.eps_rel = float(eps_rel)
+         self.k = k_for(self.dim)
+         self.register_buffer("mu", torch.zeros(0, dtype=torch.float64))
+         self.register_buffer("V", torch.zeros(0, 0, dtype=torch.float64))
+@@ -142,13 +148,13 @@
+     def forward(self, fmap):
+         if not self.fitted:
+             raise RuntimeError("So2Head.finish_fit (treino) antes de ler")
+-        return so2_vector(fmap, self.mu, self.V, self.dim)
++        return so2_vector(fmap, self.mu, self.V, self.dim, self.eps_rel)
+ 
+     def meta(self) -> dict:
+         return {"version": VERSION, "readout": READOUT if self.dim == 4096 else f"so2_{self.dim}_pca",
+                 "dim": self.dim, "k": self.k, "n_px": self.n_px, "pca_seed": PCA_SEED + self.block_index,
+                 "block_index": self.block_index, "norm": "signed_sqrt+l2", "fit": "train_only",
+-                "trainable_params": 0}
++                "trainable_params": 0, **({"eps_rel": self.eps_rel} if self.eps_rel else {})}
+ 
+     def payload(self) -> dict:
+         return {"meta": self.meta(), "mu": self.mu.clone(), "V": self.V.clone()}
+@@ -161,7 +167,7 @@
+     @classmethod
+     def from_payload(cls, p: dict) -> "So2Head":
+         m = p["meta"]
+-        h = cls(m["dim"], m["n_px"], m["block_index"])
++        h = cls(m["dim"], m["n_px"], m["block_index"], float(m.get("eps_rel", 0.0)))
+         h.mu, h.V = p["mu"], p["V"]
+         h.fitted = True
+         return h
+@@ -177,7 +183,7 @@
+ @torch.no_grad()
+ def fit_and_read(encoder: nn.Module, train_x: torch.Tensor, others: Iterable[torch.Tensor], device, *,
+                  batch_size: int, dim: int = 4096, n_px: int = 64, block_index: int = 0, tta: int = 1,
+-                 gap_head: Optional[nn.Module] = None, head: Optional["So2Head"] = None):
++                 gap_head: Optional[nn.Module] = None, head: Optional["So2Head"] = None, eps_rel: float = 0.0):
+     """Passe 1: PCA só no treino (ids = posição em ``train_x``). Passe 2: z do treino e de cada ``others``.
+     ``tta`` > 1: média de z sobre as vistas de ``pooling_head.tta_transforms`` (só canal de teste).
+     ``gap_head``: também devolve head(encoder(x)) (coluna aux GAP, tta 1).
+@@ -188,7 +194,7 @@
+         gap_head.eval()
+     bs = int(batch_size)
+     if head is None:                     # ``head`` dado (cabeça salva com o checkpoint): sem re-ajuste
+-        head = So2Head(dim, n_px, block_index)
++        head = So2Head(dim, n_px, block_index, eps_rel)
+         for i0 in range(0, len(train_x), bs):
+             xb = train_x[i0:i0 + bs].to(device).float()
+             head.add_train(encoder(xb), list(range(i0, i0 + xb.shape[0])))
+diff -ruN a/tests/hmodehb/test_growth_v31_b4.py b/tests/hmodehb/test_growth_v31_b4.py
+--- a/tests/hmodehb/test_growth_v31_b4.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_b4.py	2026-11-17 22:32:46.805524241 -0300
+@@ -0,0 +1,72 @@
++"""growth v3.1 bloco 4: eps relativo na so2, ZCA re-ajustada depois do AE/SSL, SoftHebb com tau/lr por camada,
++BN sem treino e raio R (norma SPiFiL devolvida)."""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++sys.path.insert(0, str(Path(__file__).parent))
++
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.backbones import morphisms_v3 as MV3  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.hmodehb import so2_head as SO2  # noqa: E402
++from test_growth_v31_covgate import _rand_filters, _tiny, _x  # noqa: E402
++
++
++def test_so2_eps_rel():
++    g = torch.Generator().manual_seed(0)
++    tr = [torch.randn(4, 30, 6, 6, generator=g) for _ in range(3)]
++    va = torch.randn(3, 30, 6, 6, generator=g)
++    heads = []
++    for eps in (0.0, 1e-3):
++        h = SO2.So2Head(4096, 64, 0, eps)
++        for i, f in enumerate(tr):
++            h.add_train(f, list(range(4 * i, 4 * i + 4)))
++        heads.append(h.finish_fit())
++    a, b = heads[0](va), heads[1](va)
++    assert torch.isfinite(b).all() and not torch.equal(a, b)
++    assert heads[1].meta()["eps_rel"] == 1e-3 and "eps_rel" not in heads[0].meta()
++    assert torch.equal(SO2.So2Head.from_payload(heads[1].payload())(va), b)
++
++
++def _gev(n=12, res=32):
++    return SimpleNamespace(ev=SimpleNamespace(svm_train_x=_x(n, res, seed=4)), device=torch.device("cpu"))
++
++
++def test_zca_refit_after_training():
++    m = _tiny()
++    out = MV3.add_gated_residual(MO.start(m), 2, norm="zca", new_filters=_rand_filters, fit_x=_x(8, seed=3))
++    blk = out.child.blocks[2]
++    W0 = blk.norm.W.clone()
++    with torch.no_grad():
++        blk.conv.weight.mul_(2.0)                       # "treino" mudou a conv
++    log = G._zca_refit(_gev(), out.child, [2], {"v3": {"zca_refit_images": 12}})
++    assert log and log[0]["block"] == 2 and log[0]["split"] == "train" and log[0]["W_rel_change"] > 0
++    assert not torch.equal(blk.norm.W, W0)
++
++
++def test_softhebb_paper_keeps_spifil_norm_and_layer_params():
++    m = _tiny()
++    res = G.realize_plan(m, [{"op": "widen", "widths": {"1": 30}, "seed": 1}], None, {})
++    conv = res.child.blocks[1].conv
++    key = "blocks.1.conv.weight"
++    rows = [r for r in range(conv.weight.shape[0]) if not bool(res.masks[key][r].any())]
++    with torch.no_grad():
++        conv.weight[rows] = torch.randn(conv.weight[rows].shape, generator=torch.Generator().manual_seed(5)) * 0.5
++    n0 = conv.weight[rows].flatten(1).norm(dim=1).clone()
++    W0 = conv.weight[rows].clone()
++    log = G.softhebb_new_filters(res, _gev(), {"paper": True, "radius": 3.0, "n_images": 12, "epochs": 1, "batch": 4})
++    rec = [r for r in log if r["param"] == key]
++    assert rec and rec[0]["status"] == "ok" and rec[0]["paper"] and rec[0]["temperature"] == 1 / 0.65
++    assert rec[0]["lr"] == 0.005
++    n1 = conv.weight[rows].flatten(1).norm(dim=1)
++    assert torch.allclose(n0, n1, rtol=1e-5)                     # norma SPiFiL devolvida
++    assert not torch.allclose(W0, conv.weight[rows])             # a direção mudou
++    gs = MO.finalize(res, _x(), data={"split": "synthetic"})
++    assert gs.preservation.verdict == "exact"                    # colunas do consumidor seguem 0

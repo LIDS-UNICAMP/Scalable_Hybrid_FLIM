@@ -1,0 +1,265 @@
+diff -ruN a/ga_search/backbones/morphisms_v3.py b/ga_search/backbones/morphisms_v3.py
+--- a/ga_search/backbones/morphisms_v3.py	2026-11-17 22:32:46.882525311 -0300
++++ b/ga_search/backbones/morphisms_v3.py	2026-11-17 22:32:46.882525311 -0300
+@@ -436,6 +436,72 @@
+     return out
+ 
+ 
++# ─────────────────────────────────────────────────────────────────── v3.1 bloco 5: critérios ReDo / RePr
++def redo_scores(acts: torch.Tensor, n_conv: Optional[int] = None) -> torch.Tensor:
++    """ReDo (Sokar et al. 2023, Eq. 1): s_i = E|h_i| / mean_k E|h_k| na saída pós-ativação [N,C,H,W]."""
++    a = acts.detach().double()
++    if n_conv is not None:
++        a = a[:, : int(n_conv)]
++    m = a.abs().mean(dim=(0, 2, 3))
++    return m / m.mean().clamp_min(1e-12)
++
++
++def redo_dormant(acts: torch.Tensor, tau: float = 0.1, n_conv: Optional[int] = None) -> List[int]:
++    s = redo_scores(acts, n_conv)
++    return [int(i) for i in torch.nonzero(s <= float(tau)).flatten().tolist()]
++
++
++def repr_overlap(weight: torch.Tensor) -> torch.Tensor:
++    """RePr (Prakash et al. 2019, Eqs. 1-2): O_f = (1/J) sum_j |cos(w_f, w_j) - delta_fj| (filtros achatados)."""
++    W = weight.detach().double().flatten(1)
++    W = W / W.norm(dim=1, keepdim=True).clamp_min(1e-12)
++    P = (W @ W.T).abs()
++    P.fill_diagonal_(0.0)
++    return P.sum(1) / max(P.shape[0], 1)
++
++
++def repr_select(weight: torch.Tensor, p: float = 0.30) -> List[int]:
++    """Os ``p`` filtros mais redundantes (maior O_f), desempate pelo índice (determinístico)."""
++    O = repr_overlap(weight)
++    k = int(round(float(p) * O.numel()))
++    order = sorted(range(O.numel()), key=lambda i: (-float(O[i]), i))
++    return sorted(order[:k])
++
++
++# ─────────────────────────────────────────────────────────────────── v3.1 bloco 5: poda EXATA de canais novos
++@torch.no_grad()
++def prune_new_channels(res: GrowthResult, layer: int, rows: Sequence[int]) -> GrowthResult:
++    """Remove canais de saída do bloco ``layer`` cujas colunas no consumidor são 0 (canais NOVOS do crescimento):
++    a função não muda. Recusa canal herdado, bloco amarrado (residual/depthwise/cov_gate), inception e dense."""
++    spec = res.child.spec.copy()
++    L = spec.layers()[layer]
++    n = len(spec.layers())
++    if L.conv not in ("conv", "pointwise", "dwsep") or getattr(L, "dense_out", False) or L.residual != "none" \
++            or getattr(L, "cov_gate", "none") != "none":
++        raise MorphismError(f"prune: bloco {layer} ({L.conv}/{L.residual}) não suportado")
++    if layer + 1 < n:
++        Ln = spec.layers()[layer + 1]
++        if Ln.residual in ("identity", "gated") or Ln.conv == "depthwise" or getattr(Ln, "cov_gate", "none") != "none":
++            raise MorphismError("prune: consumidor amarrado (cin == cout)")
++    rows = sorted({int(r) for r in rows})
++    om = res.out_maps[layer]
++    if om is None or any(om[r] >= 0 for r in rows):
++        raise MorphismError("prune: só canais NOVOS (herdados nunca são podados)")
++    C = int(L.channels)
++    kept = [c for c in range(C) if c not in set(rows)]
++    if not kept:
++        raise MorphismError("prune: bloco ficaria vazio")
++    L.channels = len(kept)
++    op = OpRecord(op="prune_new_channels", where={"layer": int(layer)},
++                  params={"removed": rows, "n_removed": len(rows)}, exact_claimed=True,
++                  condition="canais novos com colunas 0 no consumidor")
++
++    def fill_j(cb, pb, prior, in_local):
++        bm, ex, nt = _fill_block(cb, pb, in_local, kept, prior)
++        return bm, list(kept)
++    return _rebuild(res, spec, layer, fill_j, 0, op)
++
++
+ # ─────────────────────────────────────────────────────────────────── v3.1 bloco 3: add_dense_layer (DenseNet)
+ @torch.no_grad()
+ def add_dense_layer(res: GrowthResult, at: int, growth: int, *, kernel: int = 3, norm: str = "batch",
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 22:32:46.887525380 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 22:32:46.888525394 -0300
+@@ -136,7 +136,10 @@
+            # v3.1 bloco 4: zca_refit = re-ajusta a ZCA dos blocos novos depois do AE/SSL (whitening.md);
+            #   softhebb_paper = tau/lr por camada (1/tau = 1, .65, .25; lr .08, .005, .01), BN sem treino na entrada,
+            #   filtros SPiFiL levados ao raio R (3) durante o SoftHebb e devolvidos à norma original depois
+-           "zca_refit": False, "zca_refit_images": 256, "softhebb_paper": False, "softhebb_radius": 3.0},
++           "zca_refit": False, "zca_refit_images": 256, "softhebb_paper": False, "softhebb_radius": 3.0,
++           # v3.1 bloco 5: replace.criterion = corr (v3) | redo (tau .1) | repr (p .30); prune_redundant_new = poda
++           #   exata dos canais NOVOS mortos/duplicados (mais superpixels -> redundância eliminada na rede)
++           "prune_redundant_new": False, "prune": {"corr_thr": 0.95, "var_rel_eps": 1.0e-6, "n_images": 64}},
+ }
+ 
+ V3_SSL_REG = {"lejepa": "sigreg", "simclr": "none", "vicreg": "none"}
+@@ -1485,6 +1488,9 @@
+             res = _apply(res, op, hook, fit_x=nfi.gev.ev.svm_train_x[: int(v3.get("cov_gate_fit_images", 64))])
+             continue
+         res = _apply(res, op, hook)
++    prune_log = []
++    if v3.get("prune_redundant_new") and nfi is not None:      # v3.1 bloco 5: poda exata de canais NOVOS redundantes
++        res, prune_log = prune_redundant_new(res, nfi.gev, v3, gcfg or {})
+     sh_log = []
+     shc = {**(v3.get("softhebb_cfg") or {}), "paper": bool(v3.get("softhebb_paper")),
+            "radius": float(v3.get("softhebb_radius", 3.0))}
+@@ -1504,9 +1510,45 @@
+             res.v3_pre_replace = pre
+         res.v3_replace = infos
+     res.v3_softhebb = sh_log
++    res.v3_prune = prune_log
+     return res
+ 
+ 
++def prune_redundant_new(res: MO.GrowthResult, gev: GrowthEvaluator, v3: dict, gcfg: dict):
++    """v3.1 (pedido do usuário: mais superpixels -> mais filtros; a redundância sai DENTRO da rede): entre os canais
++    NOVOS de cada bloco, os mortos (variância ~0) e os quase duplicados (|corr| > thr com qualquer canal) nas respostas
++    de TREINO são PODADOS (exato: colunas 0 no consumidor). Nunca leva o filho abaixo da faixa-alvo (poda parcial)."""
++    from ga_search.backbones import morphisms_v3 as MV3
++    pc = {**{"corr_thr": 0.95, "var_rel_eps": 1e-6, "n_images": 64}, **(v3.get("prune") or {})}
++    lo = _band_bounds(band_of(_params(res)))[0]        # a poda nunca tira o filho da faixa que o plano atingiu
++    log = []
++    x = gev.ev.svm_train_x[: int(pc["n_images"])]
++    for j in range(len(res.child.blocks)):
++        om = res.out_maps[j]
++        if om is None or not any(m < 0 for m in om):
++            continue
++        L = res.child.spec.layers()[j]
++        C = int(L.channels)
++        acts = _block_acts(res.child, j, x, gev.device)
++        bad = MV3.bad_filters(acts, corr_thr=float(pc["corr_thr"]), var_rel_eps=float(pc["var_rel_eps"]), n_conv=C)
++        cand = sorted({int(c) for c in bad["dead"]} | {int(d[0]) for d in bad["dup"]})
++        rows = [c for c in cand if c < len(om) and om[c] < 0]
++        rec = {"block": j, "n_new": sum(1 for m in om if m < 0), "n_candidates": len(rows), "n_pruned": 0}
++        while rows:
++            try:
++                r2 = MV3.prune_new_channels(res, j, rows)
++            except MO.MorphismError as exc:
++                rec["skip"] = str(exc)[:160]
++                break
++            if _params(r2) > lo:
++                res = r2
++                rec["n_pruned"] = len(rows)
++                break
++            rows = rows[: len(rows) // 2]          # não sai da faixa: poda menos
++        log.append(rec)
++    return res, log
++
++
+ @torch.no_grad()
+ def _block_acts(model: BB.Backbone, j: int, x: torch.Tensor, device, bs: int = 32) -> torch.Tensor:
+     model.to(device).eval()
+@@ -1531,16 +1573,29 @@
+     C = int(res.child.spec.layers()[j].channels)
+     bad = MV3.bad_filters(acts, corr_thr=float(rcfg.get("corr_thr", 0.95)),
+                           var_rel_eps=float(rcfg.get("var_rel_eps", 1e-6)), n_conv=C)   # dense: só a conv
++    crit = str(rcfg.get("criterion", "corr"))
+     cap = max(1, int(float(rcfg.get("max_frac", 0.25)) * C))
+-    dead = [int(c) for c in bad["dead"]]
+-    dups = [d for d in bad["dup"] if int(d[0]) not in dead]
++    if crit == "redo":                        # v3.1 (redo_repr.md): tau-dormentes, saída pós-ativação, treino
++        dead = MV3.redo_dormant(acts, float(rcfg.get("redo_tau", 0.1)), n_conv=C)
++        dups = []
++    elif crit == "repr":                      # v3.1: RePr, os p=30% mais redundantes (O_f) dos filtros
++        conv = res.child.blocks[j].conv
++        Wc = conv.weight if isinstance(conv, nn.Conv2d) else conv[-1].weight
++        dead, dups = MV3.repr_select(Wc, float(rcfg.get("repr_p", 0.30))), []
++        cap = len(dead)
++    else:
++        dead = [int(c) for c in bad["dead"]]
++        dups = [d for d in bad["dup"] if int(d[0]) not in dead]
+     rows = (dead + [int(d[0]) for d in dups])[:cap]
++    if crit in ("redo", "repr"):              # saída zerada (sem merge), como no artigo
++        bad = {**bad, "mean": {}}
+     merge = {int(d[0]): (int(d[1]), float(d[2]), float(d[3])) for d in dups if int(d[0]) in rows}
+     means = bad.get("mean") or {}
+     for c in dead:                            # canal morto ~ constante: entra só o termo b (= média) no consumidor
+         if c in rows and (c in means or str(c) in means):
+             merge[c] = (-1, 0.0, float(means.get(c, means.get(str(c)))))
+-    info = {"layer": int(j), "n_images": int(x.shape[0]), "split": "train", "n_dead": len(dead), "n_dup": len(dups),
++    info = {"layer": int(j), "n_images": int(x.shape[0]), "split": "train", "criterion": crit,
++            "n_dead": len(dead), "n_dup": len(dups),
+             "rows": rows, "merge": {str(k): v for k, v in merge.items()}, "cap": cap,
+             "corr_thr": float(rcfg.get("corr_thr", 0.95)), "n_replaced": len(rows)}
+     if not rows:
+@@ -2442,7 +2497,7 @@
+         cap = {} if want_resume else None
+         sh_log, rep_log = getattr(res, "v3_softhebb", None), getattr(res, "v3_replace", None)
+         model, out = train_child(self.gev, res, fid, g, seed, parent_rescored, capture=cap, anchor_state=anchor_state)
+-        out.update(genes=genes or {}, softhebb_log=sh_log, replace_log=rep_log,
++        out.update(genes=genes or {}, softhebb_log=sh_log, replace_log=rep_log, prune_log=getattr(res, "v3_prune", None),
+                    spifil_data={"images_per_class_requested": g.get("spifil_images_per_class"),
+                                 "images_per_class_effective": nfi.ipc_effective, "n_images": nfi.n_images,
+                                 "split": "train (pool estratificado semeado)",
+diff -ruN a/tests/hmodehb/test_growth_v31_b5.py b/tests/hmodehb/test_growth_v31_b5.py
+--- a/tests/hmodehb/test_growth_v31_b5.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_b5.py	2026-11-17 22:32:46.892525450 -0300
+@@ -0,0 +1,72 @@
++"""growth v3.1 bloco 5: ReDo (tau-dormente) e RePr (O_f, p=30%) no replace_bad_filters; poda EXATA dos canais
++novos redundantes (mais superpixels -> redundância eliminada dentro da rede)."""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++sys.path.insert(0, str(Path(__file__).parent))
++
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.backbones import morphisms_v3 as MV3  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from test_growth_v31_covgate import _tiny, _x  # noqa: E402
++
++
++def test_redo_scores_and_dormant():
++    a = torch.rand(4, 5, 3, 3) + 0.5
++    a[:, 2] *= 0.01                                   # quase dormente
++    s = MV3.redo_scores(a)
++    assert s.mean().item() == pytest.approx(1.0)
++    assert MV3.redo_dormant(a, 0.1) == [2] and MV3.redo_dormant(a, 0.0) == []
++
++
++def test_repr_overlap_and_select():
++    torch.manual_seed(0)
++    W = torch.randn(10, 4, 3, 3)
++    W[3] = W[1] * 2.0                                 # duplicado (cos = 1)
++    O = MV3.repr_overlap(W)
++    sel = MV3.repr_select(W, 0.3)
++    assert len(sel) == 3 and 1 in sel and 3 in sel
++    assert sel == MV3.repr_select(W, 0.3)             # determinístico
++
++
++def test_prune_new_channels_exact_and_refuses_inherited():
++    m = _tiny()
++    r = MO.widen(MO.start(m), {1: 32})
++    new = [c for c, p in enumerate(r.out_maps[1]) if p < 0]
++    r2 = MV3.prune_new_channels(r, 1, new[:5])
++    x = _x()
++    with torch.no_grad():
++        assert torch.allclose(r2.child.eval()(x), m(x), atol=1e-6, rtol=0)
++    assert int(r2.child.spec.layers()[1].channels) == 27
++    gs = MO.finalize(r2, x, data={"split": "synthetic"})
++    assert gs.preservation.verdict == "exact"
++    with pytest.raises(MO.MorphismError):
++        MV3.prune_new_channels(r, 1, [0])                # herdado: nunca
++
++
++def test_prune_redundant_new_in_chain_keeps_band():
++    m = _tiny()
++    r = MO.widen(MO.start(m), {1: 60})
++    blk = r.child.blocks[1]
++    new = [c for c, p in enumerate(r.out_maps[1]) if p < 0]
++    with torch.no_grad():                             # metade dos canais novos = cópias exatas de um herdado
++        for c in new[: len(new) // 2]:
++            blk.conv.weight[c] = blk.conv.weight[0]
++            blk.conv.bias[c] = blk.conv.bias[0]
++            blk.norm.weight[c], blk.norm.bias[c] = blk.norm.weight[0], blk.norm.bias[0]
++            blk.norm.running_mean[c], blk.norm.running_var[c] = blk.norm.running_mean[0], blk.norm.running_var[0]
++    gev = SimpleNamespace(ev=SimpleNamespace(svm_train_x=_x(12, seed=7)), device=torch.device("cpu"))
++    band0 = G.band_of(G._params(r))
++    r2, log = G.prune_redundant_new(r, gev, {"prune": {"n_images": 12}}, {})
++    assert log and log[0]["n_pruned"] > 0
++    assert G.band_of(G._params(r2)) == band0
++    gs = MO.finalize(r2, _x(), data={"split": "synthetic"})
++    assert gs.preservation.verdict == "exact"

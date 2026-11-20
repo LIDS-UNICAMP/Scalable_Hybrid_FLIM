@@ -1,0 +1,3319 @@
+diff -ruN a/ga_search/backbones/build.py b/ga_search/backbones/build.py
+--- a/ga_search/backbones/build.py	2026-11-17 21:36:25.707902786 -0300
++++ b/ga_search/backbones/build.py	2026-11-17 21:36:25.708902799 -0300
+@@ -18,6 +18,7 @@
+ from typing import List, Optional, Tuple
+ 
+ import torch
++import torch.nn.functional as F
+ from torch import nn
+ 
+ from ga_search.backbones.spec import (BUDGETS, HARD_CAP, BackboneSpec, CostSpec, HeadSpec, LayerSpec,
+@@ -54,6 +55,43 @@
+         return self.head(self.reduce(x))
+ 
+ 
++# ─────────────────────────────────────────────────────────────────── growth v3: dense_out (DenseNet)
++from ga_search.modehb.spifil_ops import SpifilOpsBlock as _SpifilOpsBlock  # noqa: E402
++
++
++def _dense_cat(y, x):
++    return torch.cat([y, F.adaptive_avg_pool2d(x, tuple(y.shape[-2:])).to(y.dtype)], 1)
++
++
++class DenseOutSpifilOpsBlock(_SpifilOpsBlock):
++    """``SpifilOpsBlock`` com saída cat(bloco(x), adaptive_avg_pool(x)) (mesmos nomes de parâmetros)."""
++
++    def forward(self, x):
++        return _dense_cat(super().forward(x), x)
++
++
++class DenseOutConvBlock(ConvBlock):
++    """``ConvBlock`` com saída cat(bloco(x), adaptive_avg_pool(x)) (mesmos nomes de parâmetros)."""
++
++    def forward(self, x):
++        return _dense_cat(super().forward(x), x)
++
++
++def block_in_channels(spec: BackboneSpec, j: int) -> int:
++    return spec.block_in_channels(j)
++
++
++def block_out_channels(spec: BackboneSpec, j: int) -> int:
++    return spec.block_out_channels(j)
++
++
++def _as_dense(blk: nn.Module, cin: int, cout: int) -> nn.Module:
++    blk.__class__ = DenseOutSpifilOpsBlock if isinstance(blk, _SpifilOpsBlock) else DenseOutConvBlock
++    blk.dense_out, blk.conv_out_channels = True, int(cout)
++    blk.out_channels = int(cout) + int(cin)
++    return blk
++
++
+ def make_spifil_block(L: LayerSpec, cin: int) -> nn.Module:
+     """Bloco ``flavor=spifil_ops``: exatamente o ``SpifilOpsBlock`` dos encoders de produção (mesmos nomes
+     de parâmetros, bias em toda conv, pool da biblioteca), com os residuais do A3 (gated/project)."""
+@@ -75,6 +113,13 @@
+ 
+ 
+ def make_block(L: LayerSpec, cin: int) -> ConvBlock:
++    blk = _make_block(L, cin)
++    if getattr(L, "dense_out", False):
++        blk = _as_dense(blk, cin, int(L.channels))
++    return blk
++
++
++def _make_block(L: LayerSpec, cin: int) -> ConvBlock:
+     if L.flavor == "spifil_ops":
+         return make_spifil_block(L, cin)
+     d = {"channels": int(L.channels), "kernel": int(L.kernel), "conv": L.conv, "norm": L.norm,
+@@ -113,7 +158,7 @@
+         self.blocks = nn.ModuleList()
+         for L in spec.layers():
+             self.blocks.append(make_block(L, cin))
+-            cin = int(L.channels)
++            cin = int(L.channels) + (cin if getattr(L, "dense_out", False) else 0)
+         self.head = make_head(spec.head, cin)
+         self.embed_dim = int(spec.head.embed_dim)
+ 
+diff -ruN a/ga_search/backbones/morphisms.py b/ga_search/backbones/morphisms.py
+--- a/ga_search/backbones/morphisms.py	2026-11-17 21:36:25.713902860 -0300
++++ b/ga_search/backbones/morphisms.py	2026-11-17 21:36:25.714902872 -0300
+@@ -84,7 +84,7 @@
+     """Resultado identidade (filho = cópia literal do pai)."""
+     child = copy.deepcopy(parent)
+     n = len(parent.blocks)
+-    chans = [int(L.channels) for L in parent.spec.layers()]
++    chans = [int(parent.spec.block_out_channels(j)) for j in range(n)]      # growth v3: conta dense_out
+     masks = {k: torch.ones_like(v, dtype=torch.bool) for k, v in child.named_parameters()}
+     return GrowthResult(parent=parent, child=child, layer_map=list(range(n)),
+                         out_maps=[list(range(c)) for c in chans], masks=masks)
+@@ -330,6 +330,7 @@
+             raise MorphismError(f"camada {j}: widen não encolhe ({c_old} -> {c_new})")
+         if (L.residual in ("identity", "gated") or L.conv == "depthwise") and c_new != in_count:
+             raise NotExactError(f"camada {j} ({L.residual}/{L.conv}) exige cout == cin = {in_count}")
++        cin_j = in_count
+         L.channels = c_new
+         L.kernel = int(kernels.get(j, L.kernel))
+         if L.conv == "inception":
+@@ -338,7 +339,10 @@
+             elif c_new != c_old:                 # canais extras repartidos como inception_split(extra)
+                 add = {nm: c for nm, _, c in inception_split(c_new - c_old)}
+                 L.branches = [[nm, k, int(c) + int(add.get(nm, 0))] for nm, k, c in L.branches]
+-        in_count = c_new
++                left = c_new - sum(int(b[2]) for b in L.branches)    # growth v3: ramos com nomes fora do
++                if left > 0:                                          # inception_split (ramo novo b3_2...): o resto
++                    L.branches[0][2] = int(L.branches[0][2]) + left   # vai para o 1º ramo (antes: SpecError)
++        in_count = c_new + (cin_j if getattr(L, "dense_out", False) else 0)      # growth v3: passagem dense
+     torch.manual_seed(int(seed))
+     child = Backbone(spec)                          # pesos novos = init PyTorch com semente registrada
+     masks: Dict[str, torch.Tensor] = {}
+@@ -363,6 +367,9 @@
+         exact &= ex
+         ops_notes += [f"blocks.{j}: {x}" for x in nt]
+         masks.update({f"blocks.{j}.{k}": v for k, v in bm_masks.items()})
++        if getattr(Lc, "dense_out", False):        # growth v3: saída = conv (out_local) + passagem da entrada
++            c_par_conv = int(M.spec.layers()[j].channels)
++            out_local = list(out_local) + [c_par_conv + m if m >= 0 else -1 for m in in_local]
+         out_maps.append(_compose(res.out_maps[j], out_local))
+         in_local = out_local
+     masks.update({f"head.{k}": v for k, v in _fill_head(child.head, M.head, in_local,
+@@ -389,7 +396,7 @@
+ 
+ # ─────────────────────────────────────────────────────────────────── inserção de camadas
+ def _nonneg_output(L: LayerSpec) -> bool:
+-    return L.activation in ("relu", "relu6") and L.residual == "none"
++    return L.activation in ("relu", "relu6") and L.residual == "none" and not getattr(L, "dense_out", False)
+ 
+ 
+ def _insert(res: GrowthResult, at: int, newL: LayerSpec, tag: str, seed: int) -> GrowthResult:
+@@ -437,7 +444,7 @@
+     if not exact and not allow_approx:
+         raise NotExactError(f"deepen_identity antes de {at}: entrada não é >= 0 "
+                             f"(camada anterior act={prevL.activation}, residual={prevL.residual})")
+-    C = int(prevL.channels)
++    C = int(res.child.spec.block_out_channels(at - 1))
+     newL = LayerSpec(channels=C, kernel=int(kernel), conv="conv", norm=norm, activation="relu",
+                      residual="none", pool="none", init="identity")
+     out = _insert(res, at, newL, "identity", seed=0)
+@@ -460,14 +467,34 @@
+     return out
+ 
+ 
++RESIDUAL_ZERO_NORMS = ("none", "batch", "zca", "dbn", "batch_dbn", "batch_zca")
++
++
++@torch.no_grad()
++def _zero_norm_of_zero(norm: nn.Module) -> None:
++    """Garante norm(0) = 0 em eval(): BN (running_mean = 0, beta = 0), ZCA (mu = 0; W qualquer), DBN
++    (running_mean = 0, bias = 0); Sequential (batch_dbn/batch_zca) recursivo."""
++    for m in norm.modules():
++        if isinstance(m, nn.BatchNorm2d):
++            m.running_mean.zero_()
++            if m.bias is not None:
++                m.bias.zero_()
++        elif isinstance(m, ZCAWhitening):
++            m.mu.zero_()
++        elif isinstance(m, DecorrelatedBatchNorm):
++            m.running_mean.zero_()
++            if m.bias is not None:
++                m.bias.zero_()
++
++
+ def deepen_residual_zero(res: GrowthResult, at: int, *, act: str = "silu", kernel: int = 3, conv: str = "conv",
+                          norm: str = "none") -> GrowthResult:
+     """Insere y = act(conv(x)) + x com conv = 0 (act(0) = 0) antes da camada ``at``."""
+     if act not in ("silu", "gelu", "relu"):
+         raise MorphismError("deepen_residual_zero: act com act(0) = 0 (silu|gelu|relu)")
+-    if norm not in ("none", "batch"):
+-        raise MorphismError("deepen_residual_zero: norm none|batch")
+-    C = int(res.child.spec.layers()[at - 1].channels)
++    if norm not in RESIDUAL_ZERO_NORMS:
++        raise MorphismError(f"deepen_residual_zero: norm {RESIDUAL_ZERO_NORMS}")
++    C = int(res.child.spec.block_out_channels(at - 1))
+     newL = LayerSpec(channels=C, kernel=int(kernel), conv=conv, norm=norm, activation=act, residual="identity",
+                      pool="none", init="residual_zero")
+     out = _insert(res, at, newL, "residual_zero", seed=0)
+@@ -478,13 +505,16 @@
+                 m.weight.zero_()
+                 if m.bias is not None:
+                     m.bias.zero_()
+-        if norm == "batch":
+-            blk.norm.running_mean.zero_()
+-            blk.norm.bias.zero_()
++        _zero_norm_of_zero(blk.norm)            # growth v3: norm(0) = 0 (BN, ZCA, DBN, batch_dbn)
++    cond = "act(0)=0; qualquer entrada"
++    if norm in ("zca", "dbn", "batch_dbn", "batch_zca"):
++        cond += "; whitening: exato só em eval()/branqueamento congelado (running_mean/mu = 0, bias = 0)"
++    elif norm == "batch":
++        cond += "; BN: running_mean = 0, beta = 0"
+     out.ops.append(OpRecord(op="deepen_residual_zero", where={"before": int(at)},
+                             params={"kernel": int(kernel), "conv": conv, "norm": norm, "act": act, "width": C,
+                                     "trainable_at_zero": act != "relu"},
+-                            exact_claimed=True, condition="act(0)=0; qualquer entrada"))
++                            exact_claimed=True, condition=cond))
+     return out
+ 
+ 
+@@ -496,7 +526,7 @@
+     L = layers[layer]
+     if L.residual != "none":
+         raise MorphismError(f"camada {layer} já tem residual {L.residual}")
+-    cin = int(spec.input.in_channels) if layer == 0 else int(layers[layer - 1].channels)
++    cin = int(spec.block_in_channels(layer))         # growth v3: conta a passagem dense_out
+     L.residual = "gated" if cin == int(L.channels) else "project"
+     child = Backbone(spec)
+     masks = {k: v.clone() for k, v in res.masks.items()}
+diff -ruN a/ga_search/backbones/morphisms_v3.py b/ga_search/backbones/morphisms_v3.py
+--- a/ga_search/backbones/morphisms_v3.py	1969-12-31 21:00:00.000000000 -0300
++++ b/ga_search/backbones/morphisms_v3.py	2026-11-17 21:36:25.717902910 -0300
+@@ -0,0 +1,388 @@
++"""Morfismos da cadeia de crescimento v3 (sobre o ``GrowthResult`` de ``morphisms``).
++
++* ``inception_branch_add(res, layer, kernel, channels)``: acrescenta um ramo (k1/k3/k5) ao bloco ``layer``.
++  Conv densa (``conv``/``pointwise``) vira ``inception`` [[b{k0}, k0, C], [novo, k, n]] com os pesos herdados
++  copiados para o ramo antigo; bloco já inception ganha um ramo novo (nome único) no fim. Os canais novos
++  ficam no FIM da concatenação; as colunas do consumidor (bloco seguinte ou 1x1 da cabeça) são 0 ->
++  exato em eval() (mesmas condições de norma do ``widen``).
++* ``dense_concat(res, layer)``: DenseNet. O bloco ``layer`` passa a ter ``dense_out`` (saída =
++  cat(bloco(x), adaptive_avg_pool(x))); as colunas novas do bloco seguinte (conv e skip project) = 0 -> exato.
++* ``bad_filters(acts)`` / ``replace_filters(res, layer, rows, merge=...)``: acha filtros mortos (variância ~0)
++  ou quase duplicados (|corr| > thr) pela covariância das respostas e troca as linhas da conv por filtros
++  novos; colunas do consumidor = 0 (+ merge Net2Net). NÃO preserva a função exatamente (exact_claimed=False):
++  o chamador decide pelo WiSE com âncora = pai e só aceita se kappa >= pai.
++"""
++from __future__ import annotations
++
++import copy
++from typing import Callable, Dict, List, Optional, Sequence, Tuple
++
++import torch
++from torch import nn
++
++from ga_search.backbones.build import Backbone, LowRankHead
++from ga_search.backbones.morphisms import (GrowthResult, MorphismError, NotExactError, _compose, _fill_block,
++                                          _fill_head, _prefixed)
++from ga_search.backbones.spec import OpRecord
++from ga_search.modehb.ops_norm_act import DecorrelatedBatchNorm, InceptionConv, ZCAWhitening
++
++BranchInit = Callable[[int, nn.Module, List[int]], None]
++
++
++# ─────────────────────────────────────────────────────────────────── utilidades
++def _conv_rows(blk: nn.Module) -> int:
++    conv = blk.conv
++    if isinstance(conv, nn.Sequential):
++        return int(conv[-1].out_channels)
++    return int(conv.out_channels)
++
++
++def _full_out_local(L, Lp, conv_local: List[int], in_local: List[int], c_par_conv: int) -> List[int]:
++    """Mapa de saída do bloco (local ao pai do passo): conv + passagem dense_out (se houver). Passagem que o
++    pai do passo não tinha (``Lp`` sem dense_out) é nova: -1."""
++    if not getattr(L, "dense_out", False):
++        return list(conv_local)
++    if not getattr(Lp, "dense_out", False):
++        return list(conv_local) + [-1] * len(in_local)
++    return list(conv_local) + [c_par_conv + m if m >= 0 else -1 for m in in_local]
++
++
++def _copy_block(child_blk: nn.Module, parent_blk: nn.Module, prior: Dict[str, torch.Tensor]):
++    child_blk.load_state_dict(parent_blk.state_dict())
++    return {k: v.clone() for k, v in prior.items()}
++
++
++def _rebuild(res: GrowthResult, spec, j: int, fill_j: Callable, seed: int, op: OpRecord,
++             new_init_label: Optional[str] = None) -> GrowthResult:
++    """Monta o filho de ``spec`` (só o bloco ``j`` e o consumidor mudam de forma). ``fill_j(cb, pb, prior)``
++    preenche o bloco j e devolve (masks_do_bloco, conv_local). O consumidor (bloco j+1 ou a cabeça) recebe
++    colunas novas = 0 via ``_fill_block``/``_fill_head``."""
++    M = res.child
++    torch.manual_seed(int(seed))
++    child = Backbone(spec)
++    masks: Dict[str, torch.Tensor] = {}
++    out_maps = list(res.out_maps)
++    n = len(spec.layers())
++    exact, notes = True, []
++    in_local = list(range(int(spec.input.in_channels)))
++    with torch.no_grad():
++        for k in range(n):
++            cb, pb = child.blocks[k], M.blocks[k]
++            prior = _prefixed(res.masks, f"blocks.{k}.")
++            Lc = spec.layers()[k]
++            c_par_conv = int(M.spec.layers()[k].channels)
++            if k == j:
++                bm, conv_local = fill_j(cb, pb, prior, in_local)
++            elif k == j + 1:
++                conv_local = list(range(_conv_rows(pb)))
++                if Lc.residual in ("identity", "gated") or Lc.conv == "depthwise":
++                    conv_local = list(in_local)
++                bm, ex, nt = _fill_block(cb, pb, in_local, conv_local, prior)
++                exact &= ex
++                notes += nt
++            else:
++                bm = _copy_block(cb, pb, prior)
++                conv_local = list(range(c_par_conv)) if Lc.residual not in ("identity", "gated") else list(in_local)
++            masks.update({f"blocks.{k}.{q}": v for q, v in bm.items()})
++            full = _full_out_local(Lc, M.spec.layers()[k], conv_local, in_local, c_par_conv)
++            if k in (j, j + 1):
++                out_maps[k] = _compose(res.out_maps[k], full)
++            in_local = full
++        if j == n - 1:
++            masks.update({f"head.{q}": v for q, v in _fill_head(child.head, M.head, in_local,
++                                                                _prefixed(res.masks, "head.")).items()})
++        else:
++            child.head.load_state_dict(M.head.state_dict())
++            masks.update({q: v.clone() for q, v in res.masks.items() if q.startswith("head.")})
++    out = GrowthResult(parent=res.parent, child=child, layer_map=list(res.layer_map), out_maps=out_maps,
++                       masks=masks, ops=list(res.ops), new_init=dict(res.new_init),
++                       skip_added=set(res.skip_added), head_mode=res.head_mode)
++    if new_init_label:
++        out.new_init[j] = new_init_label
++    if notes:
++        op.condition = (op.condition + "; " if op.condition else "") + "; ".join(sorted(set(notes)))
++    op.exact_claimed = bool(op.exact_claimed and exact)
++    out.ops.append(op)
++    return out
++
++
++# ─────────────────────────────────────────────────────────────────── (a) ramo inception
++def _branch_name(existing: Sequence[str], kernel: int) -> str:
++    base = f"b{int(kernel)}"
++    if base not in existing:
++        return base
++    i = 2
++    while f"{base}_{i}" in existing:
++        i += 1
++    return f"{base}_{i}"
++
++
++def inception_branch_add(res: GrowthResult, layer: int, kernel: int, channels: int, *,
++                         new_filters: Optional[BranchInit] = None, seed: int = 0) -> GrowthResult:
++    """Acrescenta um ramo ``kernel`` x ``kernel`` com ``channels`` filtros ao bloco ``layer`` (saída nova no fim,
++    colunas do consumidor = 0). ``new_filters(j, conv_do_ramo_novo, rows)`` inicializa os filtros novos (SPiFiL);
++    senão init PyTorch com ``seed``."""
++    M = res.child
++    spec = M.spec.copy()
++    layers = spec.layers()
++    n = len(layers)
++    j, k, c = int(layer), int(kernel), int(channels)
++    if not 0 <= j < n:
++        raise MorphismError(f"camada {j} fora de 0..{n - 1}")
++    if k not in (1, 3, 5) or c < 1:
++        raise MorphismError(f"inception_branch_add: kernel {k} (1|3|5), canais {c} >= 1")
++    L = layers[j]
++    if L.residual in ("identity", "gated"):
++        raise MorphismError(f"inception_branch_add: bloco {j} com residual {L.residual} (cout == cin)")
++    if L.conv not in ("conv", "pointwise", "inception"):
++        raise MorphismError(f"inception_branch_add: conv {L.conv!r} não suportada (só conv/pointwise/inception)")
++    if j + 1 < n and (layers[j + 1].residual in ("identity", "gated") or layers[j + 1].conv == "depthwise"):
++        raise MorphismError(f"inception_branch_add: consumidor {j + 1} exige cin fixo "
++                            f"({layers[j + 1].residual}/{layers[j + 1].conv})")
++    pconv = M.blocks[j].conv
++    if L.conv == "inception":
++        old = [list(b) for b in L.branches]
++    else:
++        if not (isinstance(pconv, nn.Conv2d) and pconv.groups == 1):
++            raise MorphismError("inception_branch_add: conv do bloco não é densa")
++        old = [[f"b{int(pconv.kernel_size[0])}", int(pconv.kernel_size[0]), int(L.channels)]]
++    name = _branch_name([b[0] for b in old], k)
++    C = int(L.channels)
++    L.conv = "inception"
++    L.branches = old + [[name, k, c]]
++    L.channels = C + c
++    conv_local = list(range(C)) + [-1] * c
++
++    def fill_j(cb, pb, prior, in_local):
++        if in_local != list(range(len(in_local))):
++            raise MorphismError("inception_branch_add: entrada do bloco remapeada (use um passo de cada vez)")
++        new_conv = cb.conv
++        cb.conv = copy.deepcopy(pb.conv)        # nomes iguais aos do pai -> _fill_block cuida da norma/skip
++        bm, ex, nt = _fill_block(cb, pb, in_local, conv_local, prior)
++        if not ex:
++            raise NotExactError(f"inception_branch_add: norma do bloco não exata ({nt})")
++        cb.conv = new_conv
++        bm = {q: v for q, v in bm.items() if not q.startswith("conv.")}
++        if isinstance(pb.conv, InceptionConv):
++            for bn, _, _ in old:
++                new_conv.branches[bn].load_state_dict(pb.conv.branches[bn].state_dict())
++                for q, _p in new_conv.branches[bn].named_parameters():
++                    bm[f"conv.branches.{bn}.{q}"] = prior[f"conv.branches.{bn}.{q}"].clone()
++        else:
++            ob = new_conv.branches[old[0][0]]
++            ob.weight.copy_(pb.conv.weight)
++            bm[f"conv.branches.{old[0][0]}.weight"] = prior["conv.weight"].clone()
++            if ob.bias is not None:
++                if pb.conv.bias is not None:
++                    ob.bias.copy_(pb.conv.bias)
++                    bm[f"conv.branches.{old[0][0]}.bias"] = prior["conv.bias"].clone()
++                else:                            # pai sem bias (norm != none no ConvBlock): bias 0 herdado
++                    ob.bias.zero_()
++                    bm[f"conv.branches.{old[0][0]}.bias"] = torch.ones_like(ob.bias, dtype=torch.bool)
++        nb = new_conv.branches[name]
++        if new_filters is not None:
++            new_filters(j, nb, list(range(c)))
++        for q, p in nb.named_parameters():
++            bm[f"conv.branches.{name}.{q}"] = torch.zeros_like(p, dtype=torch.bool)
++        return bm, conv_local
++
++    op = OpRecord(op="inception_branch_add", where={"layer": j},
++                  params={"kernel": k, "channels": c, "branch": name, "from_conv": "inception" if old and
++                          isinstance(pconv, InceptionConv) else "conv", "seed": int(seed),
++                          "new_init": "new_filters" if new_filters is not None else "random:pytorch_default"},
++                  exact_claimed=True, condition="eval(); colunas do consumidor = 0")
++    return _rebuild(res, spec, j, fill_j, seed, op,
++                    new_init_label=f"branch:{name}:" + ("new_filters" if new_filters else "pytorch") + f"(seed={seed})")
++
++
++# ─────────────────────────────────────────────────────────────────── (b) dense_concat
++def dense_concat(res: GrowthResult, layer: int) -> GrowthResult:
++    """DenseNet: saída do bloco ``layer`` = cat(bloco(x), adaptive_avg_pool(x)); o bloco seguinte recebe as
++    colunas novas = 0 (conv e skip project). Exato."""
++    M = res.child
++    spec = M.spec.copy()
++    layers = spec.layers()
++    n = len(layers)
++    j = int(layer)
++    if not 0 <= j < n - 1:
++        raise MorphismError(f"dense_concat: camada {j} (proibido no último bloco; use 0..{n - 2})")
++    L, Ln = layers[j], layers[j + 1]
++    if getattr(L, "dense_out", False):
++        raise MorphismError(f"dense_concat: bloco {j} já é dense_out")
++    if Ln.residual in ("identity", "gated") or Ln.conv == "depthwise":
++        raise MorphismError(f"dense_concat: consumidor {j + 1} exige cin fixo ({Ln.residual}/{Ln.conv})")
++    cin = int(spec.block_in_channels(j))
++    L.dense_out = True
++
++    def fill_j(cb, pb, prior, in_local):
++        bm = _copy_block(cb, pb, prior)
++        rows = _conv_rows(pb)
++        conv_local = list(range(rows))
++        # passagem nova: -1 (não vem do pai deste passo) -> o consumidor zera as colunas
++        return bm, conv_local
++
++    op = OpRecord(op="dense_concat", where={"layer": j}, params={"passthrough_channels": cin,
++                                                                 "pool": "adaptive_avg"},
++                  exact_claimed=True, condition="colunas novas do consumidor = 0")
++    return _rebuild(res, spec, j, fill_j, 0, op)
++
++
++# ─────────────────────────────────────────────────────────────────── (d) filtros ruins
++@torch.no_grad()
++def bad_filters(acts: torch.Tensor, corr_thr: float = 0.95, var_rel_eps: float = 1e-6,
++                n_conv: Optional[int] = None) -> dict:
++    """Filtros mortos (var <= var_rel_eps*mediana(var) ou var == 0) e quase duplicados (|corr de Pearson| > thr)
++    nas respostas ``acts`` [N, C, H, W] (saída do bloco = o que o consumidor vê). Determinístico.
++    ``n_conv``: só os canais < n_conv são candidatos (bloco dense_out: a passagem não é filtro).
++    -> {"dead": [c], "mean": {c: média}, "dup": [[c, keep, a, b]] (y_c ~ a*y_keep + b), "corr_max": [C],
++        "var": [C], "corr_thr", "var_rel_eps"}"""
++    C = int(acts.shape[1])
++    m = C if n_conv is None else min(int(n_conv), C)
++    Y = acts.detach().double().cpu().transpose(0, 1).reshape(C, -1)[:m]
++    mean = Y.mean(1)
++    Yc = Y - mean[:, None]
++    var = (Yc * Yc).mean(1)
++    med = float(var.median()) if m else 0.0
++    dead = [int(i) for i in range(m) if float(var[i]) == 0.0 or float(var[i]) <= var_rel_eps * med]
++    alive = [i for i in range(m) if i not in set(dead)]
++    corr_max = [0.0] * m
++    dup: List[list] = []
++    if len(alive) > 1:
++        A = torch.as_tensor(alive)
++        Z = Yc[A] / var[A].sqrt()[:, None]
++        R = (Z @ Z.T) / Z.shape[1]
++        R.fill_diagonal_(0.0)
++        for ii, c in enumerate(alive):
++            corr_max[c] = float(R[ii].abs().max())
++        pairs = [(-abs(float(R[a, b])), alive[a], alive[b]) for a in range(len(alive)) for b in range(a + 1, len(alive))
++                 if abs(float(R[a, b])) > corr_thr]
++        pairs.sort()
++        dropped, kept = set(), set()
++        for _r, a, b in pairs:
++            if a in dropped or b in dropped:
++                continue
++            drop, keep = (a, b) if (float(var[a]), -a) < (float(var[b]), -b) else (b, a)
++            if drop in kept:
++                drop, keep = keep, drop
++                if drop in kept:
++                    continue
++            dropped.add(drop)
++            kept.add(keep)
++            cov = float((Yc[drop] * Yc[keep]).mean())
++            aa = cov / float(var[keep])
++            bb = float(mean[drop]) - aa * float(mean[keep])
++            dup.append([int(drop), int(keep), aa, bb])
++    return {"dead": dead, "mean": {int(c): float(mean[c]) for c in dead}, "dup": dup, "corr_max": corr_max,
++            "var": [float(v) for v in var], "corr_thr": float(corr_thr), "var_rel_eps": float(var_rel_eps)}
++
++
++def _consumer_convs(child: Backbone, j: int) -> List[Tuple[str, nn.Conv2d, bool]]:
++    """Convs que LEEM a saída do bloco j: (nome, conv, linear?) — linear=False para o proj do ramo pool
++    (MaxPool antes: o merge não vale) e para o depthwise do dwsep (zera só as linhas)."""
++    n = len(child.blocks)
++    if j == n - 1:
++        h = child.head
++        first = h.reduce if isinstance(h, LowRankHead) else h.proj[0]
++        return [("head." + ("reduce" if isinstance(h, LowRankHead) else "proj.0"), first, True)]
++    blk = child.blocks[j + 1]
++    out = []
++    for name, mod in blk.named_modules():
++        if not isinstance(mod, nn.Conv2d):
++            continue
++        full = f"blocks.{j + 1}.{name}"
++        if name.startswith("conv.branches.pool"):
++            out.append((full, mod, False))
++        elif name.startswith("conv.branches.") or name == "conv" or name.startswith("skip"):
++            if mod.groups != 1:
++                raise MorphismError(f"replace_filters: consumidor {name} agrupado")
++            out.append((full, mod, True))
++        elif name in ("conv.0", "conv.depthwise"):          # dwsep: depthwise lê canal a canal
++            out.append((full, mod, False))
++    return out
++
++
++def replace_filters(res: GrowthResult, layer: int, rows: Sequence[int], *,
++                    merge: Optional[Dict[int, Tuple[int, float, float]]] = None,
++                    new_filters: Optional[BranchInit] = None, seed: int = 0) -> GrowthResult:
++    """Troca as linhas ``rows`` da conv densa do bloco ``layer`` por filtros novos (``new_filters(j, conv, rows)``
++    = SPiFiL; senão init PyTorch com ``seed``), reseta a norma desses canais e zera as colunas do consumidor.
++    ``merge`` {c: (keep, a, b)}: Net2Net, coluna_keep += a*coluna_c e bias += b*sum(coluna_c) (keep < 0: só o
++    termo constante b, ex. canal morto com média b). NÃO exato (exact_claimed=False)."""
++    M = res.child
++    j = int(layer)
++    rows = sorted({int(r) for r in rows})
++    blk = M.blocks[j]
++    conv = blk.conv
++    if not (isinstance(conv, nn.Conv2d) and conv.groups == 1):
++        raise MorphismError("replace_filters: só conv densa (groups=1)")
++    if not rows or rows[-1] >= conv.out_channels or rows[0] < 0:
++        raise MorphismError(f"replace_filters: linhas {rows} fora de 0..{conv.out_channels - 1}")
++    L = M.spec.layers()[j]
++    if L.residual in ("identity", "gated"):
++        raise MorphismError("replace_filters: bloco com residual identity/gated (o skip mantém o canal)")
++    child = copy.deepcopy(M)
++    masks = {k: v.clone() for k, v in res.masks.items()}
++    cb = child.blocks[j]
++    r = torch.as_tensor(rows, dtype=torch.long)
++    merge = {int(k): (int(v[0]), float(v[1]), float(v[2])) for k, v in (merge or {}).items()}
++    with torch.no_grad():
++        g = torch.Generator().manual_seed(int(seed))
++        tmp = nn.Conv2d(conv.in_channels, conv.out_channels, conv.kernel_size, padding=conv.padding,
++                        bias=conv.bias is not None)
++        bound = 1.0 / max(1, conv.in_channels * conv.kernel_size[0] * conv.kernel_size[1]) ** 0.5
++        tmp.weight.uniform_(-bound, bound, generator=g)
++        if tmp.bias is not None:
++            tmp.bias.uniform_(-bound, bound, generator=g)
++        cb.conv.weight[r] = tmp.weight[r]
++        if cb.conv.bias is not None:
++            cb.conv.bias[r] = tmp.bias[r]
++        if new_filters is not None:
++            new_filters(j, cb.conv, list(rows))
++        masks[f"blocks.{j}.conv.weight"][r] = False
++        if cb.conv.bias is not None:
++            masks[f"blocks.{j}.conv.bias"][r] = False
++        for name, m in cb.named_modules():
++            if isinstance(m, nn.BatchNorm2d):
++                m.running_mean[r], m.running_var[r] = 0.0, 1.0
++                if m.weight is not None:
++                    m.weight[r], m.bias[r] = 1.0, 0.0
++                    masks[f"blocks.{j}.{name}.weight"][r] = False
++                    masks[f"blocks.{j}.{name}.bias"][r] = False
++        for full, cm, linear in _consumer_convs(child, j):
++            key = full + ".weight"
++            if linear:
++                W = cm.weight
++                for c in rows:
++                    if c in merge:
++                        keep, a, b = merge[c]
++                        if 0 <= keep < W.shape[1] and keep not in rows:
++                            W[:, keep] += a * W[:, c]
++                        if cm.bias is not None and b != 0.0:
++                            cm.bias += b * W[:, c].sum(dim=(1, 2))
++                    W[:, c] = 0.0
++                    masks[key][:, c] = False
++            else:                                  # depthwise (linhas = canais) ou proj do ramo pool (colunas)
++                if cm.groups > 1:
++                    cm.weight[r] = 0.0
++                    masks[key][r] = False
++                    if cm.bias is not None:
++                        cm.bias[r] = 0.0
++                        masks[full + ".bias"][r] = False
++                else:
++                    cm.weight[:, r] = 0.0
++                    masks[key][:, r] = False
++    out = GrowthResult(parent=res.parent, child=child, layer_map=list(res.layer_map), out_maps=list(res.out_maps),
++                       masks=masks, ops=list(res.ops), new_init=dict(res.new_init),
++                       skip_added=set(res.skip_added), head_mode=res.head_mode)
++    out.new_init[j] = f"replace:{'new_filters' if new_filters else 'pytorch'}(seed={seed})"
++    out.ops.append(OpRecord(op="replace_bad_filters", where={"layer": j},
++                            params={"rows": rows, "merge": {str(k): list(v) for k, v in merge.items()},
++                                    "seed": int(seed),
++                                    "new_init": "new_filters" if new_filters is not None else "random:pytorch_default"},
++                            exact_claimed=False,
++                            condition="NÃO preserva a função: decidir por WiSE com âncora = pai (kappa >= pai)"))
++    return out
++
++
++OPS_V3 = {"inception_branch_add": inception_branch_add, "dense_concat": dense_concat,
++          "replace_filters": replace_filters}
+diff -ruN a/ga_search/backbones/spec.py b/ga_search/backbones/spec.py
+--- a/ga_search/backbones/spec.py	2026-11-17 21:36:25.722902971 -0300
++++ b/ga_search/backbones/spec.py	2026-11-17 21:36:25.723902983 -0300
+@@ -87,6 +87,9 @@
+     # externa FLIM (MaxPool2d(pool_size, 2, pad)). Valores padrão ficam FORA do hash (hashes antigos iguais).
+     flavor: str = "convblock"
+     pool_padding: Optional[int] = None
++    # growth v3 (dense_concat): a saída do bloco = cat(saída, adaptive_avg_pool(entrada do bloco)) -> o bloco
++    # seguinte vê channels + cin canais (DenseNet). False (padrão) fica FORA do hash (hashes antigos iguais).
++    dense_out: bool = False
+ 
+     def arch_dict(self) -> dict:
+         d = asdict(self)
+@@ -95,6 +98,8 @@
+             d.pop("flavor")
+         if d.get("pool_padding") is None:
+             d.pop("pool_padding")
++        if not d.get("dense_out"):
++            d.pop("dense_out", None)
+         return d
+ 
+     def validate(self, cin: int) -> None:
+@@ -218,6 +223,18 @@
+     def layers(self) -> List[LayerSpec]:
+         return [self.stem] + [L for st in self.stages for L in st.layers]
+ 
++    def block_in_channels(self, j: int) -> int:
++        """Canais que ENTRAM no bloco plano ``j`` (growth v3: conta a passagem dense_out dos anteriores)."""
++        cin = int(self.input.in_channels)
++        for L in self.layers()[:int(j)]:
++            cin = int(L.channels) + (cin if getattr(L, "dense_out", False) else 0)
++        return cin
++
++    def block_out_channels(self, j: int) -> int:
++        """Canais que SAEM do bloco ``j`` (= ``channels`` + cin_j se dense_out)."""
++        L = self.layers()[int(j)]
++        return int(L.channels) + (self.block_in_channels(j) if getattr(L, "dense_out", False) else 0)
++
+     def layer_names(self) -> List[str]:
+         return ["stem"] + [f"{st.name}.{i}" for st in self.stages for i in range(len(st.layers))]
+ 
+@@ -253,7 +270,9 @@
+         cin = int(self.input.in_channels)
+         for L in self.layers():
+             L.validate(cin)
+-            cin = int(L.channels)
++            cin = int(L.channels) + (cin if getattr(L, "dense_out", False) else 0)
++        if self.layers() and getattr(self.layers()[-1], "dense_out", False):
++            raise SpecError("dense_out no último bloco não é suportado (a cabeça leria a passagem)")
+         self.head.validate()
+         if self.budget_class is not None and self.budget_class not in BUDGETS:
+             raise SpecError(f"budget_class {self.budget_class!r} fora de {list(BUDGETS)}")
+diff -ruN a/ga_search/config/hmodehb_b0b4/growth_v3.yaml b/ga_search/config/hmodehb_b0b4/growth_v3.yaml
+--- a/ga_search/config/hmodehb_b0b4/growth_v3.yaml	1969-12-31 21:00:00.000000000 -0300
++++ b/ga_search/config/hmodehb_b0b4/growth_v3.yaml	2026-11-17 21:36:25.728903045 -0300
+@@ -0,0 +1,62 @@
++# growth v3 (EXEMPLO): cadeia B0 -> B4 com cabeça de 2ª ordem fixa na fitness/teste, genes de SSL/DA/whitening/
++# SoftHebb, ops novas e saturação. Use com --growth-config ga_search/config/hmodehb_b0b4/growth_v3.yaml e um --out NOVO
++# (fitness_sig nova). Base: growth.yaml (inalterado).
++# Cadeia de crescimento progressivo B0 -> B4 (ga_search/hmodehb/growth_chain.py). Config de CRESCIMENTO;
++# treino/dados/régua vêm do base.yaml do H-MODEHB (fitness v2 ORIG). O hash dos dois vai para o estado.
++n_parents: 4            # pais por faixa (frente de Pareto kappa ORIG-val x FLOPs 2·MAC)
++n_children: 8           # filhos por geração
++generations: 2          # gerações por faixa
++eta: 3                  # promoção f_low -> f_high: ceil(aceitos / eta)
++fid_low: 15             # triagem
++fid_high: 45            # aceitação final
++delta: 0.0              # aceita se kappa_val(filho) >= kappa_val(pai) + delta
++require_improvement: false   # true: alpha=0 (= pai) não conta como aceito
++protect: lowlr          # herdados: lowlr (0,01 x lr) | freeze | full; novos: lr cheio
++init_method: spifil0    # KernelInitializer do A2 nos canais novos: spifil0 | spifil1 | spifil2
++init_config: {}
++spifil_images_per_class: 4
++start_band: B0
++end_band: B4
++hard_cap: 5500000
++max_ops: 12
++residual_act: silu
++seeds:
++  registry: research/spifil_b0b4/agent1/seed_registry.csv
++  regua: ORIG
++  bands: [B0]
++  checkpoints: []
++  external_small: true  # "SPiFiL pequeno" (entra na faixa em que cair; RS ~B2)
++  top_k: 2             # v3: melhor B0 da base + SPiFiL pequeno
++ssl: lejepa             # growth_fix4: 'none' = ablação sem SSL global (só AE local nos blocos novos)
++reg: sigreg
++ae_target: pixel
++ae_schedule: joint
++lr: 1.0e-3
++lr_ae: 1.0e-3
++wise_alphas: [0.0, 0.25, 0.5, 0.75, 1.0]
++preservation_images: 8
++preservation_tol: 1.0e-5
++oom: {retries: 10, sleep_s: 300}
++test_channel: true
++debug_train: null
++debug_val: null
++mem: {grad_checkpoint: true, wise_on_cpu: true, empty_cache: true, embed_batch_size: null, ssl_amp_bf16: false,
++      max_gpu_gb: null, oom_capacity_margin_gib: 1.0}
++v3:
++  readout: so2_4096_pca          # (1) mu+sigma+Cov do último bloco, PCA só no treino, 4096, signed-sqrt+L2 (sem treino)
++  so2: {dim: 4096, n_px: 64}
++  aux_gap: true                  # kappa da cabeça antiga (GAP/proj) só como coluna aux
++  genes:                         # listas -> rodízio determinístico no produto cartesiano (registrado por filho)
++    ssl: [none, lejepa, simclr, vicreg]      # (2) none = só AE local nos blocos novos (ae_local_only)
++    aug: [weak, medium, strong]              # (3) DA do SSL (crop/jitter/blur/flips/rot90), AugConfig registrado
++    whiten_new: [none, zca, dbn]             # (4d) norm do bloco novo (deepen_residual_zero)
++    softhebb: [false, true]                  # (4e) SoftHebb nos filtros novos, antes do AE/SSL
++  ops: [inception_branch_add, dense_concat, replace_bad_filters]   # (4a)(4b)(4f) + widen/residual históricos
++  families: null                 # lista restringe o braço: [widen, residual, inception_branch_add, dense_concat, ...]
++  branch_kernels: [1, 3, 5]
++  branch_frac: 0.25
++  replace: {corr_thr: 0.95, var_rel_eps: 1.0e-6, max_frac: 0.25, n_images: 64}
++  softhebb_cfg: {epochs: 1, lr: 0.01, temperature: 1.0, n_images: 128}
++  freeze_head_in_ssl: true       # a projeção antiga da cabeça fica congelada no SSL (a so2 não tem parâmetros)
++  saturation: {adopt_parent: true}   # (6) faixa sem melhora -> o melhor da anterior é adotado; curva kappa x faixa
++  test_tta8: true                # (5) coluna extra TTA8 no canal de teste (nunca na seleção)
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 21:36:25.732903095 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 21:36:25.733903107 -0300
+@@ -102,8 +102,135 @@
+     # Âncora do WiSE = o morfismo (pai em função). Nó final = melhor de f_low/f_high pela ORIG-val.
+     # "retrain" = histórico (refaz do morfismo). save_optimizer: grava o AdamW em f_low.
+     "promotion": {"mode": "resume", "save_optimizer": True, "extra_epochs": "fid_diff"},
++    # growth v3 (cadeia de crescimento v3). PADRÕES = histórico (readout head, sem genes, sem ops novas): sem
++    # deriva para quem não liga. O exemplo ligado está em config/hmodehb_b0b4/growth_v3.yaml.
++    #   readout: "head" (histórico) | "so2_4096_pca" (cabeça de 2ª ordem fixa: fitness E teste; muda a fitness_sig)
++    #   aux_gap: com so2, o kappa da cabeça antiga (GAP/proj) vai para aux (nunca decide)
++    #   genes: listas -> cada filho recebe uma combinação determinística (produto cartesiano, rodízio por geração):
++    #     ssl {lejepa, simclr, vicreg, none}; aug {null=histórico, weak, medium, strong};
++    #     whiten_new {none, zca, dbn} (norm do bloco novo do deepen_residual_zero); softhebb {false, true}
++    #   ops: famílias novas habilitadas {inception_branch_add, dense_concat, replace_bad_filters}
++    #   families: null = todas (históricas + ops); lista = só esses tipos (braços por op)
++    #   freeze_head_in_ssl: a projeção antiga da cabeça fica congelada no SSL (a so2 não tem parâmetros)
++    #   saturation.adopt_parent: faixa sem filho aceito (ou pior que a anterior) -> o melhor membro da faixa
++    #     anterior é ADOTADO como membro da próxima (curva kappa x faixa nunca piora; a cadeia continua)
++    #   test_tta8: canal de teste com coluna extra TTA8 (nunca na seleção)
++    "v3": {"readout": "head", "so2": {"dim": 4096, "n_px": 64}, "aux_gap": True,
++           "genes": {"ssl": None, "aug": None, "whiten_new": None, "softhebb": None},
++           "ops": [], "families": None, "branch_kernels": [1, 3, 5], "branch_frac": 0.25,
++           "replace": {"corr_thr": 0.95, "var_rel_eps": 1.0e-6, "max_frac": 0.25, "n_images": 64},
++           "softhebb_cfg": {"epochs": 1, "lr": 0.01, "temperature": 1.0, "n_images": 128},
++           "freeze_head_in_ssl": False, "saturation": {"adopt_parent": False}, "test_tta8": False,
++           # spifil_strict: filtro novo sem SPiFiL (conv não densa, exceção, SPiFiL com menos filtros) -> o filho
++           #   falha como "spifil_fallback" (infeasible) em vez de receber init aleatória
++           # control_no_grow: controle LEMONADE (pai treinado as mesmas épocas, SEM crescer; só registro)
++           "spifil_strict": False, "control_no_grow": False, "ssl_recipe": None, "recipe_small_views": False,
++           "weight_decay": None},
+ }
+ 
++V3_SSL_REG = {"lejepa": "sigreg", "simclr": "none", "vicreg": "none"}
++
++# growth v3: receitas dos ARTIGOS (research/spifil_b0b4/articles/*.md). ``v3.ssl_recipe: paper`` passa ao trainer o que
++# ele suporta ("fiel"); o resto fica registrado como "adaptação" (inevitável: memória/dataset/LAB) ou "pendente"
++# (não implementado no trainer ainda) no result.json -> nada é escondido.
++V3_RECIPES = {
++    "lejepa": {"kwargs": {"n_views": 8, "sigreg_lambda": 0.05, "weight_decay": 5e-4, "projector": True,
++                          "projector_dims": [2048, 2048, 128], "reg_kwargs": {"n_proj": 1024}},
++               "fiel": ["projetor MLP 3 camadas BN d->2048->2048->128, perda NO projetor, SVM no embedding",
++                        "V=8, lambda=0,05", "AdamW wd 5e-4", "SIGReg com 1024 slices", "épocas = passadas completas"],
++               "adaptacao": ["aug oficial (ColorJitter .4/.4/.2/.1 p.8, gray .2, blur .5, solarize .2) em LAB -> preset "
++                             "'strong' do make_views (jitter aditivo LAB, blur, flips/rot90; sem solarize/gray)",
++                             "batch = data.batch_size do braço (>=128 quando cabe; senão 'adaptação: batch X por memória')"],
++               "pendente": ["warmup + cosseno até lr/1000 (trainer só tem lr fixo)"],
++               "small_views": {"n_views": 4, "sigreg_lambda": 0.02}},
++    "simclr": {"kwargs": {"tau": 0.5, "weight_decay": 1e-4, "projector_dims": [0, 128]},
++               "fiel": ["projetor d->d->128 com BN", "2N vistas numa única chamada", "tau=0,5", "wd 1e-4"],
++               "adaptacao": ["aug oficial (crop .08-1, jitter s=1 p=.8, gray .2, blur .5) -> preset 'strong' em LAB",
++                             "wd aplicado também a BN/bias (o trainer não separa grupos)",
++                             "AdamW no lugar de LARS; lr do growth (não 0,075*sqrt(B))"],
++               "pendente": ["LARS", "warmup + cosseno"]},
++    "vicreg": {"kwargs": {"weight_decay": 1e-6, "vicreg_kwargs": {"expander_dims": [2048, 2048, 2048],
++                                                                  "sim_coeff": 25.0, "std_coeff": 25.0, "cov_coeff": 1.0}},
++               "fiel": ["perda inv/var/cov 25/25/1", "expander 3 camadas Linear-BN-ReLU", "2 vistas"],
++               "adaptacao": ["expander 2048 (paper 8192) por memória", "AdamW no lugar de LARS"],
++               "pendente": ["LARS", "warmup + cosseno"]},
++}
++
++
++def ssl_recipe(gcfg: dict) -> Optional[dict]:
++    """Receita do artigo para o SSL efetivo do filho (``v3.ssl_recipe: paper``) ou None (chamada histórica)."""
++    v3 = _v3(gcfg)
++    if v3.get("ssl_recipe") != "paper" or ssl_disabled(gcfg):
++        return None
++    r = copy.deepcopy(V3_RECIPES.get(str(gcfg.get("ssl", "lejepa"))))
++    if r is None:
++        return None
++    if r.get("small_views") and v3.get("recipe_small_views"):
++        r["kwargs"].update(r["small_views"])
++        r["adaptacao"].append(f"V={r['small_views']['n_views']}, lambda={r['small_views']['sigreg_lambda']} por memória")
++    variant = str(v3.get("recipe_variant") or "dim_reduzido")   # presets: "fiel_bsN" (expander do artigo) | "dim_reduzido"
++    r["variant"] = variant
++    if gcfg.get("ssl") == "vicreg" and variant.startswith("fiel"):
++        r["kwargs"]["vicreg_kwargs"]["expander_dims"] = [8192, 8192, 8192]
++        r["adaptacao"] = [a for a in r["adaptacao"] if not a.startswith("expander 2048")]
++    if gcfg.get("ssl") == "lejepa" and variant.startswith("fiel"):
++        pass                                                 # projetor 2048-2048-128 já é o do artigo
++    if gcfg.get("ssl") == "vicreg" and v3.get("vicreg_kwargs"):
++        r["kwargs"]["vicreg_kwargs"] = {**r["kwargs"]["vicreg_kwargs"], **v3["vicreg_kwargs"]}
++    return r
++
++
++def _v3(gcfg: dict) -> dict:
++    base = copy.deepcopy(GROWTH_DEFAULTS["v3"])
++    for k, v in (gcfg.get("v3") or {}).items():
++        base[k] = {**base[k], **v} if isinstance(base.get(k), dict) and isinstance(v, dict) else v
++    return base
++
++
++def so2_on(gcfg: dict) -> bool:
++    return str(_v3(gcfg).get("readout", "head")) != "head"
++
++
++def gene_space(gcfg: dict) -> List[dict]:
++    """Produto cartesiano dos genes v3 com lista (ordem fixa); gene ausente/escalar = fixo."""
++    import itertools
++    genes = _v3(gcfg).get("genes") or {}
++    keys = [k for k in ("ssl", "aug", "whiten_new", "softhebb", "spifil_images_per_class", "spifil_n_superpixels")
++            if isinstance(genes.get(k), list) and genes[k]]
++    if not keys:
++        return [{}]
++    return [dict(zip(keys, combo)) for combo in itertools.product(*[genes[k] for k in keys])]
++
++
++def child_genes(gcfg: dict, tag: str, i: int, seed: int = 0) -> dict:
++    """Genes do i-ésimo filho da geração ``tag``: rodízio determinístico no produto cartesiano com deslocamento
++    por geração (cobre todas as combinações ao longo da cadeia). {} quando não há genes."""
++    space = gene_space(gcfg)
++    if space == [{}]:
++        return {}
++    off = _h({"genes_tag": tag, "seed": int(seed)}) % len(space)
++    return dict(space[(off + int(i)) % len(space)])
++
++
++def apply_genes(gcfg: dict, genes: dict) -> dict:
++    """gcfg efetivo de um filho: ssl/reg, aug, whiten_new, softhebb."""
++    if not genes:
++        return gcfg
++    g = copy.deepcopy(gcfg)
++    if "ssl" in genes:
++        s = genes["ssl"]
++        g["ssl"] = "none" if s in (None, False, "none", "ae", "ae_local_only") else str(s)
++        if g["ssl"] in V3_SSL_REG:
++            g["reg"] = V3_SSL_REG[g["ssl"]]
++    if "spifil_images_per_class" in genes:   # "all" -> teto do pool estratificado de treino (spifil_k_max)
++        v = genes["spifil_images_per_class"]
++        g["spifil_images_per_class"] = 10 ** 6 if str(v).lower() in ("all", "todas") else int(v)
++    g.setdefault("v3", {})
++    for k in ("aug", "whiten_new", "softhebb", "spifil_n_superpixels"):
++        if k in genes:
++            g["v3"] = {**g["v3"], k: genes[k]}
++    return g
++
+ 
+ def _mem(gcfg: dict) -> dict:
+     return {**GROWTH_DEFAULTS["mem"], **(gcfg.get("mem") or {})}
+@@ -278,7 +405,7 @@
+                     "pool": str(L.pool), "fusable": bool(fus)})
+         if L.pool != "none":
+             H = (H + 1) // 2
+-        cin = int(L.channels)
++        cin = _block_out(spec, j)
+     return out
+ 
+ 
+@@ -352,7 +479,10 @@
+     """Contexto do estimador: batch do treino, V do SSL, bytes (bf16 do treino ou ``mem.ssl_amp_bf16``)."""
+     tr = (cfg or {}).get("train") or {}
+     amp = str(tr.get("amp_dtype") or "").lower() in ("bf16", "bfloat16")
+-    views = {"simclr": 2, "lejepa": 4, "ae": 1}.get(str(gcfg.get("ssl", "lejepa")).lower(), 4)
++    views = {"simclr": 2, "lejepa": 4, "ae": 1, "vicreg": 2}.get(str(gcfg.get("ssl", "lejepa")).lower(), 4)
++    rec = ssl_recipe(gcfg)                    # growth v3: a receita do artigo pode mudar V (LeJEPA V=8)
++    if rec is not None and rec["kwargs"].get("n_views"):
++        views = int(rec["kwargs"]["n_views"])
+     return {"batch": int(((cfg or {}).get("data") or {}).get("batch_size", 64)), "views": int(views),
+             "amp_bf16": bool(amp or _mem(gcfg).get("ssl_amp_bf16")), "ae_amp_bf16": bool(amp),
+             "ssl": not ssl_disabled(gcfg), "grad_checkpoint": bool(_mem(gcfg).get("grad_checkpoint", True)),
+@@ -421,6 +551,10 @@
+     pass
+ 
+ 
++class SpifilFallback(ChainError):
++    """growth v3 (regra do usuário: init SEMPRE SPiFiL): algum filtro novo cairia em init PyTorch -> plano infeasible."""
++
++
+ class PreservationViolated(ChainError):
+     """O morfismo declarado exato não preservou a função (bug): o filho falha, nunca é treinado."""
+ 
+@@ -529,7 +663,8 @@
+ class GrowthEvaluator:
+     """Dados e régua ORIG do ``HEvaluator`` (A4): ``head(encoder(x))`` >= 1280, core.svm.fit_svm C=100 sem scaler."""
+ 
+-    def __init__(self, cfg: dict, out_dir, debug_train: Optional[int] = None, debug_val: Optional[int] = None):
++    def __init__(self, cfg: dict, out_dir, debug_train: Optional[int] = None, debug_val: Optional[int] = None,
++                 v3: Optional[dict] = None):
+         from ga_search.hmodehb.hevaluate import HEvaluator
+         from ga_search.modehb.run_search import _stratified_indices
+         from torch.utils.data import DataLoader, TensorDataset
+@@ -551,6 +686,19 @@
+         self.fitness_spec = FV.spec(ev.sv2, val_sha256=ev.split_hash, n_val=int(len(ev.val_y)),
+                                     dataset=ev.dataset, split=(cfg.get("data") or {}).get("split"))
+         self.fitness_spec["embed_precision"] = EMBED_PRECISION
++        # growth v3 (1): readout de 2ª ordem fixa na fitness (e no teste). Entra na fitness_spec -> fitness_sig nova.
++        v3 = _v3({"v3": v3 or {}})
++        self.readout = str(v3.get("readout", "head"))
++        self.so2_cfg = dict(v3.get("so2") or {})
++        self.aux_gap_on = bool(v3.get("aux_gap", True))
++        self._last_head = None
++        if self.readout != "head":
++            from ga_search.hmodehb import so2_head as SO2
++            if self.readout != SO2.READOUT and not self.readout.startswith("so2_"):
++                raise FV.FitnessConfigError(f"v3.readout {self.readout!r} (head|so2_4096_pca)")
++            self.fitness_spec["readout"] = self.readout
++            self.fitness_spec["head_v3"] = SO2.spec_entry(int(self.so2_cfg.get("dim", 4096)),
++                                                          int(self.so2_cfg.get("n_px", 64)))
+         self.fitness_sig = FV.signature(self.fitness_spec)
+         self.reset_stamps()
+ 
+@@ -561,8 +709,47 @@
+         return sorted({FV.ruler_sig({"readout": r, "tta": 1, "solver": "libsvm", **st})
+                        for r in set(self.ev._readouts) for st in self.ev._svm_stamps})
+ 
++    def so2_read(self, model: BB.Backbone, others: Sequence[torch.Tensor] = (), tta: int = 1, gap: bool = False,
++                 embed_batch_size: Optional[int] = None, head=None):
++        """growth v3 (1): cabeça de 2ª ordem fixa (PCA SÓ no treino) -> (So2Head, [z_train, z_others...], gaps)."""
++        from ga_search.hmodehb import so2_head as SO2
++        model.to(self.device)
++        enc = nn.Sequential(*model.blocks)
++        bs = int(embed_batch_size or self.ev.cfg["data"].get("batch_size", 64))
++        with fp32_reading(self.ev), torch.no_grad():
++            head, outs, gaps = SO2.fit_and_read(enc, self.ev.svm_train_x, list(others), self.device, batch_size=bs,
++                                                dim=int(self.so2_cfg.get("dim", 4096)),
++                                                n_px=int(self.so2_cfg.get("n_px", 64)),
++                                                block_index=len(model.blocks) - 1, tta=int(tta),
++                                                gap_head=model.head if gap else None, head=head)
++        _free(self.device)
++        return head, outs, gaps
++
++    def aux_gap(self, model: BB.Backbone) -> Optional[dict]:
++        """growth v3: kappa ORIG-val da cabeça antiga (GAP/proj) como coluna AUX; os carimbos de decisão não mudam."""
++        if getattr(self, "readout", "head") == "head" or not getattr(self, "aux_gap_on", False):
++            return None
++        from ga_search.modehb.run_search import _blas_threads
++        saved = (list(self.ev._readouts), [dict(x) for x in self.ev._svm_stamps])
++        try:
++            model.to(self.device)
++            with fp32_reading(self.ev):
++                feats = self.ev._svm_features(nn.Sequential(*model.blocks), model.head)
++            with _blas_threads(self.ev._fitness_speed()["svm_blas_threads"]):
++                sv = self.ev._svm_score(*feats)
++            return {"kappa_val_gap": float(sv["kappa"]), "macro_f1_val_gap": float(sv.get("macro_f1", float("nan"))),
++                    "readout": "head(gap/proj)", "used_for_selection": False}
++        finally:
++            self.ev._readouts, self.ev._svm_stamps = saved
++            _free(self.device)
++
+     def features(self, model: BB.Backbone, embed_batch_size: Optional[int] = None):
+         """growth_fix7: parte GPU do ``score`` (leitura fp32 determinística) -> (train, val)."""
++        if getattr(self, "readout", "head") != "head":   # growth v3 (1): so2 (a cabeça ajustada fica em self._last_head)
++            head, (tr, va), _ = self.so2_read(model, [self.ev.val_x], embed_batch_size=embed_batch_size)
++            self.ev.__dict__.setdefault("_readouts", []).append(self.readout)
++            self._last_head = head
++            return tr.numpy(), va.numpy()
+         model.to(self.device)
+         enc = nn.Sequential(*model.blocks)
+         data = self.ev.cfg["data"]
+@@ -653,6 +840,15 @@
+         k = min(int(ipc), int(gev.ev.spifil_k_max))
+         self.train_data = _Dispatch(gev.ev, self.init).train_data(spifil_subset(gev.ev.spifil_pool, k))
+         self.log: List[dict] = []
++        self.spifil_over: Dict[str, Any] = {}          # growth v3: gene spifil_n_superpixels
++        self.ipc_effective = int(k)
++        try:
++            self.n_images = int(len(self.train_data[1])) if isinstance(self.train_data, (tuple, list)) else None
++        except Exception:
++            self.n_images = None
++
++    def scfg(self, seed: int) -> dict:
++        return {**self.gev.spifil_cfg(seed), **self.spifil_over}
+ 
+     def hook(self, parent: BB.Backbone, widened_prev: Dict[int, bool]):
+         def fn(j: int, cb: nn.Module, out_local: List[int]):
+@@ -670,7 +866,7 @@
+                 self.log.append(rec)
+                 return
+             L = parent.spec.layers()[j]
+-            cin_par = int(parent.spec.input.in_channels) if j == 0 else int(parent.spec.layers()[j - 1].channels)
++            cin_par = _block_in(parent.spec, j)
+             prefix = nn.Sequential(*[copy.deepcopy(b) for b in parent.blocks[:j]]).to(self.gev.device).eval() \
+                 if j > 0 else None
+             if prefix is not None:
+@@ -680,7 +876,7 @@
+                                 "pool": "none", "residual": False, "dropout": 0.0}, cin_par)
+             ctx = InitContext(seed=self.seed + j, device=self.gev.device, layer_idx=int(j),
+                               prefix_id=f"growth:{parent.spec.hash12}:{j}", config=dict(self.init.config),
+-                              spifil_config=self.gev.spifil_cfg(self.seed + j), genome=None,
++                              spifil_config=self.scfg(self.seed + j), genome=None,
+                               diag_batch=self.gev.ev.svm_train_x[-16:])
+             t0 = time.perf_counter()
+             try:
+@@ -707,6 +903,90 @@
+         return fn
+ 
+ 
++    # ---- growth v3: SPiFiL em linhas arbitrárias de uma conv densa (ramo novo do inception, filtros trocados)
++    def conv_hook(self, parent: BB.Backbone, residual_of: Optional[Sequence[int]] = None, tag: str = "branch"):
++        """-> fn(j, conv, rows): filtros SPiFiL (A2) ajustados sobre o prefixo do ``parent`` (canais herdados),
++        escritos nas linhas ``rows`` de ``conv`` (nn.Conv2d densa; kernel = o da conv, centrado).
++        ``residual_of`` (replace_bad_filters): linhas MANTIDAS da conv; os filtros novos são projetados no
++        complemento ortogonal do espaço delas (no espaço de pesos) e re-escalados à norma original: ajustados
++        no RESÍDUO do que os filtros mantidos já cobrem."""
++        def fn(j: int, conv: nn.Module, rows: List[int]):
++            from ga_search.abstract_init.base import InitContext
++            from ga_search.modehb.spifil_ops import to_ops_spec
++            rec = {"layer": int(j), "n_new": len(rows), "method": self.method, "n_fit": 0, "fallback": None,
++                   "target": tag}
++            if not (isinstance(conv, nn.Conv2d) and conv.groups == 1) or not rows:
++                rec["fallback"] = "conv não densa: init PyTorch"
++                self.log.append(rec)
++                return
++            cin_par = _block_in(parent.spec, j)
++            k = int(conv.kernel_size[0])
++            prefix = nn.Sequential(*[copy.deepcopy(b) for b in parent.blocks[:j]]).to(self.gev.device).eval() \
++                if j > 0 else None
++            if prefix is not None:
++                prefix.out_channels = cin_par
++            L = parent.spec.layers()[j]
++            spec = to_ops_spec({"conv": "conv" if k > 1 else "pointwise", "kernel": k, "channels": len(rows),
++                                "activation": L.activation, "norm": "none", "pool": "none", "residual": False,
++                                "dropout": 0.0}, cin_par)
++            ctx = InitContext(seed=self.seed + 7919 + j, device=self.gev.device, layer_idx=int(j),
++                              prefix_id=f"growth_v3:{tag}:{parent.spec.hash12}:{j}", config=dict(self.init.config),
++                              spifil_config=self.scfg(self.seed + 7919 + j), genome=None,
++                              diag_batch=self.gev.ev.svm_train_x[-16:])
++            t0 = time.perf_counter()
++            try:
++                w, b, _prov = self.init.fit(prefix, self.train_data, spec, ctx)
++                W, B = w["conv.weight"].detach().to(conv.weight), w.get("conv.bias", b.get("conv.bias"))
++            except Exception as exc:
++                rec["fallback"] = f"{type(exc).__name__}: {str(exc)[:160]}"
++                self.log.append(rec)
++                return
++            finally:
++                del prefix
++                _free(self.gev.device)
++            n = min(int(W.shape[0]), len(rows))
++            cin_c = min(cin_par, conv.weight.shape[1])
++            kc, kw = conv.weight.shape[-1], W.shape[-1]
++            Wn = torch.zeros(n, conv.weight.shape[1], kc, kc, dtype=conv.weight.dtype)
++            o = (kc - kw) // 2
++            if o >= 0:
++                Wn[:, :cin_c, o:o + kw, o:o + kw] = W[:n, :cin_c].cpu()
++            else:
++                Wn[:, :cin_c] = W[:n, :cin_c, -o:-o + kc, -o:-o + kc].cpu()
++            if residual_of:
++                keep = conv.weight.detach()[torch.as_tensor(list(residual_of), dtype=torch.long)].reshape(len(residual_of), -1).double().cpu()
++                Q, _ = torch.linalg.qr(keep.T)                     # base do espaço dos filtros mantidos
++                F_ = Wn.reshape(n, -1).double()
++                nrm = F_.norm(dim=1, keepdim=True)
++                R = F_ - (F_ @ Q) @ Q.T
++                R = R / R.norm(dim=1, keepdim=True).clamp_min(1e-12) * nrm
++                Wn = R.reshape(Wn.shape).to(Wn.dtype)
++                rec["residual_projection"] = {"n_keep": len(residual_of), "rank_keep": int(Q.shape[1])}
++            with torch.no_grad():
++                r = torch.as_tensor(list(rows[:n]), dtype=torch.long)
++                conv.weight[r] = Wn.to(conv.weight)
++                if conv.bias is not None and B is not None:
++                    conv.bias[r] = B[:n].detach().to(conv.bias)
++            rec.update(n_fit=n, n_pytorch=len(rows) - n, fit_seconds=time.perf_counter() - t0)
++            self.log.append(rec)
++        return fn
++
++
++def _block_in(spec, j: int) -> int:
++    """Canais de entrada do bloco j (growth v3: conta o dense_out do bloco anterior quando existir)."""
++    f = getattr(BB, "block_in_channels", None)
++    if f is not None:
++        return int(f(spec, j))
++    return int(spec.input.in_channels) if j == 0 else int(spec.layers()[j - 1].channels)
++
++
++def _block_out(spec, j: int) -> int:
++    f = getattr(BB, "block_out_channels", None)
++    if f is not None:
++        return int(f(spec, j))
++    return int(spec.layers()[j].channels)
++
++
+ # ═════════════════════════════════════════════════════════════════ 4. propostas (plano de morfismos)
+ def _band_bounds(band: str) -> Tuple[int, int]:
+     i = BANDS.index(band)
+@@ -741,9 +1021,19 @@
+     if name == "deepen_identity":
+         return MO.deepen_identity(res, int(o["at"]), kernel=int(o.get("kernel", 3)))
+     if name == "deepen_residual_zero":
+-        return MO.deepen_residual_zero(res, int(o["at"]), act=o.get("act", "silu"), kernel=int(o.get("kernel", 3)))
++        kw = {"norm": o["norm"]} if o.get("norm", "none") != "none" else {}   # growth v3 (4d): whitening
++        return MO.deepen_residual_zero(res, int(o["at"]), act=o.get("act", "silu"), kernel=int(o.get("kernel", 3)), **kw)
+     if name == "add_skip_zero":
+         return MO.add_skip_zero(res, int(o["layer"]))
++    if name in ("inception_branch_add", "dense_concat", "replace_bad_filters"):
++        from ga_search.backbones import morphisms_v3 as MV3
++        if name == "inception_branch_add":       # growth v3 (4a)
++            return MV3.inception_branch_add(res, int(o["layer"]), int(o["kernel"]), int(o["channels"]),
++                                            new_filters=hook, seed=int(o.get("seed", 0)))
++        if name == "dense_concat":               # growth v3 (4b)
++            return MV3.dense_concat(res, int(o["layer"]))
++        return res                               # replace_bad_filters: no planejamento é no-op (mesma arquitetura;
++                                                 # as linhas vêm dos DADOS no realize_plan)
+     raise ChainError(f"op {name!r}")
+ 
+ 
+@@ -823,7 +1113,7 @@
+ 
+ 
+ # ---- growth_fix4 (c): planner por família de operação (variedade + widen encadeado até a faixa)
+-_PLAN_ERRORS = (MO.MorphismError, BB.BudgetError, ValueError, KeyError, IndexError, RuntimeError)
++_PLAN_ERRORS = (MO.MorphismError, BB.BudgetError, ValueError, KeyError, IndexError, RuntimeError, NotImplementedError)
+ 
+ 
+ def _try_apply(res: MO.GrowthResult, op: dict) -> Optional[MO.GrowthResult]:
+@@ -886,9 +1176,14 @@
+     return None, None
+ 
+ 
+-def plan_families(parent: BB.Backbone) -> List[Tuple[str, Any]]:
++V3_OPS = ("inception_branch_add", "dense_concat", "replace_bad_filters")
++
++
++def plan_families(parent: BB.Backbone, gcfg: Optional[dict] = None) -> List[Tuple[str, Any]]:
+     """Famílias de 1ª operação, intercaladas por tipo: widen do bloco j (j < último), head_widen (widen do
+-    último bloco, que alarga a entrada da cabeça), deepen_residual_zero, add_skip_zero, deepen_identity."""
++    último bloco, que alarga a entrada da cabeça), deepen_residual_zero, add_skip_zero, deepen_identity.
++    growth v3: + inception_branch_add / dense_concat / replace_bad_filters quando em ``v3.ops``; ``v3.families``
++    (lista de tipos) restringe às famílias do braço."""
+     layers = parent.spec.layers()
+     n = len(layers)
+     groups = [[("widen", j) for j in range(n - 1)],
+@@ -896,6 +1191,23 @@
+               [("deepen_residual_zero", a) for a in range(n, 0, -1)],
+               [("add_skip_zero", j) for j, L in enumerate(layers) if L.residual == "none" and j > 0],
+               [("deepen_identity", a) for a in range(1, n + 1) if MO._nonneg_output(layers[a - 1])]]
++    v3 = _v3(gcfg or {})
++    ops = [o for o in (v3.get("ops") or []) if o in V3_OPS]
++    dense_ok = lambda j: not getattr(layers[j], "dense_out", False)                   # noqa: E731
++    conv_ok = lambda L: L.conv in ("conv", "pointwise", "inception") and L.residual not in ("identity", "gated")  # noqa
++    if "inception_branch_add" in ops:
++        groups.append([("inception_branch_add", j) for j in range(n - 1, -1, -1) if conv_ok(layers[j])])
++    if "dense_concat" in ops:
++        groups.append([("dense_concat", j) for j in range(n - 2, -1, -1) if dense_ok(j)
++                       and layers[j + 1].residual not in ("identity", "gated") and layers[j + 1].conv != "depthwise"])
++    if "replace_bad_filters" in ops:
++        groups.append([("replace_bad_filters", j) for j in range(n) if layers[j].conv in ("conv", "pointwise")])
++    fams = v3.get("families")
++    if fams:
++        allowed = set(fams)
++        groups = [[f for f in g if f[0] in allowed or (f[0] in ("head_widen", "widen_all") and "widen" in allowed)
++                   or (f[0] == "deepen_residual_zero" and "residual" in allowed)] for g in groups]
++        groups = [g for g in groups if g] or [[]]
+     out: List[Tuple[str, Any]] = []
+     for k in range(max(len(g) for g in groups)):
+         out += [g[k] for g in groups if k < len(g)]
+@@ -905,7 +1217,9 @@
+ def family_label(fam: Tuple[str, Any]) -> str:
+     kind, j = fam
+     return {"widen": f"widen_b{j}", "head_widen": "head_widen", "widen_all": "widen_all", "deepen_residual_zero": f"deepen_residual_zero@{j}",
+-            "add_skip_zero": f"add_skip_zero@{j}", "deepen_identity": f"deepen_identity@{j}"}[kind]
++            "add_skip_zero": f"add_skip_zero@{j}", "deepen_identity": f"deepen_identity@{j}",
++            "inception_branch_add": f"inception_branch_add@{j}", "dense_concat": f"dense_concat@{j}",
++            "replace_bad_filters": f"replace_bad_filters@{j}"}[kind]
+ 
+ 
+ def plan_with_family(parent: BB.Backbone, target_band: str, family: Tuple[str, Any], theta: Sequence[float],
+@@ -936,11 +1250,22 @@
+                 break
+         if not ops:
+             return None, f"{family_label(family)}: nem +1 canal cabe/aplica"
++    elif kind == "replace_bad_filters":
++        pass                                                  # growth v3 (4f): widens primeiro, replace no FIM
+     else:
++        v3 = _v3(gcfg)
++        L = parent.spec.layers()[int(j)] if kind in ("inception_branch_add", "dense_concat") else None
++        bk = [int(k) for k in (v3.get("branch_kernels") or [1, 3, 5])]
+         op = {"deepen_residual_zero": {"op": "deepen_residual_zero", "at": int(j),
+-                                       "act": gcfg.get("residual_act", "silu"), "kernel": 3},
++                                       "act": gcfg.get("residual_act", "silu"), "kernel": 3,
++                                       **({"norm": str(v3["whiten_new"])} if v3.get("whiten_new") not in
++                                          (None, "none") else {})},
+               "deepen_identity": {"op": "deepen_identity", "at": int(j), "kernel": 3},
+-              "add_skip_zero": {"op": "add_skip_zero", "layer": int(j)}}[kind]
++              "add_skip_zero": {"op": "add_skip_zero", "layer": int(j)},
++              "inception_branch_add": ({"op": "inception_branch_add", "layer": int(j), "kernel": bk[int(rng.integers(len(bk)))],
++                                        "channels": max(4, int(round(float(v3.get("branch_frac", 0.25)) * int(L.channels)))),
++                                        "seed": sd()} if L is not None else None),
++              "dense_concat": {"op": "dense_concat", "layer": int(j)}}[kind]
+         r = _try_apply(res, op)
+         if r is None:
+             return None, f"{family_label(family)}: morfismo inaplicável"
+@@ -960,6 +1285,8 @@
+         if step is None:
+             return None, f"{family_label(family)}: nenhum widen cabe a partir de {_params(res)} params"
+         res, ops = step[1], ops + [step[0]]
++    if kind == "replace_bad_filters":
++        ops = ops + [{"op": "replace_bad_filters", "layer": int(j)}]
+     return ops, None
+ 
+ 
+@@ -972,7 +1299,8 @@
+ 
+ def plan_children(parents: List[Tuple[dict, BB.Backbone]], target_band: str, n_children: int,
+                   thetas: Sequence[Sequence[float]], seeds: Sequence[int], gcfg: dict,
+-                  hard_cap: int = HARD_CAP, mem_ctx: Optional[dict] = None) -> List[dict]:
++                  hard_cap: int = HARD_CAP, mem_ctx: Optional[dict] = None,
++                  gcfgs: Optional[Sequence[dict]] = None) -> List[dict]:
+     """n_children planos válidos, pais em round-robin; o k-ésimo filho de um pai começa pela k-ésima família
+     (widen em blocos diferentes, head_widen, deepen, add_skip...). Plano repetido do mesmo pai é pulado; pai
+     esgotado cede a vaga ao próximo pai. Cada item: {parent, ops, family, theta, seed} ou {parent, ops=None,
+@@ -983,7 +1311,7 @@
+     P = len(parents)
+     used: Dict[int, set] = {p: set() for p in range(P)}
+     nxt = {p: 0 for p in range(P)}
+-    fams = {p: plan_families(parents[p][1]) for p in range(P)}
++    fams = {p: plan_families(parents[p][1], gcfg) for p in range(P)}
+     reasons: Dict[int, List[str]] = {p: [] for p in range(P)}
+     out: List[dict] = []
+     for i in range(int(n_children)):
+@@ -995,7 +1323,8 @@
+             while nxt[p] < len(fams[p]) and got is None:
+                 fam = fams[p][nxt[p]]
+                 nxt[p] += 1
+-                ops, why = plan_with_family(pm, target_band, fam, thetas[i], seeds[i], gcfg, hard_cap)
++                ops, why = plan_with_family(pm, target_band, fam, thetas[i], seeds[i],
++                                            gcfgs[i] if gcfgs is not None else gcfg, hard_cap)
+                 if ops is None:
+                     reasons[p].append(why)
+                     continue
+@@ -1031,20 +1360,145 @@
+     return out
+ 
+ 
+-def realize_plan(parent: BB.Backbone, ops: Sequence[dict], nfi: Optional[NewFilterInit]) -> MO.GrowthResult:
+-    """Reaplica o plano com SPiFiL nos canais novos (o plano foi achado com init PyTorch; exatidão igual)."""
++def realize_plan(parent: BB.Backbone, ops: Sequence[dict], nfi: Optional[NewFilterInit],
++                 gcfg: Optional[dict] = None) -> MO.GrowthResult:
++    """Reaplica o plano com SPiFiL nos canais novos (o plano foi achado com init PyTorch; exatidão igual).
++
++    growth v3: ramo novo do inception com SPiFiL (``conv_hook``); SoftHebb opcional nos filtros NOVOS (antes do
++    AE/SSL); ``replace_bad_filters`` (sempre no FIM do plano) usa as respostas do bloco nas imagens de TREINO.
++    Com replace, ``res.v3_pre_replace`` = o resultado exato ANTES da troca (âncora do WiSE = o pai em função) e
++    ``res.v3_replace`` = o registro."""
++    v3 = _v3(gcfg or {})
+     res = MO.start(parent)
+-    for op in ops:
++    exact_ops = [o for o in ops if o["op"] != "replace_bad_filters"]
++    rep_ops = [o for o in ops if o["op"] == "replace_bad_filters"]
++    for op in exact_ops:
+         hook = None
+         if op["op"] == "widen" and nfi is not None:
+             cur = res.child
+             widened = {int(j): True for j, v in op["widths"].items() if int(v) != int(cur.spec.layers()[int(j)].channels)}
+             hook = nfi.hook(cur, widened)
+             op = {**op, "new_init": f"{nfi.method}:residual_zero_out"}
++        elif op["op"] == "inception_branch_add" and nfi is not None:
++            hook = nfi.conv_hook(res.child, tag="inception_branch")
+         res = _apply(res, op, hook)
++    sh_log = []
++    if v3.get("softhebb") and nfi is not None:
++        sh_log += softhebb_new_filters(res, nfi.gev, v3.get("softhebb_cfg") or {}, seed=nfi.seed)
++    if rep_ops:
++        if nfi is None:                      # planejamento / estimador: a arquitetura não muda
++            return res
++        pre = copy.deepcopy(res)
++        infos = []
++        for op in rep_ops:
++            res, info = replace_bad_filters_data(res, int(op["layer"]), nfi, v3.get("replace") or {})
++            infos.append(info)
++        if v3.get("softhebb"):
++            sh_log += softhebb_new_filters(res, nfi.gev, v3.get("softhebb_cfg") or {}, seed=nfi.seed + 1, skip_from=pre)
++        if any(i.get("n_replaced", 0) for i in infos):
++            res.v3_pre_replace = pre
++        res.v3_replace = infos
++    res.v3_softhebb = sh_log
+     return res
+ 
+ 
++@torch.no_grad()
++def _block_acts(model: BB.Backbone, j: int, x: torch.Tensor, device, bs: int = 32) -> torch.Tensor:
++    model.to(device).eval()
++    outs = []
++    for i0 in range(0, len(x), bs):
++        h = x[i0:i0 + bs].to(device).float()
++        for b in model.blocks[: j + 1]:
++            h = b(h)
++        outs.append(h.cpu())
++    model.cpu()
++    return torch.cat(outs)
++
++
++def replace_bad_filters_data(res: MO.GrowthResult, j: int, nfi: NewFilterInit, rcfg: dict):
++    """growth v3 (4f): acha filtros mortos (variância ~0) ou quase duplicados (|corr| > thr) nas RESPOSTAS do bloco
++    j (imagens de TREINO) e os troca por filtros SPiFiL ajustados no resíduo (complemento dos mantidos). NÃO
++    preserva a função: quem decide é o WiSE com âncora = pai (alpha=0 = pai) e kappa >= pai."""
++    from ga_search.backbones import morphisms_v3 as MV3
++    n_img = int(rcfg.get("n_images", 64))
++    x = nfi.gev.ev.svm_train_x[:n_img]
++    acts = _block_acts(res.child, j, x, nfi.gev.device)
++    C = int(res.child.spec.layers()[j].channels)
++    bad = MV3.bad_filters(acts, corr_thr=float(rcfg.get("corr_thr", 0.95)),
++                          var_rel_eps=float(rcfg.get("var_rel_eps", 1e-6)), n_conv=C)   # dense: só a conv
++    cap = max(1, int(float(rcfg.get("max_frac", 0.25)) * C))
++    dead = [int(c) for c in bad["dead"]]
++    dups = [d for d in bad["dup"] if int(d[0]) not in dead]
++    rows = (dead + [int(d[0]) for d in dups])[:cap]
++    merge = {int(d[0]): (int(d[1]), float(d[2]), float(d[3])) for d in dups if int(d[0]) in rows}
++    means = bad.get("mean") or {}
++    for c in dead:                            # canal morto ~ constante: entra só o termo b (= média) no consumidor
++        if c in rows and (c in means or str(c) in means):
++            merge[c] = (-1, 0.0, float(means.get(c, means.get(str(c)))))
++    info = {"layer": int(j), "n_images": int(x.shape[0]), "split": "train", "n_dead": len(dead), "n_dup": len(dups),
++            "rows": rows, "merge": {str(k): v for k, v in merge.items()}, "cap": cap,
++            "corr_thr": float(rcfg.get("corr_thr", 0.95)), "n_replaced": len(rows)}
++    if not rows:
++        info["note"] = "nenhum filtro ruim: replace vira no-op"
++        return res, info
++    keep = [c for c in range(C) if c not in set(rows)]
++    hook = nfi.conv_hook(res.child, residual_of=keep, tag="replace")
++    out = MV3.replace_filters(res, j, rows, merge=merge, new_filters=hook, seed=nfi.seed + 104729 + j)
++    return out, info
++
++
++def softhebb_new_filters(res: MO.GrowthResult, gev: GrowthEvaluator, scfg: dict, seed: int = 0,
++                         skip_from: Optional[MO.GrowthResult] = None) -> List[dict]:
++    """growth v3 (4e): refinamento SoftHebb (Journé et al. 2023; ``modehb.softhebb.fit_softhebb``) SÓ nas linhas
++    NOVAS e não nulas das convs densas (máscara toda False), sobre a entrada do bloco (prefixo congelado) nas
++    imagens de TREINO, ANTES do AE/SSL. Convs zeradas (deepen_residual_zero) ficam intactas; as colunas do
++    consumidor dos canais novos seguem 0 -> a preservação não muda (medida depois)."""
++    from ga_search.modehb.softhebb import fit_softhebb
++    model = res.child
++    n_img = int(scfg.get("n_images", 128))
++    x = gev.ev.svm_train_x[:n_img].float()
++    log = []
++    pre_sd = skip_from.child.state_dict() if skip_from is not None else None
++    torch.manual_seed(int(seed))
++    for j, blk in enumerate(model.blocks):
++        for name, mod in blk.named_modules():
++            if not (isinstance(mod, nn.Conv2d) and mod.groups == 1):
++                continue
++            key = f"blocks.{j}.{name}.weight"
++            m = res.masks.get(key)
++            if m is None:
++                continue
++            W = mod.weight.detach()
++            rows = [r for r in range(W.shape[0]) if not bool(m[r].any()) and bool(W[r].abs().sum() > 0)]
++            if pre_sd is not None and key in pre_sd and pre_sd[key].shape == W.shape:
++                rows = [r for r in rows if not torch.equal(pre_sd[key][r], W[r])]
++            if not rows:
++                continue
++            if name not in ("conv", "skip") and not name.startswith("conv.branches."):
++                continue
++            if name == "skip":
++                continue
++            tmp = nn.Conv2d(mod.in_channels, len(rows), mod.kernel_size, 1, mod.padding, bias=False)
++            with torch.no_grad():
++                tmp.weight.copy_(W[torch.as_tensor(rows)])
++            prefix = nn.Sequential(*model.blocks[:j]).eval()
++            pre_pool = None
++            if name.startswith("conv.branches.") and isinstance(blk.conv.branches[name.split(".")[2]], nn.Sequential):
++                continue
++            try:
++                info = fit_softhebb(tmp, [x[i:i + 32] for i in range(0, len(x), 32)], int(scfg.get("epochs", 1)),
++                                    float(scfg.get("lr", 0.01)), float(scfg.get("temperature", 1.0)), "cpu",
++                                    input_transform=(lambda t, p=prefix: p(t)) if j > 0 else None)
++                with torch.no_grad():
++                    mod.weight[torch.as_tensor(rows)] = tmp.weight.detach().to(mod.weight)
++                log.append({"param": key, "rows": len(rows), "status": "ok",
++                            **{k: v for k, v in (info or {}).items() if isinstance(v, (int, float, str, bool))}})
++            except Exception as exc:            # registrado; filtros SPiFiL ficam como estavam
++                log.append({"param": key, "rows": len(rows), "status": f"falhou: {type(exc).__name__}: {str(exc)[:120]}"})
++            del pre_pool
++    return log
++
++
+ # ═════════════════════════════════════════════════════════════════ 5. treino de um filho
+ def ssl_disabled(gcfg: dict) -> bool:
+     """``ssl: none`` (ou null/false): pula o SSL global; fica só o AE local nos blocos novos. Padrão: lejepa."""
+@@ -1097,12 +1551,39 @@
+         amp_kw = _amp_kw(ev)
+     lr = float(gcfg.get("lr", tr.get("lr_new", 1e-3)))
+     extra = {"resume": resume, "return_state": True} if (resume is not None or return_state) else {}
++    v3 = _v3(gcfg)                            # growth v3 (2)(3): opt-in; padrões = chamada histórica
++    if v3.get("aug") not in (None, "default"):
++        extra["aug_cfg"] = v3["aug"]
++    if v3.get("freeze_head_in_ssl"):
++        extra["freeze_head"] = True
++    if v3.get("vicreg_kwargs"):
++        extra["vicreg_kwargs"] = dict(v3["vicreg_kwargs"])
++    rec = ssl_recipe(gcfg)                    # receita do artigo (fiel/adaptação/pendente registrados)
++    lam = float(tr.get("sigreg_lambda", 0.05))
++    if rec is not None:
++        kw = dict(rec["kwargs"])
++        lam = float(kw.pop("sigreg_lambda", lam))
++        if gcfg.get("ssl") != "lejepa":
++            kw.pop("projector", None)
++        extra.update(kw)
++        if v3.get("aug") in (None, "default"):
++            extra["aug_cfg"] = "strong"
++    elif v3.get("weight_decay") is not None:  # correção do wd=0 efetivo (run_search não repassa): só na v3
++        extra["weight_decay"] = float(v3["weight_decay"])
+     with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
+             ElementProtect(model.head, _masks_under(masks, "head."), scale):
+         ssl_log = train_global_ssl(enc, model.head, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
+-                                   epochs, lr, lr, [], dev, _NullRun(), int(seed), float(tr.get("sigreg_lambda", 0.05)),
++                                   epochs, lr, lr, [], dev, _NullRun(), int(seed), lam,
+                                    max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
+-                                   projector=False, progress=f"[ssl] {epochs} ép.", **amp_kw, **extra)
++                                   progress=f"[ssl] {epochs} ép.", **{"projector": False, **amp_kw, **extra})
++    if rec is not None:
++        ssl_log["recipe"] = {k: rec[k] for k in ("fiel", "adaptacao", "pendente")}
++        ssl_log["recipe"]["kwargs"] = {k: v for k, v in rec["kwargs"].items()}
++        ssl_log["recipe"]["batch_size"] = int(gev.cfg["data"].get("batch_size", 64))
++        ssl_log["recipe"]["variant"] = rec.get("variant")
++        if int(gev.cfg["data"].get("batch_size", 64)) < 128:
++            ssl_log["recipe"]["adaptacao"] = list(ssl_log["recipe"]["adaptacao"]) + [
++                f"batch {int(gev.cfg['data'].get('batch_size', 64))} (< 128 do artigo; rank da cov <= N-1)"]
+     del enc
+     return ssl_log
+ 
+@@ -1119,26 +1600,29 @@
+     gev.reset_stamps()
+     # growth_fix7: leituras (GPU) em sequência, depois as SVMs em paralelo (score_many); mesma ordem e mesma
+     # regra de desempate do laço sequencial -> mesmo alpha, mesmos kappas.
+-    feats = []
++    feats, heads = [], []
+     for a in alphas:
+         _blend_into(model, anchor, trained, a)
++        gev._last_head = None
+         feats.append(gev.features(model, embed_batch_size=mem["embed_batch_size"]))
++        heads.append(gev._last_head)              # growth v3: cabeça so2 ajustada para este alpha (None = head)
+         _free(dev, mem["empty_cache"])
+     svs = gev.score_many(feats)
+     del feats
+-    best, kappas = None, {}
+-    for a, sv in zip(alphas, svs):
++    best, kappas, bi = None, {}, 0
++    for i, (a, sv) in enumerate(zip(alphas, svs)):
+         kappas[str(a)] = float(sv["kappa"])
+         if best is None or sv["quality"] > best[1]["quality"]:
+-            best = (a, sv)
++            best, bi = (a, sv), i
+     _blend_into(model, anchor, trained, best[0])
+     model.eval()
++    model.__dict__["so2_head"] = heads[bi]        # fora do state_dict (sidecar so2_head.pt)
+     return best, kappas
+ 
+ 
+ def train_child(gev: GrowthEvaluator, res: MO.GrowthResult, fidelity: int, gcfg: dict, seed: int,
+                 parent_kappa: float, *, epochs: Optional[Tuple[int, int]] = None,
+-                capture: Optional[dict] = None) -> Tuple[BB.Backbone, dict]:
++                capture: Optional[dict] = None, anchor_state: Optional[dict] = None) -> Tuple[BB.Backbone, dict]:
+     """AE local (blocos novos) -> LeJEPA+SIGReg -> WiSE (âncora = filho no passo 0 = pai) -> kappa ORIG-val.
+ 
+     growth_fix6: ``epochs=(ae, ssl)`` força a divisão (padrão: ``split_epochs(fidelity)``; o treino contínuo de
+@@ -1156,6 +1640,9 @@
+     scale = PROTECT_SCALE[gcfg["protect"]]
+     snap = _snapper(mem)
+     anchor = snap(model)
++    if anchor_state is not None:             # growth v3 (4f): op inexata -> âncora do WiSE = o PAI (função), alpha=0 = pai
++        anchor = {k: (v.detach().to("cpu", copy=True) if mem["wise_on_cpu"] else v.detach().to(dev, copy=True))
++                  for k, v in anchor_state.items()}
+     ae_ep, ssl_ep = split_epochs(fidelity, tr.get("ae_ssl_split", [1, 2])) if epochs is None \
+         else (int(epochs[0]), int(epochs[1]))
+     run = _NullRun()
+@@ -1167,7 +1654,7 @@
+         for p in model.parameters():           # o prefixo não pode carregar gradiente do AE anterior
+             p.grad = None
+         prefix = nn.Sequential(*model.blocks[:j]).to(dev).eval()
+-        prefix.out_channels = int(model.spec.input.in_channels) if j == 0 else int(model.spec.layers()[j - 1].channels)
++        prefix.out_channels = _block_in(model.spec, j)
+         blk = model.blocks[j]
+         # growth_mem2: checkpoint do bloco novo no AE local (mesmos parâmetros/ordem; BN/DBN 1x; bit a bit)
+         ae_blk = _CkptSequential(blk) if mem["grad_checkpoint"] else blk
+@@ -1197,7 +1684,7 @@
+                        anchor={k: v.detach().to("cpu", copy=True) for k, v in anchor.items()},
+                        masks={k: v.detach().to("cpu", copy=True) for k, v in masks.items()},
+                        ssl_state=ssl_log.pop("state", None), ae_epochs=int(ae_ep), ssl_epochs=int(ssl_ep),
+-                       ssl_finite=bool(ssl_finite), ssl_skipped=bool(ssl_off))
++                       ssl_finite=bool(ssl_finite), ssl_skipped=bool(ssl_off), anchor_is_parent=anchor_state is not None)
+     best, kappas = _wise_select(gev, model, anchor, trained, ssl_finite, gcfg, mem)
+     k = float(best[1]["kappa"])
+     out = {"kappa_val_orig": k, "quality": FV.quality_of(k), "wise_alpha": float(best[0]),
+@@ -1212,10 +1699,35 @@
+            "embed_precision": gev.embed_precision,
+            "mem": dict(mem),
+            "status": "ok"}
++    _v3_fields(gev, model, out, ssl_log, gcfg, anchor_is_parent=anchor_state is not None)
+     FV.check_decisions(out, gev.fitness_spec)     # toda decisão (alpha e kappa) pela régua ORIG-val
+     return model, out
+ 
+ 
++def _v3_fields(gev: GrowthEvaluator, model, out: dict, ssl_log: dict, gcfg: dict, anchor_is_parent: bool = False):
++    """growth v3: registro de readout/cabeça so2, SSL/reg efetivos, DA, cabeça congelada e aux GAP (nunca decide)."""
++    v3 = _v3(gcfg)
++    out["readout"] = getattr(gev, "readout", "head")
++    out["ssl_method"] = ssl_log.get("method", out.get("ssl"))
++    out["reg"] = None if out.get("ssl_skipped") else gcfg.get("reg", "sigreg")
++    out["aug"] = ssl_log.get("aug") or ({"preset": "historical"} if not out.get("ssl_skipped") else None)
++    out["aug_gene"] = v3.get("aug")
++    out["freeze_head_in_ssl"] = bool(ssl_log.get("freeze_head", False))
++    out["whiten_new"] = v3.get("whiten_new")
++    out["softhebb"] = bool(v3.get("softhebb"))
++    out["anchor"] = "parent_function (pré-op inexata)" if anchor_is_parent else "morphism_step0 (= pai em função)"
++    if ssl_log.get("recipe"):
++        out["ssl_recipe"] = ssl_log["recipe"]
++    out["spifil_images_per_class"] = gcfg.get("spifil_images_per_class")
++    out["spifil_n_superpixels"] = v3.get("spifil_n_superpixels")
++    if getattr(model, "so2_head", None) is not None:
++        out["so2_head_meta"] = model.so2_head.meta()
++        out["so2_head_sha256"] = model.so2_head.sha256()
++    ag = gev.aux_gap(model) if hasattr(gev, "aux_gap") else None
++    if ag is not None:
++        out["aux"]["gap"] = ag
++
++
+ # ═════════════════════════════════════════════════════════════════ 5b. growth_fix6: retomada f_low -> f_high
+ RESUME_FORMAT = "growth_resume/v1"
+ RESUME_FILE = "resume_state.pt"
+@@ -1243,7 +1755,7 @@
+     payload = {"format": RESUME_FORMAT, "trained": capture["trained"], "anchor": capture["anchor"],
+                "masks": capture["masks"], "ssl_state": ssl_state, "ae_epochs": int(capture["ae_epochs"]),
+                "ssl_epochs": int(capture["ssl_epochs"]), "ssl_finite": bool(capture.get("ssl_finite", True)),
+-               "meta": _jsonable(meta)}
++               "anchor_is_parent": bool(capture.get("anchor_is_parent", False)), "meta": _jsonable(meta)}
+     tmp = path.with_name(path.name + f".tmp{os.getpid()}")
+     with tmp.open("wb") as f:
+         torch.save(payload, f)
+@@ -1313,6 +1825,7 @@
+                       "restarted (AdamW não salvo em f_low)", "optimizer_resumed": opt_resumed,
+                       "rng_resumed": rng_resumed, "ae_repeated": False},
+            "status": "ok"}
++    _v3_fields(gev, model, out, ssl_log, gcfg, anchor_is_parent=bool(state.get("anchor_is_parent", False)))
+     FV.check_decisions(out, gev.fitness_spec)
+     return model, out
+ 
+@@ -1332,7 +1845,14 @@
+     aceitação real: kappa_filho >= kappa_pai_re-pontuado (mesma leitura, mesmo processo) + delta."""
+     if r.get("status") != "ok":
+         return "failed", False
+-    if float(r.get("wise_alpha", 0.0)) == 0.0 and r.get("preservation_verdict") == "exact":
++    pk0 = r.get("kappa_parent_rescored")
++    same = pk0 is None or r.get("kappa_val_orig") is None or \
++        math.isclose(float(r["kappa_val_orig"]), float(pk0), abs_tol=1e-12)
++    # growth v3: com a cabeça so2, alpha=0 + preservação exata do EMBEDDING antigo não implica a mesma leitura
++    # (canais novos no último bloco entram na so2): só é "o pai" se o kappa também é o do pai; senão vale a regra.
++    if str(r.get("readout", "head")) == "head":
++        same = True                              # histórico (fix4): alpha=0 + exato = o pai, mesmo com ruído no kappa
++    if float(r.get("wise_alpha", 0.0)) == 0.0 and r.get("preservation_verdict") == "exact" and same:
+         return "adopted_as_parent", False
+     pk = r.get("kappa_parent_rescored")
+     if pk is None:                              # resultado anterior ao fix4 (não deveria ser adotado: fitness_sig)
+@@ -1497,7 +2017,9 @@
+                 if model.spec.cost.params_total > HARD_CAP:
+                     continue
+                 self.gev.reset_stamps()
++                self.gev._last_head = None
+                 sv = self.gev.score(model)
++                model.__dict__["so2_head"] = self.gev._last_head
+                 ck = BB_save(model, ndir / "backbone.pt")
+                 rec = {"status": "ok", "node_id": node, "band": band_of(model.spec.cost.params_total),
+                        "kappa_val_orig": float(sv["kappa"]), "quality": FV.quality_of(sv["kappa"]),
+@@ -1506,7 +2028,11 @@
+                        "flops_2mac": int(model.spec.cost.flops), "flops": int(model.spec.cost.macs),
+                        "checkpoint": ck["path"], "checkpoint_sha256": ck["file_sha256"], "arch": model.spec.id,
+                        "source": src, "info": _jsonable(info), "cand_key": ckey, "fitness_sig": self.gev.fitness_sig,
+-                       "fid": 0, "parent": None, "theta": None}
++                       "fid": 0, "parent": None, "theta": None, "readout": getattr(self.gev, "readout", "head")}
++                _save_so2(model, ndir, rec)
++                ag = self.gev.aux_gap(model)
++                if ag is not None:
++                    rec["aux"] = {"gap": ag}
+                 I.atomic_write_json(ndir / "result.json", rec)
+             self._lineage({"cand_key": rec["cand_key"], "node_id": node, "parent": None, "op": "seed",
+                            "source": src.get("label"), "kappa_val_orig": rec["kappa_val_orig"], "delta_kappa": None,
+@@ -1530,7 +2056,7 @@
+ 
+     # ---- um job (com OOM 10x300 s e adoção)
+     def _job(self, parent: dict, ops: List[dict], theta, fid: int, node: str, seed: int, ckey: str,
+-             resume_from: Optional[dict] = None) -> dict:
++             resume_from: Optional[dict] = None, genes: Optional[dict] = None) -> dict:
+         ndir = self.out / "nodes" / node / f"f{fid}"
+         done = I.read_json(ndir / "result.json")
+         if done is not None and I.adoptable(done, ckey=ckey, fitness_sig=self.gev.fitness_sig) is None:
+@@ -1540,8 +2066,8 @@
+         retries, sleep_s = int(oc.get("retries", 10)), float(oc.get("sleep_s", 300))
+         for attempt in range(retries + 1):
+             try:
+-                out = (self._run_job(parent, ops, theta, fid, node, seed, ckey, ndir) if resume_from is None
+-                       else self._run_resume_job(parent, resume_from, fid, node, seed, ckey, ndir))
++                out = (self._run_job(parent, ops, theta, fid, node, seed, ckey, ndir, genes=genes) if resume_from is None
++                       else self._run_resume_job(parent, resume_from, fid, node, seed, ckey, ndir, genes=genes))
+                 if os.environ.get("GROWTH_CRASH") == f"{node}:f{fid}":      # SÓ TESTE: kill -9 real
+                     import signal
+                     os.kill(os.getpid(), signal.SIGKILL)
+@@ -1549,6 +2075,10 @@
+             except PreservationViolated as exc:
+                 rec = {"status": "failed", "reason": "preservation", "error": str(exc)}
+                 break
++            except SpifilFallback as exc:            # growth v3: init SEMPRE SPiFiL
++                rec = {"status": "failed", "reason": "spifil_fallback", "decision": "infeasible_spifil",
++                       "error": str(exc)}
++                break
+             except FV.NonFiniteFitness as exc:
+                 rec = {"status": "failed", "reason": "nan", "error": str(exc)}
+                 break
+@@ -1577,15 +2107,16 @@
+                        "error": f"{type(exc).__name__}: {exc}", "traceback": traceback.format_exc()[-4000:]}
+                 break
+         rec.update(node_id=node, cand_key=ckey, fitness_sig=self.gev.fitness_sig, fid=fid, parent=parent["node_id"],
+-                   ops=ops, theta=theta, kappa_val_orig=None)
++                   ops=ops, theta=theta, kappa_val_orig=None, genes=genes or {})
+         if resume_from is not None:
+             rec["promotion"] = {"mode": "resume", "from_fid": resume_from.get("fid"),
+                                 "from_cand_key": resume_from.get("cand_key")}
+         I.atomic_write_json(ndir / "result.json", rec)
+         return rec
+ 
+-    def _run_job(self, parent, ops, theta, fid, node, seed, ckey, ndir) -> dict:
++    def _run_job(self, parent, ops, theta, fid, node, seed, ckey, ndir, genes: Optional[dict] = None) -> dict:
+         t0 = time.time()
++        g = apply_genes(self.g, genes or {})      # growth v3: genes do filho (ssl/aug/whiten/softhebb)
+         dev = self.gev.device
+         if dev.type == "cuda":
+             torch.cuda.empty_cache()
+@@ -1596,11 +2127,33 @@
+         parent_rescored = float(psv["kappa"])
+         pmodel.cpu()                       # o score move para a GPU; realize_plan monta o filho na CPU
+         nfi = NewFilterInit(self.gev, self.g["init_method"], self.g.get("init_config") or {},
+-                            int(self.g.get("spifil_images_per_class", 4)), seed)
+-        res = realize_plan(pmodel, ops, nfi)
++                            int(g.get("spifil_images_per_class", 4)), seed)
++        if _v3(g).get("spifil_n_superpixels"):
++            nfi.spifil_over["n_superpixels"] = int(_v3(g)["spifil_n_superpixels"])
++        res = realize_plan(pmodel, ops, nfi, g)
++        if _v3(g).get("spifil_strict"):
++            bad = [r for r in nfi.log if r.get("fallback") or int(r.get("n_pytorch", 0) or 0) > 0]
++            if bad:
++                raise SpifilFallback(f"filtros novos sem SPiFiL: {json.dumps(bad, default=str)[:600]}")
+         px = self.gev.ev.val_x[: int(self.g.get("preservation_images", 8))].float()
+-        gs = MO.finalize(res, px, data={"split": "validation", "n": int(px.shape[0])},
+-                         tol=float(self.g.get("preservation_tol", 1e-5)), protect=self.g["protect"])
++        pre = getattr(res, "v3_pre_replace", None)
++        anchor_state, v3_rep = None, None
++        if pre is not None:                      # growth v3 (4f): preservação medida no plano EXATO (pré-replace);
++            gs_pre = MO.finalize(pre, px, data={"split": "validation", "n": int(px.shape[0])},   # o filho real
++                                 tol=float(self.g.get("preservation_tol", 1e-5)), protect=self.g["protect"])  # muda a
++            if gs_pre.preservation.verdict == "violated":                                          # função (WiSE)
++                raise PreservationViolated(f"rel-L2 emb (pré-replace) {gs_pre.preservation.emb_rel_l2}")
++            gs = MO.finalize(res, px, data={"split": "validation", "n": int(px.shape[0])},
++                             tol=float(self.g.get("preservation_tol", 1e-5)), protect=self.g["protect"])
++            v3_rep = {"function_preserving": False, "replace": getattr(res, "v3_replace", None),
++                      "child_vs_parent_rel_l2_emb": gs.preservation.emb_rel_l2,
++                      "child_vs_parent_verdict": gs.preservation.verdict}
++            gs.preservation = gs_pre.preservation
++            anchor_state = {k: v.detach().cpu().clone() for k, v in pre.child.state_dict().items()}
++            del pre
++        else:
++            gs = MO.finalize(res, px, data={"split": "validation", "n": int(px.shape[0])},
++                             tol=float(self.g.get("preservation_tol", 1e-5)), protect=self.g["protect"])
+         pres = asdict(gs.preservation)
+         if gs.preservation.verdict == "violated":
+             raise PreservationViolated(f"rel-L2 emb {gs.preservation.emb_rel_l2}")
+@@ -1611,9 +2164,17 @@
+         _free(dev, _mem(self.g)["empty_cache"])
+         promo = _promo(self.g)
+         want_resume = (int(fid) == int(self.g["fid_low"]) and int(self.g["fid_high"]) != int(self.g["fid_low"])
+-                       and promo["mode"] == "resume" and not ssl_disabled(self.g))
++                       and promo["mode"] == "resume" and not ssl_disabled(g))
+         cap = {} if want_resume else None
+-        model, out = train_child(self.gev, res, fid, self.g, seed, parent_rescored, capture=cap)
++        sh_log, rep_log = getattr(res, "v3_softhebb", None), getattr(res, "v3_replace", None)
++        model, out = train_child(self.gev, res, fid, g, seed, parent_rescored, capture=cap, anchor_state=anchor_state)
++        out.update(genes=genes or {}, softhebb_log=sh_log, replace_log=rep_log,
++                   spifil_data={"images_per_class_requested": g.get("spifil_images_per_class"),
++                                "images_per_class_effective": nfi.ipc_effective, "n_images": nfi.n_images,
++                                "split": "train (pool estratificado semeado)",
++                                "n_superpixels": nfi.spifil_over.get("n_superpixels", "padrão do cfg")})
++        if v3_rep is not None:
++            out["v3_replace"] = v3_rep
+         if want_resume:                          # growth_fix6: pesos PRÉ-WiSE + AdamW/RNG para a promoção
+             info = save_resume_state(ndir / RESUME_FILE, cap, save_optimizer=bool(promo["save_optimizer"]),
+                                      meta={"node_id": node, "fid": int(fid), "cand_key": ckey, "seed": int(seed),
+@@ -1625,6 +2186,7 @@
+         model.spec.provenance.wise_alpha = out["wise_alpha"]
+         model.spec.provenance.fidelity_epochs = int(fid)
+         ck = BB_save(model, ndir / "backbone.pt")
++        _save_so2(model, ndir, out)
+         (ndir / "growth_spec.json").write_text(gs.to_json())
+         peak = (torch.cuda.max_memory_reserved(dev) / 1e9) if dev.type == "cuda" else None
+         out.update(node_id=node, cand_key=ckey, fitness_sig=self.gev.fitness_sig, fid=int(fid),
+@@ -1643,7 +2205,7 @@
+         I.atomic_write_json(ndir / "result.json", _jsonable(out))
+         return out
+ 
+-    def _run_resume_job(self, parent, r_low, fid, node, seed, ckey, ndir) -> dict:
++    def _run_resume_job(self, parent, r_low, fid, node, seed, ckey, ndir, genes: Optional[dict] = None) -> dict:
+         """growth_fix6: promoção por RETOMADA. Carrega o filho de f_low (pesos PRÉ-WiSE + AdamW/RNG), treina as
+         épocas restantes, WiSE com a âncora = morfismo, e fica com o melhor de f_low/f_high pela ORIG-val."""
+         t0 = time.time()
+@@ -1663,12 +2225,15 @@
+         model.load_state_dict(state["trained"])                                 # pesos treinados PRÉ-WiSE
+         fl = int(r_low["fid"])
+         n_extra = resume_extra_epochs(fl, int(fid), self.g, self.cfg.get("train"))
+-        model, out = continue_child(self.gev, model, state, n_extra, self.g, seed, parent_rescored)
++        g = apply_genes(self.g, genes or {})
++        model, out = continue_child(self.gev, model, state, n_extra, g, seed, parent_rescored)
++        out["genes"] = genes or {}
+         del state
+         model.spec.provenance.parent = parent["node_id"]
+         model.spec.provenance.wise_alpha = out["wise_alpha"]
+         model.spec.provenance.fidelity_epochs = int(fid)
+         ck_high = BB_save(model, ndir / "backbone.pt")
++        _save_so2(model, ndir, out)
+         low_dir = Path(r_low["checkpoint"]).parent
+         if (low_dir / "growth_spec.json").exists():
+             (ndir / "growth_spec.json").write_text((low_dir / "growth_spec.json").read_text())
+@@ -1690,6 +2255,9 @@
+         else:                                    # f_low venceu pela val: o nó fica com o checkpoint de f_low
+             ck = {"path": r_low["checkpoint"], "file_sha256": r_low["checkpoint_sha256"]}
+             out.update(kappa_val_orig=k_low, quality=FV.quality_of(k_low), wise_alpha=a_low)
++            for k in ("so2_head_sha256", "so2_head_meta", "so2_head"):       # growth v3: cabeça do f_low
++                if r_low.get(k) is not None:
++                    out[k] = r_low[k]
+         peak = (torch.cuda.max_memory_reserved(dev) / 1e9) if dev.type == "cuda" else None
+         out.update(node_id=node, cand_key=ckey, fitness_sig=self.gev.fitness_sig, fid=int(fid),
+                    parent=parent["node_id"], parent_checkpoint_sha256=parent["checkpoint_sha256"], ops=r_low["ops"],
+@@ -1716,7 +2284,7 @@
+         why = None
+         if promo["mode"] != "resume":
+             why = "promotion.mode=retrain"
+-        elif ssl_disabled(self.g):
++        elif ssl_disabled(apply_genes(self.g, meta.get("genes") or {})):
+             why = "ssl: none (não há SSL para continuar)"
+         elif not r_low.get("resume_state"):
+             why = "f_low sem resume_state (resultado anterior ao fix6)"
+@@ -1728,10 +2296,10 @@
+                                   "format": RESUME_FORMAT}, meta["seed"], {"kind": "resume", "lkey": meta["lkey"]},
+                                  self.gev.fitness_sig)
+             return self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
+-                             I.cand_key(rkey, fh), resume_from=r_low)
++                             I.cand_key(rkey, fh), resume_from=r_low, **_gk(meta.get("genes")))
+         print(f"[growth] {meta['node']}: promoção f{fl}->f{fh} REFEITA do morfismo ({why})", flush=True)
+         r = self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
+-                      I.cand_key(meta["lkey"], fh))
++                      I.cand_key(meta["lkey"], fh), **_gk(meta.get("genes")))
+         r = dict(r)
+         r["promotion"] = {**(r.get("promotion") or {}), "mode": "retrain", "reason": why}
+         r.setdefault("selected_fid", fh)
+@@ -1774,8 +2342,9 @@
+         pseeds = [_h({"tag": tag, "i": i, "plan": True}) % (2 ** 31 - 1) for i in range(nch)]
+         pm = [(m, BB_load(m["checkpoint"], m["checkpoint_sha256"])[0]) for m in parents]
+         mctx = mem_ctx_from(self.cfg, self.g, self.gev.device)
++        genes_l = [child_genes(self.g, tag, i, int(self.cfg["seed"])) for i in range(nch)]   # growth v3: genes
+         plans = plan_children(pm, target, nch, thetas, pseeds, self.g, int(self.g.get("hard_cap", HARD_CAP)),
+-                              mem_ctx=mctx)
++                              mem_ctx=mctx, gcfgs=[apply_genes(self.g, gg) for gg in genes_l])
+         del pm
+         for i, pl in enumerate(plans):
+             parent, ops, theta = pl["parent"], pl["ops"], pl["theta"]
+@@ -1792,6 +2361,9 @@
+                                "mem_estimate": _jsonable(inf["mem_estimate"]), "band": target})
+             origin = {"kind": "inherit", "parent_sha256": parent["checkpoint_sha256"], "protect": self.g["protect"],
+                       "init": self.g["init_method"], "init_config": self.g.get("init_config") or {}}
++            genes = genes_l[i]
++            if genes:                                # growth v3: os genes entram na cand_key (sem genes: chave histórica)
++                origin["genes"] = genes
+             lkey = I.lineage_key({"ops": ops, "theta": theta}, seed, origin, self.gev.fitness_sig)
+             if ops is None:
+                 print(f"[growth] {node}: {pl['reason'][:500]}", flush=True)
+@@ -1799,13 +2371,26 @@
+                                "op": None, "accepted": False, "decision": "no_plan", "reason": pl["reason"],
+                                "band": target})
+                 continue
+-            r = self._job(parent, ops, theta, fl, node, seed, I.cand_key(lkey, fl))
++            r = self._job(parent, ops, theta, fl, node, seed, I.cand_key(lkey, fl), **_gk(genes))
+             decision, ok = decide(r, self.g["delta"], self.g.get("require_improvement", False))
+             self._lineage(self._lin_rec(r, parent, ops, fl, ok, final=(fl == fh) or decision == "adopted_as_parent",
+                                         decision=decision, family=pl.get("family")))
+             if ok:
+                 low.append((r, {"parent": parent, "ops": ops, "theta": theta, "seed": seed, "node": node, "lkey": lkey,
+-                                "family": pl.get("family")}))
++                                "family": pl.get("family"), "genes": genes}))
++            self._save()
++        if _v3(self.g).get("control_no_grow"):     # growth v3: controle LEMONADE (treinar mais SEM crescer)
++            for p_i, parent in enumerate(parents):
++                node = f"{target}g{gen}ctl{p_i:02d}"
++                seed = _h({"tag": tag, "control": p_i, "parent": parent["checkpoint_sha256"]}) % (2 ** 31 - 1)
++                genes = genes_l[p_i % len(genes_l)] if genes_l else {}
++                origin = {"kind": "control_no_grow", "parent_sha256": parent["checkpoint_sha256"], "genes": genes}
++                lkey = I.lineage_key({"ops": [], "control": True}, seed, origin, self.gev.fitness_sig)
++                r = self._job(parent, [], None, fl, node, seed, I.cand_key(lkey, fl), genes=genes)
++                rec = self._lin_rec(r, parent, [], fl, False, final=True, decision="control_no_grow",
++                                    family="control_no_grow")
++                rec.update(op="control_no_grow", accepted=False, used_for_selection="never (controle)")
++                self._lineage(rec)
+             self._save()
+         # promoção: 1/eta melhores aceitos em fid_low (Pareto kappa x FLOPs) -> fid_high
+         n_prom = max(1, int(math.ceil(len(low) / float(self.g.get("eta", 3))))) if low else 0
+@@ -1835,6 +2420,53 @@
+         self.state["gens_done"].append(tag)
+         self._save()
+ 
++    # ---- growth v3 (6): saturação -> o melhor membro da faixa anterior é ADOTADO; curva kappa x faixa
++    def _saturate(self, band: str, target: str) -> None:
++        if not (_v3(self.g).get("saturation") or {}).get("adopt_parent"):
++            return
++        tag = f"saturate:{band}->{target}"
++        if tag in self.state.setdefault("saturation_done", []):
++            return
++        src = pareto_order(list(self.state["members"][band]))[:1]
++        if src:
++            best_src = max(self.state["members"][band], key=lambda m: (m["kappa_val_orig"], -m["params"]))
++            tgt = self.state["members"][target]
++            best_t = max((m["kappa_val_orig"] for m in tgt), default=None)
++            if best_t is None or best_t < best_src["kappa_val_orig"]:
++                m = {k: best_src[k] for k in ("band", "kappa_val_orig", "params", "flops_2mac", "checkpoint",
++                                              "checkpoint_sha256", "fid", "parent", "theta")}
++                m.update(node_id=f"{target}_adopt_{best_src['node_id']}", band=target, adopted_from=best_src["node_id"],
++                         adopted_as_parent=True, parent=best_src["node_id"],
++                         reason=("faixa sem filho aceito" if best_t is None else
++                                 f"melhor da faixa {best_t:.4f} < melhor de {band} {best_src['kappa_val_orig']:.4f}"))
++                if not any(x["node_id"] == m["node_id"] for x in tgt):
++                    tgt.append(m)
++                ikey = I.cand_key(I.lineage_key({"adopt": best_src["node_id"], "target": target}, 0,
++                                                {"kind": "saturation"}, self.gev.fitness_sig), 0)
++                self._lineage({"cand_key": ikey, "node_id": m["node_id"], "parent": best_src["node_id"],
++                               "op": "adopt_parent", "decision": "adopted_parent_saturation", "accepted": True,
++                               "kappa_val_orig": m["kappa_val_orig"], "params": m["params"], "band": target,
++                               "reason": m["reason"], "delta_kappa": 0.0})
++                print(f"[growth] saturação {band}->{target}: {best_src['node_id']} adotado ({m['reason']})", flush=True)
++        self.state["saturation_done"].append(tag)
++        self._save()
++
++    def _curve(self) -> List[dict]:
++        """Curva kappa ORIG-val x faixa (melhor membro por faixa; adotados marcados). Gravada em kappa_band_curve.json."""
++        rows = []
++        for b in BANDS:
++            mem = self.state["members"].get(b) or []
++            if not mem:
++                rows.append({"band": b, "best_node": None, "kappa_val_orig": None, "n_members": 0})
++                continue
++            best = max(mem, key=lambda m: (m["kappa_val_orig"], -m["params"]))
++            rows.append({"band": b, "best_node": best["node_id"], "kappa_val_orig": best["kappa_val_orig"],
++                         "params": best["params"], "adopted": bool(best.get("adopted_as_parent", False)),
++                         "n_members": len(mem), "readout": getattr(self.gev, "readout", "head")})
++        I.atomic_write_json(self.out / "kappa_band_curve.json", {"curve": rows, "fitness_sig": self.gev.fitness_sig,
++                                                                 "selection": "validation_only"})
++        return rows
++
+     def _lin_rec(self, r: dict, parent: dict, ops, fid, ok, final, decision=None, family=None) -> dict:
+         pk = r.get("kappa_parent_rescored")
+         return {"cand_key": r.get("cand_key"), "node_id": r.get("node_id"), "parent": parent["node_id"],
+@@ -1851,6 +2483,12 @@
+                 "preservation_verdict": r.get("preservation_verdict"), "params": r.get("params"),
+                 "flops_2mac": r.get("flops_2mac"), "band": r.get("band"), "accepted": bool(ok), "final": bool(final),
+                 "adopted": bool(r.get("adopted", False)), "used_for_selection": "validation_only",
++                # growth v3: genes, leitura, DA, SSL efetivo, aux GAP, replace
++                **({k: r.get(k) for k in ("genes", "readout", "ssl", "ssl_method", "reg", "aug", "aug_gene",
++                                          "whiten_new", "softhebb", "anchor", "so2_head_sha256", "v3_replace")
++                    if r.get(k) is not None}),
++                **({"kappa_val_gap_aux": ((r.get("aux") or {}).get("gap") or {}).get("kappa_val_gap")}
++                   if (r.get("aux") or {}).get("gap") else {}),
+                 # growth_fix6: promoção por retomada (alpha e kappa de f_low e f_high; qual ficou, pela val)
+                 **({k: r.get(k) for k in ("selected_fid", "kappa_val_orig_f_low", "wise_alpha_f_low",
+                                           "kappa_val_orig_f_high", "wise_alpha_f_high", "promotion",
+@@ -1869,14 +2507,34 @@
+             for k in range(b0, b1):
+                 for gen in range(int(self.g["generations"])):
+                     self._generation(BANDS[k], gen)
++                self._saturate(BANDS[k], BANDS[k + 1])       # growth v3 (6)
+                 self._run_test_channel()
++            curve = self._curve()
+             summary = {"best_by_band": {b: (pareto_order(self.state["members"][b])[:1] or [None])[0] for b in BANDS},
+                        "members": self.state["members"], "fitness_sig": self.gev.fitness_sig,
++                       "kappa_band_curve": curve, "readout": getattr(self.gev, "readout", "head"),
+                        "selection": "kappa ORIG-val (teste nunca lido pelo controlador)"}
+             I.atomic_write_json(self.out / "summary.json", summary)
+             return summary
+ 
+ 
++def _gk(genes: Optional[dict]) -> dict:
++    """kwarg ``genes`` só quando há genes (sem genes: a chamada histórica de ``_job``)."""
++    return {"genes": genes} if genes else {}
++
++
++def _save_so2(model, ndir: Path, out: dict) -> None:
++    """growth v3 (1): a cabeça de 2ª ordem fixa ajustada (buffers mu/V; PCA só no treino) ao lado do checkpoint."""
++    h = getattr(model, "so2_head", None)
++    if h is None:
++        return
++    p = Path(ndir) / "so2_head.pt"
++    p.parent.mkdir(parents=True, exist_ok=True)
++    torch.save(h.payload(), p)
++    out["so2_head"] = str(p)
++    out["so2_head_sha256"] = h.sha256()
++
++
+ # ═════════════════════════════════════════════════════════════════ checkpoint helpers
+ def BB_save(model: BB.Backbone, path) -> dict:
+     from ga_search.backbones import checkpoint as CK
+@@ -1965,7 +2623,7 @@
+         pass
+     out = Path(cfg["output_dir"])
+     out.mkdir(parents=True, exist_ok=True)
+-    gev = GrowthEvaluator(cfg, out / "eval", g.get("debug_train"), g.get("debug_val"))
++    gev = GrowthEvaluator(cfg, out / "eval", g.get("debug_train"), g.get("debug_val"), v3=g.get("v3"))
+     chain = GrowthChain(cfg, g, gev, out, allow_drift=a.allow_drift)
+     try:
+         s = chain.run()
+diff -ruN a/ga_search/hmodehb/growth_test_channel.py b/ga_search/hmodehb/growth_test_channel.py
+--- a/ga_search/hmodehb/growth_test_channel.py	2026-11-17 21:36:25.737903156 -0300
++++ b/ga_search/hmodehb/growth_test_channel.py	2026-11-17 21:36:25.738903169 -0300
+@@ -66,7 +66,8 @@
+     from ga_search.hmodehb.integrity import file_sha256
+     from ga_search.modehb.supervised_fitness import svm_fitness
+     from ga_search.modehb.svm_on_demand import _test_loader
+-    gev = GrowthEvaluator(cfg, out / "eval_test_channel", g.get("debug_train"), g.get("debug_val"))
++    gev = GrowthEvaluator(cfg, out / "eval_test_channel", g.get("debug_train"), g.get("debug_val"), v3=g.get("v3"))
++    v3 = (g.get("v3") or {})
+     ev = gev.ev
+     xs, ys = [], []
+     for x, y, *_ in _test_loader(cfg["data"]):
+@@ -78,17 +79,46 @@
+         model, spec = load_backbone(r["checkpoint"], expected_sha256=r["checkpoint_sha256"])
+         model.to(ev.device)
+         enc = nn.Sequential(*model.blocks)
+-        with fp32_reading(ev):               # growth_fix4: mesma leitura fp32 do controlador
+-            tr = ev._embed(enc, model.head, ev.svm_train_x, tta=1, readout="head").numpy()
+-            te = ev._embed(enc, model.head, tx, tta=1, readout="head").numpy()
+-        sv = svm_fitness(tr, ev.svm_train_y.numpy(), te, ty, C=100.0, scaler="none", whiten="none",
+-                         kappa_weight=1.0, max_train=ev.sv2["max_train"], seed=ev.seed)
++        svm = lambda a, b: svm_fitness(a, ev.svm_train_y.numpy(), b, ty, C=100.0, scaler="none", whiten="none",  # noqa
++                                       kappa_weight=1.0, max_train=ev.sv2["max_train"], seed=ev.seed)
++        extra = {}
++        if gev.readout != "head":            # growth v3 (1)(5): cabeça de 2ª ordem (PCA só no treino) + TTA8 + GAP aux
++            from ga_search.hmodehb.so2_head import So2Head
++            saved = Path(r["checkpoint"]).parent / "so2_head.pt"
++            sh = So2Head.from_payload(torch.load(saved, weights_only=False)) if saved.exists() else None
++            # a cabeça SALVA com o modelo (a que a seleção usou); sem arquivo: re-ajuste no treino (registrado)
++            head, (tr, te), gaps = gev.so2_read(model, [tx], tta=1, gap=True, head=sh)
++            sv = svm(tr.numpy(), te.numpy())
++            extra.update(readout=gev.readout, so2_head_sha256=head.sha256(),
++                         so2_head_source="saved (so2_head.pt)" if sh is not None else "refit_train")
++            if sh is not None:                   # diagnóstico: re-ajuste neste processo (só arredondamento)
++                rh, _, _ = gev.so2_read(model, [], tta=1)
++                extra["so2_refit_max_abs_diff_V"] = float((rh.V - sh.V).abs().max()) if rh.V.shape == sh.V.shape else None
++            sv_g = svm(gaps[0].numpy(), gaps[1].numpy())
++            extra.update(kappa_test_gap=float(sv_g["kappa"]), macro_f1_test_gap=float(sv_g["macro_f1"]))
++            if v3.get("test_tta8", False):
++                _h8, (tr8, te8), _ = gev.so2_read(model, [tx], tta=8, head=sh)
++                sv8 = svm(tr8.numpy(), te8.numpy())
++                extra.update(kappa_test_tta8=float(sv8["kappa"]), macro_f1_test_tta8=float(sv8["macro_f1"]),
++                             tta8="média de z sobre as 8 vistas rot/flip (treino e teste; PCA da vista identidade)")
++            te = te.numpy()
++        else:
++            with fp32_reading(ev):               # growth_fix4: mesma leitura fp32 do controlador
++                tr = ev._embed(enc, model.head, ev.svm_train_x, tta=1, readout="head").numpy()
++                te = ev._embed(enc, model.head, tx, tta=1, readout="head").numpy()
++            sv = svm(tr, te)
++            if v3.get("test_tta8", False):
++                with fp32_reading(ev):
++                    tr8 = ev._embed(enc, model.head, ev.svm_train_x, tta=8, readout="head").numpy()
++                    te8 = ev._embed(enc, model.head, tx, tta=8, readout="head").numpy()
++                sv8 = svm(tr8, te8)
++                extra.update(kappa_test_tta8=float(sv8["kappa"]), macro_f1_test_tta8=float(sv8["macro_f1"]))
+         rec = {"node_id": r["node_id"], "checkpoint": r["checkpoint"], "checkpoint_sha256": r["checkpoint_sha256"],
+                "band": r["band"], "fid": r["fid"], "regua": "ORIG_full" if len(ev.svm_train_y) < 4000 else "ORIG_sub4000",
+                "svm_protocol": "scaler=none;kernel=linear;C=100;ovo;max_iter=-1", "split_eval": "test",
+                "kappa_test": float(sv["kappa"]), "macro_f1_test": float(sv["macro_f1"]), "n_test": int(len(ty)),
+                "embed_dim": int(te.shape[1]), "embed_precision": gev.embed_precision, "params": int(spec.cost.params_total), "flops_2mac": int(spec.cost.flops),
+-               "never_feeds_fitness": True, "used_for_selection": False, "time": time.time()}
++               "never_feeds_fitness": True, "used_for_selection": False, "time": time.time(), **extra}
+         with (out / TEST_FILE).open("a") as f:
+             f.write(json.dumps(rec) + "\n")
+             f.flush()
+diff -ruN a/ga_search/hmodehb/so2_head.py b/ga_search/hmodehb/so2_head.py
+--- a/ga_search/hmodehb/so2_head.py	1969-12-31 21:00:00.000000000 -0300
++++ b/ga_search/hmodehb/so2_head.py	2026-11-17 21:36:25.743903230 -0300
+@@ -0,0 +1,214 @@
++"""growth v3 (1): cabeça de 2ª ordem FIXA (sem parâmetros treináveis) para a fitness e o teste.
++
++Mesma conta de ``research/spifil_b0b4/readout_x/eval_backbone_head.py`` (cabeça ``so2_4096_pca``):
++
++  z = Norm(pad_D([mu(Y), sigma(Y), triu(sqrtm(Cov(Y)))])),  Y = (X - mu_pca) @ V,
++
++X = mapa do ÚLTIMO bloco como (posições x canais), V = os k primeiros componentes da PCA dos canais
++ajustada SÓ no TREINO (pixels amostrados com semente por imagem: ``PixelMoments``, n_px=64, semente
++PCA_SEED + índice do bloco), D = 4096 -> k = 88 (88+88+88*89/2 = 4092 + 4 zeros); Norm = signed-sqrt + L2.
++Momentos / cov / sqrtm em fp64 na CPU (eigh). A SVM original (core.svm.fit_svm, C=100, sem scaler) roda
++sobre z. Nada é ajustado em validação/teste.
++
++A cabeça "faz parte do modelo": é um ``nn.Module`` só com BUFFERS (mu, V), ajustado por backbone (cada
++alpha do WiSE tem o seu) e gravado ao lado do checkpoint (``so2_head.pt``, sha256 no result.json).
++O SSL nunca a vê (não tem parâmetros).
++"""
++from __future__ import annotations
++
++import hashlib
++import io
++import math
++from typing import Iterable, Optional, Sequence
++
++import torch
++from torch import nn
++
++SO2_K = {1280: 48, 4096: 88}
++PCA_SEED = 0
++READOUT = "so2_4096_pca"
++VERSION = "so2_head/v1"
++
++
++def so2_dim(k: int) -> int:
++    return 2 * k + k * (k + 1) // 2
++
++
++def k_for(D: int) -> int:
++    if D in SO2_K:
++        return SO2_K[D]
++    k = 1
++    while so2_dim(k + 1) <= D:
++        k += 1
++    return k
++
++
++def pad_to(z, D: int):
++    if z.shape[1] > D:
++        raise ValueError(f"vetor {z.shape[1]} > {D}")
++    return torch.cat([z, z.new_zeros(z.shape[0], D - z.shape[1])], 1)
++
++
++def norm_ssqrt_l2(z):
++    z = z.sign() * z.abs().sqrt()
++    return z / z.norm(dim=1, keepdim=True).clamp_min(1e-12)
++
++
++def _sqrtm_psd(C):
++    C = (C + C.transpose(1, 2)) / 2
++    w, U = torch.linalg.eigh(C)
++    return (U * w.clamp(min=0).sqrt()[:, None, :]) @ U.transpose(1, 2)
++
++
++def _flat(x):
++    """[B,C,H,W] -> [B,HW,C] fp64 CPU."""
++    return x.detach().double().cpu().permute(0, 2, 3, 1).reshape(x.shape[0], -1, x.shape[1])
++
++
++def so2_vector(fmap, mu, V, D: int):
++    """Leitura de 2a ordem de UM mapa: Norm(pad([mu, sigma, triu(sqrtm(Cov))])) -> [B, D] fp32."""
++    Y = (_flat(fmap) - mu) @ V
++    m = Y.mean(1)
++    Yc = Y - m[:, None, :]
++    cov = Yc.transpose(1, 2) @ Yc / Y.shape[1]
++    sd = cov.diagonal(dim1=1, dim2=2).clamp(min=0).sqrt()
++    S = _sqrtm_psd(cov)
++    k = V.shape[1]
++    iu = torch.triu_indices(k, k)
++    z = torch.cat([m, sd, S[:, iu[0], iu[1]]], 1)
++    return norm_ssqrt_l2(pad_to(z, D)).float()
++
++
++class PixelMoments:
++    """Momentos de canal em fp64 sobre pixels amostrados (semente por IMAGEM). Só imagens de TREINO."""
++
++    def __init__(self, n_px: int = 64, seed: int = PCA_SEED):
++        self.n_px, self.seed = int(n_px), int(seed)
++        self.s1 = self.s2 = None
++        self.n = 0
++
++    def add(self, fmap, img_ids):
++        f = _flat(fmap)
++        rows = []
++        for b, gid in enumerate(img_ids):
++            g = torch.Generator().manual_seed(self.seed * 1_000_003 + int(gid))
++            hw = f.shape[1]
++            idx = torch.randperm(hw, generator=g)[: min(self.n_px, hw)]
++            rows.append(f[b, idx])
++        P = torch.cat(rows)
++        if self.s1 is None:
++            self.s1 = torch.zeros(P.shape[1], dtype=torch.float64)
++            self.s2 = torch.zeros(P.shape[1], P.shape[1], dtype=torch.float64)
++        self.s1 += P.sum(0)
++        self.s2 += P.T @ P
++        self.n += P.shape[0]
++
++    def pca(self, k: int):
++        mu = self.s1 / self.n
++        cov = (self.s2 - self.n * torch.outer(mu, mu)) / max(self.n - 1, 1)
++        cov = (cov + cov.T) / 2
++        _, V = torch.linalg.eigh(cov)
++        V = V.flip(1)[:, : min(k, V.shape[1])]
++        sgn = V.gather(0, V.abs().argmax(0, keepdim=True)).sign()
++        return mu, (V * torch.where(sgn == 0, torch.ones_like(sgn), sgn)).contiguous()
++
++
++class So2Head(nn.Module):
++    """Cabeça de 2ª ordem fixa: buffers (mu [C], V [C, k]); ``forward(fmap) -> [B, D]``. Sem parâmetros."""
++
++    def __init__(self, dim: int = 4096, n_px: int = 64, block_index: int = 0):
++        super().__init__()
++        self.dim, self.n_px, self.block_index = int(dim), int(n_px), int(block_index)
++        self.k = k_for(self.dim)
++        self.register_buffer("mu", torch.zeros(0, dtype=torch.float64))
++        self.register_buffer("V", torch.zeros(0, 0, dtype=torch.float64))
++        self._mom: Optional[PixelMoments] = None
++        self.fitted = False
++
++    # ---- ajuste (SÓ treino)
++    def add_train(self, fmap, img_ids: Sequence[int]):
++        if self._mom is None:
++            self._mom = PixelMoments(self.n_px, PCA_SEED + self.block_index)
++        self._mom.add(fmap, img_ids)
++
++    def finish_fit(self):
++        mu, V = self._mom.pca(self.k)
++        self.mu, self.V = mu, V
++        self.n_fit_pixels = int(self._mom.n)
++        self._mom = None
++        self.fitted = True
++        return self
++
++    def forward(self, fmap):
++        if not self.fitted:
++            raise RuntimeError("So2Head.finish_fit (treino) antes de ler")
++        return so2_vector(fmap, self.mu, self.V, self.dim)
++
++    def meta(self) -> dict:
++        return {"version": VERSION, "readout": READOUT if self.dim == 4096 else f"so2_{self.dim}_pca",
++                "dim": self.dim, "k": self.k, "n_px": self.n_px, "pca_seed": PCA_SEED + self.block_index,
++                "block_index": self.block_index, "norm": "signed_sqrt+l2", "fit": "train_only",
++                "trainable_params": 0}
++
++    def payload(self) -> dict:
++        return {"meta": self.meta(), "mu": self.mu.clone(), "V": self.V.clone()}
++
++    def sha256(self) -> str:
++        buf = io.BytesIO()
++        torch.save({"mu": self.mu, "V": self.V}, buf)
++        return hashlib.sha256(buf.getvalue()).hexdigest()
++
++    @classmethod
++    def from_payload(cls, p: dict) -> "So2Head":
++        m = p["meta"]
++        h = cls(m["dim"], m["n_px"], m["block_index"])
++        h.mu, h.V = p["mu"], p["V"]
++        h.fitted = True
++        return h
++
++
++def spec_entry(dim: int = 4096, n_px: int = 64) -> dict:
++    """O que entra na fitness_spec (muda a fitness_sig)."""
++    return {"readout": READOUT if dim == 4096 else f"so2_{dim}_pca", "dim": int(dim), "k": k_for(dim),
++            "n_px": int(n_px), "pca_seed": "PCA_SEED+bloco", "pca_fit": "train_only", "norm": "signed_sqrt+l2",
++            "map": "ultimo_bloco", "version": VERSION, "precision": "fp64_cpu_moments"}
++
++
++@torch.no_grad()
++def fit_and_read(encoder: nn.Module, train_x: torch.Tensor, others: Iterable[torch.Tensor], device, *,
++                 batch_size: int, dim: int = 4096, n_px: int = 64, block_index: int = 0, tta: int = 1,
++                 gap_head: Optional[nn.Module] = None, head: Optional["So2Head"] = None):
++    """Passe 1: PCA só no treino (ids = posição em ``train_x``). Passe 2: z do treino e de cada ``others``.
++    ``tta`` > 1: média de z sobre as vistas de ``pooling_head.tta_transforms`` (só canal de teste).
++    ``gap_head``: também devolve head(encoder(x)) (coluna aux GAP, tta 1).
++    -> (So2Head, [z_train, z_other...], [gap_train, gap_other...] | None)."""
++    from ga_search.modehb.pooling_head import tta_transforms
++    encoder.eval()
++    if gap_head is not None:
++        gap_head.eval()
++    bs = int(batch_size)
++    if head is None:                     # ``head`` dado (cabeça salva com o checkpoint): sem re-ajuste
++        head = So2Head(dim, n_px, block_index)
++        for i0 in range(0, len(train_x), bs):
++            xb = train_x[i0:i0 + bs].to(device).float()
++            head.add_train(encoder(xb), list(range(i0, i0 + xb.shape[0])))
++        head.finish_fit()
++    views = tta_transforms(int(tta))
++    outs, gaps = [], ([] if gap_head is not None else None)
++    for X in [train_x] + list(others):
++        acc, gacc = [], []
++        for i0 in range(0, len(X), bs):
++            xb = X[i0:i0 + bs].to(device).float()
++            if len(views) == 1:
++                f = encoder(xb)
++                acc.append(head(f))
++                if gap_head is not None:
++                    gacc.append(gap_head(f).float().cpu())
++            else:
++                acc.append(torch.stack([head(encoder(t(xb))) for t in views]).mean(0))
++                if gap_head is not None:
++                    gacc.append(gap_head(encoder(xb)).float().cpu())
++        outs.append(torch.cat(acc))
++        if gaps is not None:
++            gaps.append(torch.cat(gacc))
++    return head, outs, gaps
+diff -ruN a/ga_search/modehb/ssl_trainers.py b/ga_search/modehb/ssl_trainers.py
+--- a/ga_search/modehb/ssl_trainers.py	2026-11-17 21:36:25.747903280 -0300
++++ b/ga_search/modehb/ssl_trainers.py	2026-11-17 21:36:25.748903292 -0300
+@@ -38,7 +38,11 @@
+ 
+ __all__ = [
+     "AugConfig",
++    "AUG_PRESETS",
++    "aug_config",
++    "aug_record",
+     "nt_xent",
++    "vicreg_loss",
+     "make_views",
+     "method_name",
+     "split_param_groups",
+@@ -60,6 +64,27 @@
+     return F.cross_entropy(sim, targets)
+ 
+ 
++def vicreg_loss(z1: Tensor, z2: Tensor, sim_coeff: float = 25.0, std_coeff: float = 25.0,
++                cov_coeff: float = 1.0, eps: float = 1e-4):
++    """growth_v3: VICReg (Bardes, Ponce & LeCun, ICLR 2022), como no código oficial (facebookresearch/vicreg):
++    inv = MSE(z1, z2); var = mean(relu(1 - std(z1)))/2 + mean(relu(1 - std(z2)))/2 com std = sqrt(var + eps);
++    cov = soma dos off-diagonais^2 / D de cada ramo (z centralizado, cov = z^T z / (N - 1)).
++    total = sim_coeff * inv + std_coeff * var + cov_coeff * cov. -> (total, {"inv", "var", "cov"})."""
++    n, d = z1.shape
++    inv = F.mse_loss(z1, z2)
++    x = z1 - z1.mean(dim=0)
++    y = z2 - z2.mean(dim=0)
++    std_x = torch.sqrt(x.var(dim=0) + eps)
++    std_y = torch.sqrt(y.var(dim=0) + eps)
++    var = torch.mean(F.relu(1 - std_x)) / 2 + torch.mean(F.relu(1 - std_y)) / 2
++    cov_x = (x.T @ x) / max(n - 1, 1)
++    cov_y = (y.T @ y) / max(n - 1, 1)
++    off = lambda c: c.pow(2).sum() - c.diagonal().pow(2).sum()          # noqa: E731
++    cov = off(cov_x) / d + off(cov_y) / d
++    total = sim_coeff * inv + std_coeff * var + cov_coeff * cov
++    return total, {"inv": inv, "var": var, "cov": cov}
++
++
+ @torch.no_grad()
+ def _pos_neg_sim(z1: Tensor, z2: Tensor) -> tuple[float, float]:
+     a, b = F.normalize(z1, dim=1), F.normalize(z2, dim=1)
+@@ -83,6 +108,65 @@
+     contrast: float = 0.2         # multiplicative around per-image mean
+     channel_jitter: float = 0.05  # small per-channel additive shift (LAB-safe)
+     out_size: Optional[int] = None  # default: keep input H
++    # growth_v3 (opt-in; padrão 0 = histórico bit a bit: nenhum sorteio extra no gerador)
++    blur_p: float = 0.0           # prob. de blur gaussiano por amostra
++    blur_sigma: tuple = (0.1, 2.0)  # sigma uniforme por amostra (pixels)
++    blur_kernel: int = 5          # tamanho (ímpar) do kernel separável
++    rot90_p: float = 0.0          # prob. de rot90 por amostra (k uniforme em {1,2,3}; só imagem quadrada)
++
++
++# growth_v3: força da DA do SSL como gene (registrada por ``aug_record``).
++AUG_PRESETS: Dict[str, Dict[str, Any]] = {
++    "weak": {"crop_scale": (0.6, 1.0), "hflip_p": 0.5, "vflip_p": 0.0, "brightness": 0.1, "contrast": 0.1,
++             "channel_jitter": 0.02, "blur_p": 0.0, "rot90_p": 0.0},
++    "medium": {"crop_scale": (0.3, 1.0), "hflip_p": 0.5, "vflip_p": 0.5, "brightness": 0.2, "contrast": 0.2,
++               "channel_jitter": 0.05, "blur_p": 0.2, "blur_sigma": (0.1, 2.0), "rot90_p": 0.25},
++    "strong": {"crop_scale": (0.08, 1.0), "hflip_p": 0.5, "vflip_p": 0.5, "brightness": 0.4, "contrast": 0.4,
++               "channel_jitter": 0.1, "blur_p": 0.5, "blur_sigma": (0.1, 2.0), "rot90_p": 0.5},
++}
++
++
++def aug_config(spec: Any = None) -> "AugConfig":
++    """None / "default" -> ``AugConfig()`` histórico; "weak"|"medium"|"strong" -> preset; dict -> campos
++    (com ``preset`` opcional como base); ``AugConfig`` -> ele mesmo."""
++    if spec is None or isinstance(spec, AugConfig):
++        return spec if spec is not None else AugConfig()
++    if isinstance(spec, str):
++        if spec.lower() in ("default", "historical", "none"):
++            return AugConfig()
++        if spec.lower() not in AUG_PRESETS:
++            raise ValueError(f"aug {spec!r}: use default|{'|'.join(AUG_PRESETS)}")
++        return AugConfig(**AUG_PRESETS[spec.lower()])
++    if isinstance(spec, dict):
++        d = dict(spec)
++        base = d.pop("preset", None)
++        kw = dict(AUG_PRESETS[base]) if base else {}
++        kw.update(d)
++        return AugConfig(**kw)
++    raise TypeError(f"aug: {type(spec).__name__}")
++
++
++def aug_record(cfg: Any) -> Dict[str, Any]:
++    """Registro json-safe da DA efetiva (tuplas -> listas)."""
++    import dataclasses
++    d = dataclasses.asdict(aug_config(cfg))
++    return {k: (list(v) if isinstance(v, tuple) else v) for k, v in d.items()}
++
++
++def _gaussian_blur(v: Tensor, sigma: Tensor, k: int) -> Tensor:
++    """Blur gaussiano por amostra (sigma [N]) por conv separável agrupada; borda reflect."""
++    N, C, H, W = v.shape
++    r = k // 2
++    t = torch.arange(k, device=v.device, dtype=v.dtype) - r
++    g = torch.exp(-(t[None, :] ** 2) / (2 * sigma[:, None].clamp_min(1e-3) ** 2))
++    g = g / g.sum(1, keepdim=True)                                       # [N, k]
++    w = g.repeat_interleave(C, 0)                                        # [N*C, k]
++    x = v.reshape(1, N * C, H, W)
++    x = F.pad(x, (r, r, 0, 0), mode="reflect")
++    x = F.conv2d(x, w[:, None, None, :], groups=N * C)
++    x = F.pad(x, (0, 0, r, r), mode="reflect")
++    x = F.conv2d(x, w[:, None, :, None], groups=N * C)
++    return x.reshape(N, C, H, W)
+ 
+ 
+ def make_views(x: Tensor, V: int, cfg: Optional[AugConfig | dict] = None,
+@@ -112,6 +196,10 @@
+     # de 9·V cópias síncronas (cada ``.to(cuda)`` de memória paginável sincroniza o stream). Mesmos números,
+     # mesmas operações elementares -> vistas bit a bit iguais.
+     shapes = ((N,),) * 6 + ((N, 1, 1, 1), (N, 1, 1, 1), (N, C, 1, 1))
++    # growth_v3: sorteios extras SÓ quando ligados, depois dos 9 históricos de cada vista
++    use_blur, use_rot = float(cfg.blur_p) > 0, float(cfg.rot90_p) > 0
++    # rot90: as vistas são sempre S x S (quadradas), então a rotação preserva a forma
++    shapes = shapes + (((N,), (N,)) if use_blur else ()) + (((N,), (N,)) if use_rot else ())
+     cpu = [torch.rand(*s, generator=generator) for _ in range(V) for s in shapes]
+     flat = torch.cat([t.reshape(-1) for t in cpu])
+     if dev.type == "cuda":
+@@ -152,14 +240,29 @@
+         bri = (rnd(N, 1, 1, 1) * 2 - 1) * cfg.brightness
+         ch = (rnd(N, C, 1, 1) * 2 - 1) * cfg.channel_jitter
+         v = (v - mean) * con + mean + bri + ch
+-        views.append(v.clamp(0.0, 1.0))
++        v = v.clamp(0.0, 1.0)
++        if use_blur:            # growth_v3: blur gaussiano por amostra (sigma por amostra)
++            on, u = rnd(N), rnd(N)
++            sig = cfg.blur_sigma[0] + u * (cfg.blur_sigma[1] - cfg.blur_sigma[0])
++            vb = _gaussian_blur(v, sig, int(cfg.blur_kernel))
++            v = torch.where((on < cfg.blur_p)[:, None, None, None], vb, v)
++        if use_rot:             # growth_v3: rot90 por amostra, k uniforme em {1,2,3}
++            on, u = rnd(N), rnd(N)
++            kk = torch.where(on < cfg.rot90_p, 1 + (u * 3).floor().clamp(max=2), torch.zeros_like(u)).long()
++            out = v.clone()
++            for k in (1, 2, 3):
++                m = kk == k
++                if bool(m.any()):
++                    out[m] = torch.rot90(v[m], k, dims=(2, 3))
++            v = out
++        views.append(v)
+     return views
+ 
+ 
+ # ---------------------------------------------------------------------------
+ # Helpers
+ # ---------------------------------------------------------------------------
+-_SSL = ("simclr", "lejepa", "ae")
++_SSL = ("simclr", "lejepa", "ae", "vicreg")
+ _REG = ("none", "sigreg", "weak_sigreg")
+ 
+ 
+@@ -237,6 +340,18 @@
+     return {k: math.sqrt(v) for k, v in acc.items()}
+ 
+ 
++def _make_expander(d: int, dims: Sequence[int] = (2048, 2048, 2048)) -> nn.Module:
++    """growth_v3: expander do VICReg (paper: 3 camadas, Linear-BN-ReLU-Linear-BN-ReLU-Linear)."""
++    dims = [int(x) for x in dims]
++    layers: List[nn.Module] = []
++    prev = int(d)
++    for h in dims[:-1]:
++        layers += [nn.Linear(prev, h), nn.BatchNorm1d(h), nn.ReLU(inplace=True)]
++        prev = h
++    layers.append(nn.Linear(prev, dims[-1]))
++    return nn.Sequential(*layers)
++
++
+ def _make_projector(d: int, hidden: int = 128, out: int = 64) -> nn.Module:
+     return nn.Sequential(nn.Linear(d, hidden), nn.BatchNorm1d(hidden),
+                          nn.ReLU(inplace=True), nn.Linear(hidden, out))
+@@ -288,7 +403,9 @@
+                      max_skip_frac: float = 1.0, conv_lr_scale: float = 1.0,
+                      projector: bool = False, amp_dtype: Optional[torch.dtype] = None,
+                      resume: Optional[Dict[str, Any]] = None, return_state: bool = False,
+-                     progress: Optional[str] = None) -> Dict[str, Any]:
++                     progress: Optional[str] = None, freeze_head: bool = False,
++                     projector_dims: Optional[Sequence[int]] = None,
++                     vicreg_kwargs: Optional[dict] = None) -> Dict[str, Any]:
+     """Global SSL on the full encoder + head. Learning rates are fixed (never tuned).
+ 
+     growth_fix6 (opt-in; defaults = historical behaviour, bit for bit):
+@@ -311,6 +428,12 @@
+                (reg='sigreg' -> RealSIGReg; reg='weak_sigreg' -> 'lejepa_weak')
+       ae     : L = MSE(dec(feat), view) + lam * R(h)
+ 
++    growth_v3 (opt-in; padrões = histórico): ``ssl="vicreg"`` (2 vistas, expander do paper em
++    ``extra["expander"]``, ``vicreg_kwargs``: expander_dims, sim_coeff, std_coeff, cov_coeff);
++    ``freeze_head=True``: a cabeça (projeção antiga) fica CONGELADA no SSL (fora do otimizador, sem grad,
++    em eval(): BN da cabeça não atualiza); o gradiente atravessa a cabeça até o encoder; requires_grad dos
++    params da cabeça restaurado no fim. ``aug_cfg`` aceita preset ("weak"|"medium"|"strong") ou dict.
++
+     ``amp_dtype`` (opt-in, e.g. torch.bfloat16): forward passes (encoder, head, projector, decoder)
+     under autocast; every loss / SIGReg statistic / reduction in fp32 (inputs cast with .float(),
+     autocast off); no GradScaler (bf16 range). None = fp32 everywhere (default, unchanged).
+@@ -320,12 +443,23 @@
+     device = torch.device(device)
+     encoder.to(device).train()
+     head.to(device).train()
+-    for p in list(encoder.parameters()) + list(head.parameters()):
+-        p.requires_grad_(True)
+-
+-    V = n_views or {"simclr": 2, "lejepa": 4, "ae": 1}[ssl]
+-    if ssl == "simclr" and V != 2:
+-        raise ValueError("simclr uses exactly 2 views")
++    head_rg = [p.requires_grad for p in head.parameters()]
++    if freeze_head:                 # growth_v3: cabeça antiga congelada (eval, sem grad, fora do otimizador)
++        head.eval()
++        for p in encoder.parameters():
++            p.requires_grad_(True)
++        for p in head.parameters():
++            p.requires_grad_(False)
++    else:
++        for p in list(encoder.parameters()) + list(head.parameters()):
++            p.requires_grad_(True)
++    if not isinstance(aug_cfg, (AugConfig, type(None))):
++        aug_cfg = aug_config(aug_cfg)
++    vk = dict(vicreg_kwargs or {})
++
++    V = n_views or {"simclr": 2, "lejepa": 4, "ae": 1, "vicreg": 2}[ssl]
++    if ssl in ("simclr", "vicreg") and V != 2:
++        raise ValueError(f"{ssl} uses exactly 2 views")
+ 
+     # Probe output dims with a dummy batch from the loader-independent shape later.
+     extra: Dict[str, nn.Module] = {}
+@@ -359,14 +493,22 @@
+         with torch.no_grad():
+             feat = encoder(x0[:2])
+             d = head(feat).shape[1]
+-        if ssl == "simclr":
+-            extra["projector"] = _make_projector(d).to(device)
++        if ssl == "simclr":           # growth v3: projector_dims = receita do artigo (ex.: d->d->128 com BN)
++            extra["projector"] = (_make_projector(d) if projector_dims is None
++                                  else _make_expander(d, [d if int(x) <= 0 else int(x) for x in projector_dims])).to(device)
++        elif ssl == "vicreg":
++            extra["expander"] = _make_expander(d, vk.get("expander_dims", (2048, 2048, 2048))).to(device)
+         elif ssl == "ae":
+             extra["decoder"] = _ConvDecoder(feat.shape[1], x0.shape[1]).to(device)
+-        if projector and ssl != "simclr":   # simclr already has its own projector; Hybrid SPiFiL: SSL losses on a separate projector (Guillotine), not on
+-            extra["ssl_proj"] = _make_projector(d, hidden=512, out=128).to(device)   # the SVM embedding
++        if projector and ssl not in ("simclr", "vicreg"):   # simclr already has its own projector; Hybrid SPiFiL: SSL losses on a separate projector (Guillotine), not on
++            extra["ssl_proj"] = (_make_projector(d, hidden=512, out=128) if projector_dims is None   # the SVM embedding
++                                 else _make_expander(d, [d if int(x) <= 0 else int(x) for x in projector_dims])).to(device)
+         groups = split_param_groups(encoder, head, extra.values(), new_param_names,
+                                     lr_old, lr_new, weight_decay)
++        if freeze_head:             # growth_v3: params da cabeça fora do otimizador
++            hid = {id(p) for p in head.parameters()}
++            groups = [{**g, "params": [p for p in g["params"] if id(p) not in hid]} for g in groups]
++            groups = [g for g in groups if g["params"]]
+         groups = _scale_conv_groups(groups, encoder, conv_lr_scale)
+         opt = torch.optim.AdamW(groups)
+ 
+@@ -415,7 +557,7 @@
+             else:
+                 with amp():
+                     h_all = head(encoder(torch.cat(views, 0)))       # [V*B, D]
+-                    if projector and ssl != "simclr":
++                    if projector and ssl not in ("simclr", "vicreg"):
+                         h_all = extra["ssl_proj"](h_all)
+                 h_all = h_all.float()
+                 hs = list(h_all.split(B, 0))
+@@ -432,6 +574,22 @@
+                         parts[reg_key] = torch.stack([reg_mod(hv) for hv in reg_in]).mean()
+                         total = total + sigreg_lambda * parts[reg_key]
+                     pos, neg = _pos_neg_sim(z1.detach(), z2.detach())
++                elif ssl == "vicreg":       # growth_v3
++                    exp_ = extra["expander"]
++                    with amp():
++                        z1, z2 = exp_(hs[0]), exp_(hs[1])
++                    z1, z2 = z1.float(), z2.float()
++                    with fp32():
++                        total, vp = vicreg_loss(z1, z2, sim_coeff=float(vk.get("sim_coeff", 25.0)),
++                                                std_coeff=float(vk.get("std_coeff", 25.0)),
++                                                cov_coeff=float(vk.get("cov_coeff", 1.0)))
++                    parts["ssl/loss_vicreg_inv"] = vp["inv"]
++                    parts["ssl/loss_vicreg_var"] = vp["var"]
++                    parts["ssl/loss_vicreg_cov"] = vp["cov"]
++                    if reg_mod is not None:
++                        parts[reg_key] = torch.stack([reg_mod(hv) for hv in hs]).mean()
++                        total = total + sigreg_lambda * parts[reg_key]
++                    pos, neg = _pos_neg_sim(z1.detach(), z2.detach())
+                 else:  # lejepa
+                     H = torch.stack(hs, 0)                          # [V, B, D]
+                     parts["ssl/loss_inv"] = invariance_loss(H)
+@@ -535,6 +693,9 @@
+     extra.clear()
+     encoder.eval()
+     head.eval()
++    if freeze_head:                 # growth_v3: requires_grad original da cabeça
++        for p, rg in zip(head.parameters(), head_rg):
++            p.requires_grad_(rg)
+     final = history[-1] if history else {}
+     return {
+         "method": name,
+@@ -553,6 +714,8 @@
+         "lr_new": lr_new,
+         "sigreg_lambda": sigreg_lambda,
+         "augment_device": str(device),
++        **({"freeze_head": True} if freeze_head else {}),
++        **({"aug": aug_record(aug_cfg)} if aug_cfg is not None else {}),
+         **({"state": state} if return_state else {}),
+     }
+ 
+diff -ruN a/tests/hmodehb/test_growth_v3_ops.py b/tests/hmodehb/test_growth_v3_ops.py
+--- a/tests/hmodehb/test_growth_v3_ops.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v3_ops.py	2026-11-17 21:36:25.753903354 -0300
+@@ -0,0 +1,253 @@
++"""Cadeia de crescimento v3, morfismos (ga_search/backbones/morphisms_v3.py + whitening no deepen_residual_zero):
++preservação EXATA de inception_branch_add / dense_concat, checkpoint, hash antigo, bad_filters/replace_filters."""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++
++import pytest
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import build as BB  # noqa: E402
++from ga_search.backbones import checkpoint as CK  # noqa: E402
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.backbones import morphisms_v3 as M3  # noqa: E402
++from ga_search.backbones.spec import BackboneSpec, HeadSpec, InputSpec, LayerSpec, StageSpec  # noqa: E402
++
++RES = 32
++
++
++def _tiny(flavor="spifil_ops", seed=0, last_conv="conv", norm0="batch", norm1="batch"):
++    L = [LayerSpec(channels=12, kernel=3, conv="conv", norm=norm0, activation="relu", pool="max",
++                   flavor=flavor, init="inherited"),
++         LayerSpec(channels=20, kernel=3, conv="conv", norm=norm1, activation="silu", pool="max",
++                   flavor=flavor, init="inherited"),
++         LayerSpec(channels=16, kernel=3, conv=last_conv, norm="batch", activation="gelu", pool="none",
++                   flavor=flavor, init="inherited")]
++    spec = BackboneSpec(stem=L[0], stages=[StageSpec("local", L[1:])],
++                        head=HeadSpec(embed_dim=1280, pooling="meanstd"), input=InputSpec(resolution=RES),
++                        dataset="synthetic")
++    m = BB.build_backbone(spec, seed=seed, enforce_budget=False)
++    with torch.no_grad():                      # estatísticas não triviais (BN) para o teste valer
++        m.train()
++        for _ in range(3):
++            m(torch.rand(8, 3, RES, RES))
++    return m.eval()
++
++
++def _x(n=4, seed=1):
++    return torch.rand(n, 3, RES, RES, generator=torch.Generator().manual_seed(seed))
++
++
++def _assert_exact(res, x=None):
++    x = _x() if x is None else x
++    P, C = res.parent.eval(), res.child.eval()
++    with torch.no_grad():
++        a, b = P(x), C(x)
++    d = float((a - b).abs().max())
++    assert d <= 1e-6 * max(1.0, float(a.abs().max())), d
++    g = MO.finalize(res, x, data={"split": "synthetic"})
++    assert g.preservation.verdict == "exact", g.preservation
++    return d
++
++
++def _new_mask_false(res, prefix):
++    ks = [k for k in res.masks if k.startswith(prefix)]
++    assert ks
++    for k in ks:
++        assert not res.masks[k].any(), k
++
++
++# ───────────────────────────────────────────────────────────────── (a) inception_branch_add
++@pytest.mark.parametrize("flavor", ["spifil_ops", "convblock"])
++@pytest.mark.parametrize("layer", [1, 2])           # meio e último (cabeça)
++@pytest.mark.parametrize("kernel", [1, 5])
++def test_branch_add_conv_to_inception_exact(flavor, layer, kernel):
++    m = _tiny(flavor)
++    res = M3.inception_branch_add(MO.start(m), layer, kernel, 6, seed=3)
++    L = res.child.spec.layers()[layer]
++    assert L.conv == "inception" and L.channels == m.spec.layers()[layer].channels + 6
++    assert L.branches[-1][1] == kernel
++    _assert_exact(res)
++    _new_mask_false(res, f"blocks.{layer}.conv.branches.{L.branches[-1][0]}.")
++    old = L.branches[0][0]
++    with torch.no_grad():                  # ramo herdado bit a bit
++        assert torch.equal(res.child.blocks[layer].conv.branches[old].weight, m.blocks[layer].conv.weight)
++
++
++@pytest.mark.parametrize("flavor", ["spifil_ops", "convblock"])
++@pytest.mark.parametrize("layer", [1, 2])
++def test_branch_add_to_inception_exact(flavor, layer):
++    m = _tiny(flavor)
++    r1 = M3.inception_branch_add(MO.start(m), layer, 3, 4, seed=1)
++    r2 = M3.inception_branch_add(r1, layer, 3, 5, seed=2)       # b3 (herdado), b3_2, b3_3
++    names = [b[0] for b in r2.child.spec.layers()[layer].branches]
++    assert names == ["b3", "b3_2", "b3_3"] and len(set(names)) == len(names)
++    _assert_exact(r2)
++
++
++def test_branch_add_new_filters_hook_and_refusals():
++    m = _tiny()
++    seen = {}
++
++    def hook(j, conv, rows):
++        seen.update(j=j, rows=list(rows), shape=tuple(conv.weight.shape))
++        with torch.no_grad():
++            conv.weight.fill_(0.5)
++    res = M3.inception_branch_add(MO.start(m), 1, 3, 4, new_filters=hook)
++    assert seen == {"j": 1, "rows": [0, 1, 2, 3], "shape": (4, 12, 3, 3)}
++    _assert_exact(res)
++    with pytest.raises(MO.MorphismError):
++        M3.inception_branch_add(MO.start(m), 1, 7, 4)
++    dw = _tiny(last_conv="dwsep")
++    with pytest.raises(MO.MorphismError):
++        M3.inception_branch_add(MO.start(dw), 2, 3, 4)
++
++
++def test_branch_add_then_widen_and_checkpoint(tmp_path):
++    m = _tiny()
++    res = M3.inception_branch_add(MO.start(m), 1, 5, 6, seed=4)
++    res = MO.widen(res, {1: res.child.spec.layers()[1].channels + 4, 2: 20}, seed=5)
++    _assert_exact(res)
++    MO.finalize(res, None)
++    ck = CK.save_backbone(res.child, tmp_path / "b.pt", torchscript=False)
++    m2, _ = CK.load_backbone(ck["path"], expected_sha256=ck["file_sha256"])
++    x = _x()
++    with torch.no_grad():
++        assert torch.equal(res.child.eval()(x), m2(x))
++
++
++# ───────────────────────────────────────────────────────────────── (b) dense_concat
++@pytest.mark.parametrize("flavor", ["spifil_ops", "convblock"])
++@pytest.mark.parametrize("layer", [0, 1])
++def test_dense_concat_exact_and_checkpoint(flavor, layer, tmp_path):
++    m = _tiny(flavor)
++    res = M3.dense_concat(MO.start(m), layer)
++    sp = res.child.spec
++    assert sp.layers()[layer].dense_out
++    assert BB.block_out_channels(sp, layer) == sp.layers()[layer].channels + BB.block_in_channels(sp, layer)
++    assert res.child.blocks[layer + 1].conv.weight.shape[1] == BB.block_out_channels(sp, layer)
++    _assert_exact(res)
++    ck = CK.save_backbone(res.child, tmp_path / "d.pt", torchscript=True)
++    m2, spec2 = CK.load_backbone(ck["path"], expected_sha256=ck["file_sha256"])
++    assert spec2.layers()[layer].dense_out and spec2.arch_hash() == sp.arch_hash()
++    x = _x()
++    with torch.no_grad():
++        assert torch.equal(res.child.eval()(x), m2(x))
++    mask = res.masks[f"blocks.{layer + 1}.conv.weight"]
++    c_old = m.spec.block_out_channels(layer)
++    assert mask[:, :c_old].all() and not mask[:, c_old:].any()
++
++
++def test_spec_hash_without_dense_unchanged():
++    m = _tiny()
++    d = m.spec.arch_dict()
++    assert all("dense_out" not in L for st in d["stages"] for L in st["layers"]) and "dense_out" not in d["stem"]
++    s2 = BackboneSpec.from_json(m.spec.to_json())
++    assert s2.arch_hash() == m.spec.arch_hash()
++    legacy = m.spec.to_dict()                # spec JSON antigo, sem a chave
++    legacy["stem"].pop("dense_out", None)
++    for st in legacy["stages"]:
++        for L in st["layers"]:
++            L.pop("dense_out", None)
++    assert BackboneSpec.from_dict(legacy).arch_hash() == m.spec.arch_hash()
++
++
++def test_dense_refusals_and_followups():
++    m = _tiny()
++    with pytest.raises(MO.MorphismError):
++        M3.dense_concat(MO.start(m), 2)      # último bloco
++    res = M3.dense_concat(MO.start(m), 0)
++    with pytest.raises(MO.MorphismError):
++        M3.dense_concat(res, 0)
++    # widen do bloco dense e do consumidor: exato
++    r2 = MO.widen(res, {0: 16, 1: 24}, seed=2)
++    _assert_exact(r2)
++    # widen da última com o bloco dense no meio + head
++    r3 = MO.widen(M3.dense_concat(MO.start(m), 1), {1: 26, 2: 18}, seed=3)
++    _assert_exact(r3)
++    # deepen depois do bloco dense (largura = saída com passagem)
++    r4 = MO.deepen_residual_zero(res, 1)
++    assert r4.child.spec.layers()[1].channels == res.child.spec.block_out_channels(0)
++    _assert_exact(r4)
++    with pytest.raises(MO.NotExactError):
++        MO.deepen_identity(res, 1)
++    r5 = MO.add_skip_zero(res, 1)
++    _assert_exact(r5)
++    r6 = M3.inception_branch_add(res, 0, 3, 4)      # ramo no bloco dense
++    _assert_exact(r6)
++    r7 = M3.dense_concat(res, 1)                    # dense encadeado
++    _assert_exact(r7)
++
++
++# ───────────────────────────────────────────────────────────────── (c) deepen_residual_zero com whitening
++@pytest.mark.parametrize("norm", ["zca", "dbn", "batch_dbn", "batch", "none"])
++@pytest.mark.parametrize("flavor", ["spifil_ops", "convblock"])
++def test_deepen_residual_zero_whitening_exact(norm, flavor):
++    m = _tiny(flavor)
++    res = MO.deepen_residual_zero(MO.start(m), 2, norm=norm)
++    blk = res.child.blocks[2]
++    assert res.child.spec.layers()[2].norm == norm
++    with torch.no_grad():                    # estatísticas não nulas não podem quebrar a exatidão em eval
++        for mod in blk.modules():
++            if isinstance(mod, torch.nn.BatchNorm2d):
++                mod.running_var.fill_(2.0)
++    _assert_exact(res)
++    if norm in ("zca", "dbn", "batch_dbn"):
++        assert "eval" in res.ops[-1].condition
++    with pytest.raises(MO.MorphismError):
++        MO.deepen_residual_zero(MO.start(m), 2, norm="group")
++
++
++# ───────────────────────────────────────────────────────────────── (d) bad_filters / replace_filters
++def test_bad_filters_dead_and_dup():
++    g = torch.Generator().manual_seed(0)
++    a = torch.randn(6, 8, 5, 5, generator=g)
++    a[:, 3] = 0.7                                   # morto (constante)
++    a[:, 5] = 2.0 * a[:, 1] + 0.3 + 1e-4 * torch.randn(6, 5, 5, generator=g)   # duplicado de 1 (maior var)
++    r = M3.bad_filters(a, corr_thr=0.95)
++    assert r["dead"] == [3] and abs(r["mean"][3] - 0.7) < 1e-6
++    assert len(r["dup"]) == 1
++    c, keep, aa, bb = r["dup"][0]
++    assert (c, keep) == (1, 5)                      # cai o de MENOR variância
++    assert abs(aa - 0.5) < 1e-3 and abs(bb + 0.15) < 1e-3
++    assert r == M3.bad_filters(a, corr_thr=0.95)    # determinístico
++    assert M3.bad_filters(a, n_conv=3)["dead"] == []
++
++
++@pytest.mark.parametrize("layer", [1, 2])
++def test_replace_filters_shapes_masks_deterministic(layer):
++    m = _tiny()
++    rows = [0, 3]
++    r1 = M3.replace_filters(MO.start(m), layer, rows, merge={3: (1, 0.5, 0.1)}, seed=9)
++    r2 = M3.replace_filters(MO.start(m), layer, rows, merge={3: (1, 0.5, 0.1)}, seed=9)
++    for (k, v), (k2, v2) in zip(r1.child.state_dict().items(), r2.child.state_dict().items()):
++        assert k == k2 and torch.equal(v, v2)
++    for k, v in m.state_dict().items():
++        assert r1.child.state_dict()[k].shape == v.shape
++    mk = r1.masks[f"blocks.{layer}.conv.weight"]
++    assert not mk[rows].any() and mk[[1, 2]].all()
++    cons = "head.proj.0.weight" if layer == 2 else f"blocks.{layer + 1}.conv.weight"
++    cm = r1.masks[cons]
++    assert not cm[:, rows].any() and cm[:, [1, 2]].all()
++    W = dict(r1.child.named_parameters())[cons]
++    assert float(W[:, rows].abs().max()) == 0.0
++    assert r1.ops[-1].op == "replace_bad_filters" and not r1.ops[-1].exact_claimed
++    g = MO.finalize(r1, _x(), data={"split": "synthetic"})
++    assert g.preservation.verdict in ("approx", "not_preserving")
++    with torch.no_grad():                         # parent intacto
++        assert torch.equal(r1.parent.blocks[layer].conv.weight, m.blocks[layer].conv.weight)
++
++
++def test_replace_filters_hook_and_refusals():
++    m = _tiny(last_conv="dwsep")
++    called = {}
++    r = M3.replace_filters(MO.start(m), 1, [2], new_filters=lambda j, c, rows: called.update(j=j, rows=rows))
++    assert called == {"j": 1, "rows": [2]}
++    k = "blocks.2.conv.depthwise.weight" if "blocks.2.conv.depthwise.weight" in r.masks else "blocks.2.conv.0.weight"
++    assert not r.masks[k][2].any()
++    with pytest.raises(MO.MorphismError):
++        M3.replace_filters(MO.start(m), 2, [0])   # dwsep não é densa
+diff -ruN a/tests/hmodehb/test_growth_v3.py b/tests/hmodehb/test_growth_v3.py
+--- a/tests/hmodehb/test_growth_v3.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v3.py	2026-11-17 21:36:25.757903403 -0300
+@@ -0,0 +1,310 @@
++"""growth v3 (cadeia de crescimento v3): cabeça de 2ª ordem fixa, genes (SSL/DA/whitening/SoftHebb), ops novas
++(inception_branch_add, dense_concat, replace_bad_filters), TTA8 no teste, saturação/adoção e e2e mini REAL
++(flowers, CPU, f1, poucas imagens, B0->B1->B2 com genes variados)."""
++from __future__ import annotations
++
++import json
++import sys
++from pathlib import Path
++
++import numpy as np
++import pytest
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import build as BB  # noqa: E402
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.backbones.spec import HeadSpec, LayerSpec  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.hmodehb import so2_head as SO2  # noqa: E402
++
++READOUT_X = ROOT / "research/spifil_b0b4/readout_x"
++
++
++def _tiny(seed=0, res=32):
++    L = [LayerSpec(channels=12, kernel=3, conv="conv", norm="batch", activation="relu", pool="max",
++                   flavor="spifil_ops", init="inherited"),
++         LayerSpec(channels=24, kernel=3, conv="conv", norm="batch", activation="relu", pool="max",
++                   flavor="spifil_ops", init="inherited"),
++         LayerSpec(channels=24, kernel=3, conv="conv", norm="none", activation="relu", pool="none",
++                   flavor="spifil_ops", init="inherited")]
++    spec = G.spec_from_layers(L, HeadSpec(embed_dim=1280, pooling="meanstd"), "synthetic", res)
++    m = BB.build_backbone(spec, seed=seed, enforce_budget=False)
++    with torch.no_grad():
++        m.train()
++        for _ in range(3):
++            m(torch.rand(8, 3, res, res))
++    return m.eval()
++
++
++def _x(n=4, res=32, seed=1):
++    return torch.rand(n, 3, res, res, generator=torch.Generator().manual_seed(seed))
++
++
++# ───────────────────────────────────────────────────────────────── (1) cabeça de 2ª ordem == readout_x
++@pytest.mark.skipif(not (READOUT_X / "eval_backbone_head.py").exists(), reason="readout_x ausente")
++@pytest.mark.parametrize("C,nblocks", [(120, 1), (40, 3)])
++def test_so2_head_equals_readout_x(C, nblocks):
++    sys.path.insert(0, str(READOUT_X))
++    import eval_backbone_head as E
++    g = torch.Generator().manual_seed(3)
++    train = [[torch.randn(5, C, 7, 7, generator=g) for _ in range(nblocks)] for _ in range(3)]
++    val = [torch.randn(4, C, 7, 7, generator=g) for _ in range(nblocks)]
++    ro = E.Readouts(n_px=64)
++    head = SO2.So2Head(4096, 64, block_index=nblocks - 1)
++    off = 0
++    for bl in train:
++        ids = list(range(off, off + bl[0].shape[0]))
++        ro.add_train(bl, ids)
++        head.add_train(bl[-1], ids)
++        off += bl[0].shape[0]
++    ro.fit([C] * nblocks)
++    head.finish_fit()
++    want = ro(val)["so2_4096_pca"]
++    got = head(val[-1])
++    assert got.shape == (4, 4096)
++    assert torch.equal(got, want)
++    assert sum(p.numel() for p in head.parameters()) == 0          # sem parâmetros treináveis
++
++
++def test_so2_fit_and_read_train_only_and_deterministic():
++    m = _tiny()
++    enc = torch.nn.Sequential(*m.blocks)
++    tr, va = _x(10, seed=2), _x(6, seed=5)
++    h1, (a1, b1), gaps = SO2.fit_and_read(enc, tr, [va], "cpu", batch_size=4, block_index=2, gap_head=m.head)
++    h2, (a2, b2), _ = SO2.fit_and_read(enc, tr, [va * 0 + 0.5], "cpu", batch_size=4, block_index=2)
++    assert torch.equal(h1.V, h2.V) and torch.equal(a1, a2)            # a validação não entra na PCA
++    assert a1.shape[1] == 4096 and gaps[0].shape == (10, 1280)
++    h3, (a3, _), _ = SO2.fit_and_read(enc, tr, [va], "cpu", batch_size=3, block_index=2)
++    assert float((a1 - a3).abs().max()) < 1e-4    # amostragem por imagem; só o arredondamento da soma fp64 muda
++    _, (t8, _), _ = SO2.fit_and_read(enc, tr, [va], "cpu", batch_size=4, block_index=2, tta=8)
++    assert not torch.equal(t8, a1)
++    p = h1.payload()
++    assert torch.equal(SO2.So2Head.from_payload(p)(enc(va)), b1)
++
++
++def test_fitness_sig_changes_with_so2():
++    spec = {"readout": "head"}
++    s1 = G.FV.signature(spec)
++    spec2 = {"readout": SO2.READOUT, "head_v3": SO2.spec_entry()}
++    assert G.FV.signature(spec2) != s1
++    assert G.FV.ruler({"readout": SO2.READOUT})["readout"] == SO2.READOUT
++
++
++# ───────────────────────────────────────────────────────────────── genes
++def test_genes_cover_space_deterministic():
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"genes": {"ssl": ["lejepa", "simclr", "vicreg", "none"], "aug": ["weak", "medium", "strong"],
++                         "whiten_new": ["none", "zca", "dbn"], "softhebb": [False, True]}}
++    sp = G.gene_space(g)
++    assert len(sp) == 4 * 3 * 3 * 2
++    a = [G.child_genes(g, "B0:0", i) for i in range(len(sp))]
++    assert a == [G.child_genes(g, "B0:0", i) for i in range(len(sp))]
++    assert sorted(map(json.dumps, a)) == sorted(map(json.dumps, sp))   # rodízio cobre todas
++    e = G.apply_genes(g, {"ssl": "vicreg", "aug": "strong", "whiten_new": "zca", "softhebb": True})
++    assert e["ssl"] == "vicreg" and e["reg"] == "none" and e["v3"]["aug"] == "strong"
++    assert G.apply_genes(g, {"ssl": "none"})["ssl"] == "none" and G.ssl_disabled(G.apply_genes(g, {"ssl": "none"}))
++    assert G.apply_genes(g, {"ssl": "lejepa"})["reg"] == "sigreg"
++    assert G.child_genes(G.load_growth_config(None, []), "B0:0", 0) == {}   # padrão: sem genes (histórico)
++
++
++def test_defaults_are_historical():
++    g = G.load_growth_config(None, [])
++    assert not G.so2_on(g) and G.gene_space(g) == [{}] and G._v3(g)["ops"] == []
++    m = _tiny()
++    assert G.plan_families(m) == G.plan_families(m, g)
++
++
++# ───────────────────────────────────────────────────────────────── ops novas no planner (exatas)
++@pytest.mark.parametrize("fam", ["inception_branch_add", "dense_concat"])
++def test_planner_new_ops_exact(fam):
++    m = _tiny()
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"ops": [fam], "families": [fam]}
++    fams = G.plan_families(m, g)
++    assert fams and all(f[0] == fam for f in fams)
++    ok = 0
++    for f in fams:
++        ops, why = G.plan_with_family(m, "B1", f, [0.5] * 4, 7, g)
++        if ops is None:
++            continue
++        assert ops[0]["op"] == fam
++        res = G.realize_plan(m, ops, None, g)
++        gs = MO.finalize(res, _x(), data={"split": "synthetic"})
++        assert gs.preservation.verdict == "exact", (f, gs.preservation)
++        assert G.band_of(res.child.spec.cost.params_total) == "B1"
++        ok += 1
++    assert ok >= 1
++
++
++def test_whiten_gene_in_residual_op():
++    m = _tiny()
++    g = G.apply_genes(G.load_growth_config(None, []), {"whiten_new": "zca"})
++    ops, why = G.plan_with_family(m, "B1", ("deepen_residual_zero", 2), [0.5] * 4, 3, g)
++    assert ops and ops[0].get("norm") == "zca", why
++    res = G.realize_plan(m, ops, None, g)
++    gs = MO.finalize(res, _x(), data={"split": "synthetic"})
++    assert gs.preservation.verdict == "exact"
++
++
++def test_replace_plan_is_last_and_noop_when_planning():
++    m = _tiny()
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"ops": ["replace_bad_filters"], "families": ["replace_bad_filters"]}
++    ops, why = G.plan_with_family(m, "B1", ("replace_bad_filters", 1), [0.5] * 4, 3, g)
++    assert ops and ops[-1]["op"] == "replace_bad_filters", why
++    res = G.realize_plan(m, ops, None, g)
++    assert getattr(res, "v3_pre_replace", None) is None
++
++
++# ───────────────────────────────────────────────────────────────── replace nunca aceita pior
++def test_replace_never_accepts_worse():
++    base = {"status": "ok", "preservation_verdict": "exact", "kappa_parent_rescored": 0.60}
++    # alpha=0 com âncora = pai -> é o pai (adotado), nunca "aceito"
++    assert G.decide({**base, "wise_alpha": 0.0, "kappa_val_orig": 0.60}, 0.0, False) == ("adopted_as_parent", False)
++    assert G.decide({**base, "wise_alpha": 0.5, "kappa_val_orig": 0.599}, 0.0, False) == ("rejected", False)
++    assert G.decide({**base, "wise_alpha": 0.5, "kappa_val_orig": 0.60}, 0.0, False) == ("accepted", True)
++
++
++def test_wise_anchor_parent_alpha0_is_parent_bitwise():
++    """A âncora (= pai em função) entra com alpha=0 literalmente: o WiSE nunca fica abaixo do pai."""
++    m = _tiny()
++    anchor = {k: v.clone() for k, v in m.state_dict().items()}
++    trained = {k: (v + 1.0 if v.is_floating_point() else v) for k, v in anchor.items()}
++    G._blend_into(m, anchor, trained, 0.0)
++    assert all(torch.equal(m.state_dict()[k], anchor[k]) for k in anchor)
++
++
++# ───────────────────────────────────────────────────────────────── saturação / curva
++class _GevStub:
++    fitness_sig = "x" * 12
++    readout = "so2_4096_pca"
++
++
++def test_saturation_adopts_parent_and_curve(tmp_path):
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"saturation": {"adopt_parent": True}}
++    ch = G.GrowthChain({"seed": 42}, g, _GevStub(), tmp_path)
++    ch.state = {"members": {b: [] for b in G.BANDS}}
++    ch._lin_keys = set()
++    tmp_path.mkdir(exist_ok=True)
++    ch.state["members"]["B0"] = [{"node_id": "seed00", "band": "B0", "kappa_val_orig": 0.6, "params": 100,
++                                  "flops_2mac": 1, "checkpoint": "c", "checkpoint_sha256": "s", "fid": 0,
++                                  "parent": None, "theta": None}]
++    ch._saturate("B0", "B1")
++    assert ch.state["members"]["B1"][0]["adopted_from"] == "seed00"
++    ch._saturate("B0", "B1")                                   # idempotente
++    assert len(ch.state["members"]["B1"]) == 1
++    curve = ch._curve()
++    assert [r["kappa_val_orig"] for r in curve[:2]] == [0.6, 0.6] and curve[1]["adopted"]
++    assert (tmp_path / "kappa_band_curve.json").exists()
++
++
++# ───────────────────────────────────────────────────────────────── e2e REAL mini (flowers, CPU, f1, B0->B1->B2)
++FL_ROOT = Path("/dados/home/moliveira/datasets/organized/flowers")
++FL_SMALL = ROOT / "artifacts/modehb_spifil/flowers/state/seed42/candidates/c00003/f15/encoder.pt"
++
++
++@pytest.mark.skipif(not (FL_ROOT.exists() and FL_SMALL.exists()), reason="dados/semente de flowers ausentes")
++def test_e2e_v3_flowers_b0_b1_b2(tmp_path):
++    from ga_search.hmodehb import fitness_v2 as FV
++    out = tmp_path / "fl"
++    ov = ["device=cpu", "wandb.enabled=false", "data.image_size=64", "data.batch_size=16", "data.num_workers=0",
++          "train.max_steps_per_epoch=1"]
++    cfg = G.build_cfg("flowers", 42, ov, out)
++    g = G.load_growth_config(ROOT / "ga_search/config/hmodehb_b0b4/growth_v3.yaml",
++                             ["seeds.top_k=1", "n_parents=1", "n_children=4", "generations=1", "fid_low=1",
++                              "fid_high=1", "end_band=B2", "spifil_images_per_class=1", "debug_train=48",
++                              "debug_val=32", "test_channel=true", "seeds.external_small=false",
++                              f"seeds.registry={ROOT / 'research/spifil_b0b4/agent1/seed_registry.csv'}",
++                              "v3.softhebb_cfg.n_images=16", "v3.replace.n_images=16"])
++    g["v3"]["genes"] = {"ssl": ["vicreg", "none", "lejepa", "simclr"], "aug": ["strong", "weak"],
++                        "whiten_new": ["zca", "none"], "softhebb": [True, False]}
++    g["v3"]["vicreg_kwargs"] = {"expander_dims": [64, 64, 64]}
++    g["v3"]["families"] = None
++    gev = G.GrowthEvaluator(cfg, out / "eval", g["debug_train"], g["debug_val"], v3=g["v3"])
++    assert gev.fitness_spec["readout"] == "so2_4096_pca"
++    s = G.GrowthChain(cfg, g, gev, out).run()
++    st = json.loads((out / "growth_state.json").read_text())
++    lin = [json.loads(x) for x in (out / "lineage.jsonl").read_text().splitlines()]
++    assert st["members"]["B0"] or st["members"]["B1"], "sem semente"
++    kids = [r for r in lin if r.get("op") not in ("seed", None, "adopt_parent") and r.get("decision") != "no_plan"
++            and r.get("status") != "infeasible_mem"]
++    assert kids
++    for r in kids:
++        assert r["status"] == "ok", r
++        assert r["readout"] == "so2_4096_pca" and r.get("genes")
++    res = [json.loads(p.read_text()) for p in out.glob("nodes/*/f1/result.json")]
++    assert res
++    seen_ssl, seen_aug = set(), set()
++    for r in res:
++        FV.check_decisions(r, gev.fitness_spec)
++        assert r["so2_head_sha256"] and Path(r["so2_head"]).exists()
++        assert r["aux"]["gap"]["used_for_selection"] is False
++        seen_ssl.add(r["ssl"])
++        if not r["ssl_skipped"]:
++            assert r["aug"]["crop_scale"] and "rot90_p" in r["aug"]          # DA registrada
++            seen_aug.add(r["aug_gene"])
++        if r.get("v3_replace"):
++            assert r["anchor"].startswith("parent_function")
++    assert len(seen_ssl) >= 2
++    for r in kids:                                              # aceito => kappa >= pai re-pontuado (nunca pior)
++        if r["decision"] == "accepted":
++            assert r["kappa_val_orig"] >= r["kappa_parent_rescored"] - 1e-12
++        assert r["decision"] in ("accepted", "rejected", "adopted_as_parent", "failed")
++    for b in ("B1", "B2"):                                      # curva nunca piora
++        for m in st["members"][b]:
++            par = next((x for bb in st["members"].values() for x in bb if x["node_id"] == m["parent"]), None)
++            if par is not None:
++                assert m["kappa_val_orig"] >= par["kappa_val_orig"] - 1e-12
++    curve = json.loads((out / "kappa_band_curve.json").read_text())["curve"]
++    ks = [c["kappa_val_orig"] for c in curve if c["kappa_val_orig"] is not None]
++    assert ks == sorted(ks) or len(ks) <= 1
++    tests = [json.loads(x) for x in (out / "test_orig.jsonl").read_text().splitlines()] \
++        if (out / "test_orig.jsonl").exists() else []
++    if tests:
++        for t in tests:
++            assert t["never_feeds_fitness"] and t["readout"] == "so2_4096_pca"
++            assert "kappa_test_tta8" in t and "kappa_test_gap" in t
++    dump = Path(__import__("os").environ.get("GROWTH_E2E_DUMP", tmp_path))
++    (dump / "e2e_v3_lineage.jsonl").write_text("\n".join(json.dumps(r) for r in lin))
++    (dump / "e2e_v3_tests.jsonl").write_text("\n".join(json.dumps(r) for r in tests))
++
++
++# ───────────────────────────────────────────────────────────────── receitas dos artigos / regras
++def test_ssl_recipe_paper_records_fiel_adaptacao():
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"ssl_recipe": "paper"}
++    r = G.ssl_recipe(G.apply_genes(g, {"ssl": "lejepa"}))
++    assert r["kwargs"]["n_views"] == 8 and r["kwargs"]["projector_dims"] == [2048, 2048, 128]
++    assert r["kwargs"]["reg_kwargs"]["n_proj"] == 1024 and r["fiel"] and r["adaptacao"] and r["pendente"]
++    s = G.ssl_recipe(G.apply_genes(g, {"ssl": "simclr"}))
++    assert s["kwargs"]["tau"] == 0.5
++    g["v3"]["recipe_variant"] = "fiel_bs256"
++    v = G.ssl_recipe(G.apply_genes(g, {"ssl": "vicreg"}))
++    assert v["kwargs"]["vicreg_kwargs"]["expander_dims"] == [8192] * 3
++    assert G.ssl_recipe(G.apply_genes(g, {"ssl": "none"})) is None
++    assert G.ssl_recipe(G.load_growth_config(None, [])) is None            # padrão: chamada histórica
++
++
++def test_spifil_genes_and_strict_flag():
++    g = G.load_growth_config(None, [])
++    e = G.apply_genes(g, {"spifil_images_per_class": "all", "spifil_n_superpixels": 16})
++    assert e["spifil_images_per_class"] >= 10 ** 6 and e["v3"]["spifil_n_superpixels"] == 16
++    assert issubclass(G.SpifilFallback, G.ChainError)
++    assert G._v3(g)["spifil_strict"] is False and G._v3(g)["control_no_grow"] is False
++
++
++def test_ssl_trainer_projector_dims_paper():
++    from ga_search.modehb import ssl_trainers as T
++    enc = torch.nn.Sequential(torch.nn.Conv2d(3, 8, 3, padding=1), torch.nn.ReLU())
++    head = torch.nn.Sequential(torch.nn.AdaptiveAvgPool2d(1), torch.nn.Flatten(), torch.nn.Linear(8, 16))
++    x = torch.rand(8, 3, 16, 16)
++    out = T.train_global_ssl(enc, head, [x], "lejepa", "sigreg", 1, 1e-3, 1e-3, [], "cpu", None, 0, 0.05,
++                             n_views=4, projector=True, projector_dims=[32, 32, 8], weight_decay=5e-4,
++                             reg_kwargs={"n_proj": 64}, return_state=True)
++    assert out["steps"] == 1 and "ssl_proj" in out["state"]["extra"]
++    w = out["state"]["extra"]["ssl_proj"]
++    assert any(v.shape == (8, 32) for v in w.values())
+diff -ruN a/tests/hmodehb/test_growth_v3_ssl.py b/tests/hmodehb/test_growth_v3_ssl.py
+--- a/tests/hmodehb/test_growth_v3_ssl.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v3_ssl.py	2026-11-17 21:36:25.761903452 -0300
+@@ -0,0 +1,241 @@
++"""growth_v3: SSL como gene (VICReg), cabeça antiga congelada no SSL e força da DA (CPU, minúsculo)."""
++import json
++import math
++
++import pytest
++import torch
++import torch.nn as nn
++
++from ga_search.modehb import ssl_trainers as ST
++from ga_search.modehb.ssl_trainers import (AUG_PRESETS, AugConfig, aug_config, aug_record, make_views,
++                                           method_name, train_global_ssl, vicreg_loss)
++
++
++def _enc():
++    torch.manual_seed(0)
++    return nn.Sequential(nn.Conv2d(3, 8, 3, padding=1), nn.ReLU())
++
++
++class _Head(nn.Module):
++    """GAP -> Linear -> BN1d (BN para checar que a cabeça congelada não atualiza running stats)."""
++
++    def __init__(self, c=8, d=16):
++        super().__init__()
++        self.fc = nn.Linear(c, d)
++        self.bn = nn.BatchNorm1d(d)
++
++    def forward(self, f):
++        return self.bn(self.fc(f.mean(dim=(2, 3))))
++
++
++def _loader(n=16, bs=8, seed=0):
++    g = torch.Generator().manual_seed(seed)
++    x = torch.rand(n, 3, 16, 16, generator=g)
++    return [(x[i:i + bs], torch.zeros(len(x[i:i + bs]), dtype=torch.long)) for i in range(0, n, bs)]
++
++
++# ───────────────────────────────────────────── VICReg
++def test_vicreg_loss_known_values():
++    torch.manual_seed(0)
++    z = torch.randn(64, 8) * 3.0
++    tot, p = vicreg_loss(z, z.clone())
++    assert float(p["inv"]) == 0.0
++    # std ~3 > 1 -> hinge zero
++    assert float(p["var"]) == 0.0
++    # cov igual à fórmula direta
++    x = z - z.mean(0)
++    c = x.T @ x / 63
++    off = (c.pow(2).sum() - c.diagonal().pow(2).sum()) / 8
++    assert torch.allclose(p["cov"], 2 * off)
++    assert torch.allclose(tot, 25 * p["inv"] + 25 * p["var"] + p["cov"])
++    # colapso: z constante -> var = relu(1 - sqrt(eps)) por dim, média/2 por ramo -> soma = 1 - 0.01
++    zc = torch.ones(32, 4)
++    _, pc = vicreg_loss(zc, zc)
++    assert math.isclose(float(pc["var"]), 1 - math.sqrt(1e-4), rel_tol=1e-5)
++    assert float(pc["cov"]) == 0.0
++    # diagonal-only cov -> cov 0
++    zd = torch.tensor([[1., -1.], [-1., 1.], [1., 1.], [-1., -1.]])
++    _, pd = vicreg_loss(zd, zd)
++    assert abs(float(pd["cov"])) < 1e-12
++    # inv = MSE
++    a, b = torch.randn(10, 5), torch.randn(10, 5)
++    _, pab = vicreg_loss(a, b, sim_coeff=1, std_coeff=0, cov_coeff=0)
++    assert torch.allclose(pab["inv"], ((a - b) ** 2).mean())
++
++
++def test_method_name_vicreg():
++    assert method_name("vicreg", "none") == "vicreg"
++    assert method_name("vicreg", "sigreg") == "vicreg+sigreg"
++    with pytest.raises(ValueError):
++        method_name("byol", "none")
++
++
++def test_expander_is_paper_shape():
++    e = ST._make_expander(16, (32, 32, 24))
++    kinds = [type(m).__name__ for m in e]
++    assert kinds == ["Linear", "BatchNorm1d", "ReLU", "Linear", "BatchNorm1d", "ReLU", "Linear"]
++    assert e[-1].out_features == 24
++
++
++def test_vicreg_trains_finite_and_state_has_expander():
++    enc, head = _enc(), _Head()
++    w0 = enc[0].weight.detach().clone()
++    out = train_global_ssl(enc, head, _loader(), "vicreg", "none", 1, 1e-3, 1e-3, [], "cpu", seed=1,
++                           vicreg_kwargs={"expander_dims": (32, 32, 32)}, return_state=True)
++    assert out["method"] == "vicreg" and out["n_views"] == 2 and out["steps"] == 2
++    assert math.isfinite(out["final_loss_total"])
++    for k in ("ssl/loss_vicreg_inv", "ssl/loss_vicreg_var", "ssl/loss_vicreg_cov"):
++        assert k in out["final"] and math.isfinite(out["final"][k])
++    assert "expander" in out["state"]["extra"]
++    assert not torch.equal(w0, enc[0].weight)
++    with pytest.raises(ValueError):
++        train_global_ssl(_enc(), _Head(), _loader(), "vicreg", "none", 1, 1e-3, 1e-3, [], "cpu", n_views=4)
++
++
++def test_vicreg_resume_equals_continuous():
++    kw = dict(vicreg_kwargs={"expander_dims": (16, 16, 16)})
++    e1, h1 = _enc(), _Head()
++    train_global_ssl(e1, h1, _loader(), "vicreg", "none", 2, 1e-3, 1e-3, [], "cpu", seed=3, **kw)
++    e2, h2 = _enc(), _Head()
++    st = train_global_ssl(e2, h2, _loader(), "vicreg", "none", 1, 1e-3, 1e-3, [], "cpu", seed=3,
++                          return_state=True, **kw)["state"]
++    train_global_ssl(e2, h2, _loader(), "vicreg", "none", 1, 1e-3, 1e-3, [], "cpu", seed=3, resume=st, **kw)
++    for a, b in zip(e1.state_dict().values(), e2.state_dict().values()):
++        assert torch.equal(a, b)
++
++
++# ───────────────────────────────────────────── freeze_head
++@pytest.mark.parametrize("ssl", ["lejepa", "vicreg", "simclr"])
++def test_freeze_head_keeps_head_bitwise(ssl):
++    enc, head = _enc(), _Head()
++    head.fc.weight.requires_grad_(True)
++    head.bn.bias.requires_grad_(False)          # requires_grad original misto: restaurado no fim
++    rg0 = [p.requires_grad for p in head.parameters()]
++    sd0 = {k: v.clone() for k, v in head.state_dict().items()}
++    w0 = enc[0].weight.detach().clone()
++    out = train_global_ssl(enc, head, _loader(), ssl, "sigreg" if ssl == "lejepa" else "none", 1, 1e-2, 1e-2,
++                           [], "cpu", seed=0, freeze_head=True, vicreg_kwargs={"expander_dims": (16, 16, 16)})
++    assert out.get("freeze_head") is True
++    for k, v in head.state_dict().items():      # pesos E running stats do BN da cabeça
++        assert torch.equal(v, sd0[k]), k
++    assert not torch.equal(w0, enc[0].weight)   # o gradiente chegou ao encoder
++    assert [p.requires_grad for p in head.parameters()] == rg0
++
++
++def test_freeze_head_false_is_historical():
++    a_enc, a_head = _enc(), _Head()
++    b_enc, b_head = _enc(), _Head()
++    b_head.load_state_dict(a_head.state_dict())
++    ra = train_global_ssl(a_enc, a_head, _loader(), "lejepa", "sigreg", 1, 1e-3, 1e-3, [], "cpu", seed=2)
++    rb = train_global_ssl(b_enc, b_head, _loader(), "lejepa", "sigreg", 1, 1e-3, 1e-3, [], "cpu", seed=2,
++                          freeze_head=False)
++    assert ra["final_loss_total"] == rb["final_loss_total"]
++    for m1, m2 in ((a_enc, b_enc), (a_head, b_head)):
++        for x, y in zip(m1.state_dict().values(), m2.state_dict().values()):
++            assert torch.equal(x, y)
++    assert "freeze_head" not in ra and "aug" not in ra
++
++
++# ───────────────────────────────────────────── DA
++def _hist_make_views(x, V, cfg=None, seed=None):
++    """Cópia literal do make_views do fix8 (CPU), referência bit a bit."""
++    import torch.nn.functional as F
++    cfg = cfg or AugConfig()
++    generator = torch.Generator(device="cpu")
++    generator.manual_seed(int(seed))
++    N, C, H, W = x.shape
++    S = cfg.out_size or H
++    dev, dt = x.device, x.dtype
++    shapes = ((N,),) * 6 + ((N, 1, 1, 1), (N, 1, 1, 1), (N, C, 1, 1))
++    cpu = [torch.rand(*s, generator=generator) for _ in range(V) for s in shapes]
++    flat = torch.cat([t.reshape(-1) for t in cpu]).to(dev).to(dt)
++    draws, off = [], 0
++    for t in cpu:
++        draws.append(flat[off:off + t.numel()].view(t.shape))
++        off += t.numel()
++    it = iter(draws)
++    rnd = lambda *s: next(it)                    # noqa: E731
++    views = []
++    for _ in range(V):
++        area = cfg.crop_scale[0] + rnd(N) * (cfg.crop_scale[1] - cfg.crop_scale[0])
++        lr0, lr1 = math.log(cfg.crop_ratio[0]), math.log(cfg.crop_ratio[1])
++        ratio = torch.exp(lr0 + rnd(N) * (lr1 - lr0))
++        sw = torch.sqrt(area * ratio).clamp(max=1.0)
++        sh = torch.sqrt(area / ratio).clamp(max=1.0)
++        cx = (rnd(N) * 2 - 1) * (1 - sw)
++        cy = (rnd(N) * 2 - 1) * (1 - sh)
++        fx = torch.where(rnd(N) < cfg.hflip_p, -1.0, 1.0).to(dt)
++        fy = torch.where(rnd(N) < cfg.vflip_p, -1.0, 1.0).to(dt)
++        theta = torch.zeros(N, 2, 3, device=dev, dtype=dt)
++        theta[:, 0, 0] = sw * fx
++        theta[:, 0, 2] = cx
++        theta[:, 1, 1] = sh * fy
++        theta[:, 1, 2] = cy
++        grid = F.affine_grid(theta, (N, C, S, S), align_corners=False)
++        v = F.grid_sample(x, grid, mode="bilinear", padding_mode="reflection", align_corners=False)
++        mean = v.mean(dim=(1, 2, 3), keepdim=True)
++        con = 1 + (rnd(N, 1, 1, 1) * 2 - 1) * cfg.contrast
++        bri = (rnd(N, 1, 1, 1) * 2 - 1) * cfg.brightness
++        ch = (rnd(N, C, 1, 1) * 2 - 1) * cfg.channel_jitter
++        v = (v - mean) * con + mean + bri + ch
++        views.append(v.clamp(0.0, 1.0))
++    return views, generator.get_state()
++
++
++@pytest.mark.parametrize("V", [1, 2, 4])
++def test_make_views_default_bitwise_historical(V):
++    x = torch.rand(5, 3, 12, 12, generator=torch.Generator().manual_seed(9))
++    ref, gstate = _hist_make_views(x, V, seed=11)
++    for cfg in (None, AugConfig(), AugConfig(blur_p=0.0, rot90_p=0.0), aug_config("default"), aug_config(None)):
++        g = torch.Generator().manual_seed(11)
++        got = make_views(x, V, cfg, generator=g)
++        assert all(torch.equal(a, b) for a, b in zip(ref, got))
++        assert torch.equal(g.get_state(), gstate)
++
++
++def test_presets_valid_deterministic_and_distinct():
++    x = torch.rand(6, 3, 16, 16, generator=torch.Generator().manual_seed(1))
++    outs = {}
++    for name in AUG_PRESETS:
++        cfg = aug_config(name)
++        assert isinstance(cfg, AugConfig)
++        a = make_views(x, 2, cfg, seed=5)
++        b = make_views(x, 2, cfg, seed=5)
++        assert all(torch.equal(p, q) for p, q in zip(a, b))
++        assert all(v.shape == x.shape and float(v.min()) >= 0 and float(v.max()) <= 1 for v in a)
++        outs[name] = a
++    assert not torch.equal(outs["weak"][0], outs["strong"][0])
++    assert aug_config("strong").crop_scale[0] < aug_config("weak").crop_scale[0]
++    with pytest.raises(ValueError):
++        aug_config("ultra")
++    d = aug_config({"preset": "weak", "blur_p": 0.3})
++    assert d.blur_p == 0.3 and d.crop_scale == (0.6, 1.0)
++
++
++def test_blur_and_rot90_do_something():
++    x = torch.rand(8, 3, 16, 16, generator=torch.Generator().manual_seed(2))
++    base = dict(crop_scale=(1.0, 1.0), crop_ratio=(1.0, 1.0), hflip_p=0.0, vflip_p=0.0, brightness=0.0,
++                contrast=0.0, channel_jitter=0.0)
++    plain = make_views(x, 1, AugConfig(**base), seed=0)[0]
++    blur = make_views(x, 1, AugConfig(**base, blur_p=1.0, blur_sigma=(1.5, 1.5)), seed=0)[0]
++    assert blur.std() < plain.std()                       # blur suaviza
++    rot = make_views(x, 1, AugConfig(**base, rot90_p=1.0), seed=0)[0]
++    for i in range(8):                                    # cada amostra é uma rotação k em {1,2,3} da original
++        assert any(torch.allclose(rot[i], torch.rot90(plain[i], k, dims=(1, 2)), atol=1e-6) for k in (1, 2, 3))
++    # sigma constante: blur == conv gaussiana separável direta (amostra 0, centro)
++    g = torch.exp(-(torch.arange(5.) - 2) ** 2 / (2 * 1.5 ** 2))
++    g = g / g.sum()
++    k2 = (g[:, None] * g[None, :])
++    ref = (plain[0, 0, 5:10, 5:10] * k2).sum()
++    assert torch.allclose(blur[0, 0, 7, 7], ref, atol=1e-5)
++
++
++def test_aug_record_json_and_ssl_result_records_aug():
++    for name in list(AUG_PRESETS) + [None]:
++        r = aug_record(name)
++        json.dumps(r)
++        assert set(r) >= {"crop_scale", "blur_p", "rot90_p"}
++    out = train_global_ssl(_enc(), _Head(), _loader(), "lejepa", "sigreg", 1, 1e-3, 1e-3, [], "cpu", seed=0,
++                           aug_cfg="strong")
++    assert out["aug"] == aug_record("strong")
++    json.dumps(out["aug"])

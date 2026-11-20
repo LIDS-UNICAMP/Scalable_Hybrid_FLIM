@@ -1,0 +1,503 @@
+diff --git a/ga_search/abstract_init/spifil0.py b/ga_search/abstract_init/spifil0.py
+index 3aeb450..9a2977d 100644
+--- a/ga_search/abstract_init/spifil0.py
++++ b/ga_search/abstract_init/spifil0.py
+@@ -103,6 +103,24 @@ class Spifil0(KernelInitializer):
+ 
+ # ─── S0+ ──────────────────────────────────────────────────────────────────────
+ 
++def check_finite_patches(learn, record: Optional[dict] = None) -> None:
++    """growth_fix8: ``InfeasibleCandidate('spifil0_nonfinite_patches')`` se os patches da camada nova têm
++    NaN/Inf (contados e registrados em ``record['nonfinite_patches']``). Sem efeito para entrada finita."""
++    from ga_search.abstract_init.base import InfeasibleCandidate
++    feats = learn.state[learn.n_layers - 1].patches.feats
++    ok = torch.isfinite(feats)
++    if bool(ok.all()):
++        return
++    bad_rows = int((~ok).any(1).sum()) if feats.dim() == 2 else int((~ok).sum())
++    info = {"layer": int(learn.n_layers), "N": int(feats.shape[0]), "D": int(feats.shape[-1]),
++            "nonfinite_values": int((~ok).sum()), "nonfinite_rows": bad_rows,
++            "nan": int(torch.isnan(feats).sum()), "inf": int(torch.isinf(feats).sum())}
++    if record is not None:
++        record.setdefault("nonfinite_patches", []).append(info)
++    print(f"[grow] RECUSADO (fix8): patches não finitos {info} -> InfeasibleCandidate (sem eigh/MKL)", flush=True)
++    raise InfeasibleCandidate("spifil0_nonfinite_patches", details=info)
++
++
+ def _folded_grow_class(whiten: bool, patch_norm: bool, select_diverse: float, knn_smooth: int, record: dict):
+     from flim.spifil import GrowOneLayer
+ 
+@@ -113,6 +131,12 @@ def _folded_grow_class(whiten: bool, patch_norm: bool, select_diverse: float, kn
+             super().__init__(budget_check, whiten, patch_norm, select_diverse, knn_smooth)
+ 
+         def run(self, learn):
++            # growth_fix8: patches não finitos (NaN/Inf vindos do prefixo do pai) iam direto para o
++            # ``eigh(cov)`` do ZCA na CPU -> "Intel MKL ERROR: Parameter 4/5 ... DLASCL" (uma vez por
++            # subproblema do divide-and-conquer: 48 linhas em D=720) e filtros NaN. Agora é recusado de forma
++            # determinística ANTES da álgebra; o NewFilterInit registra o fallback (init PyTorch). Entrada
++            # finita: nada muda.
++            check_finite_patches(learn, record)
+             super().run(learn)
+             block = learn.model.block(learn.n_layers)
+             with torch.no_grad():
+diff --git a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+index e99342a..3026288 100644
+--- a/ga_search/hmodehb/growth_chain.py
++++ b/ga_search/hmodehb/growth_chain.py
+@@ -1102,7 +1102,7 @@ def _global_ssl(gev: GrowthEvaluator, model: BB.Backbone, masks: dict, scale: fl
+         ssl_log = train_global_ssl(enc, model.head, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
+                                    epochs, lr, lr, [], dev, _NullRun(), int(seed), float(tr.get("sigreg_lambda", 0.05)),
+                                    max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
+-                                   projector=False, **amp_kw, **extra)
++                                   projector=False, progress=f"[ssl] {epochs} ép.", **amp_kw, **extra)
+     del enc
+     return ssl_log
+ 
+@@ -1175,7 +1175,7 @@ def train_child(gev: GrowthEvaluator, res: MO.GrowthResult, fidelity: int, gcfg:
+             ae = train_local_ae(prefix, ae_blk, ev.train_loader, gcfg.get("ae_target", "pixel"), ae_ep,
+                                 float(gcfg.get("lr_ae", tr.get("lr_ae", 1e-3))), dev, run, int(seed) + j,
+                                 conv_lr_scale=1.0, decoder_warmup_frac=M.AE_WARMUP_FRAC[gcfg.get("ae_schedule", "joint")],
+-                                **_amp_kw(ev))
++                                progress=f"[ae] bloco {j}", **_amp_kw(ev))
+         ae_logs.append({"block": j, **{k: v for k, v in ae.items() if isinstance(v, (int, float, str, bool))}})
+         del prefix, ae
+         _free(dev, mem["empty_cache"])
+@@ -1208,6 +1208,7 @@ def train_child(gev: GrowthEvaluator, res: MO.GrowthResult, fidelity: int, gcfg:
+            "ssl_final_loss": ssl_log.get("final_loss_total"), "ssl_steps": int(ssl_log.get("steps", 0)),
+            "ssl_finite": bool(ssl_finite), "parent_kappa_val_orig": float(parent_kappa),
+            "ssl": "none" if ssl_off else gcfg.get("ssl", "lejepa"), "ssl_skipped": bool(ssl_off),
++           "augment_device": ssl_log.get("augment_device", str(dev)),   # growth_fix8: vistas no device do treino
+            "embed_precision": gev.embed_precision,
+            "mem": dict(mem),
+            "status": "ok"}
+@@ -1306,6 +1307,7 @@ def continue_child(gev: GrowthEvaluator, model: BB.Backbone, state: dict, extra_
+            "ae_blocks": [], "ae_logs": [], "ssl_final_loss": ssl_log.get("final_loss_total"),
+            "ssl_steps": int(ssl_log.get("steps", 0)), "ssl_finite": bool(ssl_finite),
+            "parent_kappa_val_orig": float(parent_kappa), "ssl": gcfg.get("ssl", "lejepa"), "ssl_skipped": False,
++           "augment_device": ssl_log.get("augment_device", str(gev.device)),   # growth_fix8
+            "embed_precision": gev.embed_precision, "mem": dict(mem),
+            "resume": {"extra_ssl_epochs": int(extra_epochs), "optimizer": "resumed" if opt_resumed else
+                       "restarted (AdamW não salvo em f_low)", "optimizer_resumed": opt_resumed,
+diff --git a/ga_search/modehb/external_seed.py b/ga_search/modehb/external_seed.py
+index 1611cc4..7968539 100644
+--- a/ga_search/modehb/external_seed.py
++++ b/ga_search/modehb/external_seed.py
+@@ -572,12 +572,15 @@ class ElementProtect:
+ 
+     def _pre(self, opt, args, kwargs):
+         ids = {id(q) for g in opt.param_groups for q in g["params"]}
+-        self._snap[id(opt)] = [(p, m, p.detach()[m].clone()) for p, m in self.entries if id(p) in ids]
++        # growth_fix8: snapshot do tensor inteiro + torch.where (sem sincronizar). A indexação booleana
++        # ``p[m]`` fazia um nonzero (sincronização GPU->CPU) por parâmetro, 2x por passo. Mesma conta por
++        # elemento mascarado (old + scale*(new - old)); os não mascarados ficam intocados -> bit a bit igual.
++        self._snap[id(opt)] = [(p, m, p.detach().clone()) for p, m in self.entries if id(p) in ids]
+ 
+     def _post(self, opt, args, kwargs):
+         with torch.no_grad():
+             for p, m, old in self._snap.pop(id(opt), []):
+-                p.data[m] = old + self.scale * (p.data[m] - old)
++                p.data.copy_(torch.where(m, old + self.scale * (p.data - old), p.data))
+ 
+     def __exit__(self, *exc):
+         for h in self._hooks:
+diff --git a/ga_search/modehb/local_ae.py b/ga_search/modehb/local_ae.py
+index c9d5430..942c63f 100644
+--- a/ga_search/modehb/local_ae.py
++++ b/ga_search/modehb/local_ae.py
+@@ -112,6 +112,7 @@ def train_local_ae(
+     conv_lr_scale: float = 1.0,
+     decoder_warmup_frac: float = 0.0,
+     amp_dtype: torch.dtype | None = None,
++    progress: str | None = None,
+ ) -> dict:
+     """Train ``new_block`` as a local AE on top of the frozen ``prefix``.
+ 
+@@ -119,6 +120,8 @@ def train_local_ae(
+     is updated in place and left in eval mode. The temporary decoder is deleted.
+     ``amp_dtype`` (opt-in, e.g. torch.bfloat16): forward passes under autocast, the reconstruction
+     loss in fp32; None (default) = fp32 everywhere, unchanged.
++    growth_fix8: ``progress="<prefixo>"`` imprime 1 linha por época (perda, tempo, passos/s); None = silencioso.
++    As normas de gradiente por parâmetro saem numa única sincronização (mesmos valores, mesma ordem).
+     """
+     if target not in TARGETS:
+         raise ValueError(f"target must be one of {TARGETS}, got {target!r}")
+@@ -202,9 +205,11 @@ def train_local_ae(
+             else:
+                 loss.backward()
+             log = {"ae/recon_loss": float(loss.item()), "ae/lr": opt.param_groups[0]["lr"]}
+-            for name, p in named:
+-                if bad is None and p.grad is not None:
+-                    g = float(p.grad.detach().norm())
++            # growth_fix8: todas as normas numa sincronização (antes: uma por parâmetro); mesmos valores/ordem
++            with_grad = [(name, p) for name, p in named if p.grad is not None]
++            norms = torch.stack([p.grad.detach().norm() for _, p in with_grad]).tolist() if (bad is None and with_grad) else []
++            for (name, p), g in zip(with_grad, norms):
++                if bad is None:
+                     if not math.isfinite(g):
+                         bad = f"grad norm non-finite in {name} at step {step}"
+                     log[f"ae/grad_norm/{name}"] = g
+@@ -232,6 +237,11 @@ def train_local_ae(
+             step += 1
+         ep_time = time.perf_counter() - t_ep
+         epoch_losses.append(losses)
++        if progress is not None:             # growth_fix8: o log não fica mudo durante o AE local
++            n_ep = len(losses)
++            print(f"{progress} época {epoch + 1}/{epochs} passos={n_ep} "
++                  f"perda={sum(losses) / max(1, n_ep):.5g} t={ep_time:.1f}s passos/s={n_ep / max(ep_time, 1e-9):.3f} "
++                  f"pulados={len(skipped)}", flush=True)
+         if logger is not None:
+             logger.log({"ae/epoch": epoch, "ae/epoch_time_s": ep_time,
+                         "ae/epoch_loss": sum(losses) / max(1, len(losses))}, step=step)
+diff --git a/ga_search/modehb/ssl_trainers.py b/ga_search/modehb/ssl_trainers.py
+index 051ed9f..0241c74 100644
+--- a/ga_search/modehb/ssl_trainers.py
++++ b/ga_search/modehb/ssl_trainers.py
+@@ -107,8 +107,26 @@ def make_views(x: Tensor, V: int, cfg: Optional[AugConfig | dict] = None,
+     S = cfg.out_size or H
+     dev, dt = x.device, x.dtype
+ 
++    # growth_fix8: os sorteios saem do MESMO gerador de CPU, nas MESMAS chamadas/formas/ordem de antes
++    # (9 por vista, nenhum depende de valor calculado), mas vão para o device numa ÚNICA cópia por lote em vez
++    # de 9·V cópias síncronas (cada ``.to(cuda)`` de memória paginável sincroniza o stream). Mesmos números,
++    # mesmas operações elementares -> vistas bit a bit iguais.
++    shapes = ((N,),) * 6 + ((N, 1, 1, 1), (N, 1, 1, 1), (N, C, 1, 1))
++    cpu = [torch.rand(*s, generator=generator) for _ in range(V) for s in shapes]
++    flat = torch.cat([t.reshape(-1) for t in cpu])
++    if dev.type == "cuda":
++        flat = flat.pin_memory()
++    flat = flat.to(dev, non_blocking=True).to(dt)
++    draws, off = [], 0
++    for t in cpu:
++        draws.append(flat[off:off + t.numel()].view(t.shape))
++        off += t.numel()
++    it = iter(draws)
++
+     def rnd(*shape):
+-        return torch.rand(*shape, generator=generator).to(dev, dt)
++        t = next(it)
++        assert t.shape == torch.Size(shape), (t.shape, shape)
++        return t
+ 
+     views = []
+     for _ in range(V):
+@@ -269,7 +287,8 @@ def train_global_ssl(encoder: nn.Module, head: nn.Module, loader: Iterable,
+                      max_steps_per_epoch: Optional[int] = None,
+                      max_skip_frac: float = 1.0, conv_lr_scale: float = 1.0,
+                      projector: bool = False, amp_dtype: Optional[torch.dtype] = None,
+-                     resume: Optional[Dict[str, Any]] = None, return_state: bool = False) -> Dict[str, Any]:
++                     resume: Optional[Dict[str, Any]] = None, return_state: bool = False,
++                     progress: Optional[str] = None) -> Dict[str, Any]:
+     """Global SSL on the full encoder + head. Learning rates are fixed (never tuned).
+ 
+     growth_fix6 (opt-in; defaults = historical behaviour, bit for bit):
+@@ -281,6 +300,10 @@ def train_global_ssl(encoder: nn.Module, head: nn.Module, loader: Iterable,
+         probe forward / extra-module init no longer touch the BN running stats nor the RNG. On CPU,
+         run(e1, return_state) + run(e2, resume) == run(e1 + e2) bit for bit.
+ 
++    growth_fix8: ``progress="<prefixo>"`` imprime 1 linha por época (perda, tempo, passos/s, espera do loader);
++    None (padrão) = silencioso como antes. A checagem de gradiente não finito virou UMA sincronização por passo
++    (antes: uma por parâmetro); a decisão é a mesma. ``result["augment_device"]`` = device das vistas.
++
+     Losses:
+       simclr : L = nt_xent(proj(h1), proj(h2)) + lam * mean_v R(h_v)   (R on head
+                embedding h BEFORE any L2 norm; projector is discarded at the end)
+@@ -427,9 +450,12 @@ def train_global_ssl(encoder: nn.Module, head: nn.Module, loader: Iterable,
+                        + ", ".join(f"{k}={float(v):.4g}" for k, v in parts.items()))
+             else:
+                 total.backward()
+-                gnorm_bad = [n for n, p in list(encoder.named_parameters()) + list(head.named_parameters())
+-                             + [(f"extra.{n}", p) for m in extra.values() for n, p in m.named_parameters()]
+-                             if p.grad is not None and not torch.isfinite(p.grad).all()]
++                named = [(n, p) for n, p in list(encoder.named_parameters()) + list(head.named_parameters())
++                         + [(f"extra.{n}", p) for m in extra.values() for n, p in m.named_parameters()]
++                         if p.grad is not None]
++                # growth_fix8: 1 sincronização (antes: 1 por parâmetro); só procura os nomes se algo não é finito
++                all_fin = bool(torch.stack([torch.isfinite(p.grad).all() for _, p in named]).all()) if named else True
++                gnorm_bad = [] if all_fin else [n for n, p in named if not torch.isfinite(p.grad).all()]
+                 if gnorm_bad:
+                     msg = f"{name}: non-finite gradients at step {step} in {gnorm_bad[:5]}"
+             if msg is not None:          # skip this update; weights stay as they were
+@@ -485,6 +511,11 @@ def train_global_ssl(encoder: nn.Module, head: nn.Module, loader: Iterable,
+                        "perf/epoch_dataloader_wait_s": wait_total,
+                        "ssl/epoch": ep})
+         history.append(ep_rec)
++        if progress is not None:          # growth_fix8: o log não fica mudo durante o SSL
++            print(f"{progress} {name} época {ep + 1}/{epochs} passos={n_batches} "
++                  f"perda={ep_rec.get('ssl/loss_total', float('nan')):.5g} t={ep_time:.1f}s "
++                  f"passos/s={n_batches / max(ep_time, 1e-9):.3f} espera_loader={wait_total:.2f}s "
++                  f"pulados={len(skipped)}", flush=True)
+         if logger is not None:
+             logger.log({f"epoch/{k}" if not k.startswith("perf/epoch") else k: v
+                         for k, v in ep_rec.items()}, step=step)
+@@ -521,6 +552,7 @@ def train_global_ssl(encoder: nn.Module, head: nn.Module, loader: Iterable,
+         "lr_old": lr_old,
+         "lr_new": lr_new,
+         "sigreg_lambda": sigreg_lambda,
++        "augment_device": str(device),
+         **({"state": state} if return_state else {}),
+     }
+ 
+diff --git a/tests/hmodehb/test_growth_fix8.py b/tests/hmodehb/test_growth_fix8.py
+new file mode 100644
+index 0000000..5ad90ac
+--- /dev/null
++++ b/tests/hmodehb/test_growth_fix8.py
+@@ -0,0 +1,258 @@
++"""growth_fix8: fase muda do train_child (AE local + SSL LeJEPA) e o "MKL ERROR ... DLASCL" do SPiFiL.
++
++Tudo bit a bit igual ao histórico em CPU:
++  - make_views: sorteios em lote (mesmo gerador, mesmas chamadas) + 1 cópia para o device;
++  - ElementProtect: snapshot inteiro + torch.where (sem nonzero/sincronização);
++  - train_global_ssl / train_local_ae: checagem/normas de gradiente numa sincronização; ``progress`` só imprime;
++  - spifil0: patches NaN/Inf -> InfeasibleCandidate ANTES do eigh (era a origem do DLASCL).
++"""
++import math
++import types
++
++import pytest
++import torch
++import torch.nn as nn
++import torch.nn.functional as F
++
++from ga_search.modehb.ssl_trainers import AugConfig, make_views, train_global_ssl
++from ga_search.modehb.local_ae import train_local_ae
++
++
++# ───────────────────────────────────────────── referências = código histórico (pré-fix8), copiado literalmente
++def _make_views_ref(x, V, cfg=None, seed=None, generator=None):
++    cfg = AugConfig() if cfg is None else (AugConfig(**cfg) if isinstance(cfg, dict) else cfg)
++    if generator is None:
++        generator = torch.Generator(device="cpu")
++        generator.manual_seed(int(seed)) if seed is not None else generator.seed()
++    N, C, H, W = x.shape
++    S = cfg.out_size or H
++    dev, dt = x.device, x.dtype
++
++    def rnd(*shape):
++        return torch.rand(*shape, generator=generator).to(dev, dt)
++
++    views = []
++    for _ in range(V):
++        area = cfg.crop_scale[0] + rnd(N) * (cfg.crop_scale[1] - cfg.crop_scale[0])
++        lr0, lr1 = math.log(cfg.crop_ratio[0]), math.log(cfg.crop_ratio[1])
++        ratio = torch.exp(lr0 + rnd(N) * (lr1 - lr0))
++        sw = torch.sqrt(area * ratio).clamp(max=1.0)
++        sh = torch.sqrt(area / ratio).clamp(max=1.0)
++        cx = (rnd(N) * 2 - 1) * (1 - sw)
++        cy = (rnd(N) * 2 - 1) * (1 - sh)
++        fx = torch.where(rnd(N) < cfg.hflip_p, -1.0, 1.0).to(dt)
++        fy = torch.where(rnd(N) < cfg.vflip_p, -1.0, 1.0).to(dt)
++        theta = torch.zeros(N, 2, 3, device=dev, dtype=dt)
++        theta[:, 0, 0] = sw * fx
++        theta[:, 0, 2] = cx
++        theta[:, 1, 1] = sh * fy
++        theta[:, 1, 2] = cy
++        grid = F.affine_grid(theta, (N, C, S, S), align_corners=False)
++        v = F.grid_sample(x, grid, mode="bilinear", padding_mode="reflection", align_corners=False)
++        mean = v.mean(dim=(1, 2, 3), keepdim=True)
++        con = 1 + (rnd(N, 1, 1, 1) * 2 - 1) * cfg.contrast
++        bri = (rnd(N, 1, 1, 1) * 2 - 1) * cfg.brightness
++        ch = (rnd(N, C, 1, 1) * 2 - 1) * cfg.channel_jitter
++        v = (v - mean) * con + mean + bri + ch
++        views.append(v.clamp(0.0, 1.0))
++    return views
++
++
++class _ElementProtectRef:
++    def __init__(self, module, masks, scale):
++        self.scale = float(scale)
++        params = dict(module.named_parameters())
++        self.entries = [(params[n], m.to(params[n].device).bool()) for n, m in (masks or {}).items()
++                        if n in params and bool(m.any())] if self.scale != 1.0 else []
++        self._hooks, self._snap = [], {}
++
++    def __enter__(self):
++        from torch.optim.optimizer import register_optimizer_step_post_hook, register_optimizer_step_pre_hook
++        if self.entries:
++            self._hooks = [register_optimizer_step_pre_hook(self._pre), register_optimizer_step_post_hook(self._post)]
++        return self
++
++    def _pre(self, opt, args, kwargs):
++        ids = {id(q) for g in opt.param_groups for q in g["params"]}
++        self._snap[id(opt)] = [(p, m, p.detach()[m].clone()) for p, m in self.entries if id(p) in ids]
++
++    def _post(self, opt, args, kwargs):
++        with torch.no_grad():
++            for p, m, old in self._snap.pop(id(opt), []):
++                p.data[m] = old + self.scale * (p.data[m] - old)
++
++    def __exit__(self, *exc):
++        for h in self._hooks:
++            h.remove()
++        return False
++
++
++# ───────────────────────────────────────────── make_views
++@pytest.mark.parametrize("seed,V,C,N", [(0, 4, 3, 8), (7, 2, 3, 5), (123, 4, 5, 3)])
++def test_make_views_bitwise_equal_to_historical(seed, V, C, N):
++    x = torch.rand(N, C, 24, 24, generator=torch.Generator().manual_seed(seed + 1))
++    g1, g2 = torch.Generator().manual_seed(seed), torch.Generator().manual_seed(seed)
++    for _ in range(3):                                   # 3 passos seguidos: o gerador avança igual
++        a, b = make_views(x, V, generator=g1), _make_views_ref(x, V, generator=g2)
++        assert len(a) == len(b) == V
++        for u, v in zip(a, b):
++            assert torch.equal(u, v)
++    assert torch.equal(g1.get_state(), g2.get_state())
++
++
++def test_make_views_out_size_and_seed_path():
++    x = torch.rand(4, 3, 32, 32)
++    a = make_views(x, 4, {"out_size": 16}, seed=5)
++    b = _make_views_ref(x, 4, {"out_size": 16}, seed=5)
++    assert all(torch.equal(u, v) and u.shape == (4, 3, 16, 16) for u, v in zip(a, b))
++
++
++# ───────────────────────────────────────────── ElementProtect
++def test_element_protect_bitwise_equal_to_historical():
++    from ga_search.modehb.external_seed import ElementProtect
++    finals = []
++    for cls in (ElementProtect, _ElementProtectRef):
++        torch.manual_seed(0)
++        m = nn.Sequential(nn.Conv2d(3, 6, 3), nn.BatchNorm2d(6), nn.Conv2d(6, 4, 1))
++        masks = {n: (torch.rand(p.shape, generator=torch.Generator().manual_seed(i)) < 0.5)
++                 for i, (n, p) in enumerate(m.named_parameters())}
++        opt = torch.optim.AdamW(m.parameters(), lr=1e-2, weight_decay=0.01)
++        x = torch.rand(4, 3, 9, 9, generator=torch.Generator().manual_seed(3))
++        with cls(m, masks, 0.01):
++            for _ in range(4):
++                opt.zero_grad()
++                m(x).pow(2).mean().backward()
++                opt.step()
++        finals.append({k: v.clone() for k, v in m.state_dict().items()})
++    for k in finals[0]:
++        assert torch.equal(finals[0][k], finals[1][k]), k
++
++
++# ───────────────────────────────────────────── trainers: progresso só imprime; augment_device; mesmo resultado
++class _Enc(nn.Module):
++    def __init__(self):
++        super().__init__()
++        self.c = nn.Conv2d(3, 8, 3, padding=1)
++
++    def forward(self, x):
++        return F.relu(self.c(x))
++
++
++class _Head(nn.Module):
++    def __init__(self):
++        super().__init__()
++        self.l = nn.Linear(8, 16)
++
++    def forward(self, f):
++        return self.l(f.mean((2, 3)))
++
++
++def _loader():
++    x = torch.rand(16, 3, 16, 16, generator=torch.Generator().manual_seed(0))
++    return torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x), batch_size=8, shuffle=True,
++                                       generator=torch.Generator().manual_seed(1))
++
++
++def _ssl(progress):
++    torch.manual_seed(0)
++    enc, head = _Enc(), _Head()
++    r = train_global_ssl(enc, head, _loader(), "lejepa", "sigreg", 2, 1e-3, 1e-3, [], "cpu", None, 3,
++                         progress=progress)
++    return r, {**{f"e.{k}": v for k, v in enc.state_dict().items()}, **{f"h.{k}": v for k, v in head.state_dict().items()}}
++
++
++def test_ssl_progress_prints_and_changes_nothing(capsys):
++    r0, w0 = _ssl(None)
++    assert capsys.readouterr().out == ""
++    r1, w1 = _ssl("[ssl]")
++    out = capsys.readouterr().out
++    assert out.count("[ssl] lejepa época") == 2 and "passos/s=" in out
++    assert all(torch.equal(w0[k], w1[k]) for k in w0)
++    assert r0["final_loss_total"] == r1["final_loss_total"]
++    assert r0["augment_device"] == "cpu"
++
++
++def test_ssl_nonfinite_grad_still_skipped():
++    torch.manual_seed(0)
++    enc, head = _Enc(), _Head()
++    calls = {"n": 0}
++
++    def hook(g):                       # 1º backward: gradiente NaN num parâmetro -> passo pulado
++        calls["n"] += 1
++        return torch.full_like(g, float("nan")) if calls["n"] == 1 else g
++    head.l.bias.register_hook(hook)
++    r = train_global_ssl(enc, head, _loader(), "lejepa", "sigreg", 1, 1e-3, 1e-3, [], "cpu", None, 3)
++    assert r["skipped_steps"] == 1 and r["steps"] == 2
++
++
++def _ae(progress):
++    torch.manual_seed(0)
++    prefix, blk = nn.Sequential(nn.Conv2d(3, 4, 3, padding=1)), nn.Sequential(nn.Conv2d(4, 6, 3, padding=1), nn.ReLU())
++    prefix.out_channels = 4
++    r = train_local_ae(prefix, blk, _loader(), "pixel", 2, 1e-3, "cpu", None, 0, progress=progress)
++    return r, {k: v.clone() for k, v in blk.state_dict().items()}
++
++
++def test_ae_progress_prints_and_changes_nothing(capsys):
++    r0, w0 = _ae(None)
++    assert capsys.readouterr().out == ""
++    r1, w1 = _ae("[ae] bloco 1")
++    out = capsys.readouterr().out
++    assert out.count("[ae] bloco 1 época") == 2
++    assert all(torch.equal(w0[k], w1[k]) for k in w0)
++    assert r0["final_recon_loss"] == r1["final_recon_loss"]
++
++
++def test_ae_grad_norm_logs_same_values():
++    """As normas logadas (agora numa sincronização) == float(p.grad.norm()) por parâmetro."""
++    logs = []
++    lg = types.SimpleNamespace(log=lambda d, step=None: logs.append(dict(d)), alert=lambda *a, **k: None)
++    torch.manual_seed(0)
++    prefix, blk = nn.Sequential(nn.Conv2d(3, 4, 3, padding=1)), nn.Sequential(nn.Conv2d(4, 6, 3, padding=1))
++    prefix.out_channels = 4
++    train_local_ae(prefix, blk, _loader(), "pixel", 1, 1e-3, "cpu", lg, 0)
++    step_logs = [d for d in logs if "ae/recon_loss" in d]
++    assert step_logs and all("ae/grad_norm/new_block.0.weight" in d and math.isfinite(d["ae/grad_norm/new_block.0.weight"])
++                             for d in step_logs)
++
++
++# ───────────────────────────────────────────── MKL DLASCL: patches não finitos -> InfeasibleCandidate antes do eigh
++def _learn(feats):
++    patches = types.SimpleNamespace(feats=feats)
++    return types.SimpleNamespace(n_layers=1, state=[types.SimpleNamespace(patches=patches)])
++
++
++@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
++def test_spifil0_nonfinite_patches_infeasible(bad):
++    from ga_search.abstract_init.base import InfeasibleCandidate
++    from ga_search.abstract_init.spifil0 import check_finite_patches
++    f = torch.randn(50, 12)
++    f[3, 4] = bad
++    rec = {}
++    with pytest.raises(InfeasibleCandidate) as ei:
++        check_finite_patches(_learn(f), rec)
++    assert ei.value.reason == "spifil0_nonfinite_patches"
++    assert rec["nonfinite_patches"][0]["nonfinite_values"] == 1 and rec["nonfinite_patches"][0]["D"] == 12
++
++
++def test_spifil0_finite_patches_untouched():
++    from ga_search.abstract_init.spifil0 import check_finite_patches
++    f = torch.randn(50, 12)
++    rec = {}
++    check_finite_patches(_learn(f), rec)
++    assert rec == {}
++
++
++def test_folded_grow_checks_before_super_run(monkeypatch):
++    """O FoldedGrowOneLayer recusa ANTES de chamar o GrowOneLayer.run (que faria o eigh no MKL)."""
++    from ga_search.abstract_init.base import InfeasibleCandidate
++    from ga_search.abstract_init import spifil0
++    import flim.spifil as FS
++    called = {"n": 0}
++    monkeypatch.setattr(FS.GrowOneLayer, "run", lambda self, learn: called.__setitem__("n", called["n"] + 1))
++    cls = spifil0._folded_grow_class(True, False, 0.0, 0, {})
++    f = torch.randn(50, 12)
++    f[0, 0] = float("nan")
++    with pytest.raises(InfeasibleCandidate):
++        cls().run(_learn(f))
++    assert called["n"] == 0

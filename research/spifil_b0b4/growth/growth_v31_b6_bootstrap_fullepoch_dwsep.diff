@@ -1,0 +1,350 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 22:32:46.971526548 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 22:32:46.972526562 -0300
+@@ -139,7 +139,10 @@
+            "zca_refit": False, "zca_refit_images": 256, "softhebb_paper": False, "softhebb_radius": 3.0,
+            # v3.1 bloco 5: replace.criterion = corr (v3) | redo (tau .1) | repr (p .30); prune_redundant_new = poda
+            #   exata dos canais NOVOS mortos/duplicados (mais superpixels -> redundância eliminada na rede)
+-           "prune_redundant_new": False, "prune": {"corr_thr": 0.95, "var_rel_eps": 1.0e-6, "n_images": 64}},
++           "prune_redundant_new": False, "prune": {"corr_thr": 0.95, "var_rel_eps": 1.0e-6, "n_images": 64},
++           # v3.1 bloco 6: full_epoch_ae (época do AE = passada completa); accept_bootstrap {n, alpha} (aceita só se o
++           #   quantil alpha do Δκ pareado da val >= 0); spifil_dwsep (SPiFiL no pointwise novo do dwsep)
++           "full_epoch_ae": False, "accept_bootstrap": None, "spifil_dwsep": False},
+ }
+ 
+ V3_SSL_REG = {"lejepa": "sigreg", "simclr": "none", "vicreg": "none"}
+@@ -749,6 +752,8 @@
+         self.readout = str(v3.get("readout", "head"))
+         self.so2_cfg = dict(v3.get("so2") or {})
+         self.aux_gap_on = bool(v3.get("aux_gap", True))
++        if v3.get("accept_bootstrap"):          # v3.1: a SVM devolve as predições da val (bootstrap pareado)
++            ev.return_pred = True
+         self._last_head = None
+         if self.readout != "head":
+             from ga_search.hmodehb import so2_head as SO2
+@@ -924,6 +929,13 @@
+             new_rows = [i for i, m in enumerate(out_local) if m < 0]
+             conv = cb.conv
+             rec = {"layer": int(j), "n_new": len(new_rows), "method": self.method, "n_fit": 0, "fallback": None}
++            if isinstance(conv, nn.Sequential) and getattr(self, "dwsep_spifil", False) and len(conv) == 2 \
++                    and isinstance(conv[1], nn.Conv2d) and conv[1].groups == 1 and conv[1].kernel_size == (1, 1):
++                # v3.1 bloco 6: dwsep -> SPiFiL no POINTWISE novo, sobre o prefixo + o depthwise herdado do bloco
++                pre = [copy.deepcopy(b) for b in parent.blocks[:j]] + [copy.deepcopy(parent.blocks[j].conv[0])]
++                cin_par = _block_in(parent.spec, j)
++                self._fit_rows(parent, j, conv[1], new_rows, cin_par, 1, pre, rec, tag="dwsep_pointwise")
++                return
+             if not (isinstance(conv, nn.Conv2d) and conv.groups == 1):
+                 rec["fallback"] = f"conv {type(conv).__name__}/groups={getattr(conv, 'groups', '?')}: init PyTorch"
+                 self.log.append(rec)
+@@ -970,6 +982,44 @@
+         return fn
+ 
+ 
++    def _fit_rows(self, parent, j: int, conv: nn.Conv2d, rows: List[int], cin_par: int, k: int, prefix_mods, rec: dict,
++                  tag: str = "") -> None:
++        """v3.1: SPiFiL (A2) nas linhas ``rows`` de ``conv`` com um prefixo explícito (ex.: dwsep pointwise)."""
++        from ga_search.abstract_init.base import InitContext
++        from ga_search.modehb.spifil_ops import to_ops_spec
++        prefix = nn.Sequential(*prefix_mods).to(self.gev.device).eval() if prefix_mods else None
++        if prefix is not None:
++            prefix.out_channels = cin_par
++        L = parent.spec.layers()[min(int(j), len(parent.spec.layers()) - 1)]
++        spec = to_ops_spec({"conv": "conv" if k > 1 else "pointwise", "kernel": int(k), "channels": len(rows),
++                            "activation": L.activation, "norm": "none", "pool": "none", "residual": False,
++                            "dropout": 0.0}, cin_par)
++        ctx = InitContext(seed=self.seed + 31 + j, device=self.gev.device, layer_idx=int(j),
++                          prefix_id=f"growth_v31:{tag}:{parent.spec.hash12}:{j}", config=dict(self.init.config),
++                          spifil_config=self.scfg(self.seed + 31 + j), genome=None,
++                          diag_batch=self.gev.ev.svm_train_x[-16:])
++        t0 = time.perf_counter()
++        rec["target"] = tag
++        try:
++            w, b, _prov = self.init.fit(prefix, self.train_data, spec, ctx)
++            W, B = w["conv.weight"].detach().to(conv.weight), w.get("conv.bias", b.get("conv.bias"))
++        except Exception as exc:
++            rec["fallback"] = f"{type(exc).__name__}: {str(exc)[:160]}"
++            self.log.append(rec)
++            return
++        finally:
++            del prefix
++            _free(self.gev.device)
++        n = min(int(W.shape[0]), len(rows))
++        with torch.no_grad():
++            r = torch.as_tensor(list(rows[:n]), dtype=torch.long)
++            conv.weight[r] = 0.0
++            conv.weight[r, :cin_par] = W[:n, :cin_par].to(conv.weight)
++            if conv.bias is not None and B is not None:
++                conv.bias[r] = B[:n].detach().to(conv.bias)
++        rec.update(n_fit=n, n_pytorch=len(rows) - n, fit_seconds=time.perf_counter() - t0)
++        self.log.append(rec)
++
+     # ---- growth v3: SPiFiL em linhas arbitrárias de uma conv densa (ramo novo do inception, filtros trocados)
+     def conv_hook(self, parent: BB.Backbone, residual_of: Optional[Sequence[int]] = None, tag: str = "branch"):
+         """-> fn(j, conv, rows): filtros SPiFiL (A2) ajustados sobre o prefixo do ``parent`` (canais herdados),
+@@ -1920,6 +1970,9 @@
+     new_blocks = [j for j in range(len(model.blocks))
+                   if any(not bool(masks[f"blocks.{j}.{k}"].all()) for k, _ in model.blocks[j].named_parameters())]
+     ae_logs = []
++    ae_loader = ev.train_loader
++    if _v3(gcfg).get("full_epoch_ae"):       # v3.1 bloco 6: época do AE = passada completa (sem max_images_per_epoch)
++        ae_loader = _ssl_loader(ev, int(gev.cfg["data"].get("batch_size", 64)), int(seed) + 17)
+     torch.manual_seed(int(seed))
+     for j in new_blocks:
+         for p in model.parameters():           # o prefixo não pode carregar gradiente do AE anterior
+@@ -1930,7 +1983,7 @@
+         # growth_mem2: checkpoint do bloco novo no AE local (mesmos parâmetros/ordem; BN/DBN 1x; bit a bit)
+         ae_blk = _CkptSequential(blk) if mem["grad_checkpoint"] else blk
+         with ElementProtect(blk, _masks_under(masks, f"blocks.{j}."), scale):
+-            ae = train_local_ae(prefix, ae_blk, ev.train_loader, gcfg.get("ae_target", "pixel"), ae_ep,
++            ae = train_local_ae(prefix, ae_blk, ae_loader, gcfg.get("ae_target", "pixel"), ae_ep,
+                                 float(gcfg.get("lr_ae", tr.get("lr_ae", 1e-3))), dev, run, int(seed) + j,
+                                 conv_lr_scale=1.0, decoder_warmup_frac=M.AE_WARMUP_FRAC[gcfg.get("ae_schedule", "joint")],
+                                 progress=f"[ae] bloco {j}", **_amp_kw(ev))
+@@ -1968,7 +2021,9 @@
+            "aux": {"wise_kappas": kappas, "kappa_val_alpha0": kappas.get("0.0"),
+                    "macro_f1": float(best[1].get("macro_f1", float("nan")))},
+            "decision_rulers": gev.decision_rulers(), "n_svm_decisions": len(ev._svm_stamps),
++           "_val_pred": best[1].get("pred"), "_val_true": best[1].get("y_true"),
+            "ae_epochs": ae_ep, "ssl_epochs": ssl_ep, "ae_blocks": new_blocks, "ae_logs": ae_logs,
++           "ae_full_epoch": bool(_v3(gcfg).get("full_epoch_ae")),
+            "ssl_final_loss": ssl_log.get("final_loss_total"), "ssl_steps": int(ssl_log.get("steps", 0)),
+            "ssl_finite": bool(ssl_finite), "parent_kappa_val_orig": float(parent_kappa),
+            "ssl": "none" if ssl_off else gcfg.get("ssl", "lejepa"), "ssl_skipped": bool(ssl_off),
+@@ -2168,6 +2223,33 @@
+ 
+ 
+ # ═════════════════════════════════════════════════════════════════ 6. utilidades de seleção
++def _kappa_np(y: np.ndarray, p: np.ndarray, k: int) -> float:
++    """Cohen kappa (não ponderado), = multiclass_cohen_kappa do core.metrics."""
++    cm = np.zeros((k, k), dtype=np.float64)
++    np.add.at(cm, (y, p), 1.0)
++    n = cm.sum()
++    po = np.trace(cm) / n
++    pe = float((cm.sum(0) * cm.sum(1)).sum()) / (n * n)
++    return 0.0 if pe >= 1.0 else float((po - pe) / (1.0 - pe))
++
++
++def bootstrap_delta_kappa(parent_pred: np.ndarray, child_pred: np.ndarray, y: np.ndarray, *, n: int = 1000,
++                          alpha: float = 0.05, seed: int = 0) -> dict:
++    """v3.1: bootstrap PAREADO da validação (mesmas amostras para pai e filho): Δκ = κ_filho - κ_pai.
++    ``accept_ok`` = quantil alpha de Δκ >= 0 (melhora significativa). Só validação; o teste nunca entra."""
++    k = int(max(y.max(), parent_pred.max(), child_pred.max())) + 1
++    rng = np.random.default_rng(int(seed))
++    m = len(y)
++    d = np.empty(int(n))
++    for b in range(int(n)):
++        i = rng.integers(0, m, m)
++        d[b] = _kappa_np(y[i], child_pred[i], k) - _kappa_np(y[i], parent_pred[i], k)
++    lo, hi = float(np.quantile(d, alpha)), float(np.quantile(d, 1 - alpha))
++    return {"delta_kappa_point": _kappa_np(y, child_pred, k) - _kappa_np(y, parent_pred, k),
++            "delta_kappa_ci": [lo, hi], "alpha": float(alpha), "n": int(n), "p_improve": float((d > 0).mean()),
++            "accept_ok": bool(lo >= 0.0), "split": "validation"}
++
++
+ def decide(r: dict, delta: float, require_improvement: bool) -> Tuple[str, bool]:
+     """growth_fix4 (b). -> (decisão, entra na faixa?). Preservação exata + WiSE alpha=0 => o filho É o pai:
+     ``adopted_as_parent`` (nem aceito nem rejeitado por ruído; não ocupa a faixa, não é promovido). Senão,
+@@ -2187,6 +2269,9 @@
+     if pk is None:                              # resultado anterior ao fix4 (não deveria ser adotado: fitness_sig)
+         pk = r.get("parent_kappa_val_orig")
+     ok = accept(r.get("kappa_val_orig"), pk, delta, r.get("wise_alpha", 0.0), require_improvement)
++    bt = r.get("bootstrap")
++    if ok and isinstance(bt, dict) and bt.get("accept_ok") is False:   # v3.1: margem estatística (opção registrada)
++        return "rejected_not_significant", False
+     return ("accepted" if ok else "rejected"), ok
+ 
+ 
+@@ -2459,6 +2544,7 @@
+                             int(g.get("spifil_images_per_class", 4)), seed)
+         if _v3(g).get("spifil_n_superpixels"):
+             nfi.spifil_over["n_superpixels"] = int(_v3(g)["spifil_n_superpixels"])
++        nfi.dwsep_spifil = bool(_v3(g).get("spifil_dwsep"))          # v3.1 bloco 6
+         res = realize_plan(pmodel, ops, nfi, g)
+         if _v3(g).get("spifil_strict"):
+             bad = [r for r in nfi.log if r.get("fallback") or int(r.get("n_pytorch", 0) or 0) > 0]
+@@ -2497,6 +2583,12 @@
+         cap = {} if want_resume else None
+         sh_log, rep_log = getattr(res, "v3_softhebb", None), getattr(res, "v3_replace", None)
+         model, out = train_child(self.gev, res, fid, g, seed, parent_rescored, capture=cap, anchor_state=anchor_state)
++        bt = _v3(g).get("accept_bootstrap")       # v3.1 bloco 6: margem estatística (bootstrap pareado da val)
++        cp, ct = out.pop("_val_pred", None), out.pop("_val_true", None)
++        if bt and cp is not None and psv.get("pred") is not None:
++            out["bootstrap"] = bootstrap_delta_kappa(np.asarray(psv["pred"]), np.asarray(cp), np.asarray(ct),
++                                                     n=int(bt.get("n", 1000)), alpha=float(bt.get("alpha", 0.05)),
++                                                     seed=int(seed))
+         out.update(genes=genes or {}, softhebb_log=sh_log, replace_log=rep_log, prune_log=getattr(res, "v3_prune", None),
+                    spifil_data={"images_per_class_requested": g.get("spifil_images_per_class"),
+                                 "images_per_class_effective": nfi.ipc_effective, "n_images": nfi.n_images,
+diff -ruN a/ga_search/hmodehb/hevaluate.py b/ga_search/hmodehb/hevaluate.py
+--- a/ga_search/hmodehb/hevaluate.py	2026-11-17 22:32:46.976526617 -0300
++++ b/ga_search/hmodehb/hevaluate.py	2026-11-17 22:32:46.977526631 -0300
+@@ -57,6 +57,8 @@
+         if self.sv2.get("gram_reduce"):
+             kw["gram_reduce"] = True
+         self.__dict__.setdefault("_svm_stamps", []).append({k: kw[k] for k in ("C", "scaler", "whiten", "kappa_weight", "max_train")})
++        if getattr(self, "return_pred", False):     # growth v3.1: bootstrap da aceitação (SVM inalterada)
++            kw["return_pred"] = True
+         return svm_fitness(tr, self.svm_train_y.numpy(), va, self.val_y.numpy(), seed=self.seed, **kw)
+ 
+     def _svm_quality(self, encoder, head):
+diff -ruN a/ga_search/modehb/supervised_fitness.py b/ga_search/modehb/supervised_fitness.py
+--- a/ga_search/modehb/supervised_fitness.py	2026-11-17 22:32:46.981526687 -0300
++++ b/ga_search/modehb/supervised_fitness.py	2026-11-17 22:32:46.982526701 -0300
+@@ -101,7 +101,7 @@
+ def svm_fitness(train_emb, train_y, val_emb, val_y, *, C: float = 100.0,
+                 scaler: str = "none", max_train: int | None = 10000, solver: str = "libsvm",
+                 seed: int = 0, kappa_weight: float = 0.75, whiten: str = "none",
+-                gram_reduce: bool = False) -> dict:
++                gram_reduce: bool = False, return_pred: bool = False) -> dict:
+     """Fit the repo's linear SVM on train embeddings, score on validation.
+ 
+     Returns {"kappa", "macro_f1", "balanced_acc", "quality", "fit_s",
+@@ -173,7 +173,10 @@
+     if not np.isfinite(f1):
+         f1 = 0.0
+     q = kappa_weight * max(kappa, 0.0) + (1.0 - kappa_weight) * f1
+-    return {"kappa": kappa, "macro_f1": f1,
+-            "balanced_acc": float(balanced_accuracy_score(yva0, pred)),
+-            "quality": float(np.clip(q, 0.0, 1.0)),
+-            "fit_s": float(fit_s), "n_train_used": int(len(idx))}
++    out = {"kappa": kappa, "macro_f1": f1,
++           "balanced_acc": float(balanced_accuracy_score(yva0, pred)),
++           "quality": float(np.clip(q, 0.0, 1.0)),
++           "fit_s": float(fit_s), "n_train_used": int(len(idx))}
++    if return_pred:            # growth v3.1 (opt-in): predições da validação (bootstrap da aceitação); SVM inalterada
++        out["pred"], out["y_true"] = np.asarray(pred, dtype=np.int64), yva0
++    return out
+diff -ruN a/tests/hmodehb/test_growth_v31_b6.py b/tests/hmodehb/test_growth_v31_b6.py
+--- a/tests/hmodehb/test_growth_v31_b6.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_b6.py	2026-11-17 22:32:46.986526756 -0300
+@@ -0,0 +1,66 @@
++"""growth v3.1 bloco 6: bootstrap pareado da val na aceitação (opção), época do AE = passada completa,
++SPiFiL no pointwise novo do dwsep, svm_fitness com predições opt-in (SVM inalterada)."""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++
++import numpy as np
++import pytest
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++
++
++def test_kappa_np_equals_core_metrics():
++    from core.metrics import compute_metrics
++    rng = np.random.default_rng(0)
++    y = rng.integers(0, 5, 200)
++    p = np.where(rng.random(200) < 0.6, y, rng.integers(0, 5, 200))
++    assert G._kappa_np(y, p, 5) == pytest.approx(compute_metrics(y, p, num_classes=5)["kappa"], abs=1e-6)
++
++
++def test_bootstrap_delta_kappa():
++    rng = np.random.default_rng(1)
++    y = rng.integers(0, 4, 300)
++    par = np.where(rng.random(300) < 0.5, y, rng.integers(0, 4, 300))
++    good = np.where(rng.random(300) < 0.9, y, rng.integers(0, 4, 300))
++    b = G.bootstrap_delta_kappa(par, good, y, n=300, seed=0)
++    assert b["accept_ok"] and b["delta_kappa_ci"][0] > 0 and b["split"] == "validation"
++    same = G.bootstrap_delta_kappa(par, par, y, n=100, seed=0)
++    assert same["delta_kappa_point"] == 0.0 and same["accept_ok"]          # empate exato: Δ = 0 sempre
++    noisy = np.where(rng.random(300) < 0.52, y, rng.integers(0, 4, 300))
++    assert G.bootstrap_delta_kappa(par, noisy, y, n=300, seed=0)["accept_ok"] is False
++    assert G.bootstrap_delta_kappa(par, good, y, n=300, seed=0) == b              # determinístico
++
++
++def test_decide_with_bootstrap():
++    r = {"status": "ok", "wise_alpha": 0.5, "kappa_val_orig": 0.61, "kappa_parent_rescored": 0.60,
++         "preservation_verdict": "exact", "bootstrap": {"accept_ok": False}}
++    assert G.decide(r, 0.0, False) == ("rejected_not_significant", False)
++    r["bootstrap"]["accept_ok"] = True
++    assert G.decide(r, 0.0, False) == ("accepted", True)
++    r.pop("bootstrap")
++    assert G.decide(r, 0.0, False) == ("accepted", True)                     # sem a opção: regra da v3
++
++
++def test_svm_fitness_return_pred_same_kappa():
++    from ga_search.modehb.supervised_fitness import svm_fitness
++    rng = np.random.default_rng(2)
++    X, y = rng.normal(size=(60, 8)), rng.integers(0, 3, 60)
++    a = svm_fitness(X[:40], y[:40], X[40:], y[40:], C=100.0, scaler="none", kappa_weight=1.0, max_train=None)
++    b = svm_fitness(X[:40], y[:40], X[40:], y[40:], C=100.0, scaler="none", kappa_weight=1.0, max_train=None,
++                    return_pred=True)
++    assert a["kappa"] == b["kappa"] and "pred" not in a and len(b["pred"]) == 20
++
++
++def test_ssl_loader_full_epoch():
++    from torch.utils.data import DataLoader, TensorDataset
++    from types import SimpleNamespace
++    ds = TensorDataset(torch.rand(50, 3, 8, 8))
++    ev = SimpleNamespace(train_loader=DataLoader(ds, batch_size=16))
++    ld = G._ssl_loader(ev, 16, 0)
++    assert len(ld) == 3 and ld.batch_size == 16 and ld.drop_last
+diff -ruN a/tests/hmodehb/test_growth_v31_e2e_b36.py b/tests/hmodehb/test_growth_v31_e2e_b36.py
+--- a/tests/hmodehb/test_growth_v31_e2e_b36.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_e2e_b36.py	2026-11-17 22:32:46.990526812 -0300
+@@ -0,0 +1,60 @@
++"""growth v3.1 blocos 3-6, e2e REAL mini (flowers, CPU, f1): add_dense_layer + deepen_rezero + cov_gate(zca) com
++ZCA re-ajustada, SoftHebb do paper, poda dos canais novos, replace ReDo, SPiFiL no dwsep, AE em passada completa e
++aceitação com bootstrap pareado da val."""
++from __future__ import annotations
++
++import json
++import sys
++from pathlib import Path
++
++import pytest
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++
++FL_ROOT = Path("/dados/home/moliveira/datasets/organized/flowers")
++FL_B0 = ROOT / "artifacts/modehb_spifil/flowers/state/seed42/candidates/c00003/f15/encoder.pt"
++
++
++@pytest.mark.skipif(not (FL_ROOT.exists() and FL_B0.exists()), reason="dados/semente de flowers ausentes")
++def test_e2e_v31_blocks_3_to_6_flowers(tmp_path):
++    from ga_search.hmodehb import fitness_v2 as FV
++    out = tmp_path / "fl"
++    ov = ["device=cpu", "wandb.enabled=false", "data.image_size=64", "data.batch_size=16", "data.num_workers=0",
++          "train.max_steps_per_epoch=1"]
++    cfg = G.build_cfg("flowers", 42, ov, out)
++    g = G.load_growth_config(ROOT / "ga_search/config/hmodehb_b0b4/growth_v3.yaml",
++                             ["seeds.top_k=2", "n_parents=2", "n_children=6", "generations=1", "fid_low=1",
++                              "fid_high=1", "end_band=B1", "spifil_images_per_class=1", "debug_train=48",
++                              "debug_val=32", "test_channel=false", "seeds.external_small=false",
++                              f"seeds.registry={ROOT / 'research/spifil_b0b4/agent1/seed_registry.csv'}",
++                              "v3.so2.seed_mode=fixed", "v3.zca_refit=true", "v3.zca_refit_images=16",
++                              "v3.softhebb_paper=true", "v3.softhebb_cfg.n_images=16", "v3.prune_redundant_new=true",
++                              "v3.prune.n_images=16", "v3.replace.criterion=redo", "v3.replace.n_images=16",
++                              "v3.spifil_dwsep=true", "v3.full_epoch_ae=true", "v3.accept_bootstrap={n: 200, alpha: 0.05}",
++                              "v3.cov_gate_fit_images=16", "v3.so2.eps_rel=0.001"])
++    g["v3"]["genes"] = {"ssl": ["none", "lejepa"], "softhebb": [True, False], "whiten_new": ["zca"]}
++    g["v3"]["ops"] = ["add_dense_layer", "deepen_rezero", "cov_gate", "replace_bad_filters"]
++    g["v3"]["families"] = ["add_dense_layer", "deepen_rezero", "cov_gate", "replace_bad_filters", "widen"]
++    gev = G.GrowthEvaluator(cfg, out / "eval", g["debug_train"], g["debug_val"], v3=g["v3"])
++    assert gev.fitness_spec["head_v3"]["eps_rel"] == 0.001
++    G.GrowthChain(cfg, g, gev, out).run()
++    res = [json.loads(p.read_text()) for p in out.glob("nodes/*/f1/result.json")]
++    lin = [json.loads(x) for x in (out / "lineage.jsonl").read_text().splitlines()]
++    assert res
++    ops_seen = set()
++    for r in res:
++        assert r["status"] == "ok", r.get("error")
++        FV.check_decisions(r, gev.fitness_spec)
++        assert "bootstrap" in r and r["bootstrap"]["split"] == "validation"
++        assert r["ae_full_epoch"] is True and "_val_pred" not in r
++        ops_seen |= {o["op"] for o in r["ops"]}
++        for z in r.get("zca_refit") or []:
++            assert z["split"] == "train"
++        assert r.get("prune_log") is not None
++    for x in lin:
++        if x.get("decision") == "accepted":
++            assert x["kappa_val_orig"] >= x["kappa_parent_rescored"]
++    assert len(ops_seen & {"add_dense_layer", "deepen_rezero", "cov_gate", "replace_bad_filters"}) >= 2, ops_seen

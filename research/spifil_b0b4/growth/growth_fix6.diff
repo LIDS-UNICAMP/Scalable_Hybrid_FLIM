@@ -1,0 +1,899 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 17:37:52.050595299 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 17:37:52.053595337 -0300
+@@ -96,6 +96,12 @@
+             # growth_fix5: teto do pico ESTIMADO por plano (GB); null = memória total da GPU - 3 GB (torch.cuda),
+             # sem GPU = filtro desligado. Plano acima -> "infeasible_mem" e o planner gera outro.
+             "max_gpu_gb": None, "oom_capacity_margin_gib": 1.0},
++    # growth_fix6: promoção fid_low -> fid_high. "resume" (padrão) RETOMA o filho de f_low: pesos treinados
++    # pré-WiSE + estado do AdamW/RNG (se salvos; senão AdamW novo, registrado) e treina mais
++    # (fid_high - fid_low) épocas de SSL ("fid_diff"; "ssl_diff" = ssl(f_high) - ssl(f_low)), mesmo lr fixo.
++    # Âncora do WiSE = o morfismo (pai em função). Nó final = melhor de f_low/f_high pela ORIG-val.
++    # "retrain" = histórico (refaz do morfismo). save_optimizer: grava o AdamW em f_low.
++    "promotion": {"mode": "resume", "save_optimizer": True, "extra_epochs": "fid_diff"},
+ }
+ 
+ 
+@@ -103,6 +109,15 @@
+     return {**GROWTH_DEFAULTS["mem"], **(gcfg.get("mem") or {})}
+ 
+ 
++def _promo(gcfg: dict) -> dict:
++    p = {**GROWTH_DEFAULTS["promotion"], **(gcfg.get("promotion") or {})}
++    if p["mode"] not in ("resume", "retrain"):
++        raise ValueError(f"promotion.mode {p['mode']!r} (resume|retrain)")
++    if p["extra_epochs"] not in ("fid_diff", "ssl_diff"):
++        raise ValueError(f"promotion.extra_epochs {p['extra_epochs']!r} (fid_diff|ssl_diff)")
++    return p
++
++
+ def _free(dev, on: bool = True) -> None:
+     import gc
+     gc.collect()
+@@ -1017,13 +1032,70 @@
+     return all(bool(torch.isfinite(v).all()) for v in sd.values() if v.is_floating_point())
+ 
+ 
++def _snapper(mem: dict):
++    return (lambda m: {k: v.detach().to("cpu", copy=True) for k, v in m.state_dict().items()}) \
++        if mem["wise_on_cpu"] else (lambda m: {k: v.detach().clone() for k, v in m.state_dict().items()})
++
++
++def _global_ssl(gev: GrowthEvaluator, model: BB.Backbone, masks: dict, scale: float, epochs: int, gcfg: dict,
++                seed: int, mem: dict, *, resume: Optional[dict] = None, return_state: bool = False) -> dict:
++    """LeJEPA+SIGReg global (mesma chamada em f_low, no treino contínuo e na retomada de f_high)."""
++    from ga_search.modehb.external_seed import ElementProtect
++    from ga_search.modehb.run_search import _amp_kw, _NullRun
++    from ga_search.modehb.ssl_trainers import train_global_ssl
++    ev, dev = gev.ev, gev.device
++    tr = gev.cfg["train"]
++    enc = (_CkptSequential if mem["grad_checkpoint"] else nn.Sequential)(*model.blocks)
++    if mem["ssl_amp_bf16"]:                   # OPÇÃO DESLIGADA: muda a ciência (declarada no resultado)
++        amp_kw = {"amp_dtype": torch.bfloat16}
++    else:
++        amp_kw = _amp_kw(ev)
++    lr = float(gcfg.get("lr", tr.get("lr_new", 1e-3)))
++    extra = {"resume": resume, "return_state": True} if (resume is not None or return_state) else {}
++    with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
++            ElementProtect(model.head, _masks_under(masks, "head."), scale):
++        ssl_log = train_global_ssl(enc, model.head, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
++                                   epochs, lr, lr, [], dev, _NullRun(), int(seed), float(tr.get("sigreg_lambda", 0.05)),
++                                   max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
++                                   projector=False, **amp_kw, **extra)
++    del enc
++    return ssl_log
++
++
++def _wise_select(gev: GrowthEvaluator, model: BB.Backbone, anchor: dict, trained: dict, ssl_finite: bool,
++                 gcfg: dict, mem: dict):
++    """WiSE: alpha pela ORIG-val entre âncora (morfismo = pai) e treinado; o modelo termina no melhor blend."""
++    dev = gev.device
++    alphas = [float(a) for a in gcfg.get("wise_alphas", [0.0, 0.25, 0.5, 0.75, 1.0])]
++    if 0.0 not in alphas:
++        alphas = [0.0] + alphas
++    if not ssl_finite:                     # SSL não finito: só alpha=0 (= pai) é avaliado
++        alphas = [0.0]
++    gev.reset_stamps()
++    best, kappas = None, {}
++    for a in alphas:
++        _blend_into(model, anchor, trained, a)
++        sv = gev.score(model, embed_batch_size=mem["embed_batch_size"])
++        _free(dev, mem["empty_cache"])
++        kappas[str(a)] = float(sv["kappa"])
++        if best is None or sv["quality"] > best[1]["quality"]:
++            best = (a, sv)
++    _blend_into(model, anchor, trained, best[0])
++    model.eval()
++    return best, kappas
++
++
+ def train_child(gev: GrowthEvaluator, res: MO.GrowthResult, fidelity: int, gcfg: dict, seed: int,
+-                parent_kappa: float) -> Tuple[BB.Backbone, dict]:
+-    """AE local (blocos novos) -> LeJEPA+SIGReg -> WiSE (âncora = filho no passo 0 = pai) -> kappa ORIG-val."""
++                parent_kappa: float, *, epochs: Optional[Tuple[int, int]] = None,
++                capture: Optional[dict] = None) -> Tuple[BB.Backbone, dict]:
++    """AE local (blocos novos) -> LeJEPA+SIGReg -> WiSE (âncora = filho no passo 0 = pai) -> kappa ORIG-val.
++
++    growth_fix6: ``epochs=(ae, ssl)`` força a divisão (padrão: ``split_epochs(fidelity)``; o treino contínuo de
++    referência da retomada usa (ae(f_low), f_high - ae(f_low))). ``capture`` (dict) recebe o estado de retomada:
++    pesos treinados PRÉ-WiSE, âncora, máscaras e o estado do SSL (AdamW/RNG/passo)."""
+     from ga_search.modehb.external_seed import ElementProtect
+     from ga_search.modehb.local_ae import train_local_ae
+     from ga_search.modehb.run_search import _amp_kw, _NullRun, split_epochs
+-    from ga_search.modehb.ssl_trainers import train_global_ssl
+     from ga_search.modehb import modehb as M
+     ev, dev = gev.ev, gev.device
+     tr = gev.cfg["train"]
+@@ -1031,10 +1103,10 @@
+     model = res.child.to(dev)
+     masks = {k: v.to(dev) for k, v in res.masks.items()}
+     scale = PROTECT_SCALE[gcfg["protect"]]
+-    snap = (lambda m: {k: v.detach().to("cpu", copy=True) for k, v in m.state_dict().items()}) \
+-        if mem["wise_on_cpu"] else (lambda m: {k: v.detach().clone() for k, v in m.state_dict().items()})
++    snap = _snapper(mem)
+     anchor = snap(model)
+-    ae_ep, ssl_ep = split_epochs(fidelity, tr.get("ae_ssl_split", [1, 2]))
++    ae_ep, ssl_ep = split_epochs(fidelity, tr.get("ae_ssl_split", [1, 2])) if epochs is None \
++        else (int(epochs[0]), int(epochs[1]))
+     run = _NullRun()
+     new_blocks = [j for j in range(len(model.blocks))
+                   if any(not bool(masks[f"blocks.{j}.{k}"].all()) for k, _ in model.blocks[j].named_parameters())]
+@@ -1059,44 +1131,23 @@
+     for p in model.parameters():
+         p.grad = None
+         p.requires_grad_(True)
+-    enc = (_CkptSequential if mem["grad_checkpoint"] else nn.Sequential)(*model.blocks)
+-    if mem["ssl_amp_bf16"]:                   # OPÇÃO DESLIGADA: muda a ciência (declarada no resultado)
+-        amp_kw = {"amp_dtype": torch.bfloat16}
+-    else:
+-        amp_kw = _amp_kw(ev)
+-    lr = float(gcfg.get("lr", tr.get("lr_new", 1e-3)))
+     ssl_off = ssl_disabled(gcfg)
+     if ssl_off:                              # growth_fix4: ablação ``ssl: none`` (só o AE local nos blocos novos)
+         ssl_log = {"steps": 0, "final_loss_total": 0.0, "skipped": True}
+     else:
+-        with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
+-                ElementProtect(model.head, _masks_under(masks, "head."), scale):
+-            ssl_log = train_global_ssl(enc, model.head, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
+-                                       ssl_ep, lr, lr, [], dev, run, int(seed), float(tr.get("sigreg_lambda", 0.05)),
+-                                       max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
+-                                       projector=False, **amp_kw)
++        ssl_log = _global_ssl(gev, model, masks, scale, ssl_ep, gcfg, seed, mem, return_state=capture is not None)
+     for p in model.parameters():
+         p.grad = None
+-    del enc
+     _free(dev, mem["empty_cache"])
+     trained = snap(model)
+     ssl_finite = _finite_state(trained) and math.isfinite(float(ssl_log.get("final_loss_total") or 0.0))
+-    alphas = [float(a) for a in gcfg.get("wise_alphas", [0.0, 0.25, 0.5, 0.75, 1.0])]
+-    if 0.0 not in alphas:
+-        alphas = [0.0] + alphas
+-    if not ssl_finite:                     # SSL não finito: só alpha=0 (= pai) é avaliado
+-        alphas = [0.0]
+-    gev.reset_stamps()
+-    best, kappas, svs = None, {}, {}
+-    for a in alphas:
+-        _blend_into(model, anchor, trained, a)
+-        sv = gev.score(model, embed_batch_size=mem["embed_batch_size"])
+-        _free(dev, mem["empty_cache"])
+-        kappas[str(a)], svs[str(a)] = float(sv["kappa"]), sv
+-        if best is None or sv["quality"] > best[1]["quality"]:
+-            best = (a, sv)
+-    _blend_into(model, anchor, trained, best[0])
+-    model.eval()
++    if capture is not None:                  # growth_fix6: estado de retomada (pesos PRÉ-WiSE)
++        capture.update(trained={k: v.detach().to("cpu", copy=True) for k, v in trained.items()},
++                       anchor={k: v.detach().to("cpu", copy=True) for k, v in anchor.items()},
++                       masks={k: v.detach().to("cpu", copy=True) for k, v in masks.items()},
++                       ssl_state=ssl_log.pop("state", None), ae_epochs=int(ae_ep), ssl_epochs=int(ssl_ep),
++                       ssl_finite=bool(ssl_finite), ssl_skipped=bool(ssl_off))
++    best, kappas = _wise_select(gev, model, anchor, trained, ssl_finite, gcfg, mem)
+     k = float(best[1]["kappa"])
+     out = {"kappa_val_orig": k, "quality": FV.quality_of(k), "wise_alpha": float(best[0]),
+            "aux": {"wise_kappas": kappas, "kappa_val_alpha0": kappas.get("0.0"),
+@@ -1113,6 +1164,114 @@
+     return model, out
+ 
+ 
++# ═════════════════════════════════════════════════════════════════ 5b. growth_fix6: retomada f_low -> f_high
++RESUME_FORMAT = "growth_resume/v1"
++RESUME_FILE = "resume_state.pt"
++
++
++def resume_extra_epochs(fid_low: int, fid_high: int, gcfg: dict, train_cfg: Optional[dict] = None) -> int:
++    """Épocas de SSL que a retomada acrescenta: fid_high - fid_low ("fid_diff", padrão: o nó termina com
++    ae(f_low) + ssl(f_low) + (f_high - f_low) = f_high épocas) ou ssl(f_high) - ssl(f_low) ("ssl_diff")."""
++    from ga_search.modehb.run_search import split_epochs
++    if _promo(gcfg)["extra_epochs"] == "ssl_diff":
++        sp = (train_cfg or {}).get("ae_ssl_split", [1, 2])
++        return max(0, split_epochs(fid_high, sp)[1] - split_epochs(fid_low, sp)[1])
++    return max(0, int(fid_high) - int(fid_low))
++
++
++def save_resume_state(path, capture: dict, *, save_optimizer: bool, meta: dict) -> dict:
++    """Grava (atômico) o estado de retomada de f_low: pesos treinados PRÉ-WiSE, âncora (morfismo), máscaras de
++    proteção e o estado do SSL (AdamW só se ``save_optimizer``; RNG e passo sempre). -> {path, sha256, ...}."""
++    path = Path(path)
++    path.parent.mkdir(parents=True, exist_ok=True)
++    ssl_state = dict(capture.get("ssl_state") or {}) or None
++    has_opt = bool(ssl_state is not None and ssl_state.get("opt") is not None and save_optimizer)
++    if ssl_state is not None and not save_optimizer:
++        ssl_state["opt"] = None
++    payload = {"format": RESUME_FORMAT, "trained": capture["trained"], "anchor": capture["anchor"],
++               "masks": capture["masks"], "ssl_state": ssl_state, "ae_epochs": int(capture["ae_epochs"]),
++               "ssl_epochs": int(capture["ssl_epochs"]), "ssl_finite": bool(capture.get("ssl_finite", True)),
++               "meta": _jsonable(meta)}
++    tmp = path.with_name(path.name + f".tmp{os.getpid()}")
++    with tmp.open("wb") as f:
++        torch.save(payload, f)
++        f.flush()
++        os.fsync(f.fileno())
++    os.replace(tmp, path)
++    return {"path": str(path), "sha256": I.file_sha256(path), "has_optimizer": has_opt,
++            "has_rng": bool(ssl_state is not None and ssl_state.get("rng") is not None),
++            "format": RESUME_FORMAT}
++
++
++def load_resume_state(path, expected_sha256: Optional[str] = None) -> dict:
++    sha = I.file_sha256(path)
++    if sha is None:
++        raise FileNotFoundError(str(path))
++    if expected_sha256 and sha != expected_sha256:
++        raise ChainError(f"{path}: sha256 {sha} != {expected_sha256}")
++    st = torch.load(path, map_location="cpu", weights_only=False)
++    if st.get("format") != RESUME_FORMAT:
++        raise ChainError(f"{path}: formato {st.get('format')!r}")
++    return st
++
++
++def continue_child(gev: GrowthEvaluator, model: BB.Backbone, state: dict, extra_epochs: int, gcfg: dict,
++                   seed: int, parent_kappa: float, *, capture: Optional[dict] = None) -> Tuple[BB.Backbone, dict]:
++    """growth_fix6: RETOMA o filho de f_low (``model`` já com os pesos treinados PRÉ-WiSE de ``state``) e treina
++    ``extra_epochs`` épocas de SSL com o mesmo lr (fixo), o AdamW e as RNGs salvos (sem AdamW salvo: AdamW novo,
++    registrado). O AE local NÃO é repetido. WiSE entre a âncora de f_low (o morfismo) e o treinado-f_high."""
++    dev = gev.device
++    mem = _mem(gcfg)
++    model = model.to(dev)
++    masks = {k: v.to(dev) for k, v in state["masks"].items()}
++    scale = PROTECT_SCALE[gcfg["protect"]]
++    anchor = state["anchor"] if mem["wise_on_cpu"] else {k: v.to(dev) for k, v in state["anchor"].items()}
++    ssl_state = state.get("ssl_state")
++    opt_resumed = bool(ssl_state is not None and ssl_state.get("opt") is not None)
++    rng_resumed = bool(ssl_state is not None and ssl_state.get("rng") is not None)
++    for p in model.parameters():
++        p.grad = None
++        p.requires_grad_(True)
++    resume = dict(ssl_state) if ssl_state is not None else {"opt": None, "rng": None, "extra": {}, "step": 0}
++    ssl_log = _global_ssl(gev, model, masks, scale, int(extra_epochs), gcfg, seed, mem, resume=resume,
++                          return_state=True)
++    for p in model.parameters():
++        p.grad = None
++    _free(dev, mem["empty_cache"])
++    trained = _snapper(mem)(model)
++    ssl_finite = _finite_state(trained) and math.isfinite(float(ssl_log.get("final_loss_total") or 0.0))
++    if capture is not None:
++        capture.update(trained={k: v.detach().to("cpu", copy=True) for k, v in trained.items()},
++                       anchor=state["anchor"], masks=state["masks"], ssl_state=ssl_log.pop("state", None),
++                       ae_epochs=int(state["ae_epochs"]), ssl_epochs=int(state["ssl_epochs"]) + int(extra_epochs),
++                       ssl_finite=bool(ssl_finite), ssl_skipped=False)
++    best, kappas = _wise_select(gev, model, anchor, trained, ssl_finite, gcfg, mem)
++    k = float(best[1]["kappa"])
++    out = {"kappa_val_orig": k, "quality": FV.quality_of(k), "wise_alpha": float(best[0]),
++           "aux": {"wise_kappas": kappas, "kappa_val_alpha0": kappas.get("0.0"),
++                   "macro_f1": float(best[1].get("macro_f1", float("nan")))},
++           "decision_rulers": gev.decision_rulers(), "n_svm_decisions": len(gev.ev._svm_stamps),
++           "ae_epochs": int(state["ae_epochs"]), "ssl_epochs": int(state["ssl_epochs"]) + int(extra_epochs),
++           "ae_blocks": [], "ae_logs": [], "ssl_final_loss": ssl_log.get("final_loss_total"),
++           "ssl_steps": int(ssl_log.get("steps", 0)), "ssl_finite": bool(ssl_finite),
++           "parent_kappa_val_orig": float(parent_kappa), "ssl": gcfg.get("ssl", "lejepa"), "ssl_skipped": False,
++           "embed_precision": gev.embed_precision, "mem": dict(mem),
++           "resume": {"extra_ssl_epochs": int(extra_epochs), "optimizer": "resumed" if opt_resumed else
++                      "restarted (AdamW não salvo em f_low)", "optimizer_resumed": opt_resumed,
++                      "rng_resumed": rng_resumed, "ae_repeated": False},
++           "status": "ok"}
++    FV.check_decisions(out, gev.fitness_spec)
++    return model, out
++
++
++def best_of_low_high(k_low: float, k_high: float) -> int:
++    """Seleção do nó promovido pela ORIG-val: f_high, a não ser que kappa_val(f_high) < kappa_val(f_low)
++    (empate fica com f_high). Devolve 0 (f_low) ou 1 (f_high). Nunca usa teste."""
++    if k_high is None or not math.isfinite(float(k_high)):
++        return 0
++    return 0 if float(k_high) < float(k_low) else 1
++
++
+ # ═════════════════════════════════════════════════════════════════ 6. utilidades de seleção
+ def decide(r: dict, delta: float, require_improvement: bool) -> Tuple[str, bool]:
+     """growth_fix4 (b). -> (decisão, entra na faixa?). Preservação exata + WiSE alpha=0 => o filho É o pai:
+@@ -1317,7 +1476,8 @@
+         self._save()
+ 
+     # ---- um job (com OOM 10x300 s e adoção)
+-    def _job(self, parent: dict, ops: List[dict], theta, fid: int, node: str, seed: int, ckey: str) -> dict:
++    def _job(self, parent: dict, ops: List[dict], theta, fid: int, node: str, seed: int, ckey: str,
++             resume_from: Optional[dict] = None) -> dict:
+         ndir = self.out / "nodes" / node / f"f{fid}"
+         done = I.read_json(ndir / "result.json")
+         if done is not None and I.adoptable(done, ckey=ckey, fitness_sig=self.gev.fitness_sig) is None:
+@@ -1327,7 +1487,8 @@
+         retries, sleep_s = int(oc.get("retries", 10)), float(oc.get("sleep_s", 300))
+         for attempt in range(retries + 1):
+             try:
+-                out = self._run_job(parent, ops, theta, fid, node, seed, ckey, ndir)
++                out = (self._run_job(parent, ops, theta, fid, node, seed, ckey, ndir) if resume_from is None
++                       else self._run_resume_job(parent, resume_from, fid, node, seed, ckey, ndir))
+                 if os.environ.get("GROWTH_CRASH") == f"{node}:f{fid}":      # SÓ TESTE: kill -9 real
+                     import signal
+                     os.kill(os.getpid(), signal.SIGKILL)
+@@ -1364,6 +1525,9 @@
+                 break
+         rec.update(node_id=node, cand_key=ckey, fitness_sig=self.gev.fitness_sig, fid=fid, parent=parent["node_id"],
+                    ops=ops, theta=theta, kappa_val_orig=None)
++        if resume_from is not None:
++            rec["promotion"] = {"mode": "resume", "from_fid": resume_from.get("fid"),
++                                "from_cand_key": resume_from.get("cand_key")}
+         I.atomic_write_json(ndir / "result.json", rec)
+         return rec
+ 
+@@ -1394,7 +1558,18 @@
+             raise BB.BudgetError("teto duro")
+         del pmodel                               # growth_mem: o pai não fica vivo durante o treino do filho
+         _free(dev, _mem(self.g)["empty_cache"])
+-        model, out = train_child(self.gev, res, fid, self.g, seed, parent_rescored)
++        promo = _promo(self.g)
++        want_resume = (int(fid) == int(self.g["fid_low"]) and int(self.g["fid_high"]) != int(self.g["fid_low"])
++                       and promo["mode"] == "resume" and not ssl_disabled(self.g))
++        cap = {} if want_resume else None
++        model, out = train_child(self.gev, res, fid, self.g, seed, parent_rescored, capture=cap)
++        if want_resume:                          # growth_fix6: pesos PRÉ-WiSE + AdamW/RNG para a promoção
++            info = save_resume_state(ndir / RESUME_FILE, cap, save_optimizer=bool(promo["save_optimizer"]),
++                                     meta={"node_id": node, "fid": int(fid), "cand_key": ckey, "seed": int(seed),
++                                           "parent": parent["node_id"]})
++            out.update(resume_state=info["path"], resume_state_sha256=info["sha256"],
++                       resume_state_has_optimizer=info["has_optimizer"], resume_state_has_rng=info["has_rng"])
++            del cap
+         model.spec.provenance.parent = parent["node_id"]
+         model.spec.provenance.wise_alpha = out["wise_alpha"]
+         model.spec.provenance.fidelity_epochs = int(fid)
+@@ -1417,6 +1592,100 @@
+         I.atomic_write_json(ndir / "result.json", _jsonable(out))
+         return out
+ 
++    def _run_resume_job(self, parent, r_low, fid, node, seed, ckey, ndir) -> dict:
++        """growth_fix6: promoção por RETOMADA. Carrega o filho de f_low (pesos PRÉ-WiSE + AdamW/RNG), treina as
++        épocas restantes, WiSE com a âncora = morfismo, e fica com o melhor de f_low/f_high pela ORIG-val."""
++        t0 = time.time()
++        dev = self.gev.device
++        if dev.type == "cuda":
++            torch.cuda.empty_cache()
++            torch.cuda.reset_peak_memory_stats(dev)
++        state = load_resume_state(r_low["resume_state"], r_low.get("resume_state_sha256"))
++        pmodel, _ = BB_load(parent["checkpoint"], parent["checkpoint_sha256"])
++        self.gev.reset_stamps()                  # growth_fix4 (b): pai re-pontuado no mesmo processo/leitura
++        psv = self.gev.score(pmodel)
++        parent_rescored = float(psv["kappa"])
++        parent_rulers = self.gev.decision_rulers()
++        del pmodel
++        _free(dev, _mem(self.g)["empty_cache"])
++        model, _ = BB_load(r_low["checkpoint"], r_low["checkpoint_sha256"])   # arquitetura do filho de f_low
++        model.load_state_dict(state["trained"])                                 # pesos treinados PRÉ-WiSE
++        fl = int(r_low["fid"])
++        n_extra = resume_extra_epochs(fl, int(fid), self.g, self.cfg.get("train"))
++        model, out = continue_child(self.gev, model, state, n_extra, self.g, seed, parent_rescored)
++        del state
++        model.spec.provenance.parent = parent["node_id"]
++        model.spec.provenance.wise_alpha = out["wise_alpha"]
++        model.spec.provenance.fidelity_epochs = int(fid)
++        ck_high = BB_save(model, ndir / "backbone.pt")
++        low_dir = Path(r_low["checkpoint"]).parent
++        if (low_dir / "growth_spec.json").exists():
++            (ndir / "growth_spec.json").write_text((low_dir / "growth_spec.json").read_text())
++        k_low, a_low = float(r_low["kappa_val_orig"]), float(r_low["wise_alpha"])
++        k_high, a_high = float(out["kappa_val_orig"]), float(out["wise_alpha"])
++        pick = best_of_low_high(k_low, k_high)                 # seleção pela VALIDAÇÃO (ORIG-val), nunca teste
++        out.update(kappa_val_orig_f_low=k_low, wise_alpha_f_low=a_low, kappa_val_orig_f_high=k_high,
++                   wise_alpha_f_high=a_high, fid_low=fl, fid_high=int(fid),
++                   aux_f_low={"wise_kappas": (r_low.get("aux") or {}).get("wise_kappas")},
++                   checkpoint_f_high=ck_high["path"], checkpoint_sha256_f_high=ck_high["file_sha256"],
++                   selected_fid=int(fid) if pick else fl,
++                   selection="best_of_low_high: kappa ORIG-val; f_high salvo kappa_val(f_high) < kappa_val(f_low) "
++                             "(empate = f_high); teste nunca lido",
++                   promotion={"mode": "resume", "from_fid": fl, "from_cand_key": r_low["cand_key"],
++                              "extra_ssl_epochs": int(n_extra), "extra_epochs_rule": _promo(self.g)["extra_epochs"],
++                              **out.pop("resume")})
++        if pick:
++            ck = ck_high
++        else:                                    # f_low venceu pela val: o nó fica com o checkpoint de f_low
++            ck = {"path": r_low["checkpoint"], "file_sha256": r_low["checkpoint_sha256"]}
++            out.update(kappa_val_orig=k_low, quality=FV.quality_of(k_low), wise_alpha=a_low)
++        peak = (torch.cuda.max_memory_reserved(dev) / 1e9) if dev.type == "cuda" else None
++        out.update(node_id=node, cand_key=ckey, fitness_sig=self.gev.fitness_sig, fid=int(fid),
++                   parent=parent["node_id"], parent_checkpoint_sha256=parent["checkpoint_sha256"], ops=r_low["ops"],
++                   theta=r_low["theta"], seed=int(seed), band=r_low["band"], params=int(model.spec.cost.params_total),
++                   flops_2mac=int(model.spec.cost.flops), flops=int(model.spec.cost.macs), arch=model.spec.id,
++                   checkpoint=ck["path"], checkpoint_sha256=ck["file_sha256"], growth_spec_id=r_low.get("growth_spec_id"),
++                   preservation=r_low.get("preservation"), preservation_rel_l2_emb=r_low.get("preservation_rel_l2_emb"),
++                   preservation_verdict=r_low.get("preservation_verdict"), new_filter_init=r_low.get("new_filter_init"),
++                   protect=self.g["protect"], init_method=self.g["init_method"],
++                   delta_kappa=out["kappa_val_orig"] - parent_rescored,
++                   kappa_parent_rescored=parent_rescored, parent_kappa_val_orig_member=float(parent["kappa_val_orig"]),
++                   parent_rescore_rulers=parent_rulers,
++                   wall_s=time.time() - t0, peak_gpu_reserved_gb=peak,
++                   inheritance_totals=r_low.get("inheritance_totals"))
++        FV.check_decisions(out, self.gev.fitness_spec)
++        I.atomic_write_json(ndir / "result.json", _jsonable(out))
++        return out
++
++    def _promote(self, r_low: dict, meta: dict, fl: int, fh: int) -> dict:
++        """growth_fix6: f_low -> f_high. ``promotion.mode=resume`` (padrão) retoma o filho de f_low quando o
++        estado de retomada existe (íntegro); senão (ou ``retrain``/``ssl: none``) refaz do morfismo (histórico),
++        com o motivo registrado. A cand_key da retomada inclui a cand_key de f_low (não adota um f_high refeito)."""
++        promo = _promo(self.g)
++        why = None
++        if promo["mode"] != "resume":
++            why = "promotion.mode=retrain"
++        elif ssl_disabled(self.g):
++            why = "ssl: none (não há SSL para continuar)"
++        elif not r_low.get("resume_state"):
++            why = "f_low sem resume_state (resultado anterior ao fix6)"
++        elif I.file_sha256(r_low["resume_state"]) != r_low.get("resume_state_sha256"):
++            why = "resume_state ausente ou com sha256 diferente"
++        if why is None:
++            n_extra = resume_extra_epochs(fl, fh, self.g, self.cfg.get("train"))
++            rkey = I.lineage_key({"resume_from": r_low["cand_key"], "extra_ssl_epochs": n_extra,
++                                  "format": RESUME_FORMAT}, meta["seed"], {"kind": "resume", "lkey": meta["lkey"]},
++                                 self.gev.fitness_sig)
++            return self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
++                             I.cand_key(rkey, fh), resume_from=r_low)
++        print(f"[growth] {meta['node']}: promoção f{fl}->f{fh} REFEITA do morfismo ({why})", flush=True)
++        r = self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
++                      I.cand_key(meta["lkey"], fh))
++        r = dict(r)
++        r["promotion"] = {**(r.get("promotion") or {}), "mode": "retrain", "reason": why}
++        r.setdefault("selected_fid", fh)
++        return r
++
+     # ---- teste (canal separado; nunca lido aqui)
+     def _submit_test(self, member: dict):
+         with self.test_queue.open("a") as f:
+@@ -1495,8 +1764,7 @@
+             if r["node_id"] not in chosen:
+                 continue
+             if fh != fl:
+-                r = self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
+-                              I.cand_key(meta["lkey"], fh))
++                r = self._promote(r, meta, fl, fh)         # growth_fix6: retoma f_low (ou refaz, registrado)
+                 decision, ok = decide(r, self.g["delta"], self.g.get("require_improvement", False))
+                 self._lineage(self._lin_rec(r, meta["parent"], meta["ops"], fh, ok, final=True, decision=decision,
+                                             family=meta.get("family")))
+@@ -1504,6 +1772,8 @@
+                     continue
+             m = {k: r[k] for k in ("node_id", "band", "kappa_val_orig", "params", "flops_2mac", "checkpoint",
+                                    "checkpoint_sha256", "fid", "parent", "theta")}
++            if r.get("selected_fid") is not None and fh != fl:   # growth_fix6: qual fidelidade ficou (val)
++                m["selected_fid"] = int(r["selected_fid"])
+             mem = self.state["members"][target]
+             if r["band"] != target or r["params"] > HARD_CAP:
+                 continue
+@@ -1529,7 +1799,11 @@
+                 "preservation_rel_l2": r.get("preservation_rel_l2_emb"),
+                 "preservation_verdict": r.get("preservation_verdict"), "params": r.get("params"),
+                 "flops_2mac": r.get("flops_2mac"), "band": r.get("band"), "accepted": bool(ok), "final": bool(final),
+-                "adopted": bool(r.get("adopted", False)), "used_for_selection": "validation_only"}
++                "adopted": bool(r.get("adopted", False)), "used_for_selection": "validation_only",
++                # growth_fix6: promoção por retomada (alpha e kappa de f_low e f_high; qual ficou, pela val)
++                **({k: r.get(k) for k in ("selected_fid", "kappa_val_orig_f_low", "wise_alpha_f_low",
++                                          "kappa_val_orig_f_high", "wise_alpha_f_high", "promotion",
++                                          "resume_state_has_optimizer") if r.get(k) is not None})}
+ 
+     # ---- execução
+     def run(self) -> dict:
+diff -ruN a/ga_search/modehb/ssl_trainers.py b/ga_search/modehb/ssl_trainers.py
+--- a/ga_search/modehb/ssl_trainers.py	2026-11-17 17:37:52.051595312 -0300
++++ b/ga_search/modehb/ssl_trainers.py	2026-11-17 17:37:52.054595350 -0300
+@@ -268,9 +268,19 @@
+                      step_offset: int = 0, reg_kwargs: Optional[dict] = None,
+                      max_steps_per_epoch: Optional[int] = None,
+                      max_skip_frac: float = 1.0, conv_lr_scale: float = 1.0,
+-                     projector: bool = False, amp_dtype: Optional[torch.dtype] = None) -> Dict[str, Any]:
++                     projector: bool = False, amp_dtype: Optional[torch.dtype] = None,
++                     resume: Optional[Dict[str, Any]] = None, return_state: bool = False) -> Dict[str, Any]:
+     """Global SSL on the full encoder + head. Learning rates are fixed (never tuned).
+ 
++    growth_fix6 (opt-in; defaults = historical behaviour, bit for bit):
++      ``return_state=True`` -> result["state"] = everything needed to CONTINUE this run exactly
++        (AdamW state, projector/decoder weights, RNG states: torch CPU/CUDA, the views generator and the
++        loader's generator, global step), all cloned to CPU;
++      ``resume=<that state>`` -> continue it for ``epochs`` MORE epochs: same lr (fixed), same optimizer
++        moments (``resume["opt"] is None`` -> fresh AdamW), RNG streams restored, and the optimizer-building
++        probe forward / extra-module init no longer touch the BN running stats nor the RNG. On CPU,
++        run(e1, return_state) + run(e2, resume) == run(e1 + e2) bit for bit.
++
+     Losses:
+       simclr : L = nt_xent(proj(h1), proj(h2)) + lam * mean_v R(h_v)   (R on head
+                embedding h BEFORE any L2 norm; projector is discarded at the end)
+@@ -313,6 +323,8 @@
+     else:
+         amp = fp32 = contextlib.nullcontext
+     opt: Optional[torch.optim.Optimizer] = None
++    if resume is not None:
++        step_offset = int(resume.get("step", step_offset))
+     step = step_offset
+     reg_key = "ssl/loss_sigreg" if reg == "sigreg" else "ssl/loss_weak_sigreg"
+     history: List[Dict[str, float]] = []
+@@ -335,6 +347,9 @@
+         groups = _scale_conv_groups(groups, encoder, conv_lr_scale)
+         opt = torch.optim.AdamW(groups)
+ 
++    if resume is not None and resume.get("rng") is not None:
++        _rng_restore(resume["rng"], device, gen, loader)
++
+     for ep in range(epochs):
+         ep_t0 = time.perf_counter()
+         sums: Dict[str, float] = {}
+@@ -348,7 +363,16 @@
+             t_step = time.perf_counter()
+             x = _unpack(batch).to(device, non_blocking=True).float()
+             if opt is None:
+-                build_opt(x)
++                if resume is None:
++                    build_opt(x)
++                else:                       # growth_fix6: no side effect (BN stats / RNG) at the resume point
++                    with _no_side_effects(encoder, head, device):
++                        build_opt(x)
++                    for k, sd in (resume.get("extra") or {}).items():
++                        if k in extra:
++                            extra[k].load_state_dict(sd)
++                    if resume.get("opt") is not None:
++                        opt.load_state_dict(resume["opt"])
+             views = make_views(x, V, aug_cfg, generator=gen)
+             B = x.shape[0]
+             parts: Dict[str, Tensor] = {}
+@@ -470,6 +494,12 @@
+         msg = f"{name}: {len(skipped)}/{n_steps} SSL steps non-finite (> {max_skip_frac:.0%})"
+         _alert(logger, "SSL NaN/Inf", msg)
+         raise FloatingPointError(msg)
++    state = None
++    if return_state:                 # growth_fix6: continuation state (CPU clones), BEFORE discarding extras
++        state = {"format": "ssl_resume/v1", "ssl": ssl, "reg": reg, "n_views": V, "step": int(step),
++                 "opt": _cpu_clone(opt.state_dict()) if opt is not None else None,
++                 "extra": {k: _cpu_clone(m.state_dict()) for k, m in extra.items()},
++                 "rng": _rng_capture(device, gen, loader)}
+     # Discard projector / decoder; encoder + head stay trained.
+     extra.clear()
+     encoder.eval()
+@@ -491,4 +521,64 @@
+         "lr_old": lr_old,
+         "lr_new": lr_new,
+         "sigreg_lambda": sigreg_lambda,
++        **({"state": state} if return_state else {}),
+     }
++
++
++# ───────────────────────────────────────────────────── growth_fix6: exact continuation helpers
++def _loader_generator(loader) -> Optional[torch.Generator]:
++    """The ``torch.Generator`` that drives the loader's shuffle (DataLoader or a wrapper with ``.loader``)."""
++    seen = 0
++    while loader is not None and seen < 8:
++        g = getattr(loader, "generator", None)
++        if isinstance(g, torch.Generator):
++            return g
++        loader, seen = getattr(loader, "loader", None), seen + 1
++    return None
++
++
++def _cpu_clone(obj):
++    if isinstance(obj, torch.Tensor):
++        return obj.detach().to("cpu", copy=True)
++    if isinstance(obj, dict):
++        return {k: _cpu_clone(v) for k, v in obj.items()}
++    if isinstance(obj, (list, tuple)):
++        return type(obj)(_cpu_clone(v) for v in obj)
++    return obj
++
++
++def _rng_capture(device, gen: torch.Generator, loader) -> Dict[str, Any]:
++    st: Dict[str, Any] = {"torch_cpu": torch.get_rng_state(), "views": gen.get_state()}
++    if torch.device(device).type == "cuda" and torch.cuda.is_available():
++        st["torch_cuda"] = torch.cuda.get_rng_state(torch.device(device))
++    lg = _loader_generator(loader)
++    st["loader"] = lg.get_state() if lg is not None else None
++    return st
++
++
++def _rng_restore(st: Dict[str, Any], device, gen: torch.Generator, loader) -> None:
++    torch.set_rng_state(st["torch_cpu"])
++    gen.set_state(st["views"])
++    if st.get("torch_cuda") is not None and torch.device(device).type == "cuda" and torch.cuda.is_available():
++        torch.cuda.set_rng_state(st["torch_cuda"], torch.device(device))
++    lg = _loader_generator(loader)
++    if lg is not None and st.get("loader") is not None:
++        lg.set_state(st["loader"])
++
++
++@contextlib.contextmanager
++def _no_side_effects(encoder: nn.Module, head: nn.Module, device):
++    """Buffers (BN running stats / num_batches_tracked) and RNG states restored on exit."""
++    bufs = [(b, b.detach().clone()) for m in (encoder, head) for b in m.buffers()]
++    cpu = torch.get_rng_state()
++    dev = torch.device(device)
++    cuda = torch.cuda.get_rng_state(dev) if dev.type == "cuda" and torch.cuda.is_available() else None
++    try:
++        yield
++    finally:
++        with torch.no_grad():
++            for b, v in bufs:
++                b.copy_(v)
++        torch.set_rng_state(cpu)
++        if cuda is not None:
++            torch.cuda.set_rng_state(cuda, dev)
+diff -ruN a/tests/hmodehb/test_growth_fix6.py b/tests/hmodehb/test_growth_fix6.py
+--- a/tests/hmodehb/test_growth_fix6.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_fix6.py	2026-11-17 17:37:52.055595362 -0300
+@@ -0,0 +1,285 @@
++"""growth_fix6: a promoção f_low -> f_high RETOMA o filho de f_low (pesos treinados PRÉ-WiSE + AdamW + RNG),
++treina as épocas restantes, WiSE com âncora = morfismo e fica com o melhor de f_low/f_high pela ORIG-val."""
++from __future__ import annotations
++
++import copy
++import json
++import sys
++from pathlib import Path
++
++import pytest
++import torch
++from torch import nn
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import build as BB  # noqa: E402
++from ga_search.backbones.spec import HeadSpec, LayerSpec  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.hmodehb import integrity as I  # noqa: E402
++from ga_search.modehb import ssl_trainers as ST  # noqa: E402
++
++SYN = ["data.synthetic=true", "data.image_size=32", "data.synthetic_train_samples=16", "data.synthetic_val_samples=12",
++       "data.batch_size=4", "data.num_workers=0", "data.ram_cache=true", "train.max_steps_per_epoch=2",
++       "search.n_classes=2", "search.spifil_images_choices=[1,2]", "device=cpu", "wandb.enabled=false"]
++OPS = [{"op": "widen", "widths": {"0": 16}, "seed": 1}]
++
++
++def _tiny(seed=0, widths=(12, 24, 24), res=32):
++    L = [LayerSpec(channels=widths[0], kernel=3, conv="conv", norm="batch", activation="relu", pool="max",
++                   flavor="spifil_ops", init="inherited"),
++         LayerSpec(channels=widths[1], kernel=3, conv="dwsep", norm="batch_dbn", activation="silu", pool="max",
++                   flavor="spifil_ops", init="inherited"),
++         LayerSpec(channels=widths[2], kernel=3, conv="conv", norm="none", activation="gelu", residual="identity",
++                   pool="none", flavor="spifil_ops", init="inherited")]
++    spec = G.spec_from_layers(L, HeadSpec(embed_dim=1280, pooling="meanstd"), "synthetic", res)
++    m = BB.build_backbone(spec, seed=seed, enforce_budget=False)
++    with torch.no_grad():
++        m.train()
++        for _ in range(3):
++            m(torch.rand(8, 3, res, res))
++    return m.eval()
++
++
++@pytest.fixture(scope="module")
++def gev(tmp_path_factory):
++    out = tmp_path_factory.mktemp("gev6")
++    cfg = G.build_cfg("remote_sensing", 42, SYN, out)
++    return G.GrowthEvaluator(cfg, out / "eval")
++
++
++def _same(a: dict, b: dict):
++    assert set(a) == set(b)
++    for k in a:
++        assert torch.equal(a[k], b[k]), k
++
++
++def _same_obj(a, b, path="opt"):
++    if isinstance(a, torch.Tensor):
++        assert torch.equal(a, b), path
++    elif isinstance(a, dict):
++        assert set(a) == set(b), path
++        for k in a:
++            _same_obj(a[k], b[k], f"{path}.{k}")
++    elif isinstance(a, (list, tuple)):
++        assert len(a) == len(b), path
++        for i, (x, y) in enumerate(zip(a, b)):
++            _same_obj(x, y, f"{path}[{i}]")
++    else:
++        assert a == b, path
++
++
++# ───────────────────────────────────────────────────────────────── trainer: run(e1)+resume(e2) == run(e1+e2)
++@pytest.mark.parametrize("ssl", ["lejepa", "simclr"])
++def test_ssl_trainer_resume_equals_continuous_bitwise(ssl):
++    from torch.utils.data import DataLoader, TensorDataset
++    X = torch.rand(12, 3, 32, 32, generator=torch.Generator().manual_seed(0))
++
++    def make():
++        torch.manual_seed(3)
++        enc = nn.Sequential(nn.Conv2d(3, 8, 3, padding=1), nn.BatchNorm2d(8), nn.ReLU(), nn.MaxPool2d(2))
++        head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(8, 16))
++        dl = DataLoader(TensorDataset(X), batch_size=4, shuffle=True, generator=torch.Generator().manual_seed(5))
++        return enc, head, dl
++
++    reg = "sigreg" if ssl == "lejepa" else "none"
++    e, h, dl = make()
++    ST.train_global_ssl(e, h, dl, ssl, reg, 3, 1e-3, 1e-3, [], "cpu", None, 11)
++    ref = {**e.state_dict(), **{f"h.{k}": v for k, v in h.state_dict().items()}}
++    e2, h2, dl2 = make()
++    r1 = ST.train_global_ssl(e2, h2, dl2, ssl, reg, 1, 1e-3, 1e-3, [], "cpu", None, 11, return_state=True)
++    torch.manual_seed(999)                                  # o que acontece entre f_low e f_high não importa
++    torch.rand(7)
++    dl2.generator.manual_seed(123)
++    st = copy.deepcopy(r1["state"])
++    r2 = ST.train_global_ssl(e2, h2, dl2, ssl, reg, 2, 1e-3, 1e-3, [], "cpu", None, 11, resume=st)
++    got = {**e2.state_dict(), **{f"h.{k}": v for k, v in h2.state_dict().items()}}
++    _same(ref, got)
++    assert r2["steps"] == 2 * 3 and r1["state"]["step"] == 3
++
++
++def test_ssl_trainer_defaults_unchanged():
++    """Sem resume/return_state o resultado não ganha chaves e o treino é o mesmo de antes (mesmo seed)."""
++    from torch.utils.data import DataLoader, TensorDataset
++    X = torch.rand(8, 3, 16, 16, generator=torch.Generator().manual_seed(0))
++    outs = []
++    for rs in (False, True):
++        torch.manual_seed(3)
++        enc = nn.Sequential(nn.Conv2d(3, 4, 3, padding=1), nn.BatchNorm2d(4), nn.ReLU())
++        head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(4, 8))
++        dl = DataLoader(TensorDataset(X), batch_size=4, shuffle=True, generator=torch.Generator().manual_seed(5))
++        r = ST.train_global_ssl(enc, head, dl, "lejepa", "sigreg", 2, 1e-3, 1e-3, [], "cpu", None, 1, return_state=rs)
++        assert ("state" in r) == rs
++        outs.append(enc.state_dict())
++    _same(outs[0], outs[1])                                 # return_state não muda o treino
++
++
++# ───────────────────────────────────────────────────────────────── filho: f_low + retomada == contínuo (f_high)
++def _child(m):
++    return G.realize_plan(copy.deepcopy(m), OPS, None)
++
++
++def _lg(gev):
++    return ST._loader_generator(gev.ev.train_loader)
++
++
++@pytest.mark.parametrize("save_opt", [True, False])
++def test_child_resume_equals_continuous_bitwise(gev, tmp_path, save_opt):
++    from ga_search.modehb.run_search import split_epochs
++    m = _tiny()
++    fl, fh, seed = 2, 4, 7
++    g = {**G.GROWTH_DEFAULTS, "wise_alphas": [0.0, 0.5, 1.0]}
++    lg = _lg(gev)
++    assert lg is not None
++    s0 = lg.get_state()
++    # (A) f_low com captura -> grava/relê o estado -> retoma (fh - fl) épocas de SSL
++    lg.set_state(s0)
++    cap = {}
++    m_low, o_low = G.train_child(gev, _child(m), fl, g, seed, 0.5, capture=cap)
++    info = G.save_resume_state(tmp_path / G.RESUME_FILE, cap, save_optimizer=save_opt, meta={"t": 1})
++    assert info["has_optimizer"] is save_opt and info["has_rng"] and info["sha256"] == I.file_sha256(info["path"])
++    st = G.load_resume_state(info["path"], info["sha256"])
++    _same(st["trained"], cap["trained"])
++    torch.manual_seed(12345)                                # outros jobs no meio: não afetam a retomada
++    lg.manual_seed(777)
++    model = copy.deepcopy(m_low)                            # arquitetura do filho de f_low (blend do WiSE)
++    model.load_state_dict(st["trained"])                    # pesos PRÉ-WiSE
++    n_extra = G.resume_extra_epochs(fl, fh, g)
++    assert n_extra == fh - fl
++    capA = {}
++    m_high, o_high = G.continue_child(gev, model, st, n_extra, g, seed, 0.5, capture=capA)
++    assert o_high["resume"]["optimizer_resumed"] is save_opt and o_high["resume"]["rng_resumed"]
++    assert o_high["ae_epochs"] == o_low["ae_epochs"] and o_high["ssl_epochs"] == o_low["ssl_epochs"] + n_extra
++    # (B) treino contínuo: o mesmo AE de f_low + SSL (fh - ae(fl)) épocas de uma vez
++    ae_l, ssl_l = split_epochs(fl, gev.cfg["train"].get("ae_ssl_split", [1, 2]))
++    lg.set_state(s0)
++    capB = {}
++    m_c, o_c = G.train_child(gev, _child(m), fh, g, seed, 0.5, epochs=(ae_l, ssl_l + n_extra), capture=capB)
++    _same(capA["anchor"], capB["anchor"])                   # âncora do WiSE = o morfismo (pai em função)
++    if save_opt:
++        _same(capA["trained"], capB["trained"])             # bit a bit
++        _same_obj(capA["ssl_state"]["opt"], capB["ssl_state"]["opt"])
++        assert capA["ssl_state"]["step"] == capB["ssl_state"]["step"]
++        assert o_high["aux"]["wise_kappas"] == o_c["aux"]["wise_kappas"]
++        assert o_high["wise_alpha"] == o_c["wise_alpha"] and o_high["kappa_val_orig"] == o_c["kappa_val_orig"]
++        _same(m_high.state_dict(), m_c.state_dict())
++    else:                                                   # AdamW novo: registrado (não é bit a bit)
++        assert o_high["resume"]["optimizer"].startswith("restarted")
++        assert any(not torch.equal(capA["trained"][k], capB["trained"][k]) for k in capA["trained"]
++                   if capA["trained"][k].is_floating_point())
++
++
++def test_resume_state_rejects_bad_sha(tmp_path):
++    p = tmp_path / "x.pt"
++    torch.save({"format": G.RESUME_FORMAT}, p)
++    with pytest.raises(G.ChainError):
++        G.load_resume_state(p, "0" * 64)
++
++
++# ───────────────────────────────────────────────────────────────── melhor de f_low/f_high pela val
++def test_best_of_low_high_rule():
++    assert G.best_of_low_high(0.620, 0.593) == 0              # o caso B2g1c02 RS: f15 vence
++    assert G.best_of_low_high(0.60, 0.61) == 1
++    assert G.best_of_low_high(0.60, 0.60) == 1                # empate = f_high
++    assert G.best_of_low_high(0.60, float("nan")) == 0
++
++
++def _chain(tmp_path, extra=()):
++    seed_ck = Path(G.BB_save(_tiny(widths=(16, 32, 32)), tmp_path / "seed_b0.pt")["path"])
++    out = tmp_path / "ctl"
++    cfg = G.build_cfg("remote_sensing", 42, SYN, out)
++    g = G.load_growth_config(None, ["seeds.registry=null", "seeds.external_small=false",
++                                    f"seeds.checkpoints=[{seed_ck}]", "n_children=2", "n_parents=1",
++                                    "generations=1", "fid_low=1", "fid_high=3", "eta=1", "end_band=B1",
++                                    "spifil_images_per_class=1", "test_channel=false", "oom.sleep_s=0",
++                                    "wise_alphas=[0.0,1.0]", *extra])
++    gev = G.GrowthEvaluator(cfg, out / "eval")
++    return cfg, g, gev, out
++
++
++def _accept_all(monkeypatch):
++    monkeypatch.setattr(G, "decide", lambda r, d, ri: ("accepted", True) if r.get("status") == "ok"
++                        else ("failed", False))
++
++
++@pytest.mark.parametrize("force_low", [False, True])
++def test_controller_promotion_resumes_and_keeps_best_by_val(tmp_path, monkeypatch, force_low):
++    _accept_all(monkeypatch)
++    if force_low:                                           # f_high pior na val -> o nó fica com f_low
++        real = G.continue_child
++
++        def worse(*a, **k):
++            model, out = real(*a, **k)
++            out["kappa_val_orig"] = -1.0
++            return model, out
++        monkeypatch.setattr(G, "continue_child", worse)
++    cfg, g, gev, out = _chain(tmp_path)
++    G.GrowthChain(cfg, g, gev, out).run()
++    st = json.loads((out / "growth_state.json").read_text())
++    lin = [json.loads(x) for x in (out / "lineage.jsonl").read_text().splitlines()]
++    highs = [r for r in lin if r.get("fid") == 3]
++    assert highs, lin
++    for r in highs:
++        node = r["node_id"]
++        low = json.loads((out / "nodes" / node / "f1" / "result.json").read_text())
++        high = json.loads((out / "nodes" / node / "f3" / "result.json").read_text())
++        assert low["resume_state_has_optimizer"] is True and Path(low["resume_state"]).exists()
++        assert high["promotion"]["mode"] == "resume" and high["promotion"]["optimizer_resumed"] is True
++        assert high["promotion"]["from_cand_key"] == low["cand_key"] and high["promotion"]["extra_ssl_epochs"] == 2
++        assert high["ae_epochs"] == low["ae_epochs"] and high["ssl_epochs"] == low["ssl_epochs"] + 2
++        assert high["ae_logs"] == []                                     # AE local não é repetido
++        assert high["kappa_val_orig_f_low"] == low["kappa_val_orig"] and high["wise_alpha_f_low"] == low["wise_alpha"]
++        assert high["cand_key"] != I.cand_key("x", 3)
++        want = 1 if high["kappa_val_orig_f_high"] >= high["kappa_val_orig_f_low"] else 0
++        assert want == (0 if force_low else want)
++        if force_low:
++            assert high["selected_fid"] == 1 and high["checkpoint"] == low["checkpoint"]
++            assert high["kappa_val_orig"] == low["kappa_val_orig"] and high["wise_alpha"] == low["wise_alpha"]
++        else:
++            assert high["selected_fid"] == (3 if want else 1)
++        assert Path(high["checkpoint_f_high"]).exists()
++        assert "teste nunca" in high["selection"]
++        assert r["selected_fid"] == high["selected_fid"] and r["kappa_val_orig_f_low"] == low["kappa_val_orig"]
++        mem = {m["node_id"]: m for m in st["members"]["B1"]}
++        if node in mem:
++            assert mem[node]["checkpoint"] == high["checkpoint"] and mem[node]["selected_fid"] == high["selected_fid"]
++    # 2ª execução: tudo adotado (cand_key da retomada estável), nada muda
++    st1 = st["members"]
++    G.GrowthChain(cfg, g, gev, out).run()
++    assert json.loads((out / "growth_state.json").read_text())["members"] == st1
++
++
++def test_promote_falls_back_to_retrain_and_records(tmp_path, monkeypatch):
++    cfg, g, gev, out = _chain(tmp_path)
++    ch = G.GrowthChain(cfg, g, gev, out)
++    calls = []
++
++    def fake_job(parent, ops, theta, fid, node, seed, ckey, resume_from=None):
++        calls.append((fid, ckey, resume_from))
++        return {"status": "ok", "fid": fid, "cand_key": ckey}
++    monkeypatch.setattr(ch, "_job", fake_job)
++    meta = {"parent": {"node_id": "p"}, "ops": OPS, "theta": [0.5] * 4, "seed": 1, "node": "B1g0c00", "lkey": "LK"}
++    r = ch._promote({"cand_key": "c1", "fid": 1}, meta, 1, 3)           # f_low antigo (sem resume_state)
++    assert calls[-1] == (3, I.cand_key("LK", 3), None)                   # cand_key histórica: adota f_high antigo
++    assert r["promotion"]["mode"] == "retrain" and "sem resume_state" in r["promotion"]["reason"]
++    r = ch._promote({"cand_key": "c1", "fid": 1, "resume_state": str(tmp_path / "nada.pt"),
++                     "resume_state_sha256": "ab"}, meta, 1, 3)
++    assert "sha256" in r["promotion"]["reason"]
++    ch.g = {**g, "promotion": {"mode": "retrain"}}
++    assert ch._promote({"cand_key": "c1", "fid": 1}, meta, 1, 3)["promotion"]["reason"] == "promotion.mode=retrain"
++    ch.g = {**g, "ssl": "none"}
++    assert "ssl: none" in ch._promote({"cand_key": "c1", "fid": 1}, meta, 1, 3)["promotion"]["reason"]
++
++
++def test_drift_and_fitness_sig(gev):
++    """A chave nova ``growth.promotion`` muda o config_sha (retomar um --out antigo: --allow-drift
++    growth.promotion); a fitness_sig não depende do growth.yaml."""
++    old = {"run": gev.cfg, "growth": {k: v for k, v in G.GROWTH_DEFAULTS.items() if k != "promotion"}, "kind": G.KIND}
++    new = {"run": gev.cfg, "growth": dict(G.GROWTH_DEFAULTS), "kind": G.KIND}
++    st = {"config_full": json.loads(json.dumps(old, default=str)), "config_sha": I.config_sha(old)}
++    with pytest.raises(I.ConfigDrift):
++        I.check_drift(st, new)
++    d = I.check_drift(st, new, ["growth.promotion"])
++    assert d is not None and all(k.startswith("growth.promotion") for k in d["keys"])
++    assert "promotion" not in json.dumps(gev.fitness_spec)

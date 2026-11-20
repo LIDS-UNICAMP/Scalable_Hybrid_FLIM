@@ -1,0 +1,40 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 22:59:44.396412792 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 22:59:44.397412805 -0300
+@@ -2456,6 +2456,15 @@
+         else:                                    # f_low venceu pela val: o nó fica com o checkpoint de f_low
+             ck = {"path": r_low["checkpoint"], "file_sha256": r_low["checkpoint_sha256"]}
+             out.update(kappa_val_orig=k_low, quality=FV.quality_of(k_low), wise_alpha=a_low)
++            # HOTFIX (fix6): o nó é o de f_low -> os kappas do WiSE que justificam alpha/kappa são os de f_low
++            # (antes ficavam os de f_high e o check_decisions levantava RulerViolation FATAL quando alpha_low não era
++            # o argmax dos kappas de f_high). Os de f_high continuam registrados em aux_f_high.
++            aux_low = dict(r_low.get("aux") or {})
++            out["aux_f_high"] = {"wise_kappas": (out.get("aux") or {}).get("wise_kappas"),
++                                 "kappa_val_alpha0": (out.get("aux") or {}).get("kappa_val_alpha0")}
++            out["aux"] = {**(out.get("aux") or {}), "wise_kappas": aux_low.get("wise_kappas"),
++                          "kappa_val_alpha0": aux_low.get("kappa_val_alpha0"),
++                          "macro_f1": aux_low.get("macro_f1", (out.get("aux") or {}).get("macro_f1"))}
+             for k in ("so2_head_sha256", "so2_head_meta", "so2_head"):       # growth v3: cabeça do f_low
+                 if r_low.get(k) is not None:
+                     out[k] = r_low[k]
+diff -ruN a/tests/hmodehb/test_growth_fix6.py b/tests/hmodehb/test_growth_fix6.py
+--- a/tests/hmodehb/test_growth_fix6.py	2026-11-17 22:59:44.400412843 -0300
++++ b/tests/hmodehb/test_growth_fix6.py	2026-11-17 22:59:44.401412856 -0300
+@@ -283,3 +283,17 @@
+     d = I.check_drift(st, new, ["growth.promotion"])
+     assert d is not None and all(k.startswith("growth.promotion") for k in d["keys"])
+     assert "promotion" not in json.dumps(gev.fitness_spec)
++
++
++def test_hotfix_resume_flow_wins_keeps_low_wise_kappas():
++    """HOTFIX: f_low vence pela val -> aux.wise_kappas = os de f_low (check_decisions passa; f_high em aux_f_high)."""
++    import inspect
++    src = inspect.getsource(G.GrowthChain._run_resume_job)
++    assert 'out["aux_f_high"]' in src and '"wise_kappas": aux_low.get("wise_kappas")' in src
++    from ga_search.hmodehb import fitness_v2 as FV
++    sp = {"readout": "head", "C": 100.0, "scaler": "none", "whiten": "none", "tta": 1, "kappa_weight": 1.0,
++          "solver": "libsvm", "max_train": 4000}
++    low = {"0.0": 0.61, "0.25": 0.62, "0.5": 0.60}
++    out = {"status": "ok", "kappa_val_orig": 0.62, "quality": 0.62, "wise_alpha": 0.25,
++           "aux": {"wise_kappas": low}, "decision_rulers": [FV.ruler_sig(sp)]}
++    FV.check_decisions(out, sp)

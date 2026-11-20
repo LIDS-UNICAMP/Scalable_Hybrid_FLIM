@@ -1,0 +1,3 @@
+3e01844ffe7520da80cb4651b7b0f50c  fixed_attention.patch
+f26b5c302f2b55e4a2b86e519146d4b0  ga_search/modehb/fixed_attention.py
+2974f5d72c909dbca92ec7f59685cb8f  tests/modehb/test_fixed_attention.py

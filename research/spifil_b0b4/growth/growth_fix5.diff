@@ -1,0 +1,496 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 14:15:11.731374030 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 14:15:11.733374054 -0300
+@@ -92,7 +92,10 @@
+     #   embed_batch_size: micro-lote da extração da SVM (null = data.batch_size, histórico);
+     #   ssl_amp_bf16: SSL em bf16 (muda a ciência).
+     "mem": {"grad_checkpoint": True, "wise_on_cpu": True, "empty_cache": True,
+-            "embed_batch_size": None, "ssl_amp_bf16": False},
++            "embed_batch_size": None, "ssl_amp_bf16": False,
++            # growth_fix5: teto do pico ESTIMADO por plano (GB); null = memória total da GPU - 3 GB (torch.cuda),
++            # sem GPU = filtro desligado. Plano acima -> "infeasible_mem" e o planner gera outro.
++            "max_gpu_gb": None, "oom_capacity_margin_gib": 1.0},
+ }
+ 
+ 
+@@ -219,6 +222,186 @@
+         return x
+ 
+ 
++# ═════════════════════════════════════════════════════════════════ growth_fix5: estimador de pico de memória
++# Pico do SSL global (checkpoint por bloco + _ActPool do mem3) e do AE local, em GB (1e9), ANTES de treinar.
++# Unidade: elementos N·C·H·W de cada bloco na SUA resolução de entrada (pré-pool), N = V·B no SSL e B no AE.
++#   saved   = entradas dos blocos guardadas pelo checkpoint (bytes do autocast);
++#   recomp  = o MAIOR bloco recomputado no backward: K_CONV cópias (saída da conv, y salvo pelo _ActPool, grad
++#             de y) nos bytes do autocast + cópias da norma: BN (cuDNN, bytes do autocast) ou DBN/ZCA (que sobem
++#             para fp32 sob bf16: x.float(), flat permutado, xc, grupos branqueados/cat) + dwsep: depthwise
++#             intermediário com Cin canais; bloco não fundível (sem _ActPool): + saída da ativação + índices
++#             int64 do MaxPool;
++#   head    = projeção 1x1 da cabeça na resolução final (saída + grad + momentos);
++#   c0      = contexto CUDA + pesos/otimizador + SIGReg + fragmentação do alocador.
++# Calibrado (tests/hmodehb/test_growth_fix5.py) contra os picos medidos no athena/jaci (±20%).
++MEM_EST = {"c0_gb": 2.0, "k_conv": 3.0, "k_norm": {"batch": 1.0, "batch_dbn": 5.0, "dbn": 5.0, "zca": 1.0, "batch_zca": 2.0},
++           "k_norm_default": 1.0, "fp32_norms": ("batch_dbn", "dbn"), "k_dw": 2.0, "k_unfused": 2.0,
++           "k_head": 3.0, "unfused_idx_bytes": 8}
++
++
++def _bytes_of(amp_bf16: bool) -> int:
++    return 2 if amp_bf16 else 4
++
++
++def _head_proj_channels(model) -> int:
++    for m in model.head.modules():
++        if isinstance(m, nn.Conv2d):
++            return int(m.out_channels)
++    return int(getattr(model.spec.head, "embed_dim", 1280))
++
++
++def _block_geometry(model) -> List[dict]:
++    """Por bloco: Cin, Cout, resolução de entrada H (pool stride 2 depois), conv/norm/pool/fusível."""
++    spec = model.spec
++    H = int(spec.input.resolution)
++    cin = int(spec.input.in_channels)
++    out = []
++    blocks = list(getattr(model, "blocks", []))
++    for j, L in enumerate(spec.layers()):
++        fus = _fusable(blocks[j]) if j < len(blocks) else True
++        out.append({"cin": cin, "cout": int(L.channels), "H": H, "conv": str(L.conv), "norm": str(L.norm),
++                    "pool": str(L.pool), "fusable": bool(fus)})
++        if L.pool != "none":
++            H = (H + 1) // 2
++        cin = int(L.channels)
++    return out
++
++
++def _block_recompute_bytes(g: dict, n: int, b: int) -> float:
++    E = MEM_EST
++    el = float(n) * g["cout"] * g["H"] * g["H"]
++    norm_b = 4 if (g["norm"] in E["fp32_norms"] and b < 4) else b
++    k_norm = E["k_norm"].get(g["norm"], E["k_norm_default"]) if g["norm"] != "none" else 0.0
++    tot = el * (E["k_conv"] * b + k_norm * norm_b)
++    if g["conv"] in ("dwsep", "depthwise"):
++        tot += float(n) * g["cin"] * g["H"] * g["H"] * E["k_dw"] * b
++    if not g["fusable"]:
++        tot += el * E["k_unfused"] * b + (el * E["unfused_idx_bytes"] if g["pool"] == "max" else 0.0)
++    return tot
++
++
++def estimate_peak_gb(model, *, batch: int, views: int = 4, amp_bf16: bool = True, ae_amp_bf16: Optional[bool] = None,
++                     new_blocks: Optional[Sequence[int]] = None, ssl: bool = True,
++                     grad_checkpoint: bool = True) -> dict:
++    """Pico estimado (GB) do SSL global e do AE local de um plano (modelo-filho montado na CPU), antes de treinar.
++
++    ``new_blocks``: blocos que passam pelo AE local (None = todos). Devolve {"ssl_gb", "ae_gb", "peak_gb",
++    "argmax_block", ...}. Monótono em B, V, canais e resolução."""
++    E = MEM_EST
++    geo = _block_geometry(model)
++    b = _bytes_of(amp_bf16)
++    b_ae = _bytes_of(amp_bf16 if ae_amp_bf16 is None else ae_amp_bf16)
++    N = int(views) * int(batch)
++    ssl_gb, arg = 0.0, None
++    if ssl and geo:
++        saved = sum(float(N) * g["cin"] * g["H"] ** 2 * b for g in geo)
++        rec = [_block_recompute_bytes(g, N, b) for g in geo]
++        if grad_checkpoint:
++            top = max(rec)
++        else:                               # sem checkpoint: tudo fica salvo
++            top = sum(rec)
++        arg = int(np.argmax(rec))
++        last = geo[-1]
++        Hl = (last["H"] + 1) // 2 if last["pool"] != "none" else last["H"]
++        head = float(N) * _head_proj_channels(model) * Hl * Hl * b * E["k_head"]
++        ssl_gb = (saved + top + head) / 1e9 + E["c0_gb"]
++    nb = list(range(len(geo))) if new_blocks is None else [int(j) for j in new_blocks]
++    ae_gb = 0.0
++    for j in nb:
++        if 0 <= j < len(geo):
++            g = geo[j]
++            dec = float(batch) * int(model.spec.input.in_channels) * int(model.spec.input.resolution) ** 2 * b_ae * 2
++            v = (_block_recompute_bytes(g, int(batch), b_ae) + float(batch) * g["cin"] * g["H"] ** 2 * b_ae + dec) / 1e9
++            ae_gb = max(ae_gb, v + E["c0_gb"])
++    return {"ssl_gb": float(ssl_gb), "ae_gb": float(ae_gb), "peak_gb": float(max(ssl_gb, ae_gb)),
++            "argmax_block": arg, "batch": int(batch), "views": int(views), "bytes": b, "bytes_ae": b_ae}
++
++
++def resolve_max_gpu_gb(gcfg: dict, device=None) -> Optional[float]:
++    """``growth.mem.max_gpu_gb``; padrão (null) = memória total da GPU - 3 GB (torch.cuda) ou None (sem GPU:
++    filtro desligado)."""
++    v = _mem(gcfg).get("max_gpu_gb")
++    if v is not None:
++        return float(v)
++    try:
++        if torch.cuda.is_available() and (device is None or getattr(device, "type", str(device)) == "cuda"):
++            idx = getattr(device, "index", None)
++            idx = torch.cuda.current_device() if idx is None else idx
++            return torch.cuda.get_device_properties(idx).total_memory / 1e9 - 3.0
++    except Exception:
++        pass
++    return None
++
++
++def mem_ctx_from(cfg: dict, gcfg: dict, device=None) -> dict:
++    """Contexto do estimador: batch do treino, V do SSL, bytes (bf16 do treino ou ``mem.ssl_amp_bf16``)."""
++    tr = (cfg or {}).get("train") or {}
++    amp = str(tr.get("amp_dtype") or "").lower() in ("bf16", "bfloat16")
++    views = {"simclr": 2, "lejepa": 4, "ae": 1}.get(str(gcfg.get("ssl", "lejepa")).lower(), 4)
++    return {"batch": int(((cfg or {}).get("data") or {}).get("batch_size", 64)), "views": int(views),
++            "amp_bf16": bool(amp or _mem(gcfg).get("ssl_amp_bf16")), "ae_amp_bf16": bool(amp),
++            "ssl": not ssl_disabled(gcfg), "grad_checkpoint": bool(_mem(gcfg).get("grad_checkpoint", True)),
++            "max_gb": resolve_max_gpu_gb(gcfg, device)}
++
++
++def plan_memory(parent, ops: Sequence[dict], ctx: dict) -> dict:
++    """Pico estimado do filho de ``parent`` pelo plano ``ops`` (montado na CPU com init PyTorch: a forma é a
++    mesma do realize_plan com SPiFiL)."""
++    res = realize_plan(parent, ops, None)
++    model = res.child
++    masks = res.masks
++    new_blocks = [j for j in range(len(model.blocks))
++                  if any(not bool(masks[f"blocks.{j}.{k}"].all()) for k, _ in model.blocks[j].named_parameters()
++                         if f"blocks.{j}.{k}" in masks)]
++    est = estimate_peak_gb(model, batch=ctx["batch"], views=ctx["views"], amp_bf16=ctx["amp_bf16"],
++                           ae_amp_bf16=ctx.get("ae_amp_bf16"), new_blocks=new_blocks, ssl=ctx.get("ssl", True),
++                           grad_checkpoint=ctx.get("grad_checkpoint", True))
++    est["max_gb"] = ctx.get("max_gb")
++    est["feasible"] = ctx.get("max_gb") is None or est["peak_gb"] <= float(ctx["max_gb"])
++    return est
++
++
++# growth_fix5 (3): OOM de CAPACIDADE (o filho não cabe na placa nem vazia) -> failed na hora, sem retries.
++_GIB = 1024 ** 3
++
++
++def _parse_gib(msg: str, pat: str) -> Optional[float]:
++    import re
++    m = re.search(pat, msg)
++    if not m:
++        return None
++    val, unit = float(m.group(1)), m.group(2)
++    return val * {"GiB": 1.0, "MiB": 1 / 1024, "KiB": 1 / 1024 ** 2, "bytes": 1 / _GIB}.get(unit, 1.0)
++
++
++def oom_info(exc_or_msg) -> dict:
++    """Campos da mensagem de OOM do PyTorch (GiB): pedido, total, livre, uso deste processo."""
++    msg = str(exc_or_msg)
++    u = r"([\d.]+) (GiB|MiB|KiB|bytes)"
++    return {"requested": _parse_gib(msg, r"Tried to allocate " + u),
++            "total": _parse_gib(msg, r"total capacity of " + u),
++            "free": _parse_gib(msg, r"of which " + u + r" is free"),
++            "this_process": _parse_gib(msg, r"this process has " + u)}
++
++
++def oom_is_capacity(exc_or_msg, *, total_gib: Optional[float] = None, margin_gib: float = 1.0,
++                    alone_tol_gib: float = 0.75) -> Tuple[bool, dict]:
++    """True quando o pedido não cabe nem com a GPU só para este processo:
++    (a) pedido + uso deste processo > total - margem; ou (b) a GPU não tem outros processos (total - livre -
++    este <= tolerância) e o pedido > livre. Sem os números na mensagem: False (trata como contenção)."""
++    d = oom_info(exc_or_msg)
++    tot = d["total"] if d["total"] is not None else total_gib
++    req, this, free = d["requested"], d["this_process"], d["free"]
++    if req is None or tot is None:
++        return False, d
++    cap = this is not None and req + this > tot - float(margin_gib)
++    if not cap and free is not None and this is not None:
++        others = tot - free - this
++        cap = others <= float(alone_tol_gib) and req > free
++    d["others"] = (tot - free - this) if (free is not None and this is not None) else None
++    return bool(cap), d
++
++
+ class ChainError(RuntimeError):
+     pass
+ 
+@@ -729,11 +912,14 @@
+ 
+ def plan_children(parents: List[Tuple[dict, BB.Backbone]], target_band: str, n_children: int,
+                   thetas: Sequence[Sequence[float]], seeds: Sequence[int], gcfg: dict,
+-                  hard_cap: int = HARD_CAP) -> List[dict]:
++                  hard_cap: int = HARD_CAP, mem_ctx: Optional[dict] = None) -> List[dict]:
+     """n_children planos válidos, pais em round-robin; o k-ésimo filho de um pai começa pela k-ésima família
+     (widen em blocos diferentes, head_widen, deepen, add_skip...). Plano repetido do mesmo pai é pulado; pai
+     esgotado cede a vaga ao próximo pai. Cada item: {parent, ops, family, theta, seed} ou {parent, ops=None,
+-    reason} quando NENHUM pai/família produz plano (motivos agregados)."""
++    reason} quando NENHUM pai/família produz plano (motivos agregados).
++
++    growth_fix5: com ``mem_ctx`` (``mem_ctx_from``) e ``max_gb`` definido, plano com pico estimado acima do teto
++    vira "infeasible_mem" (registrado em ``infeasible_mem`` do item que o substitui) e a próxima família entra."""
+     P = len(parents)
+     used: Dict[int, set] = {p: set() for p in range(P)}
+     nxt = {p: 0 for p in range(P)}
+@@ -742,6 +928,7 @@
+     out: List[dict] = []
+     for i in range(int(n_children)):
+         got = None
++        pending_inf: List[dict] = []
+         for d in range(P):
+             p = (i + d) % P
+             pm = parents[p][1]
+@@ -757,8 +944,21 @@
+                     reasons[p].append(f"{family_label(fam)}: plano repetido")
+                     continue
+                 used[p].add(key)
++                est = None
++                if mem_ctx is not None and mem_ctx.get("max_gb") is not None:
++                    est = plan_memory(pm, ops, mem_ctx)
++                    if not est["feasible"]:
++                        why = (f"{family_label(fam)}: infeasible_mem (pico estimado {est['peak_gb']:.1f} GB "
++                               f"[ssl {est['ssl_gb']:.1f}, ae {est['ae_gb']:.1f}] > {float(mem_ctx['max_gb']):.1f} GB)")
++                        reasons[p].append(why)
++                        pending_inf.append({"parent": parents[p][0], "ops": ops, "family": family_label(fam),
++                                            "theta": list(thetas[i]), "seed": int(seeds[i]), "reason": why,
++                                            "mem_estimate": est})
++                        continue
+                 got = {"parent": parents[p][0], "ops": ops, "family": family_label(fam), "theta": list(thetas[i]),
+                        "seed": int(seeds[i]), "parent_index": p}
++                if est is not None:
++                    got["mem_estimate"] = est
+             if got is not None:
+                 break
+         if got is None:
+@@ -766,6 +966,7 @@
+                 or "sem pais"
+             got = {"parent": parents[i % P][0] if P else None, "ops": None, "theta": list(thetas[i]),
+                    "seed": int(seeds[i]), "reason": f"sem plano na faixa (todas as famílias esgotadas): {why}"}
++        got["infeasible_mem"] = pending_inf
+         out.append(got)
+     return out
+ 
+@@ -967,6 +1168,16 @@
+     return int(hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode()).hexdigest()[:8], 16)
+ 
+ 
++def _gpu_total_gib(device) -> Optional[float]:
++    try:
++        if torch.cuda.is_available() and getattr(device, "type", str(device)) == "cuda":
++            idx = device.index if getattr(device, "index", None) is not None else torch.cuda.current_device()
++            return torch.cuda.get_device_properties(idx).total_memory / _GIB
++    except Exception:
++        pass
++    return None
++
++
+ def _is_oom(exc: BaseException) -> bool:
+     return isinstance(exc, getattr(torch.cuda, "OutOfMemoryError", ())) or "out of memory" in str(exc).lower()
+ 
+@@ -1130,6 +1341,17 @@
+             except FV.RulerViolation:
+                 raise
+             except Exception as exc:
++                if _is_oom(exc):                  # growth_fix5 (3): não cabe nem com a GPU vazia -> sem retries
++                    cap, info = oom_is_capacity(exc, total_gib=_gpu_total_gib(self.gev.device),
++                                                margin_gib=float(_mem(self.g).get("oom_capacity_margin_gib", 1.0)))
++                    if cap:
++                        print(f"[growth] OOM de capacidade em {node} f{fid}: failed na hora (sem retries): "
++                              f"{str(exc)[:300]}", flush=True)
++                        rec = {"status": "failed", "reason": "oom_capacidade", "oom": info,
++                               "error": f"{type(exc).__name__}: {exc}", "traceback": traceback.format_exc()[-4000:]}
++                        if torch.cuda.is_available():
++                            torch.cuda.empty_cache()
++                        break
+                 if _is_oom(exc) and attempt < retries:
+                     print(f"[growth] OOM em {node} f{fid} ({attempt + 1}/{retries}); espera {sleep_s:.0f} s: "
+                           f"{str(exc)[:300]}", flush=True)
+@@ -1231,12 +1453,23 @@
+         thetas = [de_theta(pool, rng) for _ in range(nch)]
+         pseeds = [_h({"tag": tag, "i": i, "plan": True}) % (2 ** 31 - 1) for i in range(nch)]
+         pm = [(m, BB_load(m["checkpoint"], m["checkpoint_sha256"])[0]) for m in parents]
+-        plans = plan_children(pm, target, nch, thetas, pseeds, self.g, int(self.g.get("hard_cap", HARD_CAP)))
++        mctx = mem_ctx_from(self.cfg, self.g, self.gev.device)
++        plans = plan_children(pm, target, nch, thetas, pseeds, self.g, int(self.g.get("hard_cap", HARD_CAP)),
++                              mem_ctx=mctx)
+         del pm
+         for i, pl in enumerate(plans):
+             parent, ops, theta = pl["parent"], pl["ops"], pl["theta"]
+             seed = _h({"tag": tag, "i": i, "parent": parent["checkpoint_sha256"]}) % (2 ** 31 - 1)
+             node = f"{target}g{gen}c{i:02d}"
++            for k, inf in enumerate(pl.get("infeasible_mem") or []):     # growth_fix5: registrado e substituído
++                ikey = I.lineage_key({"ops": inf["ops"], "theta": inf["theta"], "infeasible_mem": True}, inf["seed"],
++                                     {"parent_sha256": inf["parent"]["checkpoint_sha256"]}, self.gev.fitness_sig)
++                print(f"[growth] {node}: {inf['reason']}", flush=True)
++                self._lineage({"cand_key": I.cand_key(ikey, 0), "node_id": f"{node}_mem{k}",
++                               "parent": inf["parent"]["node_id"], "op": "+".join(o["op"] for o in inf["ops"]),
++                               "ops": inf["ops"], "family": inf["family"], "accepted": False, "status": "infeasible_mem",
++                               "decision": "infeasible_mem", "reason": inf["reason"],
++                               "mem_estimate": _jsonable(inf["mem_estimate"]), "band": target})
+             origin = {"kind": "inherit", "parent_sha256": parent["checkpoint_sha256"], "protect": self.g["protect"],
+                       "init": self.g["init_method"], "init_config": self.g.get("init_config") or {}}
+             lkey = I.lineage_key({"ops": ops, "theta": theta}, seed, origin, self.gev.fitness_sig)
+diff -ruN a/tests/hmodehb/test_growth_fix5.py b/tests/hmodehb/test_growth_fix5.py
+--- a/tests/hmodehb/test_growth_fix5.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_fix5.py	2026-11-17 14:15:11.734374066 -0300
+@@ -0,0 +1,175 @@
++"""growth_fix5: estimador de pico de memória por plano, filtro infeasible_mem no planner, falha rápida de OOM de
++capacidade (sem os 10 retries). Só CPU."""
++from __future__ import annotations
++
++import copy
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++import numpy as np
++import pytest
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++from test_growth_fix4 import _tiny  # noqa: E402
++
++SMOKE = ROOT / "artifacts/hmodehb_b0b4/growth_smoke/jaci_gpu0/remote_sensing/nodes"
++ATHENA = dict(batch=64, views=4, amp_bf16=True, ae_amp_bf16=True, ssl=True, grad_checkpoint=True, max_gb=None)
++# mensagem real do athena (torch 2.2), filho que não cabe nem na placa vazia
++OOM_CAP = ("CUDA out of memory. Tried to allocate 21.77 GiB. GPU 0 has a total capacity of 47.54 GiB of which "
++           "21.35 GiB is free. Including non-PyTorch memory, this process has 25.46 GiB memory in use. Of the "
++           "allocated memory 24.10 GiB is allocated by PyTorch")
++OOM_CONT = ("CUDA out of memory. Tried to allocate 9.00 GiB. GPU 0 has a total capacity of 47.54 GiB of which "
++            "3.10 GiB is free. Process 777 has 30.00 GiB memory in use. Including non-PyTorch memory, this process "
++            "has 14.20 GiB memory in use.")
++
++
++def _rs(name):
++    p = SMOKE / name / "backbone.pt"
++    if not p.exists():
++        pytest.skip(f"checkpoint de semente ausente: {p}")
++    return G.BB_load(p)[0]
++
++
++def _widen(parent, idx, w):
++    c = int(parent.spec.layers()[idx[0]].channels)
++    return [G._widen_op(MO.start(parent), idx, w / c, 1)]
++
++
++# ───────────────────────────────────────────────────────────────── (1) estimador
++def test_estimator_monotone():
++    m = _tiny(widths=(12, 24, 24), res=64)
++    base = G.estimate_peak_gb(m, batch=8, views=4)
++    assert base["ssl_gb"] > 0 and base["ae_gb"] > 0
++    assert G.estimate_peak_gb(m, batch=16, views=4)["ssl_gb"] > base["ssl_gb"]
++    assert G.estimate_peak_gb(m, batch=8, views=8)["ssl_gb"] > base["ssl_gb"]
++    assert G.estimate_peak_gb(m, batch=8, views=4, amp_bf16=False)["ssl_gb"] > base["ssl_gb"]
++    prev = base["peak_gb"]
++    for w in (24, 48, 96):
++        r = G.realize_plan(m, _widen(m, [0], w), None)
++        e = G.estimate_peak_gb(r.child, batch=8, views=4)
++        assert e["peak_gb"] > prev
++        prev = e["peak_gb"]
++    big = _tiny(widths=(12, 24, 24), res=128)
++    assert G.estimate_peak_gb(big, batch=8, views=4)["ssl_gb"] > base["ssl_gb"]
++    assert G.estimate_peak_gb(m, batch=8, views=4, grad_checkpoint=False)["ssl_gb"] > base["ssl_gb"]
++    assert G.estimate_peak_gb(m, batch=8, ssl=False)["ssl_gb"] == 0.0
++
++
++@pytest.mark.parametrize("w,lo,hi", [(376, 45.3, 47.2), (295, 40.6, 40.6)])
++def test_estimator_calibration_rs_c00306(w, lo, hi):
++    """B1 RS (c00306, widen nos blocos 0/1): medido 45,3–47,2 GB (376) e 40,6 GB (295); ±20%."""
++    p = _rs("seed01")
++    e = G.plan_memory(p, _widen(p, [0, 1], w), ATHENA)
++    assert 0.8 * lo <= e["peak_gb"] <= 1.2 * hi, e
++
++
++def test_estimator_oom_point_exceeds_athena():
++    """Planner novo: B1g0c00 RS = c00306 widen 0/1 -> 455 (OOM 'Tried to allocate 21.77 GiB'): > 47,3 GB."""
++    p = _rs("seed01")
++    e = G.plan_memory(p, _widen(p, [0, 1], 455), ATHENA)
++    assert e["peak_gb"] > 47.3, e
++
++
++@pytest.mark.skip(reason="B1g0c03 (pai tiny, 14,3 GB) e flowers B1g0c00 (33,6 GB): os genomas exatos desses nós "
++                         "do athena não estão nesta máquina; trazer growth_spec.json/backbone.pt para calibrar")
++def test_estimator_calibration_athena_tiny_flowers():
++    pass
++
++
++# ───────────────────────────────────────────────────────────────── (2) filtro no planner
++def test_resolve_max_gpu_gb_config_and_cpu():
++    g = copy.deepcopy(G.GROWTH_DEFAULTS)
++    g["mem"] = {**g["mem"], "max_gpu_gb": 30.0}
++    assert G.resolve_max_gpu_gb(g, torch.device("cpu")) == 30.0
++    if not torch.cuda.is_available():
++        assert G.resolve_max_gpu_gb(G.GROWTH_DEFAULTS, torch.device("cpu")) is None
++
++
++def test_mem_ctx_from_cfg():
++    cfg = {"data": {"batch_size": 64}, "train": {"amp_dtype": "bf16"}}
++    g = copy.deepcopy(G.GROWTH_DEFAULTS)
++    g["mem"] = {**g["mem"], "max_gpu_gb": 45.0}
++    c = G.mem_ctx_from(cfg, g)
++    assert c == {"batch": 64, "views": 4, "amp_bf16": True, "ae_amp_bf16": True, "ssl": True,
++                 "grad_checkpoint": True, "max_gb": 45.0}
++
++
++def test_planner_marks_infeasible_and_replaces():
++    a = _tiny(widths=(4, 8, 8), res=64)
++    th = [list(np.random.default_rng(0).uniform(0, 1, 4)) for _ in range(4)]
++    ctx = dict(batch=64, views=4, amp_bf16=True, ssl=True, grad_checkpoint=True, max_gb=None)
++    free = G.plan_children([({"node_id": "a"}, a)], "B1", 4, th, list(range(4)), G.GROWTH_DEFAULTS, mem_ctx=ctx)
++    peaks = sorted(G.plan_memory(a, p["ops"], ctx)["peak_gb"] for p in free if p["ops"])
++    assert len(peaks) >= 2 and peaks[0] < peaks[-1]
++    ctx["max_gb"] = (peaks[0] + peaks[-1]) / 2              # corta os planos de pico alto
++    pl = G.plan_children([({"node_id": "a"}, a)], "B1", 4, th, list(range(4)), G.GROWTH_DEFAULTS, mem_ctx=ctx)
++    inf = [x for p in pl for x in p["infeasible_mem"]]
++    assert inf and all("infeasible_mem" in x["reason"] and x["mem_estimate"]["peak_gb"] > ctx["max_gb"] for x in inf)
++    for p in pl:
++        if p["ops"] is not None:
++            assert p["mem_estimate"]["peak_gb"] <= ctx["max_gb"]
++            assert G.band_of(G._params(G.realize_plan(a, p["ops"], None))) == "B1"
++        else:
++            assert "infeasible_mem" in p["reason"] or "plano repetido" in p["reason"]
++    ctx["max_gb"] = 0.001                                    # nada cabe -> sem plano, motivo infeasible_mem
++    pl = G.plan_children([({"node_id": "a"}, a)], "B1", 2, th[:2], [0, 1], G.GROWTH_DEFAULTS, mem_ctx=ctx)
++    assert pl[0]["ops"] is None and "infeasible_mem" in pl[0]["reason"]
++
++
++def test_planner_without_ctx_unchanged():
++    a = _tiny(widths=(4, 8, 8))
++    th = [[0.5] * 4] * 3
++    p0 = G.plan_children([({"node_id": "a"}, a)], "B1", 3, th, [0, 1, 2], G.GROWTH_DEFAULTS)
++    p1 = G.plan_children([({"node_id": "a"}, a)], "B1", 3, th, [0, 1, 2], G.GROWTH_DEFAULTS,
++                         mem_ctx=dict(ATHENA))                 # max_gb None -> filtro desligado
++    assert [p["ops"] for p in p0] == [p["ops"] for p in p1]
++
++
++# ───────────────────────────────────────────────────────────────── (3) falha rápida de OOM
++def test_oom_capacity_classifier():
++    cap, d = G.oom_is_capacity(OOM_CAP)
++    assert cap and abs(d["requested"] - 21.77) < 1e-6 and abs(d["this_process"] - 25.46) < 1e-6
++    cap, d = G.oom_is_capacity(OOM_CONT)
++    assert not cap and d["others"] > 20
++    assert G.oom_is_capacity("CUDA out of memory.")[0] is False         # sem números: contenção (retries)
++    # pedido > livre com a GPU só deste processo
++    alone = ("Tried to allocate 10.00 GiB. GPU 0 has a total capacity of 47.54 GiB of which 8.00 GiB is free. "
++             "Including non-PyTorch memory, this process has 39.30 GiB memory in use.")
++    assert G.oom_is_capacity(alone, margin_gib=0.0)[0]
++
++
++def _chain(tmp_path, exc_msg, retries=3):
++    ch = object.__new__(G.GrowthChain)
++    g = copy.deepcopy(G.GROWTH_DEFAULTS)
++    g["oom"] = {"retries": retries, "sleep_s": 0}
++    ch.g, ch.out = g, tmp_path
++    ch.gev = SimpleNamespace(fitness_sig="sig", device=torch.device("cpu"))
++    calls = []
++
++    def boom(*a, **k):
++        calls.append(1)
++        raise torch.cuda.OutOfMemoryError(exc_msg)
++    ch._run_job = boom
++    return ch, calls
++
++
++def test_job_fast_fail_capacity(tmp_path):
++    ch, calls = _chain(tmp_path, OOM_CAP)
++    r = ch._job({"node_id": "p"}, [], [0.5] * 4, 15, "B1g0c00", 1, "ck")
++    assert len(calls) == 1 and r["status"] == "failed" and r["reason"] == "oom_capacidade"
++    assert G.decide(r, 0.0, False) == ("failed", False)
++    assert (tmp_path / "nodes/B1g0c00/f15/result.json").exists()
++
++
++def test_job_contention_keeps_retries(tmp_path):
++    ch, calls = _chain(tmp_path, OOM_CONT, retries=3)
++    r = ch._job({"node_id": "p"}, [], [0.5] * 4, 15, "B1g0c01", 1, "ck")
++    assert len(calls) == 4 and r["reason"] == "oom"

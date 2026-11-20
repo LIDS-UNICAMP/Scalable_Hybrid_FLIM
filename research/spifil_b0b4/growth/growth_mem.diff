@@ -1,0 +1,774 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 11:16:01.472039145 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 11:20:00.822973689 -0300
+@@ -78,9 +78,76 @@
+     "preservation_images": 8, "preservation_tol": 1.0e-5,
+     "oom": {"retries": 10, "sleep_s": 300},
+     "test_channel": True, "debug_train": None, "debug_val": None,
++    # memória (growth_mem). Ligados por padrão SÓ os que não mudam a ciência (bit a bit; ver mem_status.md):
++    #   grad_checkpoint: recomputa a ativação de cada bloco no backward do SSL (BN/DBN com momentum 0 na
++    #     recomputação -> running stats atualizadas uma vez só; RNG preservado) -> pico = 1 bloco, não a rede.
++    #   wise_on_cpu: âncora/treinado do WiSE em CPU; empty_cache: libera o cache entre fases.
++    # Desligados e DECLARADOS (mudam a ciência ou podem mudar o kappa em arredondamento):
++    #   embed_batch_size: micro-lote da extração da SVM (null = data.batch_size, histórico);
++    #   ssl_amp_bf16: SSL em bf16 (muda a ciência).
++    "mem": {"grad_checkpoint": True, "wise_on_cpu": True, "empty_cache": True,
++            "embed_batch_size": None, "ssl_amp_bf16": False},
+ }
+ 
+ 
++def _mem(gcfg: dict) -> dict:
++    return {**GROWTH_DEFAULTS["mem"], **(gcfg.get("mem") or {})}
++
++
++def _free(dev, on: bool = True) -> None:
++    import gc
++    gc.collect()
++    if on and getattr(dev, "type", str(dev)) == "cuda" and torch.cuda.is_available():
++        torch.cuda.empty_cache()
++
++
++_STAT_MODS = (nn.modules.batchnorm._BatchNorm,)
++
++
++class _FrozenStats:
++    """Na RECOMPUTAÇÃO do checkpoint: momentum 0 nos BN/DBN (running = 1*running + 0*batch, bit a bit) e
++    num_batches_tracked restaurado -> as estatísticas correntes são atualizadas uma única vez, como sem checkpoint."""
++
++    def __init__(self, mod: nn.Module):
++        from ga_search.modehb.ops_norm_act import DecorrelatedBatchNorm
++        self.mods = [m for m in mod.modules() if isinstance(m, _STAT_MODS + (DecorrelatedBatchNorm,))]
++
++    def __enter__(self):
++        self.saved = [(m.momentum, m.num_batches_tracked.clone() if getattr(m, "num_batches_tracked", None)
++                       is not None else None) for m in self.mods]
++        self.bufs = [{k: v.clone() for k, v in m.named_buffers(recurse=False)} for m in self.mods]
++        for m in self.mods:
++            m.momentum = 0.0
++
++    def __exit__(self, *exc):
++        with torch.no_grad():
++            for m, (mom, _), bufs in zip(self.mods, self.saved, self.bufs):
++                m.momentum = mom
++                for k, v in m.named_buffers(recurse=False):   # garantia bit a bit (0*inf etc.)
++                    v.copy_(bufs[k])
++        return False
++
++
++class _CkptSequential(nn.Sequential):
++    """``nn.Sequential`` com os MESMOS filhos e nomes ('0.conv.weight'...), checkpoint por bloco no treino."""
++
++    def forward(self, x):
++        from torch.utils.checkpoint import checkpoint
++        if not (self.training and torch.is_grad_enabled()):
++            return super().forward(x)
++        for blk in self:
++            calls = [0]
++
++            def run(inp, blk=blk, calls=calls):
++                calls[0] += 1
++                if calls[0] == 1:
++                    return blk(inp)
++                with _FrozenStats(blk):
++                    return blk(inp)
++            x = checkpoint(run, x, use_reentrant=False, preserve_rng_state=True)
++        return x
++
++
+ class ChainError(RuntimeError):
+     pass
+ 
+@@ -204,12 +271,25 @@
+         return sorted({FV.ruler_sig({"readout": r, "tta": 1, "solver": "libsvm", **st})
+                        for r in set(self.ev._readouts) for st in self.ev._svm_stamps})
+ 
+-    def score(self, model: BB.Backbone) -> dict:
++    def score(self, model: BB.Backbone, embed_batch_size: Optional[int] = None) -> dict:
+         from ga_search.modehb.run_search import _blas_threads
+         model.to(self.device)
+         enc = nn.Sequential(*model.blocks)
++        data = self.ev.cfg["data"]
++        old_bs = data.get("batch_size", None)
++        if embed_batch_size:                  # OPÇÃO DESLIGADA (null): micro-lote só na extração da SVM
++            data["batch_size"] = int(embed_batch_size)
++        try:
++            feats = self.ev._svm_features(enc, model.head)
++        finally:
++            if embed_batch_size:
++                if old_bs is None:
++                    data.pop("batch_size", None)
++                else:
++                    data["batch_size"] = old_bs
++        _free(self.device)
+         with _blas_threads(self.ev._fitness_speed()["svm_blas_threads"]):
+-            sv = self.ev._svm_score(*self.ev._svm_features(enc, model.head))
++            sv = self.ev._svm_score(*feats)
+         if sv.get("nonfinite"):
+             raise FV.NonFiniteFitness("embedding não finito")
+         return sv
+@@ -273,6 +353,9 @@
+                 rec["fallback"] = f"{type(exc).__name__}: {str(exc)[:160]}"
+                 self.log.append(rec)
+                 return
++            finally:                          # growth_mem: a cópia do prefixo do pai não fica na GPU
++                del prefix
++                _free(self.gev.device)
+             n = min(int(W.shape[0]), len(new_rows))
+             rows = torch.as_tensor(new_rows[:n], dtype=torch.long)
+             with torch.no_grad():
+@@ -422,11 +505,16 @@
+     if a == 0.0:
+         model.load_state_dict({k: v.clone() for k, v in anchor.items()})
+         return
++    dev = {k: v.device for k, v in model.state_dict().items()}   # growth_mem: soma no device do modelo
+     sd = {}
+     for k, t in trained.items():
+         a0 = anchor.get(k)
+-        sd[k] = ((1 - a) * a0 + a * t) if (a0 is not None and t.is_floating_point() and a0.shape == t.shape) else t
++        if a0 is not None and t.is_floating_point() and a0.shape == t.shape:
++            sd[k] = (1 - a) * a0.to(dev[k]) + a * t.to(dev[k])
++        else:
++            sd[k] = t
+     model.load_state_dict(sd)
++    del sd
+ 
+ 
+ def _masks_under(masks: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
+@@ -447,10 +535,13 @@
+     from ga_search.modehb import modehb as M
+     ev, dev = gev.ev, gev.device
+     tr = gev.cfg["train"]
++    mem = _mem(gcfg)
+     model = res.child.to(dev)
+     masks = {k: v.to(dev) for k, v in res.masks.items()}
+     scale = PROTECT_SCALE[gcfg["protect"]]
+-    anchor = {k: v.detach().clone() for k, v in model.state_dict().items()}
++    snap = (lambda m: {k: v.detach().to("cpu", copy=True) for k, v in m.state_dict().items()}) \
++        if mem["wise_on_cpu"] else (lambda m: {k: v.detach().clone() for k, v in m.state_dict().items()})
++    anchor = snap(model)
+     ae_ep, ssl_ep = split_epochs(fidelity, tr.get("ae_ssl_split", [1, 2]))
+     run = _NullRun()
+     new_blocks = [j for j in range(len(model.blocks))
+@@ -469,18 +560,28 @@
+                                 conv_lr_scale=1.0, decoder_warmup_frac=M.AE_WARMUP_FRAC[gcfg.get("ae_schedule", "joint")],
+                                 **_amp_kw(ev))
+         ae_logs.append({"block": j, **{k: v for k, v in ae.items() if isinstance(v, (int, float, str, bool))}})
++        del prefix, ae
++        _free(dev, mem["empty_cache"])
+     for p in model.parameters():
+         p.grad = None
+         p.requires_grad_(True)
+-    enc = nn.Sequential(*model.blocks)
++    enc = (_CkptSequential if mem["grad_checkpoint"] else nn.Sequential)(*model.blocks)
++    if mem["ssl_amp_bf16"]:                   # OPÇÃO DESLIGADA: muda a ciência (declarada no resultado)
++        amp_kw = {"amp_dtype": torch.bfloat16}
++    else:
++        amp_kw = _amp_kw(ev)
+     lr = float(gcfg.get("lr", tr.get("lr_new", 1e-3)))
+     with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
+             ElementProtect(model.head, _masks_under(masks, "head."), scale):
+         ssl_log = train_global_ssl(enc, model.head, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
+                                    ssl_ep, lr, lr, [], dev, run, int(seed), float(tr.get("sigreg_lambda", 0.05)),
+                                    max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
+-                                   projector=False, **_amp_kw(ev))
+-    trained = {k: v.detach().clone() for k, v in model.state_dict().items()}
++                                   projector=False, **amp_kw)
++    for p in model.parameters():
++        p.grad = None
++    del enc
++    _free(dev, mem["empty_cache"])
++    trained = snap(model)
+     ssl_finite = _finite_state(trained) and math.isfinite(float(ssl_log.get("final_loss_total") or 0.0))
+     alphas = [float(a) for a in gcfg.get("wise_alphas", [0.0, 0.25, 0.5, 0.75, 1.0])]
+     if 0.0 not in alphas:
+@@ -491,7 +592,8 @@
+     best, kappas, svs = None, {}, {}
+     for a in alphas:
+         _blend_into(model, anchor, trained, a)
+-        sv = gev.score(model)
++        sv = gev.score(model, embed_batch_size=mem["embed_batch_size"])
++        _free(dev, mem["empty_cache"])
+         kappas[str(a)], svs[str(a)] = float(sv["kappa"]), sv
+         if best is None or sv["quality"] > best[1]["quality"]:
+             best = (a, sv)
+@@ -505,6 +607,7 @@
+            "ae_epochs": ae_ep, "ssl_epochs": ssl_ep, "ae_blocks": new_blocks, "ae_logs": ae_logs,
+            "ssl_final_loss": ssl_log.get("final_loss_total"), "ssl_steps": int(ssl_log.get("steps", 0)),
+            "ssl_finite": bool(ssl_finite), "parent_kappa_val_orig": float(parent_kappa),
++           "mem": dict(mem),
+            "status": "ok"}
+     FV.check_decisions(out, gev.fitness_spec)     # toda decisão (alpha e kappa) pela régua ORIG-val
+     return model, out
+@@ -713,7 +816,8 @@
+                 raise
+             except Exception as exc:
+                 if _is_oom(exc) and attempt < retries:
+-                    print(f"[growth] OOM em {node} f{fid} ({attempt + 1}/{retries}); espera {sleep_s:.0f} s", flush=True)
++                    print(f"[growth] OOM em {node} f{fid} ({attempt + 1}/{retries}); espera {sleep_s:.0f} s: "
++                          f"{str(exc)[:300]}", flush=True)
+                     if torch.cuda.is_available():
+                         torch.cuda.empty_cache()
+                     time.sleep(sleep_s)
+@@ -745,6 +849,8 @@
+         child_band = band_of(res.child.spec.cost.params_total)
+         if res.child.spec.cost.params_total > int(self.g.get("hard_cap", HARD_CAP)):
+             raise BB.BudgetError("teto duro")
++        del pmodel                               # growth_mem: o pai não fica vivo durante o treino do filho
++        _free(dev, _mem(self.g)["empty_cache"])
+         model, out = train_child(self.gev, res, fid, self.g, seed, parent["kappa_val_orig"])
+         model.spec.provenance.parent = parent["node_id"]
+         model.spec.provenance.wise_alpha = out["wise_alpha"]
+diff -ruN a/ga_search/modehb/init.py b/ga_search/modehb/init.py
+--- a/ga_search/modehb/init.py	2026-11-17 11:20:00.796973371 -0300
++++ b/ga_search/modehb/init.py	2026-11-17 11:20:00.798973396 -0300
+@@ -188,6 +188,9 @@
+     Raises ``flim.progressive.InfeasibleCandidate`` from SPiFiL unchanged.
+     ``config["spifil_ops"]`` (default False) switches to ``_init_block_ops``.
+     """
++    if genome.get("init", "spifil") == "spifil":
++        from ga_search.modehb.spifil_oom import install as _install_oom_fallback
++        _install_oom_fallback()      # Fisher scorer: blocked recompute only on CUDA OOM
+     if (config or {}).get("spifil_ops", False):
+         return _init_block_ops(genome, layer_idx, prefix, samples, config, prefix_id)
+     layer = repair_for_spifil(genome["layers"][layer_idx])
+diff -ruN a/ga_search/modehb/ops_norm_act.py b/ga_search/modehb/ops_norm_act.py
+--- a/ga_search/modehb/ops_norm_act.py	2026-11-17 11:16:01.478039219 -0300
++++ b/ga_search/modehb/ops_norm_act.py	2026-11-17 11:16:18.122244234 -0300
+@@ -306,12 +306,26 @@
+             out = torch.cat([self._whiten_group(work[a:b], i)
+                              for i, (a, b) in enumerate(self.bounds)], 0).to(x.dtype)
+         else:
+-            xc = flat - self.running_mean[:, None].to(x.dtype)
+-            out = torch.cat([getattr(self, f"running_W{i}").to(x.dtype) @ xc[a:b]
+-                             for i, (a, b) in enumerate(self.bounds)], 0)
++            # memória (growth_mem): centra e branqueia POR GRUPO direto no buffer de saída, sem a cópia
++            # centrada inteira (C, M) nem o cat. Mesmas fatias contíguas, mesmo GEMM -> bit a bit igual.
++            rm = self.running_mean[:, None].to(x.dtype)
++            if torch.is_grad_enabled() and (x.requires_grad or any(
++                    getattr(self, f"running_W{i}").requires_grad for i in range(len(self.bounds)))):
++                xc = flat - rm
++                out = torch.cat([getattr(self, f"running_W{i}").to(x.dtype) @ xc[a:b]
++                                 for i, (a, b) in enumerate(self.bounds)], 0)
++            else:
++                out = torch.empty_like(flat)
++                for i, (a, b) in enumerate(self.bounds):
++                    torch.matmul(getattr(self, f"running_W{i}").to(x.dtype), flat[a:b] - rm[a:b], out=out[a:b])
++            del flat
+         out = out.reshape(C, N, H, W).permute(1, 0, 2, 3)
+         if self.weight is not None:
+-            out = out * self.weight.view(1, -1, 1, 1) + self.bias.view(1, -1, 1, 1)
++            if (torch.is_grad_enabled() and (out.requires_grad or self.weight.requires_grad)) \
++                    or out.dtype != self.weight.dtype or self.bias.dtype != self.weight.dtype:
++                out = out * self.weight.view(1, -1, 1, 1) + self.bias.view(1, -1, 1, 1)
++            else:                                   # sem autograd: in-place, mesmas 2 operações elementares
++                out.mul_(self.weight.view(1, -1, 1, 1)).add_(self.bias.view(1, -1, 1, 1))
+         return out
+ 
+ 
+diff -ruN a/ga_search/modehb/spifil_oom.py b/ga_search/modehb/spifil_oom.py
+--- a/ga_search/modehb/spifil_oom.py	1969-12-31 21:00:00.000000000 -0300
++++ b/ga_search/modehb/spifil_oom.py	2026-11-17 11:20:00.808973518 -0300
+@@ -0,0 +1,135 @@
++"""OOM fallback for the SPiFiL Fisher scorer (library untouched, process-local patch).
++
++``spifil.scoring.FisherScorer`` materializes the full ``N x N`` distance matrix plus
++``N x N`` masks (and an int64 ``N x N`` temporary in ``same.sum``): with N ~ 42k seeds
++that is > 25 GB at peak, so on a shared GPU the fit OOMs even though the candidate is
++otherwise cheap (remote_sensing hybrid, job 43, 417 images x 100 seeds).
++
++``install()`` wraps ``FisherScorer.__call__``: the ORIGINAL library code runs first, so
++every candidate that fits today gets bit-identical scores (same code path, nothing
++changes). ONLY when it raises a CUDA OOM, the cache is freed and the same scores are
++recomputed in row blocks:
++
++* distances: the exact ``torch.cdist`` calls of ``metrics._chunked_cdist`` (same
++  ``chunk_size`` row blocks, same whitened features for ``Mahalanobis``), so every
++  distance row is the one the library would have produced;
++* Fisher ratio: the same expressions as ``scoring._fisher_ratio`` per row block; the
++  counts come from the class histogram (exact integers). Only the CUDA reduction
++  order of the two row sums may differ (shape-dependent kernel config) -> fp rounding.
++
++Peak memory is bounded by ``chunk_size x N`` (dist block) + ``sub_rows x N`` (temps). If
++the blocked GPU pass still OOMs, it is repeated on CPU and the scores are moved back.
++"""
++from __future__ import annotations
++
++import gc
++
++import torch
++
++_ORIG = None
++STATS = {"fallbacks": 0, "cpu_fallbacks": 0}
++SUB_ROWS = 1024
++
++
++def is_oom(exc: BaseException) -> bool:
++    """CUDA OOM, directly or wrapped (torch 2.2 and 2.7)."""
++    while exc is not None:
++        oom_cls = getattr(torch.cuda, "OutOfMemoryError", None)
++        if oom_cls is not None and isinstance(exc, oom_cls):
++            return True
++        if isinstance(exc, RuntimeError) and "out of memory" in str(exc).lower():
++            return True
++        exc = exc.__cause__ or exc.__context__
++    return False
++
++
++def _free():
++    gc.collect()
++    if torch.cuda.is_available():
++        torch.cuda.empty_cache()
++
++
++def _row_source(metric, feats):
++    """``(x, chunk)`` so that ``cdist(x[s:s+chunk], x)`` == ``metric.pairwise(feats, feats)[s:s+chunk]``,
++    or ``(None, chunk)`` for an unknown metric (generic row-block ``pairwise``)."""
++    from spifil.metrics import Euclidean, Mahalanobis
++    chunk = int(getattr(metric, "chunk_size", 4096) or 4096)
++    if isinstance(metric, Euclidean):
++        return feats, chunk
++    if isinstance(metric, Mahalanobis):
++        if metric._use_euclidean:
++            return feats, chunk
++        if metric._whitener is not None:
++            return feats @ metric._whitener, chunk
++    return None, chunk
++
++
++def fisher_blocked(patches, metric, device=None):
++    """Same scores as ``FisherScorer()(patches, metric)`` with bounded peak memory."""
++    feats, labels = patches.feats, patches.labels
++    if device is not None:
++        feats, labels = feats.to(device), labels.to(device)
++    metric.fit(feats)                        # deterministic: same whitener as the failed call
++    x, chunk = _row_source(metric, feats)
++    n = feats.shape[0]
++    _, inv, counts = torch.unique(labels, return_inverse=True, return_counts=True)
++    own = counts[inv]                        # class size incl. self (exact ints)
++    cnt_intra_all, cnt_inter_all = own - 1, n - own
++    out = torch.empty(n, dtype=feats.dtype, device=feats.device)
++    for s in range(0, n, chunk):
++        e = min(s + chunk, n)
++        if x is not None:
++            dist = torch.cdist(x[s:e], x)
++        else:
++            dist = metric.pairwise(feats[s:e], feats)
++        for a in range(0, e - s, SUB_ROWS):
++            b = min(a + SUB_ROWS, e - s)
++            d = dist[a:b]
++            lab = labels[s + a:s + b]
++            same = lab[:, None] == labels[None, :]
++            rows = torch.arange(b - a, device=d.device)
++            same[rows, rows + s + a] = False             # ~eye
++            diff = lab[:, None] != labels[None, :]
++            sum_intra = (d * same).sum(dim=1)
++            sum_inter = (d * diff).sum(dim=1)
++            del same, diff
++            cnt_intra, cnt_inter = cnt_intra_all[s + a:s + b], cnt_inter_all[s + a:s + b]
++            zero = torch.zeros_like(sum_intra)
++            avg_intra = torch.where(cnt_intra > 0, sum_intra / cnt_intra.clamp(min=1), zero)
++            avg_inter = torch.where(cnt_inter > 0, sum_inter / cnt_inter.clamp(min=1), zero)
++            out[s + a:s + b] = avg_inter / (avg_intra + 1e-6)
++        del dist
++    return out
++
++
++def _patched_call(self, patches, metric):
++    try:
++        return _ORIG(self, patches, metric)
++    except Exception as exc:  # noqa: BLE001 - re-raised unless it is an OOM
++        if not is_oom(exc):
++            raise
++    # outside the except block: the failed frames (full N x N tensors) are released
++    _free()
++    STATS["fallbacks"] += 1
++    dev = patches.feats.device
++    try:
++        return fisher_blocked(patches, metric)
++    except Exception as exc:  # noqa: BLE001
++        if not is_oom(exc) or dev.type == "cpu":
++            raise
++    _free()
++    STATS["cpu_fallbacks"] += 1
++    scores = fisher_blocked(patches, metric, device="cpu")
++    metric.fit(patches.feats)                # metric state back on the original device
++    return scores.to(dev)
++
++
++def install() -> None:
++    """Idempotent, process-local: wraps ``spifil.scoring.FisherScorer.__call__``."""
++    global _ORIG
++    from spifil.scoring import FisherScorer
++    if getattr(FisherScorer.__call__, "_modehb_oom_fallback", False):
++        return
++    _ORIG = FisherScorer.__call__
++    _patched_call._modehb_oom_fallback = True
++    FisherScorer.__call__ = _patched_call
+diff -ruN a/ga_search/modehb/spifil_ops.py b/ga_search/modehb/spifil_ops.py
+--- a/ga_search/modehb/spifil_ops.py	2026-11-17 11:20:00.803973457 -0300
++++ b/ga_search/modehb/spifil_ops.py	2026-11-17 11:20:00.804973469 -0300
+@@ -287,14 +287,29 @@
+         return UniformAllocator()(layer, spec, patches, scores)
+ 
+ 
+-def _learner(features, seeds, data, in_ch, kernel, out_ch, device, budget_check, allocator=None):
++class _SkipEncode:
++    """Callback: stop ``Learner._fit_layer`` right after the filters are installed
++    (``after_model_build``), via the library's own ``CancelLayerException``.
++
++    ``fit_dense`` reads only ``model.block(1).conv`` / ``selected`` / ``state[0]``; the
++    skipped steps 5-7 encode EVERY donor image at full resolution and keep it on the device
++    (417 imgs x 281 ch x 224^2 fp32 = 23.5 GB for remote_sensing job 43) and, with a single
++    layer, never re-score. Weights/bias are bit-identical (installed before the cut)."""
++
++    def after_model_build(self, learner):
++        from spifil.learner import CancelLayerException
++        raise CancelLayerException
++
++
++def _learner(features, seeds, data, in_ch, kernel, out_ch, device, budget_check, allocator=None,
++             cbs=()):
+     from spifil import ArchSpec, LayerSpec, Learner
+     from spifil.learner import LayerState
+     from flim.spifil import GrowOneLayer
+     spec = LayerSpec(kernel_size=int(kernel), out_channels=int(out_ch),
+                      pool_type="none", pool_stride=1, relu=False)
+     learner = Learner(data, ArchSpec(layers=[spec]), color=_Bands(in_ch), allocator=allocator,
+-                      strategy=GrowOneLayer(budget_check), device=device)
++                      strategy=GrowOneLayer(budget_check), device=device, cbs=cbs)
+     learner.state[0] = LayerState(features=[f.to(device) for f in features], seeds=list(seeds))
+     return learner
+ 
+@@ -317,7 +332,8 @@
+     """
+     if allocator is None:
+         allocator = AutoAllocator()
+-    learner = _learner(features, seeds, data, in_ch, kernel, out_ch, device, budget_check, allocator)
++    learner = _learner(features, seeds, data, in_ch, kernel, out_ch, device, budget_check, allocator,
++                       cbs=[_SkipEncode()])
+     n, d = _budget(learner, budget_check, f"dense k{kernel}")
+     learner.fit()
+     conv = learner.model.block(1).conv
+@@ -427,6 +443,8 @@
+     """
+     from flim.progressive import InfeasibleCandidate, _fingerprint
+     from flim.spifil import Cropped, Trunk, build_layer0
++    from ga_search.modehb.spifil_oom import install as _install_oom_fallback
++    _install_oom_fallback()          # Fisher scorer: blocked recompute only on CUDA OOM
+     spec, cfg = dict(ops_spec), dict(config)
+     if not ops_supported(spec):
+         raise InfeasibleCandidate(f"unsupported spifil_ops spec {spec}")
+diff -ruN a/tests/hmodehb/test_growth_mem.py b/tests/hmodehb/test_growth_mem.py
+--- a/tests/hmodehb/test_growth_mem.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_mem.py	2026-11-17 11:20:21.459225522 -0300
+@@ -0,0 +1,140 @@
++"""growth_mem: as reduções de memória da cadeia de crescimento são bit a bit iguais (CPU) e reduzem o pico.
++
++Proxy de pico em CPU: bytes de tensores salvos pelo autograd (saved_tensors_hooks) -- é o que domina a GPU
++no SSL (V*B = 256 imagens 224 px) -- e tracemalloc não vê o alocador do torch.
++"""
++from __future__ import annotations
++
++import copy
++import sys
++from pathlib import Path
++
++import pytest
++import torch
++import torch.nn as nn
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import build as BB  # noqa: E402
++from ga_search.backbones.spec import HeadSpec, LayerSpec  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.modehb.ops_norm_act import DecorrelatedBatchNorm  # noqa: E402
++
++
++def _rs_like(widths=(24, 24), res=32, seed=0):
++    """Forma do B0 de RS (c00306): conv3+BN+max, dwsep7+batch_dbn+avg+identity."""
++    L = [LayerSpec(channels=widths[0], kernel=3, conv="conv", norm="batch", activation="relu", pool="max",
++                   flavor="spifil_ops", init="inherited"),
++         LayerSpec(channels=widths[1], kernel=7, conv="dwsep", norm="batch_dbn", activation="silu", pool="avg",
++                   residual="identity", flavor="spifil_ops", init="inherited")]
++    spec = G.spec_from_layers(L, HeadSpec(embed_dim=1280, pooling="meanstd"), "synthetic", res)
++    m = BB.build_backbone(spec, seed=seed, enforce_budget=False)
++    with torch.no_grad():
++        m.train()
++        for _ in range(3):
++            m(torch.rand(8, 3, res, res))
++    return m.eval()
++
++
++def _dbn_ref_eval(m: DecorrelatedBatchNorm, x):
++    """Implementação ANTERIOR (eval) copiada literalmente."""
++    N, C, H, W = x.shape
++    flat = x.permute(1, 0, 2, 3).reshape(C, -1)
++    xc = flat - m.running_mean[:, None].to(x.dtype)
++    out = torch.cat([getattr(m, f"running_W{i}").to(x.dtype) @ xc[a:b] for i, (a, b) in enumerate(m.bounds)], 0)
++    out = out.reshape(C, N, H, W).permute(1, 0, 2, 3)
++    return out * m.weight.view(1, -1, 1, 1) + m.bias.view(1, -1, 1, 1)
++
++
++@pytest.mark.parametrize("C", [16, 37, 210])
++def test_dbn_eval_bitwise(C):
++    torch.manual_seed(C)
++    m = DecorrelatedBatchNorm(C)
++    m.train()
++    with torch.no_grad():
++        for _ in range(3):
++            m(torch.randn(4, C, 9, 9) * 3 + 1)
++        m.weight.uniform_(0.5, 2), m.bias.normal_()
++    m.eval()
++    x = torch.randn(5, C, 11, 11)
++    with torch.no_grad():
++        assert torch.equal(m(x), _dbn_ref_eval(m, x))
++    xg = x.clone().requires_grad_(True)               # com autograd: caminho antigo, idem
++    assert torch.equal(m(xg).detach(), _dbn_ref_eval(m, x))
++
++
++def _ssl_step(model, ckpt: bool, x, seed=0):
++    torch.manual_seed(seed)
++    enc = (G._CkptSequential if ckpt else nn.Sequential)(*model.blocks)
++    enc.train(), model.head.train()
++    saved = [0, 0]
++
++    def pack(t):
++        saved[0] += t.numel() * t.element_size()
++        saved[1] = max(saved[1], saved[0])
++        return t
++
++    with torch.autograd.graph.saved_tensors_hooks(pack, lambda t: t):
++        h = model.head(enc(x))
++    loss = h.pow(2).mean() + h.std(0).mean()
++    loss.backward()
++    grads = {k: p.grad.clone() for k, p in model.named_parameters() if p.grad is not None}
++    return h.detach(), grads, {k: v.clone() for k, v in model.state_dict().items()}, saved[1]
++
++
++def test_grad_checkpoint_bitwise_and_smaller():
++    base = _rs_like()
++    x = torch.rand(16, 3, 32, 32)
++    a, b = copy.deepcopy(base), copy.deepcopy(base)
++    ha, ga, sa, peak_a = _ssl_step(a, False, x)
++    hb, gb, sb, peak_b = _ssl_step(b, True, x)
++    assert torch.equal(ha, hb)
++    assert ga.keys() == gb.keys() and all(torch.equal(ga[k], gb[k]) for k in ga)
++    # running stats (BN e DBN running_W/mean, num_batches_tracked) atualizadas UMA vez, igual ao sem checkpoint
++    assert sa.keys() == sb.keys() and all(torch.equal(sa[k], sb[k]) for k in sa), \
++        [k for k in sa if not torch.equal(sa[k], sb[k])]
++    print(f"\n[growth_mem] saved-for-backward: sem ckpt {peak_a / 1e6:.2f} MB, com ckpt {peak_b / 1e6:.2f} MB")
++    assert peak_b < 0.5 * peak_a
++
++
++def test_ckpt_names_unchanged():
++    m = _rs_like()
++    assert [k for k, _ in nn.Sequential(*m.blocks).named_parameters()] == \
++        [k for k, _ in G._CkptSequential(*m.blocks).named_parameters()]
++
++
++def test_blend_cpu_anchor_bitwise():
++    m = _rs_like()
++    anchor = {k: v.detach().clone() for k, v in m.state_dict().items()}
++    trained = {k: (v + 0.1 * torch.randn_like(v)) if v.is_floating_point() else v for k, v in anchor.items()}
++    cpu = {k: v.to("cpu", copy=True) for k, v in anchor.items()}
++    for a in (0.0, 0.25, 0.5, 0.75, 1.0):
++        m1, m2 = copy.deepcopy(m), copy.deepcopy(m)
++        G._blend_into(m1, anchor, trained, a)
++        G._blend_into(m2, cpu, {k: v.cpu() for k, v in trained.items()}, a)
++        ref = {k: ((1 - a) * anchor[k] + a * trained[k]) if trained[k].is_floating_point() else trained[k]
++               for k in trained} if a else anchor
++        for k, v in m1.state_dict().items():
++            assert torch.equal(v, m2.state_dict()[k]) and torch.equal(v, ref[k])
++
++
++def test_embed_bitwise_eval():
++    """Forward de avaliação inteiro (com DBN novo) == implementação antiga do DBN, no B0-like."""
++    m = _rs_like()
++    x = torch.rand(6, 3, 32, 32)
++    with torch.no_grad():
++        new = m(x)
++        orig = DecorrelatedBatchNorm.forward
++        try:
++            DecorrelatedBatchNorm.forward = lambda self, z: _dbn_ref_eval(self, z) if not self.training else orig(self, z)
++            old = m(x)
++        finally:
++            DecorrelatedBatchNorm.forward = orig
++    assert torch.equal(new, old)
++
++
++def test_mem_defaults_declared():
++    mem = G._mem({})
++    assert mem["grad_checkpoint"] and mem["wise_on_cpu"] and mem["empty_cache"]
++    assert mem["embed_batch_size"] is None and mem["ssl_amp_bf16"] is False     # mudam a ciência: desligados
+diff -ruN a/tests/modehb/test_spifil_oom.py b/tests/modehb/test_spifil_oom.py
+--- a/tests/modehb/test_spifil_oom.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/modehb/test_spifil_oom.py	2026-11-17 11:20:00.814973591 -0300
+@@ -0,0 +1,166 @@
++"""SPiFiL Fisher-scorer OOM fallback (spifil_oom) + fit_dense encode skip: bit-identical results."""
++import numpy as np
++import pytest
++import torch
++from torch import nn
++
++from ga_search.modehb import spifil_oom as O
++from ga_search.modehb import spifil_ops as so
++
++SIZE = 32
++CFG = {"device": "cpu", "image_size": SIZE, "n_superpixels": 30, "impurities": True}
++
++
++class _P:
++    def __init__(self, feats, labels):
++        self.feats, self.labels = feats, labels
++
++
++def _patches(n=700, d=20, ncls=4, seed=0, dev="cpu"):
++    g = torch.Generator().manual_seed(seed)
++    labels = torch.randint(0, ncls, (n,), generator=g)
++    feats = torch.randn(n, d, generator=g) + 0.4 * labels[:, None].float()
++    labels[:3] = ncls + 1                       # a singleton class -> cnt_intra == 0 branch
++    labels[3] = ncls + 1
++    return _P(feats.to(dev), labels.to(dev))
++
++
++def _metrics():
++    from spifil.metrics import Euclidean, Mahalanobis
++    return {"maha": lambda: Mahalanobis(chunk_size=128), "eucl": lambda: Euclidean(chunk_size=128),
++            "maha_empirical_singular": lambda: Mahalanobis("empirical", chunk_size=128)}
++
++
++@pytest.mark.parametrize("name", list(_metrics()))
++@pytest.mark.parametrize("sub_rows", [1024, 50])
++def test_blocked_is_bitwise_identical(monkeypatch, name, sub_rows):
++    from spifil.scoring import FisherScorer
++    monkeypatch.setattr(O, "SUB_ROWS", sub_rows)
++    p = _patches(d=900 if "singular" in name else 20)   # N <= D -> empirical falls back to Euclidean
++    make = _metrics()[name]
++    with pytest.warns(UserWarning) if "singular" in name else _nullctx():
++        ref = (O._ORIG or FisherScorer.__call__)(FisherScorer(), p, make())
++    with pytest.warns(UserWarning) if "singular" in name else _nullctx():
++        got = O.fisher_blocked(p, make())
++    assert torch.equal(ref, got)
++
++
++class _nullctx:
++    def __enter__(self):
++        return self
++
++    def __exit__(self, *a):
++        return False
++
++
++def test_install_idempotent_and_no_oom_is_original():
++    from spifil.metrics import Mahalanobis
++    from spifil.scoring import FisherScorer
++    O.install()
++    first = FisherScorer.__call__
++    O.install()
++    assert FisherScorer.__call__ is first and getattr(first, "_modehb_oom_fallback", False)
++    p, before = _patches(), dict(O.STATS)
++    assert torch.equal(FisherScorer()(p, Mahalanobis()), O._ORIG(FisherScorer(), p, Mahalanobis()))
++    assert O.STATS == before
++
++
++def test_oom_falls_back_identically_and_other_errors_propagate(monkeypatch):
++    from spifil.metrics import Mahalanobis
++    from spifil.scoring import FisherScorer
++    O.install()
++    p = _patches()
++    ref = O._ORIG(FisherScorer(), p, Mahalanobis())
++    orig = O._ORIG
++
++    def oom(self, patches, metric):
++        metric.fit(patches.feats)
++        raise RuntimeError("CUDA out of memory. Tried to allocate 12.96 GiB")
++    monkeypatch.setattr(O, "_ORIG", oom)
++    n0 = O.STATS["fallbacks"]
++    assert torch.equal(FisherScorer()(p, Mahalanobis()), ref)
++    assert O.STATS["fallbacks"] == n0 + 1
++
++    def other(self, patches, metric):
++        raise RuntimeError("shape mismatch")
++    monkeypatch.setattr(O, "_ORIG", other)
++    with pytest.raises(RuntimeError, match="shape mismatch"):
++        FisherScorer()(p, Mahalanobis())
++    monkeypatch.setattr(O, "_ORIG", orig)
++
++
++def test_is_oom_wrapped():
++    try:
++        try:
++            raise torch.cuda.OutOfMemoryError("CUDA out of memory")
++        except Exception as e:
++            raise ValueError("SPiFiL fit failed") from e
++    except ValueError as w:
++        assert O.is_oom(w)
++    assert not O.is_oom(RuntimeError("index out of range"))
++
++
++@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
++def test_cuda_blocked_and_cpu_second_fallback(monkeypatch):
++    from spifil.metrics import Mahalanobis
++    from spifil.scoring import FisherScorer
++    O.install()
++    p = _patches(n=3000, d=27, dev="cuda")
++    ref = O._ORIG(FisherScorer(), p, Mahalanobis())
++    assert torch.equal(O.fisher_blocked(p, Mahalanobis()), ref)       # GPU blocked: bitwise
++
++    def oom(self, patches, metric):
++        raise torch.cuda.OutOfMemoryError("CUDA out of memory")
++    real = O.fisher_blocked
++
++    def blocked(patches, metric, device=None):
++        if device is None:
++            raise torch.cuda.OutOfMemoryError("CUDA out of memory")
++        return real(patches, metric, device)
++    monkeypatch.setattr(O, "_ORIG", oom)
++    monkeypatch.setattr(O, "fisher_blocked", blocked)
++    m = Mahalanobis()
++    got = FisherScorer()(p, m)
++    assert got.device.type == "cuda" and m._whitener.device.type == "cuda"
++    rel = ((got - ref).abs() / ref.abs()).max().item()
++    assert rel < 1e-4                                                  # CPU: fp rounding only
++
++
++# ─── fit_dense skips the (unused) library encode, weights unchanged ───────────
++
++@pytest.fixture(scope="module")
++def samples(tmp_path_factory):
++    from skimage.io import imsave
++    from spifil.data import Sample
++    d = tmp_path_factory.mktemp("imgs")
++    rng = np.random.default_rng(0)
++    out = []
++    for i in range(6):
++        lab = i % 2 + 1
++        img = (rng.random((40, 40, 3)) * 255).astype(np.uint8)
++        if lab == 2:
++            img[:, :, 0] = np.linspace(0, 255, 40)[None].astype(np.uint8)
++        p = d / f"{lab:06d}_{i:08d}.png"
++        imsave(p, img, check_contrast=False)
++        out.append(Sample(p.stem, p, None, lab))
++    return out
++
++
++def _layer(**kw):
++    base = dict(active=True, channels=8, kernel=3, conv="conv", residual=False,
++                activation="relu", norm="none", pool="none", softhebb=False)
++    base.update(kw)
++    return base
++
++
++@pytest.mark.parametrize("L", [_layer(kernel=7, pool="avg"), _layer(conv="inception", kernel=5, channels=12),
++                               _layer(conv="dwsep", channels=6), _layer(channels=1),
++                               _layer(residual=True, channels=5)])
++def test_skip_encode_is_bitwise_identical(monkeypatch, samples, L):
++    spec = so.to_ops_spec(L, 3)
++    block, prov = so.fit_ops_block(None, samples, spec, {**CFG, "seed": 3})
++    monkeypatch.setattr(so, "_SkipEncode", lambda: type("NoSkip", (), {})())   # library encode back on
++    ref, prov_ref = so.fit_ops_block(None, samples, spec, {**CFG, "seed": 3})
++    sa, sb = block.state_dict(), ref.state_dict()
++    assert list(sa) == list(sb) and all(torch.equal(sa[k], sb[k]) for k in sa)
++    assert prov["effective_spec"] == prov_ref["effective_spec"] and prov["stages"] == prov_ref["stages"]

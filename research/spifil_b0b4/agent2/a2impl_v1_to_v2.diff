@@ -1,0 +1,264 @@
+diff --git a/ga_search/abstract_init/_safe_linalg.py b/ga_search/abstract_init/_safe_linalg.py
+new file mode 100644
+index 0000000..58ccb47
+--- /dev/null
++++ b/ga_search/abstract_init/_safe_linalg.py
+@@ -0,0 +1,49 @@
++"""Guardas antes de LAPACK (eigh/eigvalsh) nos inicializadores abstratos.
++
++Motivo (athena, torch 2.2 + MKL): "Intel MKL ERROR: Parameter 4/5 DLASCL" no fit do S1/S2 = matriz
++de entrada com NaN/Inf ou identicamente zero chegando ao eigh. Regras:
++* NaN/Inf na matriz -> ``InfeasibleCandidate`` (determinístico, nunca um eigh silencioso).
++* matriz zero (ex.: canais mortos) -> autovalores 0 e autovetores = identidade, SEM chamar o LAPACK.
++* senão: simetriza; jitter relativo opcional (``jitter_rel``, padrão 0 = resultado bit a bit igual ao
++  eigh direto numa matriz já simétrica).
++"""
++from __future__ import annotations
++
++import torch
++
++from ga_search.abstract_init.base import InfeasibleCandidate
++
++
++def _prep(cov: torch.Tensor, where: str, jitter_rel: float):
++    if not bool(torch.isfinite(cov).all()):
++        raise InfeasibleCandidate(f"{where}: matriz com NaN/Inf antes do eigh",
++                                  details={"where": where, "n_nonfinite": int((~torch.isfinite(cov)).sum())})
++    cov = 0.5 * (cov + cov.transpose(-1, -2))
++    scale = float(cov.diagonal(dim1=-2, dim2=-1).abs().mean()) if cov.numel() else 0.0
++    if not scale > 0:
++        return cov, True
++    if jitter_rel:
++        cov = cov + (jitter_rel * scale) * torch.eye(cov.shape[-1], dtype=cov.dtype, device=cov.device)
++    return cov, False
++
++
++def safe_eigh(cov: torch.Tensor, where: str = "eigh", jitter_rel: float = 0.0):
++    cov, zero = _prep(cov, where, jitter_rel)
++    if zero:
++        d = cov.shape[-1]
++        return (torch.zeros(d, dtype=cov.dtype, device=cov.device),
++                torch.eye(d, dtype=cov.dtype, device=cov.device))
++    return torch.linalg.eigh(cov)
++
++
++def safe_eigvalsh(cov: torch.Tensor, where: str = "eigvalsh", jitter_rel: float = 0.0):
++    cov, zero = _prep(cov, where, jitter_rel)
++    if zero:
++        return torch.zeros(cov.shape[-1], dtype=cov.dtype, device=cov.device)
++    return torch.linalg.eigvalsh(cov)
++
++
++def check_finite_rows(X: torch.Tensor, where: str) -> None:
++    """Antes de k-means/covariância: NaN/Inf nos patches -> InfeasibleCandidate."""
++    if not bool(torch.isfinite(X).all()):
++        raise InfeasibleCandidate(f"{where}: patches com NaN/Inf", details={"where": where})
+diff --git a/ga_search/abstract_init/spifil1.py b/ga_search/abstract_init/spifil1.py
+index a8b11e8..cac4309 100644
+--- a/ga_search/abstract_init/spifil1.py
++++ b/ga_search/abstract_init/spifil1.py
+@@ -61,6 +61,7 @@ import torch
+ import torch.nn.functional as F
+ from torch import nn
+ 
++from ga_search.abstract_init._safe_linalg import check_finite_rows, safe_eigh, safe_eigvalsh
+ from ga_search.abstract_init.base import (
+     InfeasibleCandidate, InitContext, KernelInitializer, TrainData, check_prefix_unchanged,
+     check_train_only, config_sha256, make_provenance, prefix_fingerprint, register, validate_init,
+@@ -114,7 +115,7 @@ def mean_removal_matrix(d: int, enabled: bool, dtype=torch.float64) -> torch.Ten
+ def zca_matrix(cov: torch.Tensor, eps_rel: float) -> tuple[torch.Tensor, torch.Tensor, float]:
+     """ZCA simétrica Z = V·diag(1/√(λ+eps))·Vᵀ e sua inversa; eps = eps_rel·média(λ) (> 0 sempre)."""
+     cov = 0.5 * (cov + cov.T)
+-    e, v = torch.linalg.eigh(cov)
++    e, v = safe_eigh(cov, "spifil1.zca")
+     e = e.clamp_min(0)
+     eps = float(eps_rel) * float(e.mean())
+     if not eps > 0:
+@@ -177,6 +178,7 @@ def _kmeanspp(x: torch.Tensor, k: int, gen: torch.Generator, euclid: bool) -> to
+ def spherical_kmeans(xn: torch.Tensor, k: int, gen: torch.Generator, *, iters: int = 30,
+                      init: str = "kmeans++", chunk: int = 16384):
+     """k-means esférico (Lloyd, cos) em linhas unitárias. Retorna (C unitários, assign, counts, iters)."""
++    check_finite_rows(xn, "spifil1.kmeans")
+     n = xn.shape[0]
+     k = max(1, min(int(k), n))
+     if init == "kmeans++":
+@@ -269,7 +271,7 @@ def select_prototypes(c: torch.Tensor, mass: torch.Tensor, n_out: int, method: s
+ 
+ def _erank_from_cov(cov: torch.Tensor) -> float:
+     """exp(entropia dos valores singulares normalizados) de X centrado, via autovalores de XᵀX."""
+-    e = torch.linalg.eigvalsh(0.5 * (cov + cov.T)).clamp_min(0).sqrt()
++    e = safe_eigvalsh(cov, "spifil1.erank").clamp_min(0).sqrt()
+     if float(e.sum()) <= 0:
+         return 0.0
+     p = e / e.sum()
+@@ -449,7 +451,7 @@ class Spifil1Prototypes(KernelInitializer):
+ 
+         pca_rows = None
+         if select == "pca":
+-            e, v = torch.linalg.eigh(0.5 * (cov + cov.T))
++            e, v = safe_eigh(cov, "spifil1.pca")
+             order = torch.argsort(e, descending=True)
+             r = min(n_out, int((e > max(float(e.max()), 0) * 1e-10).sum()))
+             vt = v[:, order[:r]].T.contiguous()                 # (r, D) direções principais (sem ZCA)
+diff --git a/ga_search/abstract_init/spifil2.py b/ga_search/abstract_init/spifil2.py
+index 2e575f1..a1110d8 100644
+--- a/ga_search/abstract_init/spifil2.py
++++ b/ga_search/abstract_init/spifil2.py
+@@ -48,6 +48,7 @@ from torch import Tensor
+ 
+ # Interface publicada pelo Agente 2a (research/spifil_b0b4/agent2/interface/base.py,
+ # instalada como ga_search/abstract_init/base.py). Dependência dura: o patch do 2a vem antes.
++from ga_search.abstract_init._safe_linalg import check_finite_rows, safe_eigh
+ from ga_search.abstract_init.base import (
+     InfeasibleCandidate, InitBudget, InitContext, KernelInitializer, TrainData, check_prefix_unchanged,
+     check_train_only, make_provenance, prefix_fingerprint, register)
+@@ -399,6 +400,7 @@ def _unfold_rows(Fsrc: Tensor, k: int, pos: Tensor) -> Tensor:
+ 
+ def _spherical_kmeans(Xn: Tensor, K: int, iters: int, gen: torch.Generator) -> Tensor:
+     """k-means esférico, semeado por k-means++ (gerador CPU). Xn linhas unitárias. -> (K, D)."""
++    check_finite_rows(Xn, "spifil2.kmeans")
+     N = Xn.shape[0]
+     first = int(torch.randint(N, (1,), generator=gen))
+     C = [Xn[first]]
+@@ -452,7 +454,7 @@ def _candidates(Fsrc: Tensor, k: int, K: int, cfg: dict, gen: torch.Generator, i
+     Pm = (torch.eye(D, dtype=X.dtype) - 1.0 / D) if cfg["patch_norm"] == "mean_only" else torch.eye(D, dtype=X.dtype)
+     Xp = Xc @ Pm
+     cov = Xp.t() @ Xp / max(N - 1, 1)
+-    eig, vec = torch.linalg.eigh(cov)
++    eig, vec = safe_eigh(cov, "spifil2.whiten")
+     eig = eig.clamp(min=0)
+     if cfg["whiten"] == "zca":
+         eps = float(cfg["eps_zca"]) * float(eig.mean().clamp(min=1e-12))
+@@ -930,7 +932,7 @@ class Spifil2Invariant(KernelInitializer):
+             X1 = _unfold_rows(Fx, 1, pos).double()
+             mu1 = X1.mean(0)
+             cov1 = (X1 - mu1).t() @ (X1 - mu1) / max(X1.shape[0] - 1, 1)
+-            _, vec = torch.linalg.eigh(cov1)
++            _, vec = safe_eigh(cov1, "spifil2.skip_pca")
+             r = min(cout, cin)
+             ws = torch.zeros(cout, cin, dtype=torch.float64)
+             ws[:r] = vec[:, -r:].flip(1).t()
+diff --git a/ga_search/abstract_init/spifil3.py b/ga_search/abstract_init/spifil3.py
+index 825e578..783fc1e 100644
+--- a/ga_search/abstract_init/spifil3.py
++++ b/ga_search/abstract_init/spifil3.py
+@@ -52,6 +52,7 @@ import torch
+ import torch.nn.functional as F
+ from torch import Tensor, nn
+ 
++from ga_search.abstract_init._safe_linalg import safe_eigh
+ from ga_search.abstract_init.base import (InfeasibleCandidate, KernelInitializer, assemble_block,
+                                           check_prefix_unchanged, check_train_only, make_provenance,
+                                           prefix_fingerprint, register)
+@@ -272,7 +273,7 @@ def _zca(z: Tensor, eps_rel: float):
+     mu = z.mean(0, keepdim=True)
+     zc = (z - mu).double()
+     cov = zc.T @ zc / max(1, zc.shape[0] - 1)
+-    evals, evecs = torch.linalg.eigh(cov)
++    evals, evecs = safe_eigh(cov, "spifil3.eigh")
+     evals = evals.clamp_min(0)
+     eps = eps_rel * float(evals.mean()) + 1e-12
+     wz = evecs @ torch.diag(1.0 / torch.sqrt(evals + eps)) @ evecs.T
+@@ -341,7 +342,7 @@ def ridge_fit(x_fit: Tensor, t_fit: Tensor, x_ho: Tensor, t_ho: Tensor, lambdas)
+     t = t_fit.double()
+     n = x.shape[0]
+     g = x.T @ x / n
+-    evals, evecs = torch.linalg.eigh(g)
++    evals, evecs = safe_eigh(g, "spifil3.gram")
+     evals = evals.clamp_min(0)
+     b = evecs.T @ (x.T @ t / n)
+     xh, th = x_ho.double(), t_ho.double()
+@@ -657,7 +658,7 @@ class Spifil3Predictive(KernelInitializer):
+         xs = f_fit.permute(0, 2, 3, 1).reshape(-1, c_in).double()
+         mu = xs.mean(0)
+         cov = (xs - mu).T @ (xs - mu) / max(1, xs.shape[0] - 1)
+-        evals, evecs = torch.linalg.eigh(cov)
++        evals, evecs = safe_eigh(cov, "spifil3.eigh")
+         comps = evecs.flip(1).T[: min(c_in, c_out)].float()       # top componentes, linhas unitárias
+         note = "skip_project_pca"
+         if c_out > c_in:
+diff --git a/tests/abstract_init/test_safe_linalg.py b/tests/abstract_init/test_safe_linalg.py
+new file mode 100644
+index 0000000..952fd4d
+--- /dev/null
++++ b/tests/abstract_init/test_safe_linalg.py
+@@ -0,0 +1,32 @@
++"""Guardas antes do LAPACK (MKL DLASCL no athena): NaN/Inf -> InfeasibleCandidate; zero -> sem LAPACK."""
++import pytest
++import torch
++
++from ga_search.abstract_init._safe_linalg import check_finite_rows, safe_eigh, safe_eigvalsh
++from ga_search.abstract_init.base import InfeasibleCandidate
++
++
++def test_equal_to_eigh_on_symmetric():
++    torch.manual_seed(0)
++    a = torch.randn(30, 6, dtype=torch.float64)
++    c = a.T @ a
++    e1, v1 = torch.linalg.eigh(c)
++    e2, v2 = safe_eigh(c)
++    assert torch.equal(e1, e2) and torch.equal(v1, v2)
++    assert torch.equal(safe_eigvalsh(c), torch.linalg.eigvalsh(c))
++
++
++@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
++def test_nonfinite_is_infeasible(bad):
++    c = torch.eye(4)
++    c[1, 2] = bad
++    with pytest.raises(InfeasibleCandidate, match="NaN/Inf"):
++        safe_eigh(c, "t")
++    with pytest.raises(InfeasibleCandidate):
++        check_finite_rows(c, "t")
++
++
++def test_zero_matrix_skips_lapack():
++    e, v = safe_eigh(torch.zeros(5, 5))
++    assert torch.equal(e, torch.zeros(5)) and torch.equal(v, torch.eye(5))
++    assert torch.equal(safe_eigvalsh(torch.zeros(3, 3)), torch.zeros(3))
+diff --git a/tests/abstract_init/test_spifil2.py b/tests/abstract_init/test_spifil2.py
+index d5d9889..0a6adb4 100644
+--- a/tests/abstract_init/test_spifil2.py
++++ b/tests/abstract_init/test_spifil2.py
+@@ -366,18 +366,31 @@ def test_stable_pattern_selected_unstable_rejected():
+ 
+ def test_invariance_terms_drive_the_choice():
+     """Com candidatos k-means reais, S2 escolhe filtros mais estáveis que a média do banco e que
+-    o controle sem invariância (s2_noinv) — o critério é o que muda a escolha."""
+-    x, y = _blobs()
++    o controle sem invariância (s2_noinv) — o critério é o que muda a escolha.
++
++    v2 (athena, torch 2.2 + MKL): um ÚNICO sorteio (seed 0) inverteu a ordem (0,3507 < 0,3786); o k-means
++    e as vistas dependem da plataforma. A hipótese é testada agora como efeito PAREADO em 5 conjuntos de
++    dados/seeds fixos (mesmos dados e mesmo contexto para S2 e noinv): média com margem + maioria das
++    réplicas. Não é mais fraca que antes: exige vantagem média ≥ 0,05 E vitória em ≥ 4 de 5 réplicas.
++    Se falhar numa plataforma, isso é evidência de que o S2 NÃO vence o noinv de forma robusta (registrar)."""
+     spec = to_ops_spec({"conv": "conv", "kernel": 3, "channels": 2}, 1)
+-    ctx = s2.InitContext(seed=0, device=torch.device("cpu"), layer_idx=0, prefix_id="p",
+-                         budget=s2.InitBudget(max_images=24, max_patches=6000),
+-                         config={"spifil2": {**FAST, "aug_policy": FLIP_JITTER, "cand_mult": 6}})
+-    _, _, p_inv = s2.Spifil2Invariant().fit(None, _train_data(x, y), spec, ctx)
+-    _, _, p_ctl = s2.Spifil2Invariant(variant="s2_noinv").fit(None, _train_data(x, y), spec, ctx)
+-    bi, bc = p_inv["banks"][0], p_ctl["banks"][0]
+-    assert bi["selected_mean"]["stab"] > bi["candidates_mean"]["stab"]
+-    assert bi["selected_mean"]["stab"] > bc["selected_mean"]["stab"]
+-    assert p_ctl["variant"] == "s2_noinv" and p_ctl["method_config"]["lam_stab"] == 0.0
++    inv, ctl, cand = [], [], []
++    for rep in range(5):
++        x, y = _blobs(seed=rep)
++        ctx = s2.InitContext(seed=rep, device=torch.device("cpu"), layer_idx=0, prefix_id="p",
++                             budget=s2.InitBudget(max_images=24, max_patches=6000),
++                             config={"spifil2": {**FAST, "aug_policy": FLIP_JITTER, "cand_mult": 6}})
++        _, _, p_inv = s2.Spifil2Invariant().fit(None, _train_data(x, y), spec, ctx)
++        _, _, p_ctl = s2.Spifil2Invariant(variant="s2_noinv").fit(None, _train_data(x, y), spec, ctx)
++        bi, bc = p_inv["banks"][0], p_ctl["banks"][0]
++        inv.append(bi["selected_mean"]["stab"])
++        ctl.append(bc["selected_mean"]["stab"])
++        cand.append(bi["candidates_mean"]["stab"])
++        assert p_ctl["variant"] == "s2_noinv" and p_ctl["method_config"]["lam_stab"] == 0.0
++    inv, ctl, cand = (torch.tensor(v, dtype=torch.float64) for v in (inv, ctl, cand))
++    msg = f"S2={inv.tolist()} noinv={ctl.tolist()} cand={cand.tolist()}"
++    assert float((inv - cand).mean()) > 0.05 and int((inv > cand).sum()) >= 4, msg
++    assert float((inv - ctl).mean()) > 0.05 and int((inv >= ctl).sum()) >= 4, msg
+ 
+ 
+ def test_greedy_nms_rejects_duplicates():

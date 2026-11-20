@@ -1,0 +1,772 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 23:01:40.399902502 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 23:01:40.401902528 -0300
+@@ -145,7 +145,7 @@
+            "full_epoch_ae": False, "accept_bootstrap": None, "spifil_dwsep": False},
+ }
+ 
+-V3_SSL_REG = {"lejepa": "sigreg", "simclr": "none", "vicreg": "none"}
++V3_SSL_REG = {"lejepa": "sigreg", "simclr": "none", "vicreg": "none", "barlow": "none", "byol": "none", "dino": "none"}
+ 
+ # growth v3: receitas dos ARTIGOS (research/spifil_b0b4/articles/*.md). ``v3.ssl_recipe: paper`` passa ao trainer o que
+ # ele suporta ("fiel"); o resto fica registrado como "adaptação" (inevitável: memória/dataset/LAB) ou "pendente"
+@@ -184,6 +184,45 @@
+ }
+ 
+ 
++V3_RECIPES.update({
++    # v3.1 bloco 7 (articles/barlow_twins.md, byol.md)
++    "barlow": {"kwargs": {"weight_decay": 1e-6, "asym_views": True,
++                          "barlow_kwargs": {"projector_dims": [2048, 2048, 2048], "lambd": 0.0051,
++                                            "lr_w_scale": 0.2, "lr_b_scale": 0.0048}},
++               "optim": {"optimizer": "lars", "lr_base": 1.0, "lr_rule": "B/256 (pesos x0,2; bias/BN x0,0048)",
++                         "warmup": {"epochs": 10, "max_frac": 0.10}, "start_ratio": 0.0, "end_ratio": 1e-3},
++               "fiel": ["perda on + 0,0051*off com BN sem afim por ramo, SOMA em D, fp32", "projetor sem bias",
++                        "LARS 2 grupos (0,2 / 0,0048), bias/BN fora do wd e da adaptação", "vistas assimétricas",
++                        "wd 1e-6 (código)"],
++               "adaptacao": ["projetor 3x2048 (paper 3x8192) = preset dim_reduzido", "solarize/jitter em LAB"],
++               "pendente": []},
++    "byol": {"kwargs": {"weight_decay": 1.5e-6, "asym_views": True,
++                        "byol_kwargs": {"projector_dims": [4096, 256], "predictor_dims": [4096, 256], "tau_base": 0.996}},
++             "optim": {"optimizer": "lars", "lr_base": 0.2, "lr_rule": "0,2*B/256", "warmup": {"epochs": 10, "max_frac": 0.10},
++                       "start_ratio": 0.0, "end_ratio": 0.0},
++             "fiel": ["online = encoder+cabeça+g+q; alvo = EMA de encoder+cabeça+g (sem q), modo train, sem grad",
++                      "perda 2-2cos simétrica", "tau_k = 1-(1-0,996)(cos(pi k/K)+1)/2 depois do passo",
++                      "LARS, bias/BN fora do wd e da adaptação", "devolve o encoder ONLINE", "vistas assimétricas"],
++             "adaptacao": ["solarize/jitter em LAB"], "pendente": []},
++    # DINO (articles/dino.md): CNN -> LARS 0,3*B/256, wd 1e-6, min_lr 0,0048/0,3 do pico; professora devolvida
++    "dino": {"kwargs": {"weight_decay": 1e-6,
++                        "dino_kwargs": {"K": 4096, "hidden": 2048, "bottleneck": 256, "use_bn": True, "n_local": 6,
++                                        "local_frac": 96 / 224, "tau_s": 0.1, "tau_t0": 0.04, "tau_t": 0.07,
++                                        "tau_t_warmup_epochs": 30, "center_m": 0.9, "momentum_base": 0.996,
++                                        "freeze_last_layer_epochs": 1}},
++             "optim": {"optimizer": "lars", "lr_base": 0.3, "lr_rule": "0,3*B/256", "warmup": {"epochs": 10, "max_frac": 0.10},
++                       "start_ratio": 0.0, "end_ratio": 0.0048 / 0.3},
++             "fiel": ["aluna = encoder+cabeça+DINOHead (BN p/ CNN, L2, weight_norm g=1)", "professora EMA (0,996->1),"
++                      " só globais, modo train", "centro m=0,9 depois da perda", "tau_s .1; tau_t .04->.07 em 30 ép.",
++                      "2 globais assimétricas + 6 locais (96/224 do lado), forward por resolução",
++                      "freeze_last_layer 1 ép.", "LARS RN50 (0,3*B/256, wd 1e-6, min_lr 0,0048)",
++                      "devolve a PROFESSORA (checkpoint_key=teacher)"],
++             "adaptacao": ["K = 4096 (65536 no artigo; App. C)", "jitter/solarize em LAB",
++                           "época = passada completa (poucas imagens: warmups em épocas reais)"],
++             "pendente": []},
++})
++
++
+ def recipe_optim(rec: dict, batch: int, steps_per_epoch: int, planned_epochs: int) -> dict:
+     """growth v3.1 (bloco 2): otimizador/lr/agenda da receita para o batch B real e os passos planejados
+     (agenda definida sobre a fidelidade MAIS ALTA planejada; a retomada continua pelo passo global)."""
+@@ -231,6 +270,12 @@
+         r["adaptacao"].append(f"V={r['small_views']['n_views']}, lambda={r['small_views']['sigreg_lambda']} por memória")
+     variant = str(v3.get("recipe_variant") or "dim_reduzido")   # presets: "fiel_bsN" (expander do artigo) | "dim_reduzido"
+     r["variant"] = variant
++    if gcfg.get("ssl") == "barlow" and variant.startswith("fiel"):
++        r["kwargs"]["barlow_kwargs"]["projector_dims"] = [8192, 8192, 8192]
++        r["adaptacao"] = [a for a in r["adaptacao"] if not a.startswith("projetor 3x2048")]
++    if gcfg.get("ssl") in ("barlow", "byol", "dino") and v3.get(f"{gcfg.get('ssl')}_kwargs"):
++        k_ = f"{gcfg.get('ssl')}_kwargs"
++        r["kwargs"][k_] = {**r["kwargs"][k_], **v3[k_]}
+     if gcfg.get("ssl") == "vicreg" and variant.startswith("fiel"):
+         r["kwargs"]["vicreg_kwargs"]["expander_dims"] = [8192, 8192, 8192]
+         r["adaptacao"] = [a for a in r["adaptacao"] if not a.startswith("expander 2048")]
+@@ -540,7 +585,7 @@
+     """Contexto do estimador: batch do treino, V do SSL, bytes (bf16 do treino ou ``mem.ssl_amp_bf16``)."""
+     tr = (cfg or {}).get("train") or {}
+     amp = str(tr.get("amp_dtype") or "").lower() in ("bf16", "bfloat16")
+-    views = {"simclr": 2, "lejepa": 4, "ae": 1, "vicreg": 2}.get(str(gcfg.get("ssl", "lejepa")).lower(), 4)
++    views = {"simclr": 2, "lejepa": 4, "ae": 1, "vicreg": 2, "barlow": 2, "byol": 2, "dino": 8}.get(str(gcfg.get("ssl", "lejepa")).lower(), 4)
+     rec = ssl_recipe(gcfg)                    # growth v3: a receita do artigo pode mudar V (LeJEPA V=8)
+     if rec is not None and rec["kwargs"].get("n_views"):
+         views = int(rec["kwargs"]["n_views"])
+@@ -1834,6 +1879,11 @@
+             if om:
+                 lr = om["lr"]
+                 extra.update(optimizer=om["optimizer"], lr_schedule=om["lr_schedule"], wd_exclude_1d=om["wd_exclude_1d"])
++                if "dino_kwargs" in extra:        # DINO: tau_t/freeze por época real, momentum pelos passos da agenda
++                    extra["dino_kwargs"] = {**extra["dino_kwargs"], "steps_per_epoch": int(spe),
++                                            "total_steps": om["lr_schedule"]["total_steps"]}
++                if "byol_kwargs" in extra:        # EMA tau_k sobre os mesmos passos planejados da agenda
++                    extra["byol_kwargs"] = {**extra["byol_kwargs"], "total_steps": om["lr_schedule"]["total_steps"]}
+             batch_info = {"requested": int(sb), "used": int(loader.batch_size), "steps_per_epoch": int(spe),
+                           "epoch": "passada completa do treino (sem max_images_per_epoch)", "optim": om}
+     elif v3.get("weight_decay") is not None:  # correção do wd=0 efetivo (run_search não repassa): só na v3
+@@ -1981,7 +2031,12 @@
+         prefix.out_channels = _block_in(model.spec, j)
+         blk = model.blocks[j]
+         # growth_mem2: checkpoint do bloco novo no AE local (mesmos parâmetros/ordem; BN/DBN 1x; bit a bit)
+-        ae_blk = _CkptSequential(blk) if mem["grad_checkpoint"] else blk
++        # v3.1 (velocidade): checkpoint do bloco no AE local é bit a bit igual mas custa ~30-40% do passo (perfil
++        # CPU, 224 px: recomputa conv+DBN+act+pool e o _ActPool fatiado) e quase não poupa memória num bloco só
++        # (growth_mem2). ``mem.ae_grad_checkpoint`` (ausente = segue grad_checkpoint, histórico).
++        ae_ck = mem.get("ae_grad_checkpoint")
++        ae_ck = mem["grad_checkpoint"] if ae_ck is None else bool(ae_ck)
++        ae_blk = _CkptSequential(blk) if ae_ck else blk
+         with ElementProtect(blk, _masks_under(masks, f"blocks.{j}."), scale):
+             ae = train_local_ae(prefix, ae_blk, ae_loader, gcfg.get("ae_target", "pixel"), ae_ep,
+                                 float(gcfg.get("lr_ae", tr.get("lr_ae", 1e-3))), dev, run, int(seed) + j,
+diff -ruN a/ga_search/modehb/ssl_trainers.py b/ga_search/modehb/ssl_trainers.py
+--- a/ga_search/modehb/ssl_trainers.py	2026-11-17 23:01:40.405902580 -0300
++++ b/ga_search/modehb/ssl_trainers.py	2026-11-17 23:01:40.406902593 -0300
+@@ -27,7 +27,7 @@
+ import math
+ import time
+ from dataclasses import dataclass
+-from typing import Any, Dict, Iterable, List, Optional, Sequence
++from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+ 
+ import torch
+ import torch.nn as nn
+@@ -113,6 +113,9 @@
+     blur_sigma: tuple = (0.1, 2.0)  # sigma uniforme por amostra (pixels)
+     blur_kernel: int = 5          # tamanho (ímpar) do kernel separável
+     rot90_p: float = 0.0          # prob. de rot90 por amostra (k uniforme em {1,2,3}; só imagem quadrada)
++    # growth v3.1 (BYOL/Barlow/DINO): solarização em LAB [0,1] = 1 - v onde v >= limiar (adaptação de 128/255)
++    solarize_p: float = 0.0
++    solarize_thr: float = 0.5
+ 
+ 
+ # growth_v3: força da DA do SSL como gene (registrada por ``aug_record``).
+@@ -199,7 +202,8 @@
+     # growth_v3: sorteios extras SÓ quando ligados, depois dos 9 históricos de cada vista
+     use_blur, use_rot = float(cfg.blur_p) > 0, float(cfg.rot90_p) > 0
+     # rot90: as vistas são sempre S x S (quadradas), então a rotação preserva a forma
+-    shapes = shapes + (((N,), (N,)) if use_blur else ()) + (((N,), (N,)) if use_rot else ())
++    use_sol = float(getattr(cfg, "solarize_p", 0.0)) > 0
++    shapes = shapes + (((N,), (N,)) if use_blur else ()) + (((N,), (N,)) if use_rot else ()) + (((N,),) if use_sol else ())
+     cpu = [torch.rand(*s, generator=generator) for _ in range(V) for s in shapes]
+     flat = torch.cat([t.reshape(-1) for t in cpu])
+     if dev.type == "cuda":
+@@ -255,14 +259,128 @@
+                 if bool(m.any()):
+                     out[m] = torch.rot90(v[m], k, dims=(2, 3))
+             v = out
++        if use_sol:             # growth v3.1: solarização por amostra (LAB [0,1], limiar 0,5)
++            on = rnd(N)
++            v = torch.where((on < cfg.solarize_p)[:, None, None, None], torch.where(v >= cfg.solarize_thr, 1.0 - v, v), v)
+         views.append(v)
+     return views
+ 
+ 
++# growth v3.1: vistas ASSIMÉTRICAS do BYOL/Barlow (T: blur 1,0 / solarize 0; T': blur 0,1 / solarize 0,2), em LAB
++ASYM_VIEWS = ({"crop_scale": (0.08, 1.0), "hflip_p": 0.5, "vflip_p": 0.0, "brightness": 0.4, "contrast": 0.4,
++               "channel_jitter": 0.1, "blur_p": 1.0, "blur_sigma": (0.1, 2.0), "blur_kernel": 5, "solarize_p": 0.0},
++              {"crop_scale": (0.08, 1.0), "hflip_p": 0.5, "vflip_p": 0.0, "brightness": 0.4, "contrast": 0.4,
++               "channel_jitter": 0.1, "blur_p": 0.1, "blur_sigma": (0.1, 2.0), "blur_kernel": 5, "solarize_p": 0.2})
++
++
++def make_views_asym(x: Tensor, cfgs, generator: torch.Generator) -> List[Tensor]:
++    """Uma vista por config (mesmo gerador, em ordem)."""
++    return [make_views(x, 1, AugConfig(**c) if isinstance(c, dict) else c, generator=generator)[0] for c in cfgs]
++
++
++def barlow_loss(z1: Tensor, z2: Tensor, lambd: float = 0.0051, eps: float = 1e-5):
++    """Barlow Twins (Zbontar et al. 2021, código oficial): c = bn(z1)^T bn(z2) / N com BN sem afim (estatística do
++    batch, viesada); perda = sum (diag(c)-1)^2 + lambd * sum offdiag(c)^2 (SOMA sobre D), em fp32."""
++    z1, z2 = z1.float(), z2.float()
++    N = z1.shape[0]
++    bn = lambda z: (z - z.mean(0)) / torch.sqrt(z.var(0, unbiased=False) + eps)          # noqa: E731
++    c = bn(z1).T @ bn(z2) / N
++    on = (torch.diagonal(c) - 1).pow(2).sum()
++    off = (c - torch.diag(torch.diagonal(c))).pow(2).sum()
++    return on + lambd * off, {"on": on.detach(), "off": off.detach()}
++
++
++def byol_loss(p: Tensor, z: Tensor) -> Tensor:
++    """2 - 2 cos(p, sg(z)), média no batch (BYOL, Grill et al. 2020)."""
++    return (2 - 2 * F.cosine_similarity(p.float(), z.detach().float(), dim=-1)).mean()
++
++
++def _make_barlow_projector(d: int, dims: Sequence[int] = (8192, 8192, 8192)) -> nn.Module:
++    """Projetor oficial do Barlow: (Linear sem bias + BN1d + ReLU) x2 + Linear sem bias."""
++    dims = [int(x) for x in dims]
++    layers: List[nn.Module] = []
++    prev = int(d)
++    for h in dims[:-1]:
++        layers += [nn.Linear(prev, h, bias=False), nn.BatchNorm1d(h), nn.ReLU(inplace=True)]
++        prev = h
++    layers.append(nn.Linear(prev, dims[-1], bias=False))
++    return nn.Sequential(*layers)
++
++
++class _WNLinear(nn.Module):
++    """weight_norm(Linear(bias=False)) com g = 1 congelado (norm_last_layer do DINO): W = v / ||v|| por linha.
++    Igual ao oficial; escrito explícito porque o ``nn.utils.weight_norm`` não suporta deepcopy (professora)."""
++
++    def __init__(self, din: int, dout: int):
++        super().__init__()
++        lin = nn.Linear(din, dout, bias=False)
++        self.weight_v = nn.Parameter(lin.weight.detach().clone())
++        self.register_buffer("weight_g", torch.ones(dout, 1))
++
++    def forward(self, x):
++        return F.linear(x, self.weight_g * self.weight_v / self.weight_v.norm(dim=1, keepdim=True).clamp_min(1e-12))
++
++
++class DINOHead(nn.Module):
++    """Cabeça do DINO (Caron et al. 2021, código oficial): MLP 3 camadas (hidden, BN p/ CNN, GELU) -> bottleneck ->
++    L2 -> weight_norm(Linear(bottleneck, K, bias=False)) com weight_g = 1 congelado (norm_last_layer)."""
++
++    def __init__(self, d: int, K: int = 4096, hidden: int = 2048, bottleneck: int = 256, use_bn: bool = True):
++        super().__init__()
++        layers: List[nn.Module] = [nn.Linear(d, hidden)]
++        if use_bn:
++            layers.append(nn.BatchNorm1d(hidden))
++        layers.append(nn.GELU())
++        layers.append(nn.Linear(hidden, hidden))
++        if use_bn:
++            layers.append(nn.BatchNorm1d(hidden))
++        layers += [nn.GELU(), nn.Linear(hidden, bottleneck)]
++        self.mlp = nn.Sequential(*layers)
++        for m in self.mlp:
++            if isinstance(m, nn.Linear):
++                nn.init.trunc_normal_(m.weight, std=0.02)
++                nn.init.zeros_(m.bias)
++        self.last_layer = _WNLinear(bottleneck, int(K))
++
++    def forward(self, x):
++        return self.last_layer(F.normalize(self.mlp(x), dim=-1, p=2))
++
++
++def dino_views(x: Tensor, generator: torch.Generator, n_local: int, local_size: int,
++               global_scale=(0.14, 1.0), local_scale=(0.05, 0.14)) -> Tuple[List[Tensor], List[Tensor]]:
++    """2 globais assimétricas (blur 1,0 / blur 0,1 + solarize 0,2) e ``n_local`` locais (blur 0,5) em ``local_size``."""
++    base = {"hflip_p": 0.5, "vflip_p": 0.0, "brightness": 0.4, "contrast": 0.4, "channel_jitter": 0.1,
++            "blur_sigma": (0.1, 2.0), "blur_kernel": 5}
++    g1 = AugConfig(**base, crop_scale=tuple(global_scale), blur_p=1.0)
++    g2 = AugConfig(**base, crop_scale=tuple(global_scale), blur_p=0.1, solarize_p=0.2)
++    lc = AugConfig(**base, crop_scale=tuple(local_scale), blur_p=0.5, out_size=int(local_size))
++    gl = [make_views(x, 1, g1, generator=generator)[0], make_views(x, 1, g2, generator=generator)[0]]
++    lo = make_views(x, int(n_local), lc, generator=generator) if n_local else []
++    return gl, lo
++
++
++def dino_loss(student_out: List[Tensor], teacher_out: List[Tensor], center: Tensor, tau_s: float, tau_t: float):
++    """CE entre q = softmax((t - c)/tau_t) (sem grad) e log_softmax(s/tau_s), pares (iq global, v != iq)."""
++    total, n = 0.0, 0
++    q = [F.softmax((t.float() - center) / tau_t, dim=-1).detach() for t in teacher_out]
++    for iq, qq in enumerate(q):
++        for v, sv in enumerate(student_out):
++            if v == iq:
++                continue
++            total = total + torch.sum(-qq * F.log_softmax(sv.float() / tau_s, dim=-1), dim=-1).mean()
++            n += 1
++    return total / max(n, 1)
++
++
++def byol_tau(k: int, K: int, tau_base: float = 0.996) -> float:
++    """tau_k = 1 - (1 - tau_base) (cos(pi k / K) + 1) / 2 (BYOL, por passo)."""
++    return 1.0 - (1.0 - float(tau_base)) * (math.cos(math.pi * min(int(k), int(K)) / max(int(K), 1)) + 1.0) / 2.0
++
++
+ # ---------------------------------------------------------------------------
+ # Helpers
+ # ---------------------------------------------------------------------------
+-_SSL = ("simclr", "lejepa", "ae", "vicreg")
++_SSL = ("simclr", "lejepa", "ae", "vicreg", "barlow", "byol", "dino")
+ _REG = ("none", "sigreg", "weak_sigreg")
+ 
+ 
+@@ -460,6 +578,8 @@
+                      projector_dims: Optional[Sequence[int]] = None,
+                      optimizer: str = "adamw", lars_kwargs: Optional[dict] = None,
+                      lr_schedule: Optional[dict] = None, wd_exclude_1d: bool = False,
++                     barlow_kwargs: Optional[dict] = None, byol_kwargs: Optional[dict] = None,
++                     asym_views: bool = False, dino_kwargs: Optional[dict] = None,
+                      vicreg_kwargs: Optional[dict] = None) -> Dict[str, Any]:
+     """Global SSL on the full encoder + head. Learning rates are fixed (never tuned).
+ 
+@@ -512,8 +632,16 @@
+         aug_cfg = aug_config(aug_cfg)
+     vk = dict(vicreg_kwargs or {})
+ 
+-    V = n_views or {"simclr": 2, "lejepa": 4, "ae": 1, "vicreg": 2}[ssl]
+-    if ssl in ("simclr", "vicreg") and V != 2:
++    dk = {"K": 4096, "hidden": 2048, "bottleneck": 256, "use_bn": True, "n_local": 6, "local_frac": 96 / 224,
++          "tau_s": 0.1, "tau_t0": 0.04, "tau_t": 0.07, "tau_t_warmup_epochs": 30, "center_m": 0.9,
++          "momentum_base": 0.996, "wd_start": None, "wd_end": None, "freeze_last_layer_epochs": 1,
++          **(dino_kwargs or {})}
++    if ssl == "dino":
++        n_views = 2 + int(dk["n_local"])
++    V = n_views or {"simclr": 2, "lejepa": 4, "ae": 1, "vicreg": 2, "barlow": 2, "byol": 2}[ssl]
++    bk, yk = dict(barlow_kwargs or {}), dict(byol_kwargs or {})
++    target: Dict[str, nn.Module] = {}           # growth v3.1: rede-alvo do BYOL (EMA; fora do otimizador)
++    if ssl in ("simclr", "vicreg", "barlow", "byol") and V != 2:
+         raise ValueError(f"{ssl} uses exactly 2 views")
+ 
+     # Probe output dims with a dummy batch from the loader-independent shape later.
+@@ -537,6 +665,9 @@
+     opt: Optional[torch.optim.Optimizer] = None
+     if resume is not None:
+         step_offset = int(resume.get("step", step_offset))
++        if resume.get("dino_student") is not None:   # v3.1 DINO: o modelo devolvido é a professora; a aluna continua
++            encoder.load_state_dict(resume["dino_student"]["encoder"])
++            head.load_state_dict(resume["dino_student"]["head"])
+     step = step_offset
+     reg_key = "ssl/loss_sigreg" if reg == "sigreg" else "ssl/loss_weak_sigreg"
+     history: List[Dict[str, float]] = []
+@@ -553,6 +684,15 @@
+                                   else _make_expander(d, [d if int(x) <= 0 else int(x) for x in projector_dims])).to(device)
+         elif ssl == "vicreg":
+             extra["expander"] = _make_expander(d, vk.get("expander_dims", (2048, 2048, 2048))).to(device)
++        elif ssl == "barlow":       # growth v3.1: projetor oficial (sem bias), perda no projetor
++            extra["projector"] = _make_barlow_projector(d, bk.get("projector_dims", (8192, 8192, 8192))).to(device)
++        elif ssl == "byol":         # growth v3.1: projetor g e preditor q (Linear-BN-ReLU-Linear), alvo = EMA
++            pd = [int(v) for v in yk.get("projector_dims", (4096, 256))]
++            extra["projector"] = _make_expander(d, pd).to(device)
++            extra["predictor"] = _make_expander(pd[-1], yk.get("predictor_dims", (4096, pd[-1]))).to(device)
++        elif ssl == "dino":         # growth v3.1: DINOHead (descartada no fim; a professora é devolvida)
++            extra["dino_head"] = DINOHead(d, int(dk["K"]), int(dk["hidden"]), int(dk["bottleneck"]),
++                                          bool(dk["use_bn"])).to(device)
+         elif ssl == "ae":
+             extra["decoder"] = _ConvDecoder(feat.shape[1], x0.shape[1]).to(device)
+         if projector and ssl not in ("simclr", "vicreg"):   # simclr already has its own projector; Hybrid SPiFiL: SSL losses on a separate projector (Guillotine), not on
+@@ -575,6 +715,17 @@
+                 if nd:
+                     split.append({**g_, "params": nd, "weight_decay": 0.0, "name": g_.get("name", "") + "_nowd"})
+             groups = split
++        if ssl == "barlow" and optimizer == "lars":       # v3.1: Barlow = 2 grupos (pesos 0,2*lr; bias/BN 0,0048*lr)
++            split = []
++            for g_ in groups:
++                nd = [p for p in g_["params"] if p.ndim == 1]
++                dd = [p for p in g_["params"] if p.ndim != 1]
++                if dd:
++                    split.append({**g_, "params": dd, "lr": g_["lr"] * float(bk.get("lr_w_scale", 0.2))})
++                if nd:
++                    split.append({**g_, "params": nd, "lr": g_["lr"] * float(bk.get("lr_b_scale", 0.0048)),
++                                  "name": g_.get("name", "") + "_1d"})
++            groups = split
+         for g_ in groups:                                # lr de referência do grupo (a agenda multiplica)
+             g_["base_lr"] = g_["lr"]
+         if optimizer == "lars":                          # growth v3.1: LARS oficial (VICReg/SimCLR)
+@@ -585,6 +736,15 @@
+             opt = torch.optim.AdamW(groups)
+         else:
+             raise ValueError(f"optimizer {optimizer!r} (adamw|lars)")
++        if ssl in ("byol", "dino"):  # alvo/professora = cópia idêntica, sem grad, modo train
++            import copy as _copy
++            mods_ = (("encoder", encoder), ("head", head),
++                     ("projector", extra["projector"]) if ssl == "byol" else ("dino_head", extra["dino_head"]))
++            for k_, m_ in mods_:
++                t_ = _copy.deepcopy(m_)
++                for p_ in t_.parameters():
++                    p_.requires_grad_(False)
++                target[k_] = t_.train()
+ 
+     if resume is not None and resume.get("rng") is not None:
+         _rng_restore(resume["rng"], device, gen, loader)
+@@ -610,12 +770,46 @@
+                     for k, sd in (resume.get("extra") or {}).items():
+                         if k in extra:
+                             extra[k].load_state_dict(sd)
++                    for k, sd in (resume.get("byol_target") or {}).items():
++                        if k in target:
++                            target[k].load_state_dict(sd)
++                        elif k == "center":
++                            target["center"] = sd.to(device).clone()
+                     if resume.get("opt") is not None:
+                         opt.load_state_dict(resume["opt"])
+-            views = make_views(x, V, aug_cfg, generator=gen)
++            if ssl == "dino":
++                ls_ = max(8, int(round(x.shape[-1] * float(dk["local_frac"]))))
++                gviews, lviews = dino_views(x, gen, int(dk["n_local"]), ls_)
++                views = gviews + lviews
++            else:
++                views = make_views_asym(x, ASYM_VIEWS, gen) if asym_views else make_views(x, V, aug_cfg, generator=gen)
+             B = x.shape[0]
+             parts: Dict[str, Tensor] = {}
+-            if ssl == "ae":
++            if ssl == "dino":               # growth v3.1: DINO (aluna por resolução; professora só nas globais)
++                spe_d = int(dk.get("steps_per_epoch") or 1)
++                ep_glob = step // max(spe_d, 1)
++                wte = int(dk["tau_t_warmup_epochs"])
++                tau_t = float(dk["tau_t0"]) + (float(dk["tau_t"]) - float(dk["tau_t0"])) * min(ep_glob, wte) / max(wte, 1) \
++                    if wte > 0 else float(dk["tau_t"])
++                with amp():
++                    sg = extra["dino_head"](head(encoder(torch.cat(gviews, 0))))
++                    s_out = list(sg.split(B, 0))
++                    if lviews:
++                        sl = extra["dino_head"](head(encoder(torch.cat(lviews, 0))))
++                        s_out += list(sl.split(B, 0))
++                with torch.no_grad(), amp():
++                    tg = target["dino_head"](target["head"](target["encoder"](torch.cat(gviews, 0)))).float()
++                t_out = list(tg.split(B, 0))
++                if "center" not in target:
++                    target["center"] = torch.zeros(1, tg.shape[1], device=device)
++                with fp32():
++                    total = dino_loss(s_out, t_out, target["center"], float(dk["tau_s"]), tau_t)
++                with torch.no_grad():       # centro DEPOIS da perda (média das globais da professora)
++                    target["center"].mul_(float(dk["center_m"])).add_(tg.mean(0, keepdim=True), alpha=1 - float(dk["center_m"]))
++                parts["ssl/loss_dino"] = total
++                parts["ssl/dino_tau_t"] = torch.tensor(tau_t)
++                pos, neg = 0.0, 0.0
++            elif ssl == "ae":
+                 v = views[0]
+                 with amp():
+                     feat = encoder(v)
+@@ -648,6 +842,23 @@
+                         parts[reg_key] = torch.stack([reg_mod(hv) for hv in reg_in]).mean()
+                         total = total + sigreg_lambda * parts[reg_key]
+                     pos, neg = _pos_neg_sim(z1.detach(), z2.detach())
++                elif ssl == "barlow":       # growth v3.1
++                    with amp():
++                        z1, z2 = extra["projector"](hs[0]), extra["projector"](hs[1])
++                    with fp32():
++                        total, bp = barlow_loss(z1, z2, float(bk.get("lambd", 0.0051)))
++                    parts["ssl/loss_barlow_on"], parts["ssl/loss_barlow_off"] = bp["on"], bp["off"]
++                    pos, neg = _pos_neg_sim(z1.detach().float(), z2.detach().float())
++                elif ssl == "byol":         # growth v3.1: online (g, q) x alvo EMA (modo train, sem grad)
++                    with amp():
++                        p1 = extra["predictor"](extra["projector"](hs[0]))
++                        p2 = extra["predictor"](extra["projector"](hs[1]))
++                    with torch.no_grad(), amp():
++                        tz = target["projector"](target["head"](target["encoder"](torch.cat(views, 0)))).float()
++                    t1, t2 = tz.split(B, 0)
++                    with fp32():
++                        total = byol_loss(p1, t2) + byol_loss(p2, t1)
++                    pos, neg = _pos_neg_sim(p1.detach().float(), t2.detach())
+                 elif ssl == "vicreg":       # growth_v3
+                     exp_ = extra["expander"]
+                     with amp():
+@@ -701,6 +912,16 @@
+             if grad_clip:
+                 torch.nn.utils.clip_grad_norm_([p for g in opt.param_groups for p in g["params"]],
+                                                grad_clip)
++            if ssl == "dino":               # freeze_last_layer + wd em cosseno só no grupo regularizado
++                if step // max(int(dk.get("steps_per_epoch") or 1), 1) < int(dk["freeze_last_layer_epochs"]):
++                    for p_ in extra["dino_head"].last_layer.parameters():
++                        p_.grad = None
++                if dk.get("wd_start") is not None and lr_schedule is not None:
++                    tt = min(1.0, step / max(1, int(lr_schedule["total_steps"])))
++                    wd_t = float(dk["wd_end"]) + (float(dk["wd_start"]) - float(dk["wd_end"])) * 0.5 * (1 + math.cos(math.pi * tt))
++                    for g in opt.param_groups:
++                        if not g.get("name", "").endswith("_nowd"):     # 1-D (bias/BN) seguem sem wd
++                            g["weight_decay"] = wd_t
+             if lr_schedule is not None:                  # growth v3.1: agenda por passo GLOBAL (retomada continua)
+                 fac = schedule_factor(step, lr_schedule["total_steps"], lr_schedule.get("warmup_steps", 0),
+                                       float(lr_schedule.get("end_ratio", 1e-3)), float(lr_schedule.get("start_ratio", 0.0)))
+@@ -711,6 +932,28 @@
+                 gn = _per_layer_norms(encoder, "grad_norm/encoder", grad=True)
+                 gn.update(_per_layer_norms(head, "grad_norm/head", grad=True))
+             opt.step()
++            if ssl == "dino":               # v3.1: EMA da professora (momentum 0,996 -> 1 em cosseno, por passo)
++                K = int((lr_schedule or {}).get("total_steps") or dk.get("total_steps") or 1)
++                m_k = byol_tau(step, K, float(dk["momentum_base"]))
++                with torch.no_grad():
++                    for k_, online_ in (("encoder", encoder), ("head", head), ("dino_head", extra["dino_head"])):
++                        for pt, po in zip(target[k_].parameters(), online_.parameters()):
++                            pt.mul_(m_k).add_(po.detach(), alpha=1.0 - m_k)
++                parts["ssl/dino_momentum"] = torch.tensor(m_k)
++            if ssl == "byol":               # v3.1: EMA DEPOIS do passo, por passo (tau_k em cosseno até 1)
++                K = yk.get("total_steps") or (lr_schedule or {}).get("total_steps")
++                if not K:
++                    try:
++                        spe_ = len(loader) if max_steps_per_epoch is None else min(len(loader), int(max_steps_per_epoch))
++                    except TypeError:
++                        spe_ = int(max_steps_per_epoch or 1)
++                    K = max(1, int(epochs) * int(spe_) + int(step_offset))
++                tau_k = byol_tau(step, K, float(yk.get("tau_base", 0.996)))
++                with torch.no_grad():
++                    for k_, online_ in (("encoder", encoder), ("head", head), ("projector", extra["projector"])):
++                        for pt, po in zip(target[k_].parameters(), online_.parameters()):
++                            pt.mul_(tau_k).add_(po.detach(), alpha=1.0 - tau_k)
++                parts["ssl/byol_tau"] = torch.tensor(tau_k)
+             if device.type == "cuda":
+                 torch.cuda.synchronize(device)
+             dt = time.perf_counter() - t_step
+@@ -767,9 +1010,18 @@
+         state = {"format": "ssl_resume/v1", "ssl": ssl, "reg": reg, "n_views": V, "step": int(step),
+                  "opt": _cpu_clone(opt.state_dict()) if opt is not None else None,
+                  "extra": {k: _cpu_clone(m.state_dict()) for k, m in extra.items()},
++                 **({"byol_target": {k: (_cpu_clone(m.state_dict()) if isinstance(m, nn.Module) else m.detach().cpu().clone())
++                                     for k, m in target.items()}} if target else {}),
+                  "rng": _rng_capture(device, gen, loader)}
+     # Discard projector / decoder; encoder + head stay trained.
++    if ssl == "dino" and target and state is not None:     # retomada: a ALUNA continua de onde parou
++        state["dino_student"] = {"encoder": _cpu_clone(encoder.state_dict()), "head": _cpu_clone(head.state_dict())}
++    if ssl == "dino" and target:     # DINO: devolve a PROFESSORA (encoder + cabeça), como checkpoint_key=teacher
++        with torch.no_grad():
++            encoder.load_state_dict(target["encoder"].state_dict())
++            head.load_state_dict(target["head"].state_dict())
+     extra.clear()
++    target.clear()                   # BYOL: devolve o encoder ONLINE (o alvo é descartado)
+     encoder.eval()
+     head.eval()
+     if freeze_head:                 # growth_v3: requires_grad original da cabeça
+diff -ruN a/tests/hmodehb/test_growth_v31_b7.py b/tests/hmodehb/test_growth_v31_b7.py
+--- a/tests/hmodehb/test_growth_v31_b7.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_b7.py	2026-11-17 23:01:40.410902644 -0300
+@@ -0,0 +1,191 @@
++"""growth v3.1 bloco 7: Barlow Twins e BYOL conforme os artigos (articles/barlow_twins.md, byol.md), vistas
++assimétricas com solarização (LAB), retomada contínua; receitas registradas."""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++
++import pytest
++import torch
++from torch import nn
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.modehb import ssl_trainers as T  # noqa: E402
++
++
++def _official_barlow(z1, z2, lambd=0.0051):
++    bn = nn.BatchNorm1d(z1.shape[1], affine=False).train()
++    c = bn(z1).T @ bn(z2)
++    c.div_(z1.shape[0])
++    on = torch.diagonal(c).add_(-1).pow_(2).sum()
++    n = c.shape[0]
++    off = c.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten().pow_(2).sum()
++    return on + lambd * off
++
++
++def test_barlow_loss_equals_official():
++    g = torch.Generator().manual_seed(0)
++    z1, z2 = torch.randn(32, 16, generator=g), torch.randn(32, 16, generator=g)
++    a, _ = T.barlow_loss(z1, z2)
++    assert torch.allclose(a, _official_barlow(z1, z2), rtol=1e-5)
++
++
++def test_byol_tau_and_loss():
++    assert T.byol_tau(0, 10) == pytest.approx(0.996) and T.byol_tau(10, 10) == pytest.approx(1.0)
++    p = torch.randn(4, 8)
++    assert float(T.byol_loss(p, p)) == pytest.approx(0.0, abs=1e-6)
++    assert float(T.byol_loss(p, -p)) == pytest.approx(4.0, abs=1e-5)
++
++
++def test_asym_views_solarize():
++    x = torch.rand(4, 3, 16, 16)
++    g1, g2 = torch.Generator().manual_seed(1), torch.Generator().manual_seed(1)
++    a = T.make_views_asym(x, T.ASYM_VIEWS, g1)
++    b = T.make_views_asym(x, T.ASYM_VIEWS, g2)
++    assert len(a) == 2 and all(torch.equal(u, v) for u, v in zip(a, b))
++    cfg = T.AugConfig(crop_scale=(1.0, 1.0), hflip_p=0.0, vflip_p=0.0, brightness=0.0, contrast=0.0,
++                      channel_jitter=0.0, solarize_p=1.0)
++    v = T.make_views(x, 1, cfg, seed=0)[0]
++    ref = T.make_views(x, 1, T.AugConfig(crop_scale=(1.0, 1.0), hflip_p=0.0, vflip_p=0.0, brightness=0.0,
++                                          contrast=0.0, channel_jitter=0.0), seed=0)[0]
++    assert torch.allclose(v, torch.where(ref >= 0.5, 1 - ref, ref))
++
++
++def _toy():
++    torch.manual_seed(1)
++    enc = nn.Sequential(nn.Conv2d(3, 8, 3, padding=1), nn.BatchNorm2d(8), nn.ReLU())
++    head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(8, 16))
++    return enc, head
++
++
++def _loader():
++    from torch.utils.data import DataLoader, TensorDataset
++    x = torch.rand(32, 3, 16, 16, generator=torch.Generator().manual_seed(2))
++    return DataLoader(TensorDataset(x), batch_size=8, shuffle=True, generator=torch.Generator().manual_seed(3),
++                      drop_last=True)
++
++
++KW = {"barlow": dict(barlow_kwargs={"projector_dims": [32, 32, 32]}, optimizer="lars", asym_views=True,
++                     lr_schedule={"total_steps": 12, "warmup_steps": 3, "end_ratio": 1e-3}, weight_decay=1e-6),
++      "byol": dict(byol_kwargs={"projector_dims": [32, 16], "predictor_dims": [32, 16], "tau_base": 0.99},
++                   optimizer="lars", asym_views=True,
++                   lr_schedule={"total_steps": 12, "warmup_steps": 3, "end_ratio": 0.0}, weight_decay=1.5e-6)}
++
++
++@pytest.mark.parametrize("ssl", ["barlow", "byol"])
++def test_train_and_resume_equals_continuous(ssl):
++    e1, h1 = _toy()
++    r = T.train_global_ssl(e1, h1, _loader(), ssl, "none", 3, 0.1, 0.1, [], "cpu", None, 0, 0.05, **KW[ssl])
++    assert r["steps"] == 12 and r["method"] == ssl
++    e2, h2 = _toy()
++    ld = _loader()
++    st = T.train_global_ssl(e2, h2, ld, ssl, "none", 1, 0.1, 0.1, [], "cpu", None, 0, 0.05, return_state=True,
++                            **KW[ssl])["state"]
++    if ssl == "byol":
++        assert set(st["byol_target"]) == {"encoder", "head", "projector"}
++    T.train_global_ssl(e2, h2, ld, ssl, "none", 2, 0.1, 0.1, [], "cpu", None, 0, 0.05, resume=st, **KW[ssl])
++    for a, b in zip(list(e1.state_dict().values()) + list(h1.state_dict().values()),
++                    list(e2.state_dict().values()) + list(h2.state_dict().values())):
++        assert torch.equal(a, b)
++
++
++def test_barlow_projector_no_bias_and_lr_groups():
++    proj = T._make_barlow_projector(8, (16, 16, 4))
++    assert all(m.bias is None for m in proj if isinstance(m, nn.Linear))
++    e, h = _toy()
++    seen = {}
++    orig = T.LARS.step
++
++    def spy(self, closure=None):
++        seen.update({g["name"]: g["base_lr"] for g in self.param_groups})
++        return orig(self, closure)
++    T.LARS.step = spy
++    try:
++        T.train_global_ssl(e, h, _loader(), "barlow", "none", 1, 1.0, 1.0, [], "cpu", None, 0, 0.05, **KW["barlow"])
++    finally:
++        T.LARS.step = orig
++    assert any(abs(v - 0.2) < 1e-12 for v in seen.values()) and any(abs(v - 0.0048) < 1e-12 for v in seen.values())
++
++
++def test_chain_recipes_barlow_byol():
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"ssl_recipe": "paper"}
++    b = G.ssl_recipe(G.apply_genes(g, {"ssl": "barlow"}))
++    assert b["kwargs"]["asym_views"] and b["kwargs"]["barlow_kwargs"]["lambd"] == 0.0051
++    o = G.recipe_optim(b, 256, 10, 100)
++    assert o["optimizer"] == "lars" and o["lr"] == pytest.approx(1.0)
++    y = G.ssl_recipe(G.apply_genes(g, {"ssl": "byol"}))
++    assert G.recipe_optim(y, 512, 10, 100)["lr"] == pytest.approx(0.4)
++    assert G.apply_genes(g, {"ssl": "byol"})["reg"] == "none"
++
++
++def test_dino_head_and_loss():
++    h = T.DINOHead(16, K=64, hidden=32, bottleneck=8)
++    assert [n for n, _ in h.last_layer.named_parameters()] == ["weight_v"] and torch.all(h.last_layer.weight_g == 1)
++    import copy
++    copy.deepcopy(h)                                              # a professora é uma cópia
++    o = h(torch.randn(4, 16))
++    assert o.shape == (4, 64)
++    t = [torch.randn(4, 64), torch.randn(4, 64)]
++    s = [t[0].clone(), t[1].clone(), torch.randn(4, 64)]
++    l_ = T.dino_loss(s, t, torch.zeros(1, 64), 0.1, 0.04)
++    assert torch.isfinite(l_)
++
++
++def test_dino_trains_returns_teacher_and_resumes():
++    kw = dict(dino_kwargs={"K": 32, "hidden": 16, "bottleneck": 8, "n_local": 2, "local_frac": 0.5,
++                           "tau_t_warmup_epochs": 1, "steps_per_epoch": 4},
++              optimizer="lars", lr_schedule={"total_steps": 12, "warmup_steps": 2, "end_ratio": 0.016},
++              weight_decay=1e-6)
++    e1, h1 = _toy()
++    r = T.train_global_ssl(e1, h1, _loader(), "dino", "none", 3, 0.1, 0.1, [], "cpu", None, 0, 0.05, **kw)
++    assert r["n_views"] == 4 and r["method"] == "dino" and r["steps"] == 12
++    e2, h2 = _toy()
++    ld = _loader()
++    st = T.train_global_ssl(e2, h2, ld, "dino", "none", 1, 0.1, 0.1, [], "cpu", None, 0, 0.05, return_state=True,
++                            **kw)["state"]
++    assert "center" in st["byol_target"] and "dino_head" in st["byol_target"]
++    T.train_global_ssl(e2, h2, ld, "dino", "none", 2, 0.1, 0.1, [], "cpu", None, 0, 0.05, resume=st, **kw)
++    for a, b in zip(list(e1.state_dict().values()) + list(h1.state_dict().values()),
++                    list(e2.state_dict().values()) + list(h2.state_dict().values())):
++        assert torch.equal(a, b)
++
++
++FL_ROOT = Path("/dados/home/moliveira/datasets/organized/flowers")
++FL_B0 = ROOT / "artifacts/modehb_spifil/flowers/state/seed42/candidates/c00003/f15/encoder.pt"
++
++
++@pytest.mark.skipif(not (FL_ROOT.exists() and FL_B0.exists()), reason="dados/semente de flowers ausentes")
++def test_e2e_v31_barlow_byol_dino_flowers(tmp_path):
++    import json
++    from ga_search.hmodehb import fitness_v2 as FV
++    out = tmp_path / "fl"
++    ov = ["device=cpu", "wandb.enabled=false", "data.image_size=64", "data.batch_size=16", "data.num_workers=0",
++          "train.max_steps_per_epoch=1"]
++    cfg = G.build_cfg("flowers", 42, ov, out)
++    g = G.load_growth_config(ROOT / "ga_search/config/hmodehb_b0b4/growth_v3.yaml",
++                             ["seeds.top_k=1", "n_parents=1", "n_children=3", "generations=1", "fid_low=1",
++                              "fid_high=1", "end_band=B1", "spifil_images_per_class=1", "debug_train=48",
++                              "debug_val=32", "test_channel=false", "seeds.external_small=false",
++                              f"seeds.registry={ROOT / 'research/spifil_b0b4/agent1/seed_registry.csv'}",
++                              "v3.ssl_recipe=paper", "v3.ssl_batch_size=16", "v3.so2.seed_mode=fixed",
++                              "v3.barlow_kwargs={projector_dims: [64, 64, 64]}",
++                              "v3.byol_kwargs={projector_dims: [64, 32], predictor_dims: [64, 32]}",
++                              "v3.dino_kwargs={K: 64, hidden: 32, bottleneck: 16, n_local: 2}"])
++    g["v3"]["genes"] = {"ssl": ["barlow", "byol", "dino"]}
++    g["v3"]["families"] = None
++    g["v3"]["ops"] = []
++    gev = G.GrowthEvaluator(cfg, out / "eval", g["debug_train"], g["debug_val"], v3=g["v3"])
++    G.GrowthChain(cfg, g, gev, out).run()
++    res = [json.loads(p.read_text()) for p in out.glob("nodes/*/f1/result.json")]
++    assert res
++    seen = set()
++    for r in res:
++        assert r["status"] == "ok", r.get("error")
++        FV.check_decisions(r, gev.fitness_spec)
++        seen.add(r["ssl_method"])
++        assert r["ssl_recipe"]["fiel"] and r["ssl_recipe"]["batch"]["optim"]["optimizer"] == "lars"
++    assert seen == {"barlow", "byol", "dino"}, seen
+diff -ruN a/tests/hmodehb/test_growth_v31_speed.py b/tests/hmodehb/test_growth_v31_speed.py
+--- a/tests/hmodehb/test_growth_v31_speed.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_speed.py	2026-11-17 23:01:40.415902708 -0300
+@@ -0,0 +1,55 @@
++"""growth v3.1 (velocidade do AE): sem checkpoint no AE local o resultado é bit a bit igual (pesos e state);
++ElementProtect funciona também com o LARS (hooks globais do otimizador)."""
++from __future__ import annotations
++
++import copy
++import sys
++from pathlib import Path
++
++import torch
++from torch import nn
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++sys.path.insert(0, str(Path(__file__).parent))
++
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.modehb import ssl_trainers as T  # noqa: E402
++from ga_search.modehb.external_seed import ElementProtect  # noqa: E402
++from ga_search.modehb.local_ae import train_local_ae  # noqa: E402
++from ga_search.modehb.run_search import _NullRun  # noqa: E402
++from test_growth_v31_covgate import _tiny, _x  # noqa: E402
++
++
++def test_ae_without_checkpoint_is_bitwise_equal():
++    m = _tiny()
++    res = MO.widen(MO.start(m), {1: 30})
++    loader = [(_x(8, seed=s),) for s in range(3)]
++    outs = []
++    for ck in (True, False):
++        child = copy.deepcopy(res.child).train()
++        prefix = nn.Sequential(*child.blocks[:1]).eval()
++        prefix.out_channels = 12
++        blk = child.blocks[1]
++        torch.manual_seed(0)
++        with ElementProtect(blk, G._masks_under(res.masks, "blocks.1."), 0.01):
++            train_local_ae(prefix, G._CkptSequential(blk) if ck else blk, loader, "pixel", 1, 1e-3,
++                           torch.device("cpu"), _NullRun(), 0)
++        outs.append({k: v.clone() for k, v in child.state_dict().items()})
++    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0])
++
++
++def test_element_protect_with_lars():
++    w = nn.Parameter(torch.randn(4, 3))
++    opt = T.LARS([w], lr=0.5, weight_decay=0.0, weight_decay_filter=T.exclude_bias_and_norm,
++                 lars_adaptation_filter=T.exclude_bias_and_norm)
++    mod = nn.Module()
++    mod.w = w
++    mask = torch.zeros(4, 3, dtype=torch.bool)
++    mask[0] = True                                      # linha 0 herdada (congelada com scale 0)
++    w0 = w.detach().clone()
++    with ElementProtect(mod, {"w": mask}, 0.0):
++        w.grad = torch.ones_like(w)
++        opt.step()
++    assert torch.equal(w[0], w0[0]) and not torch.equal(w[1], w0[1])
+diff -ruN a/tests/hmodehb/test_growth_v3_ssl.py b/tests/hmodehb/test_growth_v3_ssl.py
+--- a/tests/hmodehb/test_growth_v3_ssl.py	2026-11-17 23:01:40.420902773 -0300
++++ b/tests/hmodehb/test_growth_v3_ssl.py	2026-11-17 23:01:40.421902786 -0300
+@@ -67,7 +67,7 @@
+     assert method_name("vicreg", "none") == "vicreg"
+     assert method_name("vicreg", "sigreg") == "vicreg+sigreg"
+     with pytest.raises(ValueError):
+-        method_name("byol", "none")
++        method_name("swav", "none")          # growth v3.1: byol passou a existir (bloco 7)
+ 
+ 
+ def test_expander_is_paper_shape():
+diff -ruN a/tests/modehb/test_ssl_trainers.py b/tests/modehb/test_ssl_trainers.py
+--- a/tests/modehb/test_ssl_trainers.py	2026-11-17 23:01:40.424902824 -0300
++++ b/tests/modehb/test_ssl_trainers.py	2026-11-17 23:01:40.425902837 -0300
+@@ -131,7 +131,7 @@
+     with pytest.raises(ValueError):
+         method_name("lejepa", "none")
+     with pytest.raises(ValueError):
+-        method_name("byol", "none")
++        method_name("swav", "none")          # growth v3.1: byol passou a existir (bloco 7)
+ 
+ 
+ # --------------------------------------------------------------------- param groups

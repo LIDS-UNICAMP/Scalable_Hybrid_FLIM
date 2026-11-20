@@ -1,0 +1,2356 @@
+diff --git a/ga_search/backbones/__init__.py b/ga_search/backbones/__init__.py
+new file mode 100644
+index 0000000..7df8710
+--- /dev/null
++++ b/ga_search/backbones/__init__.py
+@@ -0,0 +1,12 @@
++"""Backbones autocontidos B0–B4 (Agente 3, missão SPiFiL progressivo).
++
++Módulos (sem efeito colateral na importação; ``ga_search.modehb`` não é modificado):
++* ``spec``          BackboneSpec v1 / GrowthSpec v1 (dataclasses, JSON canônico, hash);
++* ``build``         spec -> nn.Module (ConvBlock + EmbeddingHead do repo), params e MACs/FLOPs medidos;
++* ``budget``        faixas B0–B4, teto duro 5,5M, reparo da forma da cabeça (embed_dim >= 1280 mantido);
++* ``morphisms``     widen (conv/BN/residual/dwsep/inception/ZCA/DBN) + head_widen, deepen_identity,
++                    deepen_residual_zero, add_skip_zero, finalize -> GrowthSpec;
++* ``preservation``  erro pai x filho em eval() (rel-L2, max|.|, cosseno) no mapa e no embedding;
++* ``checkpoint``    arquivo único autocontido (spec + state_dict + TorchScript);
++* ``family``        família de referência plana B0 -> B4 por morfismo exato.
++"""
+diff --git a/ga_search/backbones/budget.py b/ga_search/backbones/budget.py
+new file mode 100644
+index 0000000..9ec4cdb
+--- /dev/null
++++ b/ga_search/backbones/budget.py
+@@ -0,0 +1,108 @@
++"""Faixas B0–B4, teto duro de 5,5M e reparo da FORMA da cabeça (nunca da dimensão).
++
++Regra (MISSION.md, decisão do usuário 17/11): o embedding tem dimensão >= 1280 e a cabeça conta no
++orçamento. Quando encoder + cabeça não cabem em Bk, o reparo troca só a forma da cabeça, numa ordem
++fixa e registrada, mantendo ``embed_dim``:
++
++    forma atual -> meanstd (1x1 -> D/2, mu||sigma) -> moments (1x1 -> D/4, mu||sigma||skew||kurt)
++    -> lowrank (1x1 C->r sem bias, então 1x1 r->largura do pooling) com r decrescente.
++
++O reparo gera um NOVO spec (novo hash) e um log; nunca altera o spec de entrada. Se nenhuma forma
++cabe, levanta ``BudgetError``: o encoder precisa encolher, e isso não é decisão do reparo.
++"""
++from __future__ import annotations
++
++import copy
++from typing import Dict, List, Optional, Sequence, Tuple
++
++from ga_search.backbones.build import BudgetError, param_count_spec
++from ga_search.backbones.spec import BUDGETS, HARD_CAP, BackboneSpec, HeadSpec, band_of
++
++LOWRANK_RANKS = (512, 384, 256, 192, 128, 96, 64, 48, 32)
++
++
++def cap_of(budget_class: str) -> int:
++    return min(int(BUDGETS[budget_class]), HARD_CAP)
++
++
++def head_candidates(head: HeadSpec, ranks: Sequence[int] = LOWRANK_RANKS) -> List[HeadSpec]:
++    """Formas na ordem de preferência; todas com o mesmo ``embed_dim`` (>= 1280)."""
++    D = int(head.embed_dim)
++    out = [copy.deepcopy(head)]
++    for pooling in ("meanstd", "moments"):
++        if head.proj == "full" and head.pooling == pooling:
++            continue
++        out.append(HeadSpec(embed_dim=D, pooling=pooling, proj="full", kurtosis=True, act=head.act, bn=head.bn))
++    for pooling in ("gem", "meanstd", "moments"):
++        for r in ranks:
++            out.append(HeadSpec(embed_dim=D, pooling=pooling, proj="lowrank", rank=int(r), kurtosis=True,
++                                act=head.act, bn=head.bn))
++    seen, uniq = set(), []
++    for h in out:
++        key = (h.pooling, h.proj, h.rank, h.kurtosis)
++        if key not in seen:
++            seen.add(key)
++            uniq.append(h)
++    return uniq
++
++
++def fits(spec: BackboneSpec, budget_class: str) -> Tuple[bool, int]:
++    e, h = param_count_spec(spec)
++    return e + h <= cap_of(budget_class), e + h
++
++
++def repair_head(spec: BackboneSpec, budget_class: Optional[str] = None) -> Tuple[BackboneSpec, Dict]:
++    """Primeira forma de cabeça (ordem de ``head_candidates``) que faz o spec caber em ``budget_class``."""
++    bc = budget_class or spec.budget_class
++    if bc is None:
++        raise ValueError("informe budget_class")
++    tried = []
++    for h in head_candidates(spec.head):
++        cand = spec.copy()
++        cand.head = h
++        ok, n = fits(cand, bc)
++        tried.append({"head": h.label, "proj": h.proj, "params_total": n, "fits": ok})
++        if ok:
++            cand.budget_class = bc
++            changed = h.label != spec.head.label or h.proj != spec.head.proj
++            log = {"budget_class": bc, "cap": cap_of(bc), "repaired": changed, "from_head": spec.head.label,
++                   "to_head": h.label, "embed_dim": int(h.embed_dim), "params_total": n, "tried": tried}
++            if changed:
++                cand.provenance.notes = list(cand.provenance.notes) + [
++                    f"head_repair {spec.head.label}->{h.label} para caber em {bc} (embed_dim mantido)"]
++            return cand, log
++    raise BudgetError(f"nenhuma forma de cabeça com embed_dim={spec.head.embed_dim} cabe em {bc}; "
++                      f"o encoder precisa encolher (tentativas: {[t['head'] for t in tried]})")
++
++
++def repair_family_head(specs: Sequence[BackboneSpec], budget_classes: Sequence[str]) -> Tuple[List[BackboneSpec], Dict]:
++    """Uma única forma de cabeça para toda a cadeia (necessário para ``head_widen`` exato entre Bk e Bk+1):
++    a primeira de ``head_candidates`` que faz TODOS os membros caberem em suas classes."""
++    tried = []
++    for h in head_candidates(specs[0].head):
++        out, totals, ok_all = [], [], True
++        for s, bc in zip(specs, budget_classes):
++            c = s.copy()
++            c.head = h
++            ok, n = fits(c, bc)
++            totals.append(n)
++            ok_all &= ok
++            c.budget_class = bc
++            out.append(c)
++        tried.append({"head": h.label, "totals": totals, "fits_all": ok_all})
++        if ok_all:
++            return out, {"head": h.label, "from_head": specs[0].head.label, "repaired": h.label != specs[0].head.label,
++                         "tried": tried}
++    raise BudgetError("nenhuma forma de cabeça comum cabe em toda a família")
++
++
++def describe_bands() -> List[Dict]:
++    lo, rows = 0, []
++    for k, cap in BUDGETS.items():
++        rows.append({"class": k, "min_exclusive": lo, "max_inclusive": cap})
++        lo = cap
++    return rows
++
++
++__all__ = ["cap_of", "head_candidates", "fits", "repair_head", "repair_family_head", "describe_bands", "band_of",
++           "BudgetError", "LOWRANK_RANKS"]
+diff --git a/ga_search/backbones/build.py b/ga_search/backbones/build.py
+new file mode 100644
+index 0000000..48cb330
+--- /dev/null
++++ b/ga_search/backbones/build.py
+@@ -0,0 +1,209 @@
++"""Construtor: ``BackboneSpec`` -> ``nn.Module`` autocontido (encoder + cabeça >= 1280) + custo medido.
++
++Reaproveita os operadores do repo sem modificá-los:
++* cada camada é um ``ga_search.modehb.ops_norm_act.ConvBlock`` (conv -> norm -> act (+ skip) -> pool);
++  ``inception`` usa ``InceptionConv`` com a partição explícita do spec; residual ``project`` força um
++  1x1 sem bias mesmo quando cin == cout; residual ``gated`` = ``GatedSkip`` (y + lambda*x, lambda=0 no
++  morfismo ``add_skip_zero``).
++* a cabeça é ``ga_search.modehb.pooling_head.EmbeddingHead`` (1x1 -> pooling -> ``embed_dim``); a
++  variante ``lowrank`` antepõe um 1x1 C -> rank sem bias (``LowRankHead``), mantendo ``embed_dim``.
++
++Custo: params do encoder e da cabeça contados no módulo construído (decoders/projetores à parte, em
++``extras_not_counted``, nunca somados); MACs = termos de kernel de Conv2d/Linear (mesma metodologia de
++``run_search.inference_macs``), FLOPs = 2 x MACs, explícito no spec.
++"""
++from __future__ import annotations
++
++import copy
++from typing import List, Optional, Tuple
++
++import torch
++from torch import nn
++
++from ga_search.backbones.spec import (BUDGETS, HARD_CAP, BackboneSpec, CostSpec, HeadSpec, LayerSpec,
++                                      SpecError, band_of)
++from ga_search.modehb.ops_norm_act import ConvBlock, InceptionConv
++from ga_search.modehb.pooling_head import EmbeddingHead
++
++
++class BudgetError(SpecError):
++    pass
++
++
++class GatedSkip(nn.Module):
++    """skip = lambda * x, lambda escalar aprendível (residual de contribuição zero numa camada existente)."""
++
++    def __init__(self, init: float = 0.0):
++        super().__init__()
++        self.gate = nn.Parameter(torch.tensor(float(init)))
++
++    def forward(self, x):
++        return self.gate * x
++
++
++class LowRankHead(nn.Module):
++    """1x1 C -> rank (sem bias) -> EmbeddingHead(rank, embed_dim, pooling). Saída = embed_dim (>= 1280)."""
++
++    def __init__(self, in_ch: int, rank: int, embed_dim: int, pooling: str, **kw):
++        super().__init__()
++        self.reduce = nn.Conv2d(int(in_ch), int(rank), 1, bias=False)
++        self.head = EmbeddingHead(int(rank), int(embed_dim), pooling, **kw)
++        self.in_ch, self.out_dim, self.nominal_dim = int(in_ch), self.head.out_dim, self.head.nominal_dim
++
++    def forward(self, x):
++        return self.head(self.reduce(x))
++
++
++def make_block(L: LayerSpec, cin: int) -> ConvBlock:
++    d = {"channels": int(L.channels), "kernel": int(L.kernel), "conv": L.conv, "norm": L.norm,
++         "activation": L.activation, "pool": L.pool, "pool_size": int(L.pool_size),
++         "dbn_group_size": int(L.dbn_group_size), "residual": L.residual == "identity",
++         "residual_mismatch": "disable"}
++    blk = ConvBlock(d, int(cin))
++    if L.conv == "inception":
++        blk.conv = InceptionConv(int(cin), int(L.channels), 1, bias=L.norm == "none",
++                                 branches=[list(b) for b in L.branches])
++    if L.residual == "identity" and blk.residual_mode != "identity":
++        raise SpecError("residual identity não montado (cin != cout?)")
++    if L.residual == "project":
++        blk.skip, blk.residual_mode = nn.Conv2d(int(cin), int(L.channels), 1, bias=False), "project"
++    elif L.residual == "gated":
++        blk.skip, blk.residual_mode = GatedSkip(0.0), "gated"
++    return blk
++
++
++def make_head(H: HeadSpec, cin: int) -> nn.Module:
++    kw = dict(kurtosis=bool(H.kurtosis), act=H.act, bn=bool(H.bn))
++    if H.proj == "lowrank":
++        return LowRankHead(cin, int(H.rank), int(H.embed_dim), H.pooling, **kw)
++    return EmbeddingHead(int(cin), int(H.embed_dim), H.pooling, **kw)
++
++
++class Backbone(nn.Module):
++    """Encoder (``blocks``: stem + estágios, planos em ordem) + ``head`` (embedding >= 1280)."""
++
++    def __init__(self, spec: BackboneSpec):
++        super().__init__()
++        spec = spec.copy().normalize()
++        spec.validate()
++        self.spec = spec
++        cin = int(spec.input.in_channels)
++        self.blocks = nn.ModuleList()
++        for L in spec.layers():
++            self.blocks.append(make_block(L, cin))
++            cin = int(L.channels)
++        self.head = make_head(spec.head, cin)
++        self.embed_dim = int(spec.head.embed_dim)
++
++    def features(self, x):
++        for b in self.blocks:
++            x = b(x)
++        return x
++
++    def forward(self, x):
++        return self.head(self.features(x))
++
++    def forward_all(self, x) -> Tuple[List[torch.Tensor], torch.Tensor]:
++        outs = []
++        for b in self.blocks:
++            x = b(x)
++            outs.append(x)
++        return outs, self.head(x)
++
++
++# ─────────────────────────────────────────────────────────────────── custo
++def count_params(model: Backbone) -> Tuple[int, int]:
++    enc = sum(p.numel() for p in model.blocks.parameters())
++    head = sum(p.numel() for p in model.head.parameters())
++    return int(enc), int(head)
++
++
++def count_macs(model: Backbone, resolution: int) -> Tuple[int, int]:
++    """(macs_encoder, macs_head) por imagem; hooks em Conv2d/Linear (``run_search.inference_macs``)."""
++    acc = {"enc": 0, "head": 0}
++    head_mods = {id(m) for m in model.head.modules()}
++
++    def hook(mod, inp, out):
++        if isinstance(mod, nn.Conv2d):
++            n = out.numel() // out.shape[0] * mod.kernel_size[0] * mod.kernel_size[1] * mod.in_channels // mod.groups
++        else:
++            n = out.numel() // out.shape[0] * mod.in_features
++        acc["head" if id(mod) in head_mods else "enc"] += int(n)
++
++    def run(m, dev):
++        hs = [x.register_forward_hook(hook) for x in m.modules() if isinstance(x, (nn.Conv2d, nn.Linear))]
++        try:
++            was = m.training
++            m.eval()
++            with torch.no_grad():
++                m(torch.zeros(1, int(m.spec.input.in_channels), resolution, resolution, device=dev))
++            m.train(was)
++        finally:
++            for h in hs:
++                h.remove()
++
++    try:                                   # meta: sem alocar memória (ZCA não roda em meta)
++        meta = copy.deepcopy(model).to("meta")
++        head_mods = {id(m) for m in meta.head.modules()}
++        run(meta, "meta")
++    except Exception:
++        acc = {"enc": 0, "head": 0}
++        head_mods = {id(m) for m in model.head.modules()}
++        run(model, next(model.parameters()).device)
++    return acc["enc"], acc["head"]
++
++
++def measure_cost(model: Backbone, resolution: Optional[int] = None) -> CostSpec:
++    res = int(resolution or model.spec.input.resolution)
++    pe, ph = count_params(model)
++    me, mh = count_macs(model, res)
++    return CostSpec(params_encoder=pe, params_head=ph, params_total=pe + ph,
++                    params_extras=dict(model.spec.extras_not_counted), macs_encoder=me, macs_head=mh,
++                    macs=me + mh, flops=2 * (me + mh), resolution=res, measured=True)
++
++
++def check_budget(spec: BackboneSpec) -> None:
++    """Teto duro 5,5M + teto da classe declarada (sem tolerância, sem reparo silencioso)."""
++    n = int(spec.cost.params_total)
++    if n > HARD_CAP:
++        raise BudgetError(f"{spec.hash12}: params_total={n:,} > teto duro {HARD_CAP:,}")
++    if spec.budget_class is not None and n > BUDGETS[spec.budget_class]:
++        raise BudgetError(f"{spec.hash12}: params_total={n:,} > {spec.budget_class}={BUDGETS[spec.budget_class]:,}")
++
++
++def param_count_spec(spec: BackboneSpec) -> Tuple[int, int]:
++    """(encoder, head) sem alocar pesos (meta device)."""
++    with torch.device("meta"):
++        m = Backbone(spec)
++    return count_params(m)
++
++
++def build_backbone(spec: BackboneSpec, *, seed: Optional[int] = None, enforce_budget: bool = True,
++                   measure: bool = True) -> Backbone:
++    """Monta o módulo, mede o custo e grava em ``model.spec.cost``; ``budget_class`` vazio -> menor Bk
++    que comporta. ``enforce_budget``: viola teto -> ``BudgetError`` (o teto duro de 5,5M vale sempre)."""
++    if seed is not None:
++        torch.manual_seed(int(seed))
++    model = Backbone(spec)
++    if measure:
++        model.spec.cost = measure_cost(model)
++        if model.spec.cost.params_total > HARD_CAP:
++            raise BudgetError(f"params_total={model.spec.cost.params_total:,} > teto duro {HARD_CAP:,}")
++        if model.spec.budget_class is None:
++            model.spec.budget_class = band_of(model.spec.cost.params_total)
++        if enforce_budget:
++            check_budget(model.spec)
++        elif model.spec.cost.params_total > HARD_CAP:
++            raise BudgetError(f"params_total={model.spec.cost.params_total:,} > teto duro {HARD_CAP:,}")
++    return model
++
++
++def refresh_spec(model: Backbone) -> BackboneSpec:
++    """Re-mede custo depois de um morfismo; mantém budget_class se ainda couber, senão sobe de faixa."""
++    model.spec.cost = measure_cost(model)
++    if model.spec.cost.params_total > HARD_CAP:
++        raise BudgetError(f"params_total={model.spec.cost.params_total:,} > teto duro {HARD_CAP:,}")
++    band = band_of(model.spec.cost.params_total)
++    if model.spec.budget_class is None or BUDGETS[band] > BUDGETS[model.spec.budget_class]:
++        model.spec.budget_class = band
++    return model.spec
+diff --git a/ga_search/backbones/checkpoint.py b/ga_search/backbones/checkpoint.py
+new file mode 100644
+index 0000000..39a9d0a
+--- /dev/null
++++ b/ga_search/backbones/checkpoint.py
+@@ -0,0 +1,91 @@
++"""Checkpoint autocontido de um Bk: um único arquivo ``torch.save`` com
++
++* ``spec_json``: o ``BackboneSpec`` completo (com ``arch_sha256``);
++* ``state_dict``: encoder + cabeça (sem pai, sem decoder/projetor);
++* ``state_sha256``: hash dos tensores (verificado no load);
++* ``torchscript``: bytes de ``torch.jit.trace`` do modelo em eval() -> infere só com ``torch``
++  (``load_standalone``), sem importar este repo.
++
++Carregável com ``torch.load(path, weights_only=True)`` (só str/bytes/tensores/dicts).
++"""
++from __future__ import annotations
++
++import hashlib
++import io
++import warnings
++from pathlib import Path
++from typing import Tuple, Union
++
++import torch
++
++from ga_search.backbones.build import Backbone, measure_cost
++from ga_search.backbones.spec import BackboneSpec
++
++FORMAT = "backbone_ckpt/v1"
++
++
++def state_sha256(sd: dict) -> str:
++    h = hashlib.sha256()
++    for k in sorted(sd):
++        v = sd[k]
++        h.update(k.encode())
++        h.update(str(tuple(v.shape)).encode() + str(v.dtype).encode())
++        flat = v.detach().cpu().contiguous().reshape(-1)
++        h.update((flat if v.dtype == torch.bool else flat.view(torch.uint8)).numpy().tobytes())
++    return h.hexdigest()
++
++
++def _trace(model: Backbone, resolution: int) -> bytes:
++    m = model.eval()
++    x = torch.rand(2, int(model.spec.input.in_channels), resolution, resolution)
++    with warnings.catch_warnings():
++        warnings.simplefilter("ignore")
++        ts = torch.jit.trace(m, x, check_trace=False)
++    buf = io.BytesIO()
++    torch.jit.save(ts, buf)
++    return buf.getvalue()
++
++
++def save_backbone(model: Backbone, path: Union[str, Path], *, torchscript: bool = True,
++                  trace_resolution: int = 64) -> dict:
++    model = model.cpu()
++    was = model.training
++    if not model.spec.cost.measured:
++        model.spec.cost = measure_cost(model)
++    sd = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
++    payload = {"format": FORMAT, "spec_json": model.spec.to_json(), "arch_sha256": model.spec.arch_hash(),
++               "state_dict": sd, "state_sha256": state_sha256(sd), "torch_version": str(torch.__version__),
++               "embed_dim": int(model.spec.head.embed_dim)}
++    if torchscript:
++        payload["torchscript"] = _trace(model, trace_resolution)
++    model.train(was)
++    path = Path(path)
++    path.parent.mkdir(parents=True, exist_ok=True)
++    torch.save(payload, path)
++    file_sha = hashlib.sha256(path.read_bytes()).hexdigest()
++    return {"path": str(path), "file_sha256": file_sha, "state_sha256": payload["state_sha256"],
++            "arch_sha256": payload["arch_sha256"]}
++
++
++def load_backbone(path: Union[str, Path], map_location="cpu") -> Tuple[Backbone, BackboneSpec]:
++    """Reconstrói pelo spec (precisa deste pacote) e confere arch/state hash; strict=True."""
++    ck = torch.load(path, map_location=map_location, weights_only=True)
++    if ck.get("format") != FORMAT:
++        raise ValueError(f"formato {ck.get('format')!r} != {FORMAT}")
++    spec = BackboneSpec.from_json(ck["spec_json"])
++    if spec.arch_hash() != ck["arch_sha256"]:
++        raise ValueError("arch_sha256 não confere")
++    if state_sha256(ck["state_dict"]) != ck["state_sha256"]:
++        raise ValueError("state_sha256 não confere")
++    model = Backbone(spec)
++    model.load_state_dict(ck["state_dict"], strict=True)
++    model.spec.cost = spec.cost
++    return model.eval(), model.spec
++
++
++def load_standalone(path: Union[str, Path]):
++    """Só torch: devolve o módulo TorchScript (eval) e o spec em dict JSON."""
++    import json
++    ck = torch.load(path, map_location="cpu", weights_only=True)
++    ts = torch.jit.load(io.BytesIO(ck["torchscript"]), map_location="cpu")
++    return ts.eval(), json.loads(ck["spec_json"])
+diff --git a/ga_search/backbones/family.py b/ga_search/backbones/family.py
+new file mode 100644
+index 0000000..6e69619
+--- /dev/null
++++ b/ga_search/backbones/family.py
+@@ -0,0 +1,114 @@
++"""Família de referência PLANA e CONTIDA B0 -> B4 (prep_literatura_e_specs.md §4), construída por morfismo exato.
++
++Template: stem conv k5 + max-pool 2 (224 -> 112); 3 estágios conv k3 + ReLU, cada um fechado por
++max-pool 2 (112 -> 56 -> 28 -> 14); norm none; cabeça 1280 no mapa 14x14.
++Cada Bk+1 contém Bk (larguras e nº de camadas por estágio não decrescem), então cada aresta é
++``deepen_identity`` (camadas novas inseridas ANTES da camada que faz pool do estágio, como no PNAS-CS)
++seguido de ``widen`` (zero-pad do consumidor) + ``head_widen`` (colunas zero): toda a cadeia é exata.
++
++Diferença registrada em relação à tabela §4: o pool do stem é MaxPool(2, 2) do ``ConvBlock`` (não 3x3 s2
++pad 1); mesmas resoluções, params iguais, MACs iguais (o pooling não entra nos MACs).
++
++Cabeça: com GeM 1280 o B1 da tabela (0,882M) passa de 800k. ``repair_family_head`` escolhe UMA forma de
++cabeça para a cadeia toda (necessário para o ``head_widen`` exato entre Bk e Bk+1): a primeira, na ordem
++gem -> meanstd -> moments -> lowrank, em que os cinco membros cabem. Resultado: meanstd 1280.
++"""
++from __future__ import annotations
++
++from typing import Dict, List, Optional, Sequence, Tuple
++
++import torch
++
++from ga_search.backbones.budget import repair_family_head
++from ga_search.backbones.build import Backbone, build_backbone
++from ga_search.backbones.morphisms import GrowthResult, deepen_identity, finalize, start, widen
++from ga_search.backbones.spec import (BUDGETS, BackboneSpec, GrowthSpec, HeadSpec, InputSpec, LayerSpec,
++                                      StageSpec)
++
++REF_FLAT: Dict[str, Dict[str, object]] = {
++    "B0": {"stem": 24, "local": [48], "intermediate": [80], "abstract": [112]},
++    "B1": {"stem": 32, "local": [64], "intermediate": [112, 112], "abstract": [176, 176]},
++    "B2": {"stem": 32, "local": [64, 64], "intermediate": [128, 128], "abstract": [256, 256]},
++    "B3": {"stem": 40, "local": [80, 80], "intermediate": [160, 160, 160], "abstract": [288, 288, 288]},
++    "B4": {"stem": 48, "local": [96, 96], "intermediate": [208, 208, 208], "abstract": [400, 400, 400]},
++}
++
++
++def flat_spec(widths: Dict[str, object], *, head: Optional[HeadSpec] = None, dataset: str = "reference",
++              budget_class: Optional[str] = None, init: str = "spifil0") -> BackboneSpec:
++    stem = LayerSpec(channels=int(widths["stem"]), kernel=5, pool="max", init=init)
++    stages = []
++    for name in ("local", "intermediate", "abstract"):
++        ws = list(widths.get(name, []))
++        if ws:
++            stages.append(StageSpec(name=name, layers=[
++                LayerSpec(channels=int(w), kernel=3, pool="max" if i == len(ws) - 1 else "none", init=init)
++                for i, w in enumerate(ws)]))
++    return BackboneSpec(stem=stem, stages=stages, head=head or HeadSpec(embed_dim=1280, pooling="gem"),
++                        input=InputSpec(), dataset=dataset, budget_class=budget_class).normalize()
++
++
++def reference_family_specs(*, head: Optional[HeadSpec] = None, dataset: str = "reference",
++                           classes: Sequence[str] = tuple(REF_FLAT)) -> Tuple[List[BackboneSpec], Dict]:
++    specs = [flat_spec(REF_FLAT[k], head=head, dataset=dataset) for k in classes]
++    return repair_family_head(specs, list(classes))
++
++
++def edge_plan(parent: BackboneSpec, child: BackboneSpec) -> List[dict]:
++    """Operações (em ordem) que levam o pai plano ao filho plano contido: deepen_identity e depois widen."""
++    if parent.head.label != child.head.label or parent.head.proj != child.head.proj:
++        raise ValueError("cadeia exata exige a mesma forma de cabeça")
++    pst = {s.name: len(s.layers) for s in parent.stages}
++    cst = {s.name: len(s.layers) for s in child.stages}
++    if list(pst) != list(cst) or any(cst[k] < pst[k] for k in pst):
++        raise ValueError("filho não contém o pai (estágios/profundidade)")
++    ops, depth = [], dict(pst)
++    for name in pst:
++        while depth[name] < cst[name]:
++            # índice plano da camada que faz pool do estágio ``name`` no modelo corrente
++            flat = 1
++            for nm in pst:
++                if nm == name:
++                    break
++                flat += depth[nm]
++            at = flat + depth[name] - 1
++            ops.append({"op": "deepen_identity", "at": at})
++            depth[name] += 1
++    widths = {j: int(L.channels) for j, L in enumerate(child.layers())}
++    ops.append({"op": "widen", "widths": widths})
++    return ops
++
++
++def grow_edge(parent: Backbone, child_target: BackboneSpec, x: Optional[torch.Tensor] = None, *, seed: int = 0,
++              data: Optional[dict] = None, new_filters=None) -> Tuple[Backbone, GrowthSpec, GrowthResult]:
++    res = start(parent)
++    for o in edge_plan(parent.spec, child_target):
++        if o["op"] == "deepen_identity":
++            res = deepen_identity(res, o["at"])
++        else:
++            res = widen(res, o["widths"], seed=seed, new_filters=new_filters)
++    if res.child.spec.arch_hash() != child_target.arch_hash():
++        raise AssertionError(f"filho {res.child.spec.hash12} != alvo {child_target.hash12}")
++    res.child.spec.dataset = child_target.dataset
++    g = finalize(res, x, data=data, child_budget_class=child_target.budget_class)
++    return res.child, g, res
++
++
++def build_reference_chain(x: Optional[torch.Tensor] = None, *, seed: int = 0, dataset: str = "reference",
++                          data: Optional[dict] = None, classes: Sequence[str] = tuple(REF_FLAT)):
++    """B0 (init aleatória registrada) -> B1 -> ... por morfismo exato. Devolve (modelos, growth_specs, log_reparo)."""
++    specs, repair_log = reference_family_specs(dataset=dataset, classes=classes)
++    torch.manual_seed(int(seed))
++    m0 = build_backbone(specs[0], seed=seed)
++    m0.spec.provenance.lineage_id = f"L-size/{dataset}/ref_flat"
++    models, edges = [m0], []
++    for k in range(1, len(specs)):
++        child, g, _ = grow_edge(models[-1], specs[k], x, seed=seed + k, data=data)
++        child.spec.provenance.lineage_id = m0.spec.provenance.lineage_id
++        models.append(child)
++        edges.append(g)
++    return models, edges, repair_log
++
++
++__all__ = ["REF_FLAT", "flat_spec", "reference_family_specs", "edge_plan", "grow_edge", "build_reference_chain",
++           "BUDGETS"]
+diff --git a/ga_search/backbones/morphisms.py b/ga_search/backbones/morphisms.py
+new file mode 100644
+index 0000000..f0e76ca
+--- /dev/null
++++ b/ga_search/backbones/morphisms.py
+@@ -0,0 +1,597 @@
++"""Morfismos que preservam a função (Net2Net / LEMONADE) sobre ``Backbone`` (ConvBlock + EmbeddingHead).
++
++Cada operação recebe e devolve um ``GrowthResult`` acumulado em relação ao pai ORIGINAL: mapa de
++camadas (filho -> pai | "identity" | "residual_zero"), mapas de canais por camada (canal do filho ->
++canal do pai, -1 = novo), máscaras por elemento (True = peso herdado do pai) e a lista de operações.
++``finalize`` mede o custo, a preservação em ``eval()`` e gera o ``GrowthSpec``.
++
++Operações e condição de exatidão (verificadas numericamente em tests/backbones):
++
++* ``widen`` (zero-pad do consumidor): filtros novos com init livre (aleatória ou ``new_filters``); as
++  colunas de ENTRADA novas de toda conv consumidora = 0. Exato para:
++    - conv densa / pointwise, com ``kernel_grow`` (k -> k+2m, zero-pad central);
++    - BN (gamma, beta, running_mean, running_var, num_batches_tracked copiados por canal): exato em
++      eval() e também em treino (estatísticas por canal);
++    - InstanceNorm afim (por canal);
++    - residual ``identity``/``gated`` (o mapa de saída É o de entrada, mesma ordem: o skip leva os
++      canais novos aos canais novos), ``project`` (1x1 com colunas novas = 0);
++    - dwsep (depthwise novo para canal novo, pointwise com colunas novas = 0) e depthwise com cin == cout;
++    - inception (widen por ramo, colunas novas = 0 em cada ramo; a partição ``branches`` é explícita no
++      spec e os canais novos ficam intercalados por ramo; o mapa de canais acompanha);
++    - ZCA estatístico: W_filho = [[W_pai, 0], [0, I]] e mu_filho = [mu_pai, 0] (na ordem do mapa).
++      Exato SÓ com o branqueamento CONGELADO (buffers do pai, nunca re-``fit`` no filho).
++    - DBN: running_W por grupo estendido em bloco-diagonal com I nos canais novos. Exato SÓ em eval()
++      (branqueamento congelado = running stats). Em treino o DBN recalcula o branqueamento sobre todos
++      os canais do grupo e a exatidão se perde. Exige que cada grupo do filho contenha os canais de no
++      máximo um grupo inteiro do pai (verificado; senão ``NotExactError``).
++    - GroupNorm / LayerNorm (canal): NÃO exatos (as estatísticas misturam canais); só com
++      ``allow_approx=True`` e declarados ``exact_claimed=False``.
++* ``head_widen`` (sempre junto do widen da última camada): 1x1 da cabeça [D, C+n] com colunas novas = 0
++  (ou o 1x1 ``reduce`` da cabeça lowrank). Exato para qualquer pooling (o 1x1 vem antes do pooling).
++* ``deepen_identity``: conv k (centro = I, bias 0) + ReLU [+ BN com rm=0, rv=1, gamma=sqrt(1+eps),
++  beta=0], inserida antes da camada ``at``. Exato se a entrada for >= 0 (camada anterior com ReLU/ReLU6
++  e sem skip); com BN, exato só em eval().
++* ``deepen_residual_zero``: y = act(conv(x)) + x com conv = 0 (act(0) = 0: silu/gelu/relu). Exato para
++  qualquer entrada; norm none ou batch (BN(0) = 0 com rm = 0, beta = 0).
++* ``add_skip_zero``: liga um skip de contribuição zero numa camada existente: ``gated`` (y + lambda*x,
++  lambda = 0, cin == cout) ou ``project`` (1x1 = 0). Exato.
++"""
++from __future__ import annotations
++
++import copy
++import math
++from dataclasses import dataclass, field
++from typing import Callable, Dict, List, Optional, Sequence, Union
++
++import torch
++from torch import nn
++
++from ga_search.backbones.build import Backbone, GatedSkip, LowRankHead, refresh_spec
++from ga_search.backbones.spec import (GrowthSpec, LayerInheritance, LayerSpec, OpRecord,
++                                      band_of)
++from ga_search.modehb.ops_norm_act import DecorrelatedBatchNorm, InceptionConv, ZCAWhitening, inception_split
++
++
++class MorphismError(ValueError):
++    pass
++
++
++class NotExactError(MorphismError):
++    """A operação pedida não preserva a função nas condições dadas (use allow_approx para declarar)."""
++
++
++Src = Union[int, str]
++
++
++@dataclass
++class GrowthResult:
++    parent: Backbone                                   # pai original (não é modificado)
++    child: Backbone
++    layer_map: List[Src]                               # camada do filho -> camada do pai | "identity" | "residual_zero"
++    out_maps: List[Optional[List[int]]]                # canal do filho -> canal do pai (-1 = novo); None = camada nova
++    masks: Dict[str, torch.Tensor]                     # param do filho -> bool (True = herdado do pai)
++    ops: List[OpRecord] = field(default_factory=list)
++    new_init: Dict[int, str] = field(default_factory=dict)
++    skip_added: set = field(default_factory=set)
++    head_mode: str = "inherit_zero_cols"
++
++    @property
++    def exact_claimed(self) -> bool:
++        return all(o.exact_claimed for o in self.ops)
++
++
++def start(parent: Backbone) -> GrowthResult:
++    """Resultado identidade (filho = cópia literal do pai)."""
++    child = copy.deepcopy(parent)
++    n = len(parent.blocks)
++    chans = [int(L.channels) for L in parent.spec.layers()]
++    masks = {k: torch.ones_like(v, dtype=torch.bool) for k, v in child.named_parameters()}
++    return GrowthResult(parent=parent, child=child, layer_map=list(range(n)),
++                        out_maps=[list(range(c)) for c in chans], masks=masks)
++
++
++# ─────────────────────────────────────────────────────────────────── utilidades
++def _ix(lst):
++    return torch.as_tensor(lst, dtype=torch.long)
++
++
++def _old(map_):
++    pos = [i for i, m in enumerate(map_) if m >= 0]
++    return pos, [int(map_[i]) for i in pos]
++
++
++def _remap_vec(dst: torch.Tensor, src: torch.Tensor, rows: Sequence[int]) -> None:
++    pos, par = _old(rows)
++    if pos:
++        dst[_ix(pos)] = src[_ix(par)].to(dst.dtype)
++
++
++def _remap_conv(dst: torch.Tensor, src: torch.Tensor, rows: Sequence[int], cols: Optional[Sequence[int]]) -> None:
++    """Linhas (filtros) herdadas: zera a linha inteira (colunas novas e borda do kernel = 0) e copia o
++    bloco [linhas herdadas x colunas herdadas] no centro do kernel. ``cols=None``: conv por canal."""
++    pos, par = _old(rows)
++    if not pos:
++        return
++    kc, kp = dst.shape[-1], src.shape[-1]
++    if kc < kp or (kc - kp) % 2:
++        raise NotExactError(f"kernel {kp} -> {kc} não preserva a função (só k -> k+2m)")
++    o = (kc - kp) // 2
++    r = _ix(pos)
++    dst[r] = torch.zeros_like(dst[r])
++    if cols is None:
++        dst[r, :, o:o + kp, o:o + kp] = src[_ix(par)].to(dst.dtype)
++        return
++    cpos, cpar = _old(cols)
++    if cpos:
++        dst[r[:, None], _ix(cpos)[None, :], o:o + kp, o:o + kp] = src[_ix(par)][:, _ix(cpar)].to(dst.dtype)
++
++
++def _branch_maps(parent_conv: InceptionConv, child_conv: InceptionConv, local: bool = False) -> Dict[str, List[int]]:
++    """Mapa de canais por ramo: ramo b do filho = canais herdados do ramo b do pai + novos ao fim.
++    ``local=True``: índices dentro do ramo (linhas do conv do ramo); senão, na concatenação do pai."""
++    pb = {n: int(c) for n, _, c in parent_conv.branch_spec}
++    cb = [(n, int(c)) for n, _, c in child_conv.branch_spec]
++    if [n for n, _ in cb] != [n for n, _, _ in parent_conv.branch_spec]:
++        raise NotExactError("inception: ramos do filho diferem dos do pai")
++    off_p, maps = 0, {}
++    for n, c in cb:
++        if c < pb[n]:
++            raise NotExactError(f"inception: ramo {n} encolheu ({pb[n]} -> {c})")
++        base = 0 if local else off_p
++        maps[n] = list(range(base, base + pb[n])) + [-1] * (c - pb[n])
++        off_p += pb[n]
++    return maps
++
++
++def _inception_out_map(bmaps: Dict[str, List[int]], order: Sequence[str]) -> List[int]:
++    out = []
++    for n in order:
++        out += bmaps[n]
++    return out
++
++
++def _dbn_extend(dst_mod: DecorrelatedBatchNorm, src_mod: DecorrelatedBatchNorm, rows: Sequence[int],
++                put: Callable[[str, torch.Tensor], None]) -> None:
++    pgroup = {}
++    for i, (a, b) in enumerate(src_mod.bounds):
++        for q in range(a, b):
++            pgroup[q] = i
++    for gi, (a, b) in enumerate(dst_mod.bounds):
++        W = torch.eye(b - a, dtype=getattr(dst_mod, f"running_W{gi}").dtype)
++        loc = [(p - a, rows[p]) for p in range(a, b) if rows[p] >= 0]
++        if loc:
++            gs = {pgroup[q] for _, q in loc}
++            if len(gs) != 1:
++                raise NotExactError(f"DBN: grupo {gi} do filho mistura grupos {sorted(gs)} do pai")
++            pg = gs.pop()
++            pa, pb_ = src_mod.bounds[pg]
++            if sorted(q for _, q in loc) != list(range(pa, pb_)):
++                raise NotExactError(f"DBN: grupo {pg} do pai foi partido entre grupos do filho")
++            Wp = getattr(src_mod, f"running_W{pg}")
++            li = _ix([p for p, _ in loc])
++            qi = _ix([q - pa for _, q in loc])
++            W[li[:, None], li[None, :]] = Wp[qi[:, None], qi[None, :]].to(W.dtype)
++        put(f"running_W{gi}", W)
++
++
++# ─────────────────────────────────────────────────────────────────── preenchimento de um bloco
++def _fill_block(child_blk: nn.Module, parent_blk: nn.Module, in_map: Sequence[int], out_map: Sequence[int],
++                prior_masks: Optional[Dict[str, torch.Tensor]] = None, *, allow_approx: bool = False):
++    """Copia os pesos herdados de ``parent_blk`` para ``child_blk`` (in place) segundo os mapas.
++    Devolve (máscaras do bloco filho: True = herdado do pai ORIGINAL, exato?, notas)."""
++    exact, notes = True, []
++    psd = parent_blk.state_dict()
++    pmods = dict(parent_blk.named_modules())
++    child_params = dict(child_blk.named_parameters())
++    masks = {k: torch.zeros_like(v, dtype=torch.bool) for k, v in child_params.items()}
++    pm = prior_masks if prior_masks is not None else {k: torch.ones_like(psd[k], dtype=torch.bool)
++                                                      for k, _ in parent_blk.named_parameters()}
++    bmaps = None
++    if isinstance(getattr(child_blk, "conv", None), InceptionConv):
++        bmaps = _branch_maps(parent_blk.conv, child_blk.conv, local=True)
++
++    with torch.no_grad():
++        for mname, mod in child_blk.named_modules():
++            pmod = pmods.get(mname)
++            pre = f"{mname}." if mname else ""
++            if pmod is None:
++                if any(True for _ in mod.parameters(recurse=False)):
++                    raise MorphismError(f"módulo {mname!r} sem correspondente no pai")
++                continue
++
++            def key(n):
++                return pre + n
++
++            def put_param(n, fn_val, fn_mask):
++                t = getattr(mod, n)
++                fn_val(t.data, psd[key(n)])
++                if key(n) in masks:
++                    fn_mask(masks[key(n)], pm[key(n)])
++
++            if isinstance(mod, nn.Conv2d):
++                if mname.startswith("conv.branches."):
++                    rows, cols = bmaps[mname.split(".")[2]], in_map
++                elif mname == "conv.0" and mod.groups > 1:          # depthwise do dwsep: por canal (mapa de entrada)
++                    rows, cols = in_map, None
++                elif mod.groups > 1:                                 # depthwise com cin == cout
++                    if mod.groups != mod.in_channels or mod.in_channels != mod.out_channels:
++                        raise NotExactError("depthwise com multiplicador > 1: widen não implementado")
++                    rows, cols = out_map, None
++                else:
++                    rows, cols = out_map, in_map
++                put_param("weight", lambda d, s: _remap_conv(d, s, rows, cols),
++                          lambda d, s: _remap_conv(d, s, rows, cols))
++                if mod.bias is not None:
++                    put_param("bias", lambda d, s: _remap_vec(d, s, rows), lambda d, s: _remap_vec(d, s, rows))
++            elif isinstance(mod, GatedSkip):
++                put_param("gate", lambda d, s: d.copy_(s), lambda d, s: d.copy_(s))
++            elif isinstance(mod, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm, nn.LayerNorm)):
++                if isinstance(mod, (nn.GroupNorm, nn.LayerNorm)):
++                    if not allow_approx:
++                        raise NotExactError(f"{type(mod).__name__}: estatísticas misturam canais; widen não exato")
++                    exact = False
++                    notes.append(f"{mname}: {type(mod).__name__} NÃO exato (afim copiado)")
++                for n in ("weight", "bias"):
++                    if getattr(mod, n, None) is not None:
++                        put_param(n, lambda d, s: _remap_vec(d, s, out_map), lambda d, s: _remap_vec(d, s, out_map))
++                for n in ("running_mean", "running_var"):
++                    if getattr(mod, n, None) is not None:
++                        _remap_vec(getattr(mod, n), psd[key(n)], out_map)
++                if getattr(mod, "num_batches_tracked", None) is not None:
++                    mod.num_batches_tracked.copy_(psd[key("num_batches_tracked")])
++            elif isinstance(mod, ZCAWhitening):
++                pos, par = _old(out_map)
++                mod.mu.zero_()
++                _remap_vec(mod.mu, psd[key("mu")], out_map)
++                W = torch.eye(mod.W.shape[0], dtype=mod.W.dtype)
++                if pos:
++                    W[_ix(pos)[:, None], _ix(pos)[None, :]] = psd[key("W")][_ix(par)[:, None], _ix(par)[None, :]].to(W.dtype)
++                mod.W.copy_(W)
++                mod.fitted.copy_(psd[key("fitted")])
++                notes.append(f"{mname}: ZCA exato só com branqueamento congelado (não re-fit no filho)")
++            elif isinstance(mod, DecorrelatedBatchNorm):
++                mod.running_mean.zero_()
++                _remap_vec(mod.running_mean, psd[key("running_mean")], out_map)
++                _dbn_extend(mod, pmod, out_map, lambda n, W: getattr(mod, n).copy_(W))
++                if mod.weight is not None:
++                    put_param("weight", lambda d, s: _remap_vec(d, s, out_map), lambda d, s: _remap_vec(d, s, out_map))
++                    put_param("bias", lambda d, s: _remap_vec(d, s, out_map), lambda d, s: _remap_vec(d, s, out_map))
++                notes.append(f"{mname}: DBN exato só em eval() (running_W congelado)")
++            elif isinstance(mod, nn.PReLU):
++                if mod.weight.numel() != 1:
++                    raise NotExactError("PReLU por canal: não implementado")
++                put_param("weight", lambda d, s: d.copy_(s), lambda d, s: d.copy_(s))
++            else:
++                own = list(mod.named_parameters(recurse=False))
++                if own:
++                    raise MorphismError(f"módulo {type(mod).__name__} em {mname!r} sem regra de widen")
++    return masks, exact, notes
++
++
++def _fill_head(child_head: nn.Module, parent_head: nn.Module, in_map: Sequence[int],
++               prior_masks: Dict[str, torch.Tensor]):
++    """head_widen: o 1x1 de entrada da cabeça recebe colunas novas = 0; o resto é copiado inteiro."""
++    first = "reduce" if isinstance(child_head, LowRankHead) else "proj.0"
++    psd = parent_head.state_dict()
++    masks = {}
++    with torch.no_grad():
++        for k, t in child_head.state_dict().items():
++            if k == f"{first}.weight":
++                rows = list(range(t.shape[0]))
++                _remap_conv(t, psd[k], rows, in_map)
++                m = torch.zeros_like(t, dtype=torch.bool)
++                _remap_conv(m, prior_masks[k], rows, in_map)
++            else:
++                if t.shape != psd[k].shape:
++                    raise MorphismError(f"cabeça: {k} mudou de forma {tuple(psd[k].shape)} -> {tuple(t.shape)}")
++                t.copy_(psd[k])
++                m = prior_masks[k].clone() if k in prior_masks else None
++            if m is not None:
++                masks[k] = m
++    return masks
++
++
++def _prefixed(masks: Dict[str, torch.Tensor], prefix: str) -> Dict[str, torch.Tensor]:
++    n = len(prefix)
++    return {k[n:]: v for k, v in masks.items() if k.startswith(prefix)}
++
++
++def _compose(prev: Optional[List[int]], local: Sequence[int]) -> Optional[List[int]]:
++    if prev is None:
++        return None
++    return [int(prev[m]) if m >= 0 else -1 for m in local]
++
++
++# ─────────────────────────────────────────────────────────────────── widen (+ head_widen)
++NewFilters = Callable[[int, nn.Module, List[int]], None]
++
++
++def widen(res: GrowthResult, widths: Dict[int, int], *, kernels: Optional[Dict[int, int]] = None,
++          branches: Optional[Dict[int, List[List]]] = None, new_filters: Optional[NewFilters] = None,
++          new_init_label: str = "random:pytorch_default", seed: int = 0, allow_approx: bool = False) -> GrowthResult:
++    """Alarga as camadas ``widths`` (índice plano -> nova largura >= atual) e, se mudar a última, a cabeça.
++
++    ``new_filters(j, child_block, out_map_local)``: opcional, inicializa os filtros NOVOS (ex.: SPiFiL do
++    Agente 2) antes da cópia dos herdados (a cópia sobrescreve as linhas herdadas e zera as colunas novas).
++    """
++    kernels, branches = dict(kernels or {}), dict(branches or {})
++    M = res.child
++    spec = M.spec.copy()
++    layers = spec.layers()
++    n = len(layers)
++    for j in list(widths) + list(kernels) + list(branches):
++        if not 0 <= int(j) < n:
++            raise MorphismError(f"camada {j} fora de 0..{n - 1}")
++    in_count = int(spec.input.in_channels)
++    for j, L in enumerate(layers):
++        c_old = int(L.channels)
++        c_new = int(widths.get(j, c_old))
++        if c_new < c_old:
++            raise MorphismError(f"camada {j}: widen não encolhe ({c_old} -> {c_new})")
++        if (L.residual in ("identity", "gated") or L.conv == "depthwise") and c_new != in_count:
++            raise NotExactError(f"camada {j} ({L.residual}/{L.conv}) exige cout == cin = {in_count}")
++        L.channels = c_new
++        L.kernel = int(kernels.get(j, L.kernel))
++        if L.conv == "inception":
++            if j in branches:
++                L.branches = [list(b) for b in branches[j]]
++            elif c_new != c_old:                 # canais extras repartidos como inception_split(extra)
++                add = {nm: c for nm, _, c in inception_split(c_new - c_old)}
++                L.branches = [[nm, k, int(c) + int(add.get(nm, 0))] for nm, k, c in L.branches]
++        in_count = c_new
++    torch.manual_seed(int(seed))
++    child = Backbone(spec)                          # pesos novos = init PyTorch com semente registrada
++    masks: Dict[str, torch.Tensor] = {}
++    ops_notes, exact = [], True
++    in_local = list(range(int(spec.input.in_channels)))
++    out_maps = []
++    for j in range(n):
++        cb, pb = child.blocks[j], M.blocks[j]
++        Lc = spec.layers()[j]
++        if isinstance(cb.conv, InceptionConv):
++            bm = _branch_maps(pb.conv, cb.conv)
++            out_local = _inception_out_map(bm, [b[0] for b in cb.conv.branch_spec])
++        elif Lc.residual in ("identity", "gated") or Lc.conv == "depthwise":
++            out_local = list(in_local)
++        else:
++            c_par = int(pb.conv.out_channels if not isinstance(pb.conv, nn.Sequential) else pb.conv[1].out_channels)
++            out_local = list(range(c_par)) + [-1] * (int(Lc.channels) - c_par)
++        if new_filters is not None and any(m < 0 for m in out_local):
++            new_filters(j, cb, list(out_local))
++        bm_masks, ex, nt = _fill_block(cb, pb, in_local, out_local, _prefixed(res.masks, f"blocks.{j}."),
++                                       allow_approx=allow_approx)
++        exact &= ex
++        ops_notes += [f"blocks.{j}: {x}" for x in nt]
++        masks.update({f"blocks.{j}.{k}": v for k, v in bm_masks.items()})
++        out_maps.append(_compose(res.out_maps[j], out_local))
++        in_local = out_local
++    masks.update({f"head.{k}": v for k, v in _fill_head(child.head, M.head, in_local,
++                                                         _prefixed(res.masks, "head.")).items()})
++    widened = {int(j): int(w) for j, w in widths.items() if int(w) != int(M.spec.layers()[int(j)].channels)}
++    new_res = GrowthResult(parent=res.parent, child=child, layer_map=list(res.layer_map), out_maps=out_maps,
++                           masks=masks, ops=list(res.ops), new_init=dict(res.new_init),
++                           skip_added=set(res.skip_added), head_mode=res.head_mode)
++    for j in widened:
++        new_res.new_init[j] = new_init_label + f"(seed={seed})"
++    cond = "eval(); " + "; ".join(sorted(set(x.split(": ", 1)[1] for x in ops_notes))) if ops_notes else "sempre"
++    new_res.ops.append(OpRecord(op="widen", where={"layers": sorted(widened)},
++                                params={"widths": {str(k): v for k, v in sorted(widened.items())},
++                                        "kernels": {str(k): int(v) for k, v in kernels.items()},
++                                        "new_init": new_init_label, "seed": int(seed), "variant": "widen_zero"},
++                                exact_claimed=exact, condition=cond))
++    if n - 1 in widened:
++        new_res.ops.append(OpRecord(op="head_widen", where={"head": spec.head.label},
++                                    params={"in_channels": [int(M.spec.layers()[-1].channels), int(spec.layers()[-1].channels)],
++                                            "rule": "inherit_zero_cols"},
++                                    exact_claimed=True, condition="qualquer pooling (1x1 antes do pooling)"))
++    return new_res
++
++
++# ─────────────────────────────────────────────────────────────────── inserção de camadas
++def _nonneg_output(L: LayerSpec) -> bool:
++    return L.activation in ("relu", "relu6") and L.residual == "none"
++
++
++def _insert(res: GrowthResult, at: int, newL: LayerSpec, tag: str, seed: int) -> GrowthResult:
++    M = res.child
++    spec = M.spec.copy()
++    n = len(spec.layers())
++    if not 1 <= at <= n:
++        raise MorphismError(f"inserção em {at}: use 1..{n} (antes do stem não)")
++    if at < n:
++        s, pos = spec.locate(at)
++        spec.stages[s].layers.insert(pos, newL)
++    else:
++        spec.stages[-1].layers.append(newL)
++    torch.manual_seed(int(seed))
++    child = Backbone(spec)
++    src = list(range(at)) + [None] + list(range(at, n))
++    masks = {}
++    with torch.no_grad():
++        for j, s_ in enumerate(src):
++            if s_ is None:
++                for k, v in child.blocks[j].named_parameters():
++                    masks[f"blocks.{j}.{k}"] = torch.zeros_like(v, dtype=torch.bool)
++                continue
++            child.blocks[j].load_state_dict(M.blocks[s_].state_dict())
++            for k, v in _prefixed(res.masks, f"blocks.{s_}.").items():
++                masks[f"blocks.{j}.{k}"] = v.clone()
++        child.head.load_state_dict(M.head.state_dict())
++    masks.update({k: v.clone() for k, v in res.masks.items() if k.startswith("head.")})
++    shift = lambda d: {(k if k < at else k + 1): v for k, v in d.items()}  # noqa: E731
++    return GrowthResult(parent=res.parent, child=child,
++                        layer_map=list(res.layer_map[:at]) + [tag] + list(res.layer_map[at:]),
++                        out_maps=list(res.out_maps[:at]) + [None] + list(res.out_maps[at:]), masks=masks,
++                        ops=list(res.ops), new_init={**shift(res.new_init), at: tag},
++                        skip_added={k if k < at else k + 1 for k in res.skip_added}, head_mode=res.head_mode)
++
++
++def deepen_identity(res: GrowthResult, at: int, *, kernel: int = 3, norm: str = "none",
++                    allow_approx: bool = False) -> GrowthResult:
++    """Net2Deeper: insere conv k identidade + ReLU antes da camada ``at`` (largura = a da entrada)."""
++    if norm not in ("none", "batch"):
++        raise MorphismError("deepen_identity: norm none|batch")
++    layers = res.child.spec.layers()
++    prevL = layers[at - 1]
++    exact = _nonneg_output(prevL)
++    if not exact and not allow_approx:
++        raise NotExactError(f"deepen_identity antes de {at}: entrada não é >= 0 "
++                            f"(camada anterior act={prevL.activation}, residual={prevL.residual})")
++    C = int(prevL.channels)
++    newL = LayerSpec(channels=C, kernel=int(kernel), conv="conv", norm=norm, activation="relu",
++                     residual="none", pool="none", init="identity")
++    out = _insert(res, at, newL, "identity", seed=0)
++    blk = out.child.blocks[at]
++    with torch.no_grad():
++        blk.conv.weight.zero_()
++        blk.conv.weight[torch.arange(C), torch.arange(C), kernel // 2, kernel // 2] = 1.0
++        if blk.conv.bias is not None:
++            blk.conv.bias.zero_()
++        if norm == "batch":
++            bn = blk.norm
++            bn.running_mean.zero_()
++            bn.running_var.fill_(1.0)
++            bn.weight.fill_(math.sqrt(1.0 + bn.eps))
++            bn.bias.zero_()
++    cond = "entrada >= 0 (ReLU anterior, sem skip)" + ("; BN: só eval()" if norm == "batch" else "")
++    out.ops.append(OpRecord(op="deepen_identity", where={"before": int(at)},
++                            params={"kernel": int(kernel), "norm": norm, "width": C},
++                            exact_claimed=exact, condition=cond if exact else "NÃO exato: entrada pode ser < 0"))
++    return out
++
++
++def deepen_residual_zero(res: GrowthResult, at: int, *, act: str = "silu", kernel: int = 3, conv: str = "conv",
++                         norm: str = "none") -> GrowthResult:
++    """Insere y = act(conv(x)) + x com conv = 0 (act(0) = 0) antes da camada ``at``."""
++    if act not in ("silu", "gelu", "relu"):
++        raise MorphismError("deepen_residual_zero: act com act(0) = 0 (silu|gelu|relu)")
++    if norm not in ("none", "batch"):
++        raise MorphismError("deepen_residual_zero: norm none|batch")
++    C = int(res.child.spec.layers()[at - 1].channels)
++    newL = LayerSpec(channels=C, kernel=int(kernel), conv=conv, norm=norm, activation=act, residual="identity",
++                     pool="none", init="residual_zero")
++    out = _insert(res, at, newL, "residual_zero", seed=0)
++    blk = out.child.blocks[at]
++    with torch.no_grad():
++        for m in blk.conv.modules():
++            if isinstance(m, nn.Conv2d):
++                m.weight.zero_()
++                if m.bias is not None:
++                    m.bias.zero_()
++        if norm == "batch":
++            blk.norm.running_mean.zero_()
++            blk.norm.bias.zero_()
++    out.ops.append(OpRecord(op="deepen_residual_zero", where={"before": int(at)},
++                            params={"kernel": int(kernel), "conv": conv, "norm": norm, "act": act, "width": C,
++                                    "trainable_at_zero": act != "relu"},
++                            exact_claimed=True, condition="act(0)=0; qualquer entrada"))
++    return out
++
++
++def add_skip_zero(res: GrowthResult, layer: int) -> GrowthResult:
++    """Liga um residual de contribuição zero numa camada existente (gated lambda=0 ou project 1x1=0)."""
++    M = res.child
++    spec = M.spec.copy()
++    layers = spec.layers()
++    L = layers[layer]
++    if L.residual != "none":
++        raise MorphismError(f"camada {layer} já tem residual {L.residual}")
++    cin = int(spec.input.in_channels) if layer == 0 else int(layers[layer - 1].channels)
++    L.residual = "gated" if cin == int(L.channels) else "project"
++    child = Backbone(spec)
++    masks = {k: v.clone() for k, v in res.masks.items()}
++    with torch.no_grad():
++        for j in range(len(layers)):
++            missing, unexpected = child.blocks[j].load_state_dict(M.blocks[j].state_dict(), strict=False)
++            if unexpected or (j != layer and missing) or any(not k.startswith("skip.") for k in missing):
++                raise MorphismError(f"add_skip_zero: chaves inesperadas {missing} {unexpected}")
++        child.head.load_state_dict(M.head.state_dict())
++        for k, p in child.blocks[layer].skip.named_parameters():
++            p.zero_()
++            masks[f"blocks.{layer}.skip.{k}"] = torch.zeros_like(p, dtype=torch.bool)
++    out = GrowthResult(parent=res.parent, child=child, layer_map=list(res.layer_map), out_maps=list(res.out_maps),
++                       masks=masks, ops=list(res.ops), new_init=dict(res.new_init),
++                       skip_added=set(res.skip_added) | {layer}, head_mode=res.head_mode)
++    out.ops.append(OpRecord(op="add_skip_zero", where={"layer": int(layer)}, params={"skip": L.residual},
++                            exact_claimed=True, condition="skip inicial = 0"))
++    return out
++
++
++# ─────────────────────────────────────────────────────────────────── aplicação / GrowthSpec
++OPS = {"widen": widen, "deepen_identity": deepen_identity, "deepen_residual_zero": deepen_residual_zero,
++       "add_skip_zero": add_skip_zero}
++
++
++def apply_ops(parent: Backbone, ops: Sequence[dict]) -> GrowthResult:
++    """``ops``: lista de ``{"op": nome, **kwargs}`` aplicadas em ordem (índices referem-se ao filho corrente)."""
++    res = start(parent)
++    for o in ops:
++        o = dict(o)
++        fn = OPS[o.pop("op")]
++        res = fn(res, **o)
++    return res
++
++
++def _shapes(mod: nn.Module) -> Dict[str, List[int]]:
++    return {k: list(v.shape) for k, v in mod.named_parameters()}
++
++
++def finalize(res: GrowthResult, x: Optional[torch.Tensor] = None, *, data: Optional[dict] = None,
++             tol: float = 1e-5, child_budget_class: Optional[str] = None, protect: str = "full") -> GrowthSpec:
++    """Mede custo do filho, herança por camada e preservação (se ``x`` for dado) e monta o ``GrowthSpec``.
++    ``x``: imagens de TREINO/VALIDAÇÃO (nunca teste); ``data`` descreve a origem (registrada)."""
++    from ga_search.backbones.preservation import measure_preservation
++    P, C = res.parent, res.child
++    if child_budget_class is not None:
++        C.spec.budget_class = child_budget_class
++    refresh_spec(C)
++    from ga_search.backbones.build import check_budget
++    check_budget(C.spec)
++    C.spec.provenance.parent = P.spec.id
++    pnames = P.spec.layer_names()
++    cnames = C.spec.layer_names()
++    per_layer = []
++    for j, src in enumerate(res.layer_map):
++        blk = C.blocks[j]
++        tot = sum(p.numel() for p in blk.parameters())
++        inh = int(sum(int(res.masks[f"blocks.{j}.{k}"].sum()) for k, _ in blk.named_parameters()))
++        if isinstance(src, int):
++            origin = "inherited" if inh == tot else "fp_widen"
++            pidx, pname, pshape = src, pnames[src], _shapes(P.blocks[src])
++        else:
++            origin, pidx, pname, pshape = f"fp_{src}", None, None, {}
++        per_layer.append(LayerInheritance(child_layer=cnames[j], child_index=j, parent_layer=pname, parent_index=pidx,
++                                          origin=origin, shape_parent=pshape, shape_child=_shapes(blk),
++                                          out_map=res.out_maps[j],
++                                          in_map=(list(range(int(C.spec.input.in_channels))) if j == 0
++                                                  else res.out_maps[j - 1]),
++                                          n_inherited_elements=inh,
++                                          n_new_elements=tot - inh, new_init=res.new_init.get(j, ""),
++                                          skip_added=j in res.skip_added))
++    htot = sum(p.numel() for p in C.head.parameters())
++    hinh = int(sum(int(res.masks[f"head.{k}"].sum()) for k, _ in C.head.named_parameters()))
++    from dataclasses import asdict
++    inheritance = {"head": res.head_mode, "per_layer": [asdict(r) for r in per_layer],
++                   "head_detail": {"label": C.spec.head.label, "shape_parent": _shapes(P.head),
++                                   "shape_child": _shapes(C.head), "n_inherited_elements": hinh,
++                                   "n_new_elements": htot - hinh},
++                   "totals": {"inherited": int(sum(r.n_inherited_elements for r in per_layer) + hinh),
++                              "new": int(sum(r.n_new_elements for r in per_layer) + htot - hinh)}}
++    if x is not None:
++        pres = measure_preservation(P, C, res.layer_map, res.out_maps, x, tol=tol, exact_claimed=res.exact_claimed,
++                                    data=data)
++    else:
++        from ga_search.backbones.spec import PreservationRecord
++        pres = PreservationRecord(exact_claimed=res.exact_claimed, tolerance_rel=tol)
++    from ga_search.backbones.build import measure_cost
++    ps, cs = (P.spec.cost if P.spec.cost.measured else measure_cost(P)), C.spec.cost
++    g = GrowthSpec(parent=P.spec.id, child=C.spec.id, parent_hash=P.spec.arch_hash(), child_hash=C.spec.arch_hash(),
++                   operations=list(res.ops), inheritance=inheritance,
++                   params={"parent_total": int(ps.params_total), "child_total": int(cs.params_total),
++                           "delta": int(cs.params_total - ps.params_total),
++                           "child_budget_class": C.spec.budget_class, "child_band": band_of(cs.params_total)},
++                   macs={"parent": int(ps.macs), "child": int(cs.macs)},
++                   flops={"parent": int(ps.flops), "child": int(cs.flops)}, preservation=pres,
++                   protect={"mode": protect, "scope": "inherited_elements"})
++    C.spec.provenance.growth_spec = g.id
++    return g
+diff --git a/ga_search/backbones/preservation.py b/ga_search/backbones/preservation.py
+new file mode 100644
+index 0000000..431c426
+--- /dev/null
++++ b/ga_search/backbones/preservation.py
+@@ -0,0 +1,84 @@
++"""Erro de preservação pai x filho ANTES de qualquer treino: ``eval()``, fp32, sem gradiente.
++
++Métricas (por camada herdada, no mapa final do encoder e no embedding >= 1280):
++* ``max_abs``: max |filho - pai| nos canais herdados;
++* ``rel_l2``: ||filho - pai||_2 / ||pai||_2 (lote inteiro);
++* ``cos_min``: menor cosseno por imagem entre os vetores achatados.
++
++Veredito: ``exact`` se a operação foi declarada exata e max(rel_l2) <= tol; ``violated`` se foi
++declarada exata e passou de tol (bug); se NÃO foi declarada exata: ``approx`` (rel_l2 <= 1e-2) ou
++``not_preserving``. Os dados devem ser de treino/validação (nunca teste) e ficam descritos em ``data``.
++"""
++from __future__ import annotations
++
++import hashlib
++from typing import Dict, List, Optional, Sequence, Union
++
++import torch
++import torch.nn.functional as F
++
++from ga_search.backbones.spec import PreservationRecord
++
++APPROX_REL = 1e-2
++
++
++def _metrics(a: torch.Tensor, b: torch.Tensor) -> Dict[str, float]:
++    a, b = a.double(), b.double()
++    d = (b - a)
++    den = a.norm().item()
++    rel = d.norm().item() / den if den > 0 else (0.0 if d.norm().item() == 0 else float("inf"))
++    cos = F.cosine_similarity(a.flatten(1), b.flatten(1), dim=1, eps=1e-30)
++    return {"max_abs": float(d.abs().max().item()) if d.numel() else 0.0, "rel_l2": float(rel),
++            "cos_min": float(cos.min().item())}
++
++
++def tensor_sha256(x: torch.Tensor) -> str:
++    return hashlib.sha256(x.detach().cpu().contiguous().numpy().tobytes()).hexdigest()
++
++
++@torch.no_grad()
++def measure_preservation(parent, child, layer_map: Sequence[Union[int, str]], out_maps: Sequence[Optional[List[int]]],
++                         x: torch.Tensor, *, tol: float = 1e-5, exact_claimed: bool = True,
++                         data: Optional[dict] = None, compare_embedding: bool = True) -> PreservationRecord:
++    pt, ct = parent.training, child.training
++    parent.eval()
++    child.eval()
++    try:
++        x = x.float()
++        po, pe = parent.forward_all(x)
++        co, ce = child.forward_all(x)
++    finally:
++        parent.train(pt)
++        child.train(ct)
++    per_layer, last = [], None
++    n_parent = len(po)
++    for c, p in enumerate(layer_map):
++        if not isinstance(p, int) or out_maps[c] is None:
++            continue
++        pos = [j for j, m in enumerate(out_maps[c]) if m >= 0]
++        src = [out_maps[c][j] for j in pos]
++        if sorted(src) != list(range(po[p].shape[1])):
++            raise ValueError(f"camada {c}: nem todos os canais do pai foram herdados (cut não suportado aqui)")
++        m = _metrics(po[p][:, src], co[c][:, pos])
++        rec = {"parent_index": int(p), "child_index": int(c), **m}
++        per_layer.append(rec)
++        if p == n_parent - 1:
++            last = rec
++    rec = PreservationRecord(data=dict(data or {}), exact_claimed=bool(exact_claimed), tolerance_rel=float(tol),
++                             per_layer=per_layer)
++    rec.data.setdefault("n_images", int(x.shape[0]))
++    rec.data.setdefault("shape", list(x.shape))
++    rec.data.setdefault("sha256", tensor_sha256(x))
++    rec.data.setdefault("mode", "eval(), fp32, no_grad, antes de treino")
++    if last is not None:
++        rec.map_max_abs, rec.map_rel_l2, rec.map_cos_min = last["max_abs"], last["rel_l2"], last["cos_min"]
++    if compare_embedding and pe.shape == ce.shape:
++        e = _metrics(pe, ce)
++        rec.emb_max_abs, rec.emb_rel_l2, rec.emb_cos_min = e["max_abs"], e["rel_l2"], e["cos_min"]
++    rels = [r["rel_l2"] for r in per_layer] + ([rec.emb_rel_l2] if rec.emb_rel_l2 is not None else [])
++    worst = max(rels) if rels else float("nan")
++    if exact_claimed:
++        rec.verdict = "exact" if worst <= tol else "violated"
++    else:
++        rec.verdict = "approx" if worst <= APPROX_REL else "not_preserving"
++    return rec
+diff --git a/ga_search/backbones/spec.py b/ga_search/backbones/spec.py
+new file mode 100644
+index 0000000..1f652f0
+--- /dev/null
++++ b/ga_search/backbones/spec.py
+@@ -0,0 +1,395 @@
++"""BackboneSpec v1 e GrowthSpec v1 (Agente 3, desenho em research/spifil_b0b4/agent3/prep_literatura_e_specs.md §3).
++
++* ``BackboneSpec``: modelo Bk autocontido = stem + estágios (local / intermediate / abstract) + cabeça
++  com embedding >= 1280. Serializa em JSON canônico; ``arch_hash`` = sha256 do JSON canônico de
++  ``input`` + ``stem`` + ``stages`` + ``head`` (NÃO entram custo, proveniência, dataset, nem o campo
++  ``init`` das camadas, que é proveniência dos pesos e não arquitetura).
++* ``GrowthSpec``: uma aresta do DAG de linhagens (pai -> filho), com as operações atômicas, a herança
++  por camada (pesos herdados x novos, mapas de canais, shapes) e o erro de preservação medido em
++  ``eval()``, fp32, antes de qualquer treino.
++
++Nada aqui importa torch: só dataclasses + json + hashlib.
++"""
++from __future__ import annotations
++
++import copy
++import dataclasses
++import hashlib
++import json
++from dataclasses import asdict, dataclass, field
++from typing import Any, Dict, List, Optional
++
++SCHEMA_BACKBONE = "backbone_spec/v1"
++SCHEMA_GROWTH = "growth_spec/v1"
++
++#: teto superior de cada classe de porte (encoder + cabeça; decoders/projetores à parte). Sem tolerância.
++BUDGETS: Dict[str, int] = {"B0": 300_000, "B1": 800_000, "B2": 1_500_000, "B3": 3_000_000, "B4": 5_500_000}
++HARD_CAP = 5_500_000            # proibido passar (MISSION.md, Agente 3)
++MIN_EMBED_DIM = 1280            # R11 / decisão do usuário 17/11: nunca abaixo
++STAGE_NAMES = ("local", "intermediate", "abstract")
++FLOPS_DEFINITION = ("flops = 2 * macs; macs = termos de kernel de Conv2d/Linear (sem bias, pooling, "
++                    "normalizações e operações elemento a elemento), metodologia de run_search.inference_macs")
++
++CONVS = ("conv", "dwsep", "depthwise", "pointwise", "inception")
++NORMS_EXACT = ("none", "batch", "instance", "zca", "dbn", "batch_zca", "batch_dbn")
++NORMS = NORMS_EXACT + ("group", "layer")
++ACTS = ("relu", "relu6", "leaky_relu", "prelu", "gelu", "silu", "selu")
++RESIDUALS = ("none", "identity", "project", "gated")
++POOLS = ("none", "max", "avg")
++HEAD_POOLINGS = ("gap", "gem", "gem_learn", "meanstd", "moments", "combo")
++HEAD_PROJ = ("full", "lowrank")
++
++
++class SpecError(ValueError):
++    pass
++
++
++def canonical_json(obj: Any) -> str:
++    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
++
++
++def sha256_hex(obj: Any) -> str:
++    return hashlib.sha256(canonical_json(obj).encode()).hexdigest()
++
++
++def band_of(params_total: int) -> str:
++    """Menor classe Bk cujo teto comporta ``params_total``. > 5,5M -> erro (teto duro)."""
++    for k, cap in BUDGETS.items():
++        if params_total <= cap:
++            return k
++    raise SpecError(f"params_total={params_total} > teto duro {HARD_CAP}")
++
++
++# ─────────────────────────────────────────────────────────────────── camadas / estágios / cabeça
++@dataclass
++class LayerSpec:
++    """Um ``ConvBlock`` do repo: conv -> norm -> act (+ skip) -> pool. stride sempre 1.
++
++    residual: none | identity (cin == cout) | project (1x1 sem bias) | gated (y + lambda*x, cin == cout).
++    branches: só inception, ``[[nome, kernel, canais], ...]`` (preenchido no ``normalize``).
++    init: proveniência dos pesos (spifil0..4 | random | identity | residual_zero | inherited); fora do hash.
++    """
++    channels: int
++    kernel: int = 3
++    conv: str = "conv"
++    norm: str = "none"
++    activation: str = "relu"
++    residual: str = "none"
++    pool: str = "none"
++    pool_size: int = 2
++    branches: Optional[List[List[Any]]] = None
++    dbn_group_size: int = 16
++    init: str = "spifil0"
++
++    def arch_dict(self) -> dict:
++        d = asdict(self)
++        d.pop("init")
++        return d
++
++    def validate(self, cin: int) -> None:
++        if self.conv not in CONVS:
++            raise SpecError(f"conv {self.conv!r} fora de {CONVS}")
++        if self.norm not in NORMS:
++            raise SpecError(f"norm {self.norm!r} fora de {NORMS}")
++        if self.activation not in ACTS:
++            raise SpecError(f"activation {self.activation!r} fora de {ACTS}")
++        if self.residual not in RESIDUALS:
++            raise SpecError(f"residual {self.residual!r} fora de {RESIDUALS}")
++        if self.pool not in POOLS:
++            raise SpecError(f"pool {self.pool!r} fora de {POOLS}")
++        if int(self.channels) < 1 or int(self.kernel) < 1 or int(self.kernel) % 2 == 0:
++            raise SpecError(f"channels/kernel inválidos: {self.channels}/{self.kernel}")
++        if self.residual in ("identity", "gated") and cin != self.channels:
++            raise SpecError(f"residual {self.residual} exige cin == cout ({cin} != {self.channels})")
++        if self.conv == "depthwise" and self.channels % cin:
++            raise SpecError("depthwise exige cout múltiplo de cin (sem reparo silencioso por gcd)")
++        if self.conv == "inception":
++            if not self.branches or sum(int(b[2]) for b in self.branches) != int(self.channels):
++                raise SpecError(f"inception: branches {self.branches} não somam {self.channels}")
++
++
++@dataclass
++class StageSpec:
++    name: str
++    layers: List[LayerSpec]
++
++
++@dataclass
++class HeadSpec:
++    """Cabeça: [1x1 C->rank (lowrank)] -> EmbeddingHead (1x1 -> pooling) -> embedding ``embed_dim`` >= 1280."""
++    embed_dim: int = 1280
++    pooling: str = "gem"
++    proj: str = "full"
++    rank: Optional[int] = None
++    kurtosis: bool = True
++    act: str = "none"
++    bn: bool = False
++    taps: List[str] = field(default_factory=lambda: ["last"])
++
++    def validate(self) -> None:
++        if int(self.embed_dim) < MIN_EMBED_DIM:
++            raise SpecError(f"embed_dim={self.embed_dim} < {MIN_EMBED_DIM} (proibido)")
++        if self.pooling not in HEAD_POOLINGS:
++            raise SpecError(f"pooling {self.pooling!r} fora de {HEAD_POOLINGS}")
++        if self.proj not in HEAD_PROJ:
++            raise SpecError(f"proj {self.proj!r} fora de {HEAD_PROJ}")
++        if self.proj == "lowrank" and not (self.rank and int(self.rank) >= 1):
++            raise SpecError("proj=lowrank exige rank >= 1")
++        if self.proj == "full" and self.rank is not None:
++            raise SpecError("rank só vale com proj=lowrank")
++        if list(self.taps) != ["last"]:
++            raise SpecError("v1 só implementa taps=['last'] (multiescala: pendente, registrado)")
++
++    @property
++    def label(self) -> str:
++        s = f"{self.pooling}{self.embed_dim}"
++        if self.pooling == "moments" and not self.kurtosis:
++            s += "_nokurt"
++        return s + (f"_lr{self.rank}" if self.proj == "lowrank" else "")
++
++
++@dataclass
++class InputSpec:
++    resolution: int = 224
++    in_channels: int = 3
++    color: str = "lab01"
++    norm: str = "none"
++
++
++@dataclass
++class CostSpec:
++    params_encoder: int = 0
++    params_head: int = 0
++    params_total: int = 0                     # = encoder + head (verificado <= orçamento)
++    params_extras: Dict[str, int] = field(default_factory=dict)   # decoders/projetores, NUNCA somados
++    macs_encoder: int = 0
++    macs_head: int = 0
++    macs: int = 0
++    flops: int = 0                            # = 2 * macs (explícito)
++    flops_definition: str = FLOPS_DEFINITION
++    resolution: int = 224
++    measured: bool = False                    # True = contado no módulo construído
++
++
++@dataclass
++class Provenance:
++    lineage_id: Optional[str] = None
++    parent: Optional[str] = None
++    growth_spec: Optional[str] = None
++    checkpoint: Optional[str] = None
++    checkpoint_sha256: Optional[str] = None
++    config_sha256: Optional[str] = None
++    seeds: Dict[str, int] = field(default_factory=dict)
++    fidelity_epochs: int = 0
++    wise_alpha: Optional[float] = None
++    notes: List[str] = field(default_factory=list)
++
++
++@dataclass
++class BackboneSpec:
++    stem: LayerSpec
++    stages: List[StageSpec]
++    head: HeadSpec = field(default_factory=HeadSpec)
++    input: InputSpec = field(default_factory=InputSpec)
++    dataset: str = "unspecified"
++    split: Optional[int] = None
++    budget_class: Optional[str] = None
++    extras_not_counted: Dict[str, int] = field(default_factory=dict)
++    cost: CostSpec = field(default_factory=CostSpec)
++    provenance: Provenance = field(default_factory=Provenance)
++    schema: str = SCHEMA_BACKBONE
++
++    # ── estrutura
++    def layers(self) -> List[LayerSpec]:
++        return [self.stem] + [L for st in self.stages for L in st.layers]
++
++    def layer_names(self) -> List[str]:
++        return ["stem"] + [f"{st.name}.{i}" for st in self.stages for i in range(len(st.layers))]
++
++    def locate(self, flat_index: int):
++        """(stage_index, position) de uma camada plana (stem -> (-1, 0))."""
++        if flat_index == 0:
++            return -1, 0
++        i = flat_index - 1
++        for s, st in enumerate(self.stages):
++            if i < len(st.layers):
++                return s, i
++            i -= len(st.layers)
++        raise IndexError(flat_index)
++
++    def normalize(self) -> "BackboneSpec":
++        """Preenche ``branches`` do inception (partição explícita, entra no hash)."""
++        from ga_search.modehb.ops_norm_act import inception_split as default_branches
++        for L in self.layers():
++            if L.conv == "inception" and not L.branches:
++                L.branches = default_branches(int(L.channels))
++            if L.branches is not None:
++                L.branches = [[str(n), int(k), int(c)] for n, k, c in L.branches]
++        return self
++
++    def validate(self) -> None:
++        if self.schema != SCHEMA_BACKBONE:
++            raise SpecError(f"schema {self.schema!r} != {SCHEMA_BACKBONE}")
++        names = [st.name for st in self.stages]
++        if any(n not in STAGE_NAMES for n in names) or names != [n for n in STAGE_NAMES if n in names]:
++            raise SpecError(f"estágios {names}: use um subconjunto ordenado de {STAGE_NAMES}")
++        if any(len(st.layers) == 0 for st in self.stages):
++            raise SpecError("estágio vazio: remova-o em vez de deixá-lo sem camadas")
++        cin = int(self.input.in_channels)
++        for L in self.layers():
++            L.validate(cin)
++            cin = int(L.channels)
++        self.head.validate()
++        if self.budget_class is not None and self.budget_class not in BUDGETS:
++            raise SpecError(f"budget_class {self.budget_class!r} fora de {list(BUDGETS)}")
++
++    # ── hash / id
++    def arch_dict(self) -> dict:
++        return {"schema": self.schema, "input": asdict(self.input), "stem": self.stem.arch_dict(),
++                "stages": [{"name": st.name, "layers": [L.arch_dict() for L in st.layers]} for st in self.stages],
++                "head": asdict(self.head)}
++
++    def arch_hash(self) -> str:
++        return sha256_hex(self.arch_dict())
++
++    @property
++    def hash12(self) -> str:
++        return self.arch_hash()[:12]
++
++    @property
++    def id(self) -> str:
++        return f"{self.dataset}/{self.budget_class or 'B?'}/{self.hash12}"
++
++    # ── (de)serialização
++    def to_dict(self) -> dict:
++        d = asdict(self)
++        d["arch_sha256"] = self.arch_hash()
++        d["id"] = self.id
++        return d
++
++    def to_json(self, indent: Optional[int] = 2) -> str:
++        return json.dumps(self.to_dict(), indent=indent, sort_keys=True)
++
++    @classmethod
++    def from_dict(cls, d: dict) -> "BackboneSpec":
++        d = copy.deepcopy(d)
++        d.pop("arch_sha256", None)
++        d.pop("id", None)
++        spec = cls(stem=LayerSpec(**d.pop("stem")),
++                   stages=[StageSpec(name=s["name"], layers=[LayerSpec(**L) for L in s["layers"]])
++                           for s in d.pop("stages")],
++                   head=HeadSpec(**d.pop("head")), input=InputSpec(**d.pop("input")),
++                   cost=CostSpec(**d.pop("cost")), provenance=Provenance(**d.pop("provenance")), **d)
++        return spec
++
++    @classmethod
++    def from_json(cls, s: str) -> "BackboneSpec":
++        d = json.loads(s)
++        stored = d.get("arch_sha256")
++        spec = cls.from_dict(d)
++        if stored is not None and stored != spec.arch_hash():
++            raise SpecError(f"arch_sha256 gravado {stored[:12]} != recalculado {spec.hash12}")
++        return spec
++
++    def copy(self) -> "BackboneSpec":
++        return copy.deepcopy(self)
++
++
++# ─────────────────────────────────────────────────────────────────── GrowthSpec
++@dataclass
++class OpRecord:
++    op: str                                   # widen | deepen_identity | deepen_residual_zero | add_skip_zero | head_widen | ...
++    where: Dict[str, Any] = field(default_factory=dict)
++    params: Dict[str, Any] = field(default_factory=dict)
++    exact_claimed: bool = True
++    condition: str = ""                       # condição da exatidão (ex.: "eval(); ZCA congelado")
++
++
++@dataclass
++class LayerInheritance:
++    child_layer: str
++    child_index: int
++    parent_layer: Optional[str]
++    parent_index: Optional[int]
++    origin: str                               # inherited | fp_widen | fp_identity | fp_residual_zero | new
++    shape_parent: Dict[str, List[int]]
++    shape_child: Dict[str, List[int]]
++    out_map: Optional[List[int]]              # canal do filho -> canal do pai (-1 = novo)
++    n_inherited_elements: int
++    n_new_elements: int
++    new_init: str = ""
++    skip_added: bool = False
++    in_map: Optional[List[int]] = None        # canal de entrada do filho -> do pai (-1 = novo; None = vem de camada nova)
++
++
++@dataclass
++class PreservationRecord:
++    data: Dict[str, Any] = field(default_factory=dict)       # nunca teste
++    exact_claimed: bool = True
++    tolerance_rel: float = 1e-5
++    map_max_abs: Optional[float] = None       # mapa final do encoder, canais herdados
++    map_rel_l2: Optional[float] = None
++    map_cos_min: Optional[float] = None
++    per_layer: List[Dict[str, Any]] = field(default_factory=list)
++    emb_max_abs: Optional[float] = None       # embedding >= 1280 (só com cabeça herdada)
++    emb_rel_l2: Optional[float] = None
++    emb_cos_min: Optional[float] = None
++    verdict: str = "unmeasured"               # exact | approx | not_preserving | violated | unmeasured
++
++
++@dataclass
++class GrowthSpec:
++    parent: str
++    child: str
++    parent_hash: str
++    child_hash: str
++    operations: List[OpRecord]
++    inheritance: Dict[str, Any]               # {"head": inherit_zero_cols|reinit, "per_layer": [...], "head_detail": {...}}
++    params: Dict[str, Any]
++    macs: Dict[str, int]
++    flops: Dict[str, int]
++    preservation: PreservationRecord
++    protect: Dict[str, Any] = field(default_factory=lambda: {"mode": "full", "scope": "inherited_elements"})
++    twin: Dict[str, Any] = field(default_factory=lambda: {"reinit_twin_id": None})
++    schema: str = SCHEMA_GROWTH
++
++    @property
++    def op_label(self) -> str:
++        return "+".join(dict.fromkeys(o.op for o in self.operations))
++
++    @property
++    def id(self) -> str:
++        return f"{self.parent_hash[:12]}->{self.child_hash[:12]}:{self.op_label}"
++
++    def content_hash(self) -> str:
++        """Hash das operações + pai + filho (não inclui medições)."""
++        return sha256_hex({"schema": self.schema, "parent": self.parent_hash, "child": self.child_hash,
++                           "operations": [asdict(o) for o in self.operations]})
++
++    def to_dict(self) -> dict:
++        d = asdict(self)
++        d["id"] = self.id
++        d["content_sha256"] = self.content_hash()
++        return d
++
++    def to_json(self, indent: Optional[int] = 2) -> str:
++        return json.dumps(self.to_dict(), indent=indent, sort_keys=True)
++
++    @classmethod
++    def from_dict(cls, d: dict) -> "GrowthSpec":
++        d = copy.deepcopy(d)
++        d.pop("id", None)
++        stored = d.pop("content_sha256", None)
++        g = cls(operations=[OpRecord(**o) for o in d.pop("operations")],
++                preservation=PreservationRecord(**d.pop("preservation")), **d)
++        if stored is not None and stored != g.content_hash():
++            raise SpecError("content_sha256 do GrowthSpec não confere")
++        return g
++
++    @classmethod
++    def from_json(cls, s: str) -> "GrowthSpec":
++        return cls.from_dict(json.loads(s))
++
++
++def dataclass_fields(cls) -> List[str]:
++    return [f.name for f in dataclasses.fields(cls)]
+diff --git a/tests/backbones/_helpers.py b/tests/backbones/_helpers.py
+new file mode 100644
+index 0000000..195f4f7
+--- /dev/null
++++ b/tests/backbones/_helpers.py
+@@ -0,0 +1,80 @@
++"""Utilidades dos testes de ga_search/backbones (CPU, fp32, determinístico)."""
++from __future__ import annotations
++
++import torch
++from torch import nn
++
++from ga_search.backbones.build import Backbone, build_backbone
++from ga_search.backbones.spec import BackboneSpec, HeadSpec, InputSpec, LayerSpec, StageSpec
++from ga_search.modehb.ops_norm_act import DecorrelatedBatchNorm, ZCAWhitening
++
++TOL = 1e-5
++
++
++def small_spec(layers, *, head=None, stem=8, stem_act="relu", stem_norm="none", res=32) -> BackboneSpec:
++    """stem conv k3 (pool max) + um estágio 'local' com ``layers`` (LayerSpec)."""
++    return BackboneSpec(stem=LayerSpec(channels=stem, kernel=3, pool="max", activation=stem_act, norm=stem_norm),
++                        stages=[StageSpec(name="local", layers=list(layers))],
++                        head=head or HeadSpec(embed_dim=1280, pooling="gem"),
++                        input=InputSpec(resolution=res)).normalize()
++
++
++def randomize_stats(model: nn.Module, seed: int = 0, x: torch.Tensor | None = None) -> nn.Module:
++    """Torna BN/ZCA/DBN não triviais: BN com stats/afim aleatórios; ZCA ajustado em ativações reais
++    (pré-hook); DBN com running_W atualizado em 5 passos de treino; bias e GatedSkip aleatórios."""
++    g = torch.Generator().manual_seed(seed)
++    with torch.no_grad():
++        for m in model.modules():
++            if isinstance(m, (nn.BatchNorm2d,)):
++                m.running_mean.copy_(torch.randn(m.num_features, generator=g) * 0.1)
++                m.running_var.copy_(torch.rand(m.num_features, generator=g) + 0.5)
++                m.weight.copy_(torch.randn(m.num_features, generator=g) * 0.5 + 1)
++                m.bias.copy_(torch.randn(m.num_features, generator=g) * 0.1)
++            if isinstance(m, nn.Conv2d) and m.bias is not None:
++                m.bias.copy_(torch.randn(m.bias.shape, generator=g) * 0.05)
++    if x is not None:
++        hooks = []
++
++        def fit_hook(mod, inp):
++            if not bool(mod.fitted):
++                mod.fit(inp[0])
++        for m in model.modules():
++            if isinstance(m, ZCAWhitening):
++                hooks.append(m.register_forward_pre_hook(fit_hook))
++        dbn = any(isinstance(m, DecorrelatedBatchNorm) for m in model.modules())
++        was = model.training
++        model.train(dbn)
++        bns = [m for m in model.modules() if isinstance(m, nn.BatchNorm2d)]
++        saved = [(m.running_mean.clone(), m.running_var.clone()) for m in bns]
++        with torch.no_grad():
++            for _ in range(5 if dbn else 1):
++                model(x)
++        with torch.no_grad():
++            for m, (rm, rv) in zip(bns, saved):
++                m.running_mean.copy_(rm)
++                m.running_var.copy_(rv)
++        for h in hooks:
++            h.remove()
++        model.train(was)
++    return model
++
++
++def make_parent(spec: BackboneSpec, seed: int = 0, x: torch.Tensor | None = None) -> Backbone:
++    m = build_backbone(spec, seed=seed, enforce_budget=False)
++    randomize_stats(m, seed, x)
++    return m.eval()
++
++
++def assert_exact(g, tol: float = TOL):
++    p = g.preservation
++    assert p.exact_claimed, g.operations
++    assert p.verdict == "exact", (p.verdict, p.per_layer, p.emb_rel_l2)
++    assert p.map_rel_l2 is not None and p.map_rel_l2 <= tol, p.map_rel_l2
++    assert p.emb_rel_l2 is not None and p.emb_rel_l2 <= tol, p.emb_rel_l2
++    assert p.emb_cos_min >= 1 - 1e-6
++    for r in p.per_layer:
++        assert r["rel_l2"] <= tol, r
++
++
++def x_batch(n=4, res=32, seed=123):
++    return torch.rand(n, 3, res, res, generator=torch.Generator().manual_seed(seed))
+diff --git a/tests/backbones/conftest.py b/tests/backbones/conftest.py
+new file mode 100644
+index 0000000..9cbaf38
+--- /dev/null
++++ b/tests/backbones/conftest.py
+@@ -0,0 +1,9 @@
++import os
++import sys
++from pathlib import Path
++
++import torch
++
++sys.path.insert(0, str(Path(__file__).resolve().parent))          # _helpers
++sys.path.insert(0, str(Path(__file__).resolve().parents[2]))      # raiz do repo (ga_search)
++torch.set_num_threads(int(os.environ.get("OMP_NUM_THREADS", "4")))
+diff --git a/tests/backbones/test_checkpoint.py b/tests/backbones/test_checkpoint.py
+new file mode 100644
+index 0000000..8825923
+--- /dev/null
++++ b/tests/backbones/test_checkpoint.py
+@@ -0,0 +1,102 @@
++"""Checkpoint autocontido: salvar, carregar (strict) e inferir; e inferir SÓ com torch, fora do repo."""
++import os
++import subprocess
++import sys
++
++import pytest
++import torch
++
++from _helpers import make_parent, small_spec, x_batch
++from ga_search.backbones.checkpoint import load_backbone, load_standalone, save_backbone, state_sha256
++from ga_search.backbones.family import REF_FLAT, flat_spec
++from ga_search.backbones.build import build_backbone
++from ga_search.backbones.morphisms import add_skip_zero, start, widen
++from ga_search.backbones.spec import HeadSpec, LayerSpec as L
++
++
++def _complex_model():
++    x = x_batch(4, 32)
++    spec = small_spec([L(12, norm="batch_zca"), L(12, conv="inception", norm="dbn", dbn_group_size=4),
++                       L(12, conv="dwsep", residual="identity"), L(16, residual="project", pool="max")],
++                      head=HeadSpec(pooling="moments", proj="lowrank", rank=24))
++    m = make_parent(spec, seed=11, x=x)
++    res = add_skip_zero(start(m), 1)
++    with torch.no_grad():
++        res.child.blocks[1].skip.weight.normal_(0, 0.1)
++    return res.child.eval(), x
++
++
++@pytest.mark.parametrize("kind", ["reference_b0", "complex"])
++def test_save_load_infer(tmp_path, kind):
++    if kind == "reference_b0":
++        m, x = build_backbone(flat_spec(REF_FLAT["B0"], head=HeadSpec(pooling="meanstd"))).eval(), x_batch(2, 64)
++    else:
++        m, x = _complex_model()
++    with torch.no_grad():
++        ref = m(x)
++    info = save_backbone(m, tmp_path / "bk.pt")
++    ck = torch.load(tmp_path / "bk.pt", weights_only=True)            # só tipos primitivos/tensores
++    assert set(ck) >= {"format", "spec_json", "arch_sha256", "state_dict", "state_sha256", "torchscript"}
++    m2, spec2 = load_backbone(tmp_path / "bk.pt")
++    assert spec2.arch_hash() == m.spec.arch_hash() == info["arch_sha256"]
++    assert state_sha256(m2.state_dict()) == info["state_sha256"]
++    with torch.no_grad():
++        assert torch.equal(m2(x), ref)
++    ts, sj = load_standalone(tmp_path / "bk.pt")
++    with torch.no_grad():
++        assert torch.allclose(ts(x), ref, rtol=1e-6, atol=1e-6)
++    assert sj["head"]["embed_dim"] >= 1280
++
++
++def test_standalone_without_repo(tmp_path):
++    """Subprocesso isolado (python -I, cwd vazio, sem PYTHONPATH): ga_search NÃO importável; infere pelo arquivo."""
++    m, x = _complex_model()
++    with torch.no_grad():
++        ref = m(x)
++    save_backbone(m, tmp_path / "bk.pt")
++    torch.save({"x": x, "ref": ref}, tmp_path / "io.pt")
++    code = r"""
++import io, json, sys, torch
++try:
++    import ga_search  # noqa
++    sys.exit("ga_search importável: teste não isolado")
++except ModuleNotFoundError:
++    pass
++ck = torch.load("bk.pt", map_location="cpu", weights_only=True)
++spec = json.loads(ck["spec_json"])
++ts = torch.jit.load(io.BytesIO(ck["torchscript"])).eval()
++d = torch.load("io.pt", weights_only=True)
++with torch.no_grad():
++    y = ts(d["x"])
++assert y.shape[1] == spec["head"]["embed_dim"] >= 1280
++err = ((y - d["ref"]).norm() / d["ref"].norm()).item()
++print("ok", err)
++assert err < 1e-6, err
++"""
++    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONSTARTUP")}
++    env.update(CUDA_VISIBLE_DEVICES="", OMP_NUM_THREADS="2")
++    r = subprocess.run([sys.executable, "-I", "-c", code], cwd=tmp_path, env=env, capture_output=True, text=True)
++    assert r.returncode == 0 and r.stdout.startswith("ok"), r.stderr + r.stdout
++
++
++def test_tampered_checkpoint_rejected(tmp_path):
++    m = build_backbone(flat_spec(REF_FLAT["B0"], head=HeadSpec(pooling="meanstd")))
++    save_backbone(m, tmp_path / "bk.pt", torchscript=False)
++    ck = torch.load(tmp_path / "bk.pt", weights_only=True)
++    ck["state_dict"]["blocks.0.conv.weight"][0, 0, 0, 0] += 1.0
++    torch.save(ck, tmp_path / "bad.pt")
++    with pytest.raises(ValueError):
++        load_backbone(tmp_path / "bad.pt")
++
++
++def test_grown_child_checkpoint_has_no_parent_dependency(tmp_path):
++    p = build_backbone(flat_spec(REF_FLAT["B0"], head=HeadSpec(pooling="meanstd")))
++    child = widen(start(p), {0: 32, 3: 128}).child
++    x = x_batch(2, 64)
++    with torch.no_grad():
++        ref = child.eval()(x)
++    save_backbone(child, tmp_path / "c.pt")
++    del p
++    m2, _ = load_backbone(tmp_path / "c.pt")
++    with torch.no_grad():
++        assert torch.equal(m2(x), ref)
+diff --git a/tests/backbones/test_cost_budget.py b/tests/backbones/test_cost_budget.py
+new file mode 100644
+index 0000000..1cdef7d
+--- /dev/null
++++ b/tests/backbones/test_cost_budget.py
+@@ -0,0 +1,140 @@
++"""Contagem de params (encoder + cabeça; extras à parte), MACs/FLOPs (FLOPs = 2 x MACs), teto duro e reparo."""
++import pytest
++import torch
++
++from _helpers import small_spec
++from ga_search.backbones.budget import head_candidates, repair_head
++from ga_search.backbones.build import BudgetError, build_backbone, param_count_spec
++from ga_search.backbones.family import REF_FLAT, flat_spec, reference_family_specs
++from ga_search.backbones.spec import BUDGETS, HARD_CAP, HeadSpec, LayerSpec
++
++
++def conv_p(cin, cout, k, bias=True, groups=1):
++    return cout * (cin // groups) * k * k + (cout if bias else 0)
++
++
++def flat_analytic(widths, head_width, embed_bias=True, res=224):
++    """params e MACs da família plana, calculados à mão (independente do código)."""
++    chans = [widths["stem"]] + [w for n in ("local", "intermediate", "abstract") for w in widths[n]]
++    ks = [5] + [3] * (len(chans) - 1)
++    pools = [True] + [i == len(widths[n]) - 1 for n in ("local", "intermediate", "abstract")
++                      for i in range(len(widths[n]))]
++    cin, p, macs, r = 3, 0, 0, res
++    for c, k, pl in zip(chans, ks, pools):
++        p += conv_p(cin, c, k)
++        macs += r * r * c * cin * k * k
++        cin = c
++        if pl:
++            r //= 2
++    head_p = cin * head_width + (head_width if embed_bias else 0)
++    head_macs = r * r * cin * head_width
++    return p, head_p, macs, head_macs
++
++
++@pytest.mark.parametrize("k", list(REF_FLAT))
++@pytest.mark.parametrize("pooling,width", [("gem", 1280), ("meanstd", 640), ("moments", 320)])
++def test_params_and_flops_reference(k, pooling, width):
++    spec = flat_spec(REF_FLAT[k], head=HeadSpec(pooling=pooling))
++    m = build_backbone(spec, enforce_budget=False)
++    pe, ph, me, mh = flat_analytic(REF_FLAT[k], width)
++    c = m.spec.cost
++    assert (c.params_encoder, c.params_head, c.params_total) == (pe, ph, pe + ph)
++    assert (c.macs_encoder, c.macs_head, c.macs) == (me, mh, me + mh)
++    assert c.flops == 2 * c.macs and "2 * macs" in c.flops_definition
++    assert param_count_spec(spec) == (pe, ph)
++
++
++def test_design_table_numbers():
++    """Tabela §4 do desenho (GeM 1280): totais 0,272/0,882/1,494/2,945/5,231M e GMACs 0,42/1,31/2,27/4,61/7,69."""
++    exp = {"B0": (272272, 0.42), "B1": (881664, 1.31), "B2": (1493504, 2.27), "B3": (2944576, 4.61),
++           "B4": (5230624, 7.69)}
++    for k, (tot, gm) in exp.items():
++        c = build_backbone(flat_spec(REF_FLAT[k]), enforce_budget=False).spec.cost
++        assert c.params_total == tot
++        assert abs(c.macs / 1e9 - gm) < 0.01
++
++
++def test_cost_other_operators_and_extras():
++    L = LayerSpec
++    spec = small_spec([L(8, conv="dwsep", norm="batch"), L(12, conv="inception"), L(12, residual="project"),
++                       L(12, residual="gated", pool="max")], head=HeadSpec(pooling="moments", proj="lowrank", rank=16),
++                      res=32)
++    spec.extras_not_counted = {"ae_decoder": 10_000, "ssl_projector": 5_000}
++    m = build_backbone(spec, enforce_budget=False)
++    enc = (conv_p(3, 8, 3) + (8 * 9 + conv_p(8, 8, 1, bias=False) + 2 * 8)          # stem; dwsep (dw sem bias) + BN
++           + conv_p(8, 3, 1) + conv_p(8, 3, 3) + conv_p(8, 3, 5) + conv_p(8, 3, 1)   # inception 3/3/3/3
++           + conv_p(12, 12, 3) + 12 * 12                                   # conv + skip project 1x1 sem bias
++           + conv_p(12, 12, 3) + 1)                                        # conv + gate
++    head = 12 * 16 + conv_p(16, 320, 1)
++    c = m.spec.cost
++    assert (c.params_encoder, c.params_head) == (enc, head)
++    assert c.params_total == enc + head and c.params_extras == {"ae_decoder": 10_000, "ssl_projector": 5_000}
++    macs = (32 * 32 * 8 * 27) // 1 + 0
++    r = 16
++    macs += r * r * 8 * 9 + r * r * 8 * 8                                   # dwsep
++    macs += r * r * 3 * 8 * (1 + 9 + 25 + 1)                                # inception
++    macs += r * r * 12 * 12 * 9 + r * r * 12 * 12                           # conv + project
++    macs += r * r * 12 * 12 * 9                                             # gated conv
++    r = 8
++    macs_head = r * r * 12 * 16 + r * r * 16 * 320
++    assert c.macs == macs + macs_head and c.macs_head == macs_head and c.flops == 2 * c.macs
++
++
++def test_meta_and_real_mac_count_agree():
++    spec = small_spec([LayerSpec(12, norm="zca"), LayerSpec(16, pool="max")])     # ZCA força a contagem real
++    spec2 = small_spec([LayerSpec(12, norm="batch"), LayerSpec(16, pool="max")])  # meta
++    a, b = build_backbone(spec, enforce_budget=False), build_backbone(spec2, enforce_budget=False)
++    assert a.spec.cost.macs == b.spec.cost.macs
++
++
++def test_hard_cap_and_class_cap():
++    big = flat_spec({"stem": 64, "local": [128, 128], "intermediate": [256, 256, 256], "abstract": [512, 512]})
++    e, h = param_count_spec(big)
++    assert e + h > HARD_CAP
++    with pytest.raises(BudgetError):
++        build_backbone(big, enforce_budget=False)          # teto duro vale sempre
++    b1 = flat_spec(REF_FLAT["B1"], budget_class="B1")       # GeM: 881.664 > 800k
++    with pytest.raises(BudgetError):
++        build_backbone(b1)
++
++
++def test_head_repair_keeps_dim_and_changes_hash():
++    b1 = flat_spec(REF_FLAT["B1"], budget_class="B1")
++    fixed, log = repair_head(b1, "B1")
++    assert log["repaired"] and log["to_head"] == "meanstd1280" and fixed.head.embed_dim == 1280
++    assert fixed.hash12 != b1.hash12 and b1.head.pooling == "gem"   # entrada intacta
++    m = build_backbone(fixed)
++    assert m.spec.cost.params_total <= BUDGETS["B1"] and m(torch.rand(1, 3, 64, 64)).shape == (1, 1280)
++    # encoder grande: só lowrank cabe
++    tight = flat_spec({"stem": 32, "local": [64], "intermediate": [128, 128], "abstract": [300, 300]},
++                      head=HeadSpec(pooling="gem", embed_dim=1536), budget_class="B2")
++    fixed2, log2 = repair_head(tight, "B2")
++    assert fixed2.head.proj == "lowrank" and fixed2.head.embed_dim == 1536
++    m2 = build_backbone(fixed2)
++    assert m2(torch.rand(1, 3, 64, 64)).shape == (1, 1536)
++    # nada cabe -> erro (o reparo nunca reduz a dimensão)
++    with pytest.raises(BudgetError):
++        repair_head(flat_spec(REF_FLAT["B4"]), "B0")
++    assert all(h.embed_dim == 1280 for h in head_candidates(HeadSpec()))
++
++
++def test_reference_family_in_bands():
++    specs, log = reference_family_specs()
++    assert log["from_head"] == "gem1280" and log["head"] == "meanstd1280" and log["repaired"]
++    lo = 0
++    for k, s in zip(REF_FLAT, specs):
++        m = build_backbone(s)
++        n = m.spec.cost.params_total
++        assert lo < n <= BUDGETS[k] <= HARD_CAP and m.spec.budget_class == k
++        assert m.spec.head.embed_dim >= 1280
++        lo = BUDGETS[k]
++
++
++def test_growth_beyond_hard_cap_refused():
++    """Um morfismo que leva o filho acima de 5,5M é recusado no finalize (nunca há filho > teto)."""
++    from ga_search.backbones.morphisms import finalize, start, widen
++    specs, _ = reference_family_specs()
++    b4 = build_backbone(specs[-1])
++    res = widen(start(b4), {len(b4.blocks) - 1: 560})
++    with pytest.raises(BudgetError):
++        finalize(res)
+diff --git a/tests/backbones/test_family_chain.py b/tests/backbones/test_family_chain.py
+new file mode 100644
+index 0000000..deb1023
+--- /dev/null
++++ b/tests/backbones/test_family_chain.py
+@@ -0,0 +1,48 @@
++"""Família de referência plana B0 -> B4 por morfismo exato: preservação em toda a cadeia (224 px, eval, fp32)."""
++import pytest
++import torch
++
++from _helpers import TOL, assert_exact
++from ga_search.backbones.family import REF_FLAT, build_reference_chain, reference_family_specs
++from ga_search.backbones.spec import BUDGETS, GrowthSpec
++
++
++@pytest.fixture(scope="module")
++def chain():
++    x = torch.rand(2, 3, 224, 224, generator=torch.Generator().manual_seed(7))
++    models, edges, log = build_reference_chain(x, seed=0, data={"source": "synthetic_uniform01", "seed": 7})
++    return x, models, edges, log
++
++
++def test_chain_targets_and_bands(chain):
++    _, models, edges, _ = chain
++    specs, _ = reference_family_specs()
++    assert [m.spec.arch_hash() for m in models] == [s.arch_hash() for s in specs]
++    for k, m in zip(REF_FLAT, models):
++        assert m.spec.budget_class == k and m.spec.cost.params_total <= BUDGETS[k]
++    assert len(edges) == 4
++
++
++def test_every_edge_exact(chain):
++    _, models, edges, _ = chain
++    for g, p, c in zip(edges, models[:-1], models[1:]):
++        assert_exact(g)
++        assert g.parent == p.spec.id and g.child == c.spec.id
++        assert g.inheritance["head"] == "inherit_zero_cols"
++        assert g.inheritance["totals"]["inherited"] == p.spec.cost.params_total
++        assert g.inheritance["totals"]["inherited"] + g.inheritance["totals"]["new"] == c.spec.cost.params_total
++        assert g.params["delta"] == c.spec.cost.params_total - p.spec.cost.params_total
++        assert g.flops["child"] == 2 * g.macs["child"]
++        assert GrowthSpec.from_json(g.to_json()).id == g.id
++
++
++@torch.no_grad()
++def test_end_to_end_b0_equals_b4(chain):
++    """Composição: o embedding 1280 do B4 recém-crescido é o do B0 (e o mapa final 14x14 nos canais herdados)."""
++    x, models, _, _ = chain
++    e0, e4 = models[0].eval()(x), models[-1].eval()(x)
++    rel = ((e4 - e0).norm() / e0.norm()).item()
++    assert e0.shape == e4.shape == (2, 1280) and rel <= TOL
++    f0, f4 = models[0].features(x), models[-1].features(x)
++    assert f0.shape[-1] == f4.shape[-1] == 14
++    assert ((f4[:, :f0.shape[1]] - f0).norm() / f0.norm()).item() <= TOL
+diff --git a/tests/backbones/test_morphisms.py b/tests/backbones/test_morphisms.py
+new file mode 100644
+index 0000000..5060b5e
+--- /dev/null
++++ b/tests/backbones/test_morphisms.py
+@@ -0,0 +1,192 @@
++"""Cada morfismo exato: erro de preservação <= 1e-5 (rel-L2) em eval(), CPU, fp32, no mapa e no embedding 1280."""
++import pytest
++import torch
++
++from _helpers import TOL, assert_exact, make_parent, small_spec, x_batch
++from ga_search.backbones.morphisms import (NotExactError, add_skip_zero, apply_ops, deepen_identity,
++                                           deepen_residual_zero, finalize, start, widen)
++from ga_search.backbones.spec import GrowthSpec, HeadSpec, LayerSpec
++
++X = x_batch()
++
++
++def L(c, **kw):
++    return LayerSpec(channels=c, **kw)
++
++
++# (nome, camadas do estágio, larguras novas {índice plano: largura}, kernels)
++WIDEN_CASES = [
++    ("conv_plain", [L(12), L(16, pool="max")], {0: 12, 1: 20, 2: 24}, {}),
++    ("conv_kernel_grow", [L(12), L(16, pool="max")], {1: 18, 2: 20}, {1: 5}),
++    ("batchnorm", [L(12, norm="batch"), L(16, norm="batch", pool="max")], {0: 10, 1: 18, 2: 22}, {}),
++    ("instance", [L(12, norm="instance"), L(16, pool="max")], {1: 14, 2: 20}, {}),
++    ("residual_identity", [L(8, residual="identity", norm="batch"), L(16, pool="max")], {0: 12, 1: 12, 2: 20}, {}),
++    ("residual_project", [L(12, residual="project", norm="batch"), L(16, residual="project", pool="max")],
++     {1: 15, 2: 21}, {}),
++    ("dwsep", [L(12, conv="dwsep", norm="batch"), L(16, conv="dwsep", pool="max")], {0: 11, 1: 16, 2: 24}, {}),
++    ("depthwise_cin_eq_cout", [L(12), L(12, conv="depthwise", norm="batch", pool="max")], {1: 18, 2: 18}, {}),
++    ("pointwise", [L(12, conv="pointwise"), L(16, pool="max")], {1: 13, 2: 20}, {}),
++    ("inception", [L(12, conv="inception", norm="batch"), L(16, conv="inception", pool="max")],
++     {0: 10, 1: 19, 2: 27}, {}),
++    ("zca_frozen", [L(12, norm="zca"), L(16, norm="batch_zca", pool="max")], {1: 18, 2: 22}, {}),
++    ("dbn_eval", [L(24, norm="dbn"), L(20, norm="batch_dbn", pool="max", dbn_group_size=8)], {1: 40, 2: 28}, {}),
++    ("acts", [L(12, activation="gelu"), L(12, activation="silu"), L(12, activation="selu"),
++              L(12, activation="leaky_relu"), L(16, activation="prelu", pool="avg")], {1: 14, 2: 15, 3: 16, 4: 17, 5: 18}, {}),
++    ("gated_skip_widen", [L(8, residual="gated"), L(16, pool="max")], {0: 10, 1: 10, 2: 18}, {}),
++]
++
++
++@pytest.mark.parametrize("name,layers,widths,kernels", WIDEN_CASES, ids=[c[0] for c in WIDEN_CASES])
++def test_widen_exact(name, layers, widths, kernels):
++    spec = small_spec(layers)
++    parent = make_parent(spec, seed=1, x=X)
++    if name == "gated_skip_widen":
++        with torch.no_grad():
++            parent.blocks[1].skip.gate.fill_(0.7)          # skip já treinado (gate != 0)
++    res = widen(start(parent), widths, kernels=kernels, seed=5)
++    g = finalize(res, X)
++    assert_exact(g)
++    ops = [o.op for o in g.operations]
++    assert "widen" in ops
++    assert ("head_widen" in ops) == (len(parent.blocks) - 1 in widths and
++                                     widths[len(parent.blocks) - 1] != parent.spec.layers()[-1].channels)
++    # todos os elementos do pai foram herdados (widen não corta)
++    assert g.inheritance["totals"]["inherited"] == sum(p.numel() for p in parent.parameters())
++    assert g.inheritance["totals"]["new"] == sum(p.numel() for p in res.child.parameters()) - \
++        sum(p.numel() for p in parent.parameters())
++    if name in ("zca_frozen", "dbn_eval"):
++        assert any("congelado" in o.condition for o in g.operations), [o.condition for o in g.operations]
++
++
++@pytest.mark.parametrize("pooling,proj,bn", [("gap", "full", False), ("gem", "full", False),
++                                             ("gem_learn", "full", False), ("meanstd", "full", False),
++                                             ("moments", "full", False), ("combo", "full", False),
++                                             ("gem", "full", True), ("meanstd", "lowrank", False),
++                                             ("gem", "lowrank", False)])
++def test_head_widen_exact_any_pooling(pooling, proj, bn):
++    head = HeadSpec(embed_dim=1280, pooling=pooling, proj=proj, rank=24 if proj == "lowrank" else None, bn=bn)
++    spec = small_spec([L(12), L(16, pool="max")], head=head)
++    parent = make_parent(spec, seed=2, x=X)
++    if bn:
++        with torch.no_grad():
++            hb = parent.head.proj[1]
++            hb.running_mean.normal_(0, 0.1)
++            hb.running_var.uniform_(0.5, 1.5)
++    res = widen(start(parent), {2: 30}, seed=3)
++    g = finalize(res, X)
++    assert_exact(g)
++    assert g.inheritance["head"] == "inherit_zero_cols"
++    hd = g.inheritance["head_detail"]
++    assert hd["n_new_elements"] == (30 - 16) * (24 if proj == "lowrank" else res.child.head.width)
++    assert res.child.head.out_dim == 1280 if proj == "full" else res.child.head.head.out_dim == 1280
++
++
++@pytest.mark.parametrize("norm", ["none", "batch"])
++@pytest.mark.parametrize("at", [1, 2, 3])
++def test_deepen_identity_exact(norm, at):
++    spec = small_spec([L(12), L(16, pool="max")])
++    parent = make_parent(spec, seed=3)
++    res = deepen_identity(start(parent), at, norm=norm)
++    g = finalize(res, X)
++    assert_exact(g)
++    rec = g.inheritance["per_layer"][at]
++    assert rec["origin"] == "fp_identity" and rec["n_inherited_elements"] == 0
++    assert len(res.child.blocks) == len(parent.blocks) + 1
++
++
++def test_deepen_identity_refuses_negative_input_and_declares_approx():
++    spec = small_spec([L(12, activation="gelu"), L(16, pool="max")])
++    parent = make_parent(spec, seed=4)
++    with pytest.raises(NotExactError):
++        deepen_identity(start(parent), 2)
++    res = deepen_identity(start(parent), 2, allow_approx=True)
++    g = finalize(res, X)
++    assert not g.preservation.exact_claimed
++    assert g.preservation.verdict in ("approx", "not_preserving")
++
++
++@pytest.mark.parametrize("act", ["silu", "gelu", "relu"])
++@pytest.mark.parametrize("conv,norm", [("conv", "none"), ("dwsep", "none"), ("conv", "batch"), ("inception", "none")])
++def test_deepen_residual_zero_exact(act, conv, norm):
++    # entrada com valores negativos (camada anterior GELU): residual zero é exato para qualquer entrada
++    spec = small_spec([L(12, activation="gelu"), L(16, pool="max")])
++    parent = make_parent(spec, seed=5)
++    res = deepen_residual_zero(start(parent), 2, act=act, conv=conv, norm=norm)
++    g = finalize(res, X)
++    assert_exact(g)
++    assert g.inheritance["per_layer"][2]["origin"] == "fp_residual_zero"
++
++
++@pytest.mark.parametrize("layers,layer,kind", [
++    ([L(8), L(16, pool="max")], 1, "gated"),          # cin == cout -> lambda = 0
++    ([L(12), L(16, pool="max")], 2, "project"),       # cin != cout -> 1x1 = 0
++    ([L(12, norm="batch"), L(16, pool="max")], 1, "project"),
++])
++def test_add_skip_zero_exact(layers, layer, kind):
++    parent = make_parent(small_spec(layers), seed=6, x=X)
++    res = add_skip_zero(start(parent), layer)
++    g = finalize(res, X)
++    assert_exact(g)
++    assert res.child.spec.layers()[layer].residual == kind
++    assert g.inheritance["per_layer"][layer]["skip_added"]
++
++
++def test_composite_chain_exact_and_masks():
++    """deepen_residual_zero + add_skip_zero + deepen_identity + widen + head_widen numa aresta."""
++    spec = small_spec([L(8, norm="batch"), L(12, conv="inception"), L(16, conv="dwsep", pool="max")])
++    parent = make_parent(spec, seed=7, x=X)
++    res = apply_ops(parent, [
++        {"op": "deepen_residual_zero", "at": 2, "act": "silu"},
++        {"op": "add_skip_zero", "layer": 1},
++        {"op": "deepen_identity", "at": 4},
++        {"op": "widen", "widths": {0: 10, 1: 10, 2: 10, 3: 17, 4: 17, 5: 24}, "seed": 9},
++    ])
++    g = finalize(res, X)
++    assert_exact(g)
++    assert [o.op for o in g.operations] == ["deepen_residual_zero", "add_skip_zero", "deepen_identity", "widen",
++                                            "head_widen"]
++    assert g.inheritance["totals"]["inherited"] == sum(p.numel() for p in parent.parameters())
++    # todo elemento herdado tem o mesmo valor que no pai (via mapas de canais) -> máscaras coerentes
++    for r in g.inheritance["per_layer"]:
++        if r["parent_index"] is not None:
++            assert r["n_inherited_elements"] == sum(p.numel() for p in parent.blocks[r["parent_index"]].parameters())
++    # o GrowthSpec serializa e volta igual
++    g2 = GrowthSpec.from_json(g.to_json())
++    assert g2.id == g.id and g2.content_hash() == g.content_hash()
++
++
++def test_layernorm_groupnorm_not_exact_declared():
++    spec = small_spec([L(12, norm="layer"), L(16, norm="group", pool="max")])
++    parent = make_parent(spec, seed=8)
++    with pytest.raises(NotExactError):
++        widen(start(parent), {1: 16})
++    res = widen(start(parent), {1: 16, 2: 24}, allow_approx=True)
++    g = finalize(res, X)
++    assert not g.preservation.exact_claimed
++    assert g.preservation.verdict in ("approx", "not_preserving")
++    assert any(not o.exact_claimed for o in g.operations)
++
++
++def test_dbn_group_split_refused():
++    # pai C=12, group_size 8 -> grupos [0,8),[8,12); filho C=20 alargado na camada ANTERIOR, mas a própria
++    # camada DBN herda canais 0..11 nas posições 0..11 e o grupo [8,16) do filho contém o grupo [8,12) inteiro.
++    spec = small_spec([L(12, norm="dbn", dbn_group_size=8), L(16, pool="max")])
++    parent = make_parent(spec, seed=9, x=X)
++    g = finalize(widen(start(parent), {1: 20}), X)
++    assert_exact(g)
++    # inception + DBN: canais novos intercalados por ramo partem os grupos -> recusado
++    spec2 = small_spec([L(16, conv="inception", norm="dbn", dbn_group_size=4), L(16, pool="max")])
++    parent2 = make_parent(spec2, seed=9, x=X)
++    with pytest.raises(NotExactError):
++        widen(start(parent2), {1: 20})
++
++
++def test_negative_control_detects_violation():
++    """Controle negativo: uma coluna 'nova' não-zero quebra a preservação e o veredito acusa 'violated'."""
++    parent = make_parent(small_spec([L(12), L(16, pool="max")]), seed=10)
++    res = widen(start(parent), {1: 20})
++    with torch.no_grad():
++        res.child.blocks[2].conv.weight[:, 12:] += 0.5        # colunas dos canais novos
++    g = finalize(res, X)
++    assert g.preservation.verdict == "violated"
++    assert g.preservation.emb_rel_l2 > TOL
+diff --git a/tests/backbones/test_spec_hash.py b/tests/backbones/test_spec_hash.py
+new file mode 100644
+index 0000000..cde6369
+--- /dev/null
++++ b/tests/backbones/test_spec_hash.py
+@@ -0,0 +1,85 @@
++"""BackboneSpec/GrowthSpec: JSON ida-e-volta, hash estável (valor dourado), invariâncias e validação."""
++import json
++import subprocess
++import sys
++from pathlib import Path
++
++import pytest
++
++from ga_search.backbones.family import REF_FLAT, flat_spec
++from ga_search.backbones.spec import (BackboneSpec, HeadSpec, LayerSpec, SpecError, StageSpec, band_of,
++                                      canonical_json)
++
++ROOT = Path(__file__).resolve().parents[2]
++
++# Valores dourados: mudar o esquema/canonicalização do hash muda estes valores (exige bump de versão).
++GOLDEN_B0_GEM = "6a77a0a93aa6"
++GOLDEN_B0_MEANSTD = "c7f23392f942"
++
++
++def test_hash_golden_values():
++    assert flat_spec(REF_FLAT["B0"]).hash12 == GOLDEN_B0_GEM
++    assert flat_spec(REF_FLAT["B0"], head=HeadSpec(pooling="meanstd")).hash12 == GOLDEN_B0_MEANSTD
++
++
++def test_hash_stable_across_processes():
++    code = ("import sys; sys.path.insert(0, %r); from ga_search.backbones.family import flat_spec, REF_FLAT; "
++            "print(flat_spec(REF_FLAT['B3']).arch_hash())" % str(ROOT))
++    outs = {subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True,
++                           env={"PYTHONHASHSEED": str(s), "PATH": "/usr/bin:/bin"}).stdout.strip() for s in (0, 1, 2)}
++    assert outs == {flat_spec(REF_FLAT["B3"]).arch_hash()}
++
++
++def test_hash_invariances():
++    a = flat_spec(REF_FLAT["B2"])
++    b = a.copy()
++    b.dataset, b.split, b.budget_class = "flowers", 3, "B2"
++    b.cost.params_total, b.cost.macs = 123, 456
++    b.provenance.parent, b.provenance.notes = "x", ["y"]
++    for L in b.layers():
++        L.init = "spifil3"                       # proveniência do peso, não arquitetura
++    assert a.arch_hash() == b.arch_hash()
++    c = a.copy()
++    c.stages[0].layers[0].channels += 1
++    d = a.copy()
++    d.head.pooling = "moments"
++    e = a.copy()
++    e.stages[1].layers[0].norm = "batch"
++    assert len({a.hash12, c.hash12, d.hash12, e.hash12}) == 4
++
++
++def test_json_roundtrip_and_tamper_detection():
++    a = flat_spec(REF_FLAT["B1"], dataset="remote_sensing", budget_class="B1")
++    a.extras_not_counted = {"ae_decoders": 12345, "ssl_projector": 999}
++    s = a.to_json()
++    b = BackboneSpec.from_json(s)
++    assert b.to_json() == s and b.id == a.id == f"remote_sensing/B1/{a.hash12}"
++    d = json.loads(s)
++    d["stages"][0]["layers"][0]["channels"] = 65
++    with pytest.raises(SpecError):
++        BackboneSpec.from_json(json.dumps(d))
++    assert canonical_json({"b": 1, "a": [1, 2]}) == '{"a":[1,2],"b":1}'
++
++
++def test_validation_rules():
++    with pytest.raises(SpecError):
++        HeadSpec(embed_dim=1024).validate()                          # R11: nunca < 1280
++    HeadSpec(embed_dim=1536).validate()
++    bad = flat_spec(REF_FLAT["B0"])
++    bad.stages[0].layers[0].residual = "identity"                    # 24 -> 48: identity impossível
++    with pytest.raises(SpecError):
++        bad.validate()
++    bad2 = flat_spec(REF_FLAT["B0"])
++    bad2.stages = [bad2.stages[1], bad2.stages[0]]                   # ordem de estágios errada
++    with pytest.raises(SpecError):
++        bad2.validate()
++    inc = BackboneSpec(stem=LayerSpec(channels=8, pool="max"),
++                       stages=[StageSpec("abstract", [LayerSpec(channels=10, conv="inception")])]).normalize()
++    assert inc.stages[0].layers[0].branches == [["b1", 1, 4], ["b3", 3, 2], ["b5", 5, 2], ["pool", 1, 2]]
++    inc.validate()
++
++
++def test_bands():
++    assert band_of(300_000) == "B0" and band_of(300_001) == "B1" and band_of(5_500_000) == "B4"
++    with pytest.raises(SpecError):
++        band_of(5_500_001)

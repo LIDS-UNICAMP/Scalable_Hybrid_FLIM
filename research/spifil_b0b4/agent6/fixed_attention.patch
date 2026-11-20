@@ -1,0 +1,1509 @@
+diff --git a/ga_search/modehb/fixed_attention.py b/ga_search/modehb/fixed_attention.py
+new file mode 100644
+index 0000000..e0e6691
+--- /dev/null
++++ b/ga_search/modehb/fixed_attention.py
+@@ -0,0 +1,1085 @@
++"""fixed_attention.py -- atencao SEM parametros treinaveis (ATTENTION_ADDENDUM.md, 17/11).
++
++Todos os operadores sao funcoes matematicas das ativacoes: nenhum ``nn.Parameter``, nenhum
++W_Q/W_K/W_V, nenhum otimizador proprio.  Dois tipos de operador, sempre identificados:
++
++* **sem parametros** (``fitted_statistics = False``): A/B/E e C/D com ``alignment='none'``;
++* **com estatistica ajustada no treino** (``fitted_statistics = True``): C/D com
++  ``alignment in {shared_channels, pca, svd}`` -- media/desvio, PCA ou CCA (SVD da
++  covariancia cruzada branqueada) ajustados SO em imagens de treino, sem rotulos, e guardados
++  como *buffers* (``requires_grad=False``; nao aparecem em ``parameters()``).
++
++Operadores (todos em fp32 interno, devolvem o dtype de entrada):
++
++A ``FixedSelfAttention``      Q=K=V=X.  Queries = todas as posicoes do mapa; keys/values =
++                              ``tokens`` (16/49/196) obtidos por pooling adaptativo do proprio
++                              mapa (com tokens >= H*W e exatamente Q=K=V=X).  Y = softmax(sim/tau) V.
++B ``FixedAttentionPooling``   query global (GAP / GeM / GAP refinada uma vez) x posicoes ->
++                              softmax -> pesos espaciais w; o pooling da cabeca (gap, gem,
++                              meanstd, moments, combo) vira a versao ponderada por w.
++C ``FixedCrossAttention``     queries = camada profunda (ex. L3); keys/values = camada rasa
++                              (ex. L2) alinhada a profunda por estatistica de treino.
++D ``FixedMultiScaleAttention``queries = camada profunda; keys/values = banco de tokens de varias
++                              camadas, cada uma alinhada a profunda; sem convolucoes novas.
++E ``FixedCovarianceAttention``2a ordem: A = softmax(Gram_canais/tau) (C x C), Y = A X (mistura de
++                              canais por correlacao).  Difere do ``CovReadout`` (que e uma
++                              LEITURA de 2a ordem fora da cabeca): aqui o operador age no mapa e a
++                              saida continua a cabeca original de >= 1280 dims.
++
++Fusao residual com alpha FIXO (convexa):  Y = (1 - alpha) * X + alpha * Op(X).
++``alpha = 0`` => identidade EXATA (curto-circuito; e, mesmo calculando, ``1*X + 0*Op = X`` em
++IEEE quando Op e finito) -- preserva a funcao num crescimento.
++
++``attention_aggregation`` (como os values sao combinados):
++    weighted_mean  sum_j a_ij v_j (atencao padrao);
++    gem            (sum_j a_ij clamp(v_j, eps)^p)^(1/p), p=3 (media de potencia ponderada);
++    mean           (1/M) sum_j v_j -- CONTROLE sem similaridade (so contexto global).
++    Em ``fixed_pool`` o gene escolhe a query: mean -> GAP, gem -> GeM, weighted_mean -> GAP
++    refinada por uma passada de atencao.
++
++TTA (``tta_views``): none / tta4 / tta8 / multiscale, deterministico, agregacao explicita
++(``mean`` = media uniforme, igual a ``pooling_head.encode_tta``; ``l2_mean`` = media das vistas
++normalizadas em L2).  Custo multiplicativo em ``tta_cost``.
++
++Genes do adendo: ``GENE_SPACE`` + ``repair_attention_genes`` (shapes, tokens, memoria,
++alinhamento, localizacao).  Custos: ``attention_cost`` (FLOPs = 2*MAC + softmax/normas,
++bytes de pico) e ``measure_latency``.
++
++NAO modifica nenhum modulo existente; ``EmbeddingHead`` so e lida (``proj``, ``pool``,
++``pooling``, ``block``, ``p``).
++"""
++from __future__ import annotations
++
++import math
++import time
++from dataclasses import asdict, dataclass, field, replace
++from typing import Any, Callable, Iterable, Sequence
++
++import torch
++import torch.nn as nn
++import torch.nn.functional as F
++from torch import Tensor
++
++# ─── espaco de genes (adendo) ────────────────────────────────────────────────
++
++ATTENTION_TYPES = ("none", "fixed_self", "fixed_pool", "fixed_cross", "fixed_multiscale",
++                   "fixed_covariance")
++SIMILARITIES = ("cosine", "normalized_dot")
++TOKENS = (16, 49, 196)
++ALPHAS = (0.0, 0.25, 0.5, 0.75, 1.0)
++TEMPERATURES = (0.03, 0.05, 0.1, 0.25, 0.5, 1.0)
++NORMALIZATIONS = ("none", "l2", "zscore")
++AGGREGATIONS = ("mean", "weighted_mean", "gem")
++ALIGNMENTS = ("none", "shared_channels", "pca", "svd")
++LOCATIONS = ("final", "head")          # + int (depois do bloco i)
++TTA_MODES = ("none", "tta4", "tta8", "multiscale")
++TTA_GEOMETRIES = ("rot_flip", "flip_scale")
++TTA_AGGS = ("mean", "l2_mean")
++MULTISCALE_FACTORS = (0.75, 1.0, 1.25)
++
++GENE_SPACE: dict[str, tuple] = {
++    "attention_type": ATTENTION_TYPES,
++    "attention_location": LOCATIONS,
++    "attention_source_layers": ("auto",),
++    "attention_similarity": SIMILARITIES,
++    "attention_temperature": TEMPERATURES,
++    "attention_tokens": TOKENS,
++    "attention_residual_alpha": ALPHAS,
++    "attention_exclude_self": (False, True),
++    "attention_normalization": NORMALIZATIONS,
++    "attention_aggregation": AGGREGATIONS,
++    "attention_alignment": ALIGNMENTS,
++}
++
++MAP_OPS = ("fixed_self", "fixed_cross", "fixed_multiscale", "fixed_covariance")
++CROSS_OPS = ("fixed_cross", "fixed_multiscale")
++EPS = 1e-6
++GEM_P = 3.0
++STAT_EPS = 1e-5          # = pooling_head.STAT_EPS
++GEM_EPS = 1e-6           # = pooling_head.GEM_EPS
++ALIGN_SHRINK = 1e-3      # encolhimento relativo dos autovalores no branqueamento (canais mortos)
++DEFAULT_MAX_LOGITS = 1 << 25   # elementos de logits por pedaco de queries (~128 MiB fp32)
++
++
++# ─── especificacao ────────────────────────────────────────────────────────────
++
++@dataclass(frozen=True)
++class AttentionSpec:
++    """Genes do adendo (valores ja reparados por ``repair_attention_genes``)."""
++    attention_type: str = "none"
++    attention_location: Any = "final"          # "final" | "head" | int (depois do bloco i)
++    attention_source_layers: tuple = ()        # blocos (indices >= 0) p/ cross / multiscale
++    attention_similarity: str = "cosine"
++    attention_temperature: float = 0.1
++    attention_tokens: int = 49
++    attention_residual_alpha: float = 0.5
++    attention_exclude_self: bool = False
++    attention_normalization: str = "none"
++    attention_aggregation: str = "weighted_mean"
++    attention_alignment: str = "none"
++    align_k: int = 64                          # dims do espaco alinhado (pca/svd)
++    max_logits: int = DEFAULT_MAX_LOGITS       # memoria: pedacos de queries
++
++    def to_dict(self) -> dict:
++        d = asdict(self)
++        d["attention_source_layers"] = list(self.attention_source_layers)
++        return d
++
++
++# ─── primitivas ───────────────────────────────────────────────────────────────
++
++def normalize_tokens(t: Tensor, mode: str) -> Tensor:
++    """``t [B,N,C]`` -> tokens para a SIMILARIDADE (os values nao sao normalizados).
++    l2: por token; zscore: por canal sobre os tokens da imagem (canal morto -> 0)."""
++    if mode == "none":
++        return t
++    if mode == "l2":
++        return t / t.norm(dim=-1, keepdim=True).clamp_min(EPS)
++    if mode == "zscore":
++        mu = t.mean(1, keepdim=True)
++        sd = t.std(1, keepdim=True, unbiased=False)
++        return (t - mu) / (sd + EPS)
++    raise ValueError(f"attention_normalization invalida {mode!r}")
++
++
++def normalize_pair(q: Tensor, k: Tensor, mode: str, ref: Tensor | None = None) -> tuple[Tensor, Tensor]:
++    """Normaliza queries e keys.  zscore com ``ref`` usa as estatisticas por canal de ``ref``
++    para os DOIS (mesmo espaco: self-attention e pooling); sem ``ref`` cada um usa as suas."""
++    if mode == "zscore" and ref is not None:
++        mu = ref.mean(1, keepdim=True)
++        sd = ref.std(1, keepdim=True, unbiased=False) + EPS
++        return (q - mu) / sd, (k - mu) / sd
++    return normalize_tokens(q, mode), normalize_tokens(k, mode)
++
++
++def similarity_logits(q: Tensor, k: Tensor, similarity: str, tau: float) -> Tensor:
++    """``q [B,Nq,D]``, ``k [B,Nk,D]`` -> logits ``[B,Nq,Nk]`` (fp32)."""
++    if tau <= 0:
++        raise ValueError("attention_temperature precisa ser > 0")
++    if similarity == "cosine":
++        q = q / q.norm(dim=-1, keepdim=True).clamp_min(EPS)
++        k = k / k.norm(dim=-1, keepdim=True).clamp_min(EPS)
++        return (q @ k.transpose(1, 2)) / tau
++    if similarity == "normalized_dot":
++        return (q @ k.transpose(1, 2)) / (math.sqrt(q.shape[-1]) * tau)
++    raise ValueError(f"attention_similarity invalida {similarity!r}")
++
++
++def grid_side(tokens: int) -> int:
++    g = math.isqrt(int(tokens))
++    if g * g != int(tokens):
++        raise ValueError(f"attention_tokens={tokens} nao e quadrado perfeito")
++    return g
++
++
++def map_tokens(x: Tensor, tokens: int | None) -> tuple[Tensor, tuple[int, int]]:
++    """``x [B,C,H,W]`` -> ``([B,M,C], (gh, gw))`` por pooling adaptativo medio para uma grade
++    ``sqrt(tokens)``; ``tokens=None`` ou grade >= mapa -> todas as posicoes (sem pooling)."""
++    _, _, h, w = x.shape
++    if tokens is not None:
++        g = grid_side(tokens)
++        gh, gw = min(g, h), min(g, w)
++        if (gh, gw) != (h, w):
++            x = F.adaptive_avg_pool2d(x, (gh, gw))
++    gh, gw = x.shape[2], x.shape[3]
++    return x.flatten(2).transpose(1, 2), (gh, gw)
++
++
++def self_cell_index(h: int, w: int, gh: int, gw: int, device=None) -> Tensor:
++    """Para cada posicao (i,j) de um mapa h x w, o indice do token (grade gh x gw) cuja celula
++    adaptativa contem a posicao (``floor(i*gh/h)``).  Com gh=h, gw=w e a diagonal."""
++    ii = (torch.arange(h, device=device) * gh) // h
++    jj = (torch.arange(w, device=device) * gw) // w
++    return (ii[:, None] * gw + jj[None, :]).reshape(-1)
++
++
++def attend(q: Tensor, k: Tensor, v: Tensor, *, similarity: str, tau: float, aggregation: str,
++           self_index: Tensor | None = None, max_logits: int = DEFAULT_MAX_LOGITS,
++           return_mass: Sequence[int] | None = None):
++    """Atencao fixa exata, em pedacos de queries (memoria O(B * chunk * Nk)).
++
++    ``q [B,Nq,D]`` e ``k [B,Nk,D]`` ja normalizados p/ similaridade; ``v [B,Nk,Dv]``.
++    ``self_index [Nq]``: token excluido de cada query (exclude_self); linhas com Nk=1 nao sao
++    mascaradas.  ``return_mass``: tamanhos de grupos consecutivos de keys -> devolve tambem a
++    massa media de atencao por grupo (diagnostico do multiescala)."""
++    b, nq, _ = q.shape
++    nk = k.shape[1]
++    if aggregation == "mean":
++        out = v.mean(1, keepdim=True).expand(b, nq, v.shape[-1])
++        mass = None
++        if return_mass is not None:
++            mass = torch.tensor([s / nk for s in return_mass])
++        return (out, mass) if return_mass is not None else out
++    chunk = max(1, int(max_logits) // max(1, b * nk))
++    outs, mass_acc = [], None
++    for s in range(0, nq, chunk):
++        lg = similarity_logits(q[:, s:s + chunk], k, similarity, tau)
++        if self_index is not None and nk > 1:
++            idx = self_index[s:s + chunk].to(lg.device)
++            lg = lg.clone()
++            lg[:, torch.arange(len(idx), device=lg.device), idx] = float("-inf")
++        a = torch.softmax(lg, dim=-1)
++        if aggregation == "weighted_mean":
++            outs.append(a @ v)
++        elif aggregation == "gem":
++            outs.append((a @ v.clamp(min=GEM_EPS).pow(GEM_P)).clamp_min(0).pow(1.0 / GEM_P))
++        else:
++            raise ValueError(f"attention_aggregation invalida {aggregation!r}")
++        if return_mass is not None:
++            parts = torch.split(a, list(return_mass), dim=-1)
++            m = torch.stack([p.sum(-1).mean() for p in parts]).detach().cpu() * a.shape[1]
++            mass_acc = m if mass_acc is None else mass_acc + m
++    out = torch.cat(outs, 1)
++    if return_mass is not None:
++        return out, mass_acc / nq
++    return out
++
++
++def residual_mix(x: Tensor, y: Tensor, alpha: float) -> Tensor:
++    """(1-alpha) x + alpha y, alpha FIXO; alpha=0 -> x exato."""
++    if alpha == 0.0:
++        return x
++    if alpha == 1.0:
++        return y
++    return (1.0 - alpha) * x + alpha * y
++
++
++# ─── base ─────────────────────────────────────────────────────────────────────
++
++class _FixedOp(nn.Module):
++    """Base: nenhum parametro; estatisticas ajustadas ficam em buffers."""
++    fitted_statistics = False
++
++    def __init__(self, spec: AttentionSpec):
++        super().__init__()
++        self.spec = spec
++        self.force_compute = False     # testes: calcula mesmo com alpha=0
++
++    @property
++    def n_trainable_params(self) -> int:
++        return sum(p.numel() for p in self.parameters())
++
++    @property
++    def n_fitted_values(self) -> int:
++        return sum(b.numel() for b in self.buffers())
++
++    def _skip(self) -> bool:
++        return self.spec.attention_residual_alpha == 0.0 and not self.force_compute
++
++
++# ─── A. self-attention fixa ──────────────────────────────────────────────────
++
++class FixedSelfAttention(_FixedOp):
++    """Q=K=V=X; queries em resolucao cheia, keys/values = tokens do proprio mapa."""
++
++    def forward(self, x: Tensor) -> Tensor:
++        if self._skip():
++            return x
++        s = self.spec
++        b, c, h, w = x.shape
++        xf = x.float()
++        q = xf.flatten(2).transpose(1, 2)                       # [B,N,C]
++        kv, (gh, gw) = map_tokens(xf, s.attention_tokens)
++        sidx = self_cell_index(h, w, gh, gw, x.device) if s.attention_exclude_self else None
++        qn, kn = normalize_pair(q, kv, s.attention_normalization, ref=q)
++        y = attend(qn, kn, kv,
++                   similarity=s.attention_similarity, tau=s.attention_temperature,
++                   aggregation=s.attention_aggregation, self_index=sidx, max_logits=s.max_logits)
++        y = y.transpose(1, 2).reshape(b, c, h, w)
++        return residual_mix(xf, y, s.attention_residual_alpha).to(x.dtype)
++
++
++# ─── B. attention pooling fixa ───────────────────────────────────────────────
++
++def weighted_gem(z: Tensor, w: Tensor, p: Tensor | float = GEM_P) -> Tensor:
++    """``z [B,C,N]`` (ja achatado), ``w [B,N]`` somando 1 -> ``[B,C]``."""
++    zf = z.float().clamp(min=GEM_EPS)
++    if isinstance(p, Tensor):
++        p = p.float()
++    return (zf.pow(p) * w[:, None, :]).sum(-1).pow(1.0 / p)
++
++
++def weighted_central_stats(z: Tensor, w: Tensor, order: int) -> list[Tensor]:
++    """Versao ponderada de ``pooling_head._central_stats`` (w uniforme -> mesma conta)."""
++    zf = z.float()
++    wv = w[:, None, :]
++    mean = (zf * wv).sum(-1)
++    d = zf - mean[..., None]
++    var = (d.pow(2) * wv).sum(-1)
++    std = (var + STAT_EPS).sqrt()
++    out = [mean, std]
++    if order >= 3:
++        out.append((d.pow(3) * wv).sum(-1) / std.pow(3))
++    if order >= 4:
++        out.append((d.pow(4) * wv).sum(-1) / var.add(STAT_EPS).pow(2) - 3.0)
++    return out
++
++
++def weighted_head_pool(head: nn.Module, z: Tensor, w: Tensor) -> Tensor:
++    """Pooling da ``EmbeddingHead`` com pesos espaciais ``w [B,H*W]`` (dimensao identica)."""
++    zf = z.float().flatten(2)
++    pooling, b = head.pooling, head.block
++    if pooling == "gap":
++        y = (zf * w[:, None, :]).sum(-1)
++    elif pooling == "gem":
++        y = weighted_gem(zf, w)
++    elif pooling == "gem_learn":
++        y = weighted_gem(zf, w, head.p)
++    elif pooling == "combo":
++        y = torch.cat([(zf * w[:, None, :]).sum(-1), weighted_gem(zf[:, :b], w)], 1)
++    else:
++        stats = weighted_central_stats(zf, w, head.n_blocks)
++        y = torch.cat([stats[0]] + [s_[:, :b] for s_ in stats[1:]], 1)
++    return y.to(z.dtype)
++
++
++class FixedAttentionPooling(_FixedOp):
++    """Pesos espaciais w = (1-alpha)/N + alpha*softmax(sim(query, x_i)/tau).
++    ``attention_aggregation`` escolhe a query: mean -> GAP, gem -> GeM, weighted_mean -> GAP
++    refinada por uma passada (q2 = sum_i a_i x_i)."""
++
++    def weights(self, x: Tensor) -> Tensor:
++        s = self.spec
++        b, c, h, w = x.shape
++        n = h * w
++        if self._skip():
++            return torch.full((b, n), 1.0 / n, device=x.device)
++        t = x.float().flatten(2).transpose(1, 2)                # [B,N,C]
++        mode = s.attention_normalization
++        if s.attention_aggregation == "gem":
++            qv = x.float().clamp(min=GEM_EPS).pow(GEM_P).mean((2, 3)).pow(1.0 / GEM_P)[:, None, :]
++        else:
++            qv = t.mean(1, keepdim=True)
++        qn, tn = normalize_pair(qv, t, mode, ref=t)
++        a = torch.softmax(similarity_logits(qn, tn, s.attention_similarity,
++                                            s.attention_temperature), -1)[:, 0]
++        if s.attention_aggregation == "weighted_mean":
++            q2 = (a[:, :, None] * t).sum(1, keepdim=True)
++            q2n, _ = normalize_pair(q2, t, mode, ref=t)
++            a = torch.softmax(similarity_logits(q2n, tn, s.attention_similarity,
++                                                s.attention_temperature), -1)[:, 0]
++        al = s.attention_residual_alpha
++        return (1.0 - al) / n + al * a
++
++    def forward(self, head: nn.Module, z: Tensor, source: Tensor | None = None) -> Tensor:
++        """``z`` = mapa projetado da cabeca; ``source`` = mapa de onde saem os pesos
++        (o proprio ``z`` se None).  alpha=0 -> ``head.pool(z)`` exato."""
++        if self._skip():
++            return head.pool(z)
++        src = z if source is None else source
++        if src.shape[2:] != z.shape[2:]:
++            raise ValueError("source e z precisam da mesma resolucao")
++        return weighted_head_pool(head, z, self.weights(src))
++
++
++# ─── alinhamento (C/D): estatisticas de treino, sem rotulos ──────────────────
++
++def _sym_eigh(c: Tensor) -> tuple[Tensor, Tensor]:
++    """eigh fp64 deterministico com sinal fixado (maior |componente| positiva)."""
++    w, v = torch.linalg.eigh(c.double())
++    idx = v.abs().argmax(0)
++    sign = torch.sign(v[idx, torch.arange(v.shape[1])])
++    sign[sign == 0] = 1
++    return w, v * sign
++
++
++def _whitener(x: Tensor, k: int) -> tuple[Tensor, Tensor]:
++    """PCA-branqueamento top-k de ``x [n,C]`` (fp64): devolve (media, W [C,k])."""
++    mu = x.mean(0)
++    xc = x - mu
++    cov = xc.T @ xc / max(1, x.shape[0] - 1)
++    w, v = _sym_eigh(cov)
++    w, v = w.flip(0)[:k], v.flip(1)[:, :k]
++    lam = w.clamp_min(0) + ALIGN_SHRINK * w.clamp_min(0).mean().clamp_min(EPS)
++    return mu, v / lam.sqrt()[None, :]
++
++
++class Alignment(nn.Module):
++    """Projeta queries (camada profunda, Cq) e keys (camada rasa, Ck) num espaco comum de dim k.
++
++    none            identidade; exige Cq == Ck (o reparo troca para pca se nao).
++    shared_channels identidade em canais, com z-score por canal ajustado no treino; exige
++                    Cq == Ck e so faz sentido com correspondencia de canais (skip identidade).
++    pca             PCA-branqueamento top-k de cada camada + rotacao de Procrustes ortogonal
++                    ajustada em pares de posicoes co-localizadas (nao trata eixos arbitrarios
++                    de PCA como equivalentes).
++    svd             CCA: SVD da covariancia cruzada das duas camadas branqueadas; eixos = pares
++                    canonicos (correlacao maxima entre posicoes co-localizadas).
++    ``back`` [k, Cq] (pseudo-inversa) leva o espaco alinhado de volta a camada profunda."""
++
++    def __init__(self, mode: str, cq: int, ck: int, k: int):
++        super().__init__()
++        if mode not in ALIGNMENTS:
++            raise ValueError(f"attention_alignment invalido {mode!r}")
++        if mode in ("none", "shared_channels") and cq != ck:
++            raise ValueError(f"alignment {mode} exige Cq == Ck ({cq} != {ck}); reparar para pca")
++        self.mode, self.cq, self.ck = mode, int(cq), int(ck)
++        self.k = int(cq if mode in ("none", "shared_channels") else min(k, cq, ck))
++        self.fitted = mode == "none"
++        for name, shape in (("mu_q", (cq,)), ("mu_k", (ck,)), ("w_q", (cq, self.k)),
++                            ("w_k", (ck, self.k)), ("back", (self.k, cq))):
++            self.register_buffer(name, torch.zeros(shape))
++        if mode == "none":
++            self.w_q.copy_(torch.eye(cq)), self.w_k.copy_(torch.eye(ck)), self.back.copy_(torch.eye(cq))
++
++    @torch.no_grad()
++    def fit(self, xq: Tensor, xk: Tensor) -> "Alignment":
++        """``xq [n,Cq]`` e ``xk [n,Ck]``: pares de posicoes co-localizadas de imagens de TREINO."""
++        if self.mode == "none":
++            return self
++        xq, xk = xq.double(), xk.double()
++        if self.mode == "shared_channels":
++            mq, mk = xq.mean(0), xk.mean(0)
++            sq = xq.std(0).clamp_min(EPS)
++            sk = xk.std(0).clamp_min(EPS)
++            wq, wk = torch.diag(1.0 / sq), torch.diag(1.0 / sk)
++        else:
++            mq, wq = _whitener(xq, self.k)
++            mk, wk = _whitener(xk, self.k)
++            zq, zk = (xq - mq) @ wq, (xk - mk) @ wk
++            m = zk.T @ zq / max(1, zq.shape[0] - 1)            # [k,k] cov cruzada branqueada
++            u, _, vh = torch.linalg.svd(m)
++            if self.mode == "pca":                              # Procrustes: zk R ~ zq
++                wk = wk @ (u @ vh)
++            else:                                               # svd/CCA
++                wk, wq = wk @ u, wq @ vh.T
++            # sinal deterministico por eixo: correlacao q/k positiva
++            sgn = torch.sign((((xq - mq) @ wq) * ((xk - mk) @ wk)).sum(0))
++            sgn[sgn == 0] = 1
++            wq, wk = wq * sgn, wk * sgn
++        self.mu_q.copy_(mq.float()), self.mu_k.copy_(mk.float())
++        self.w_q.copy_(wq.float()), self.w_k.copy_(wk.float())
++        self.back.copy_(torch.linalg.pinv(wq, rtol=1e-6).float())
++        self.fitted = True
++        return self
++
++    def q(self, t: Tensor) -> Tensor:
++        return (t - self.mu_q) @ self.w_q
++
++    def kv(self, t: Tensor) -> Tensor:
++        return (t - self.mu_k) @ self.w_k
++
++    def to_query_space(self, t: Tensor) -> Tensor:
++        return t @ self.back + self.mu_q
++
++
++# ─── C/D. cross-attention e multiescala fixas ────────────────────────────────
++
++class FixedCrossAttention(_FixedOp):
++    """Queries = mapa profundo; keys/values = tokens das camadas fonte alinhadas.
++    Com 1 fonte e C (fixed_cross); com varias fontes (+ opcionalmente a propria camada) e D
++    (fixed_multiscale: banco multiescala, pesos de escala emergem da softmax)."""
++
++    def __init__(self, spec: AttentionSpec, cq: int, source_channels: Sequence[int],
++                 include_self: bool = False):
++        super().__init__(spec)
++        self.include_self = bool(include_self)
++        chans = list(source_channels) + ([cq] if include_self else [])
++        mode = spec.attention_alignment
++        aligns = [Alignment(mode, cq, ck, spec.align_k) for ck in source_channels]
++        if include_self:   # a propria camada entra no banco no espaco da 1a fonte
++            aligns.append(Alignment("none" if mode == "none" else mode, cq, cq, spec.align_k))
++        self.aligns = nn.ModuleList(aligns)
++        self.channels = chans
++        self.last_scale_mass: Tensor | None = None
++        if mode != "none":
++            self.fitted_statistics = True
++
++    @property
++    def is_fitted(self) -> bool:
++        return all(a.fitted for a in self.aligns)
++
++    @torch.no_grad()
++    def fit_pairs(self, xq: Tensor, xks: Sequence[Tensor]) -> "FixedCrossAttention":
++        srcs = list(xks) + ([xq] if self.include_self else [])
++        for a, xk in zip(self.aligns, srcs):
++            a.fit(xq, xk)
++        return self
++
++    def forward(self, xq: Tensor, sources: Sequence[Tensor]) -> Tensor:
++        if self._skip():
++            return xq
++        if not self.is_fitted:
++            raise RuntimeError("alinhamento nao ajustado: chame fit() com imagens de TREINO")
++        s = self.spec
++        b, c, h, w = xq.shape
++        tq = xq.float().flatten(2).transpose(1, 2)                  # [B,N,Cq]
++        srcs = list(sources) + ([xq] if self.include_self else [])
++        # query no espaco de cada alinhamento: com alinhamentos diferentes por fonte, a query
++        # precisa ser a mesma -> usamos o espaco do 1o alinhamento para as queries e
++        # re-expressamos keys das outras fontes nele (via volta ao espaco da camada profunda).
++        a0 = self.aligns[0]
++        q = a0.q(tq)
++        keys, sizes = [], []
++        for a, src in zip(self.aligns, srcs):
++            tk, _ = map_tokens(src.float(), s.attention_tokens)
++            kz = a.kv(tk)                                           # espaco alinhado de a
++            if a is not a0:
++                kz = a0.q(a.to_query_space(kz))                     # -> espaco de a0
++            keys.append(kz), sizes.append(kz.shape[1])
++        kv = torch.cat(keys, 1)
++        qn, kn = normalize_pair(q, kv, s.attention_normalization)   # camadas distintas: stats proprias
++        y, mass = attend(qn, kn, kv, similarity=s.attention_similarity, tau=s.attention_temperature,
++                         aggregation=s.attention_aggregation, max_logits=s.max_logits,
++                         return_mass=sizes)
++        self.last_scale_mass = mass
++        y = a0.to_query_space(y).transpose(1, 2).reshape(b, c, h, w)
++        return residual_mix(xq.float(), y, s.attention_residual_alpha).to(xq.dtype)
++
++
++# ─── E. atencao de 2a ordem (covariancia de canais) ──────────────────────────
++
++class FixedCovarianceAttention(_FixedOp):
++    """A = softmax(G/tau) com G = Gram/correlacao entre canais sobre as posicoes (C x C);
++    Y = A X.  normalization: none -> Gram/N centrado (covariancia); zscore -> correlacao;
++    l2 -> cosseno entre canais.  exclude_self mascara a diagonal (c -> c)."""
++
++    def forward(self, x: Tensor) -> Tensor:
++        if self._skip():
++            return x
++        s = self.spec
++        b, c, h, w = x.shape
++        xf = x.float().flatten(2)                                   # [B,C,N]
++        n = xf.shape[-1]
++        xc = xf - xf.mean(-1, keepdim=True)
++        if s.attention_normalization == "zscore":
++            xn = xc / (xc.pow(2).mean(-1, keepdim=True).sqrt() + EPS)
++            g = xn @ xn.transpose(1, 2) / n
++        elif s.attention_normalization == "l2":
++            xn = xc / xc.norm(dim=-1, keepdim=True).clamp_min(EPS)
++            g = xn @ xn.transpose(1, 2)
++        else:
++            g = xc @ xc.transpose(1, 2) / n
++            if s.attention_similarity == "normalized_dot":
++                g = g / math.sqrt(c)
++        g = g / s.attention_temperature
++        if s.attention_exclude_self and c > 1:
++            g = g.masked_fill(torch.eye(c, dtype=torch.bool, device=g.device), float("-inf"))
++        a = torch.softmax(g, -1)
++        if s.attention_aggregation == "mean":
++            y = xf.mean(1, keepdim=True).expand_as(xf)
++        elif s.attention_aggregation == "gem":
++            y = (a @ xf.clamp(min=GEM_EPS).pow(GEM_P)).clamp_min(0).pow(1.0 / GEM_P)
++        else:
++            y = a @ xf
++        y = y.reshape(b, c, h, w)
++        return residual_mix(x.float(), y, s.attention_residual_alpha).to(x.dtype)
++
++
++# ─── reparo dos genes ─────────────────────────────────────────────────────────
++
++def _nearest(v: float, grid: Sequence[float]) -> float:
++    return min(grid, key=lambda g: (abs(g - v), g))
++
++
++def repair_attention_genes(genes: dict, *, block_channels: Sequence[int],
++                           block_hw: Sequence[tuple[int, int]], head_width: int,
++                           batch_size: int = 64, mem_budget_bytes: float = 4 * 2 ** 30,
++                           n_fit_samples: int | None = None) -> tuple[dict, list[str]]:
++    """Genes brutos (DE/mutacao) -> genes validos + notas de reparo (registradas no job).
++
++    Regras: valores fora da grade -> mais proximo/padrao; tokens <= posicoes do mapa de keys
++    (e quadrado); cross/multiscale precisam de >= 2 blocos e fontes estritamente mais rasas que
++    a query (senao -> fixed_self); alinhamento none/shared_channels com canais diferentes ->
++    pca; align_k <= min(C) e <= amostras; exclude_self so em self/covariance; location head so
++    p/ self/pool/covariance; memoria: tokens diminuem ate caber (o pedaco de queries ja e exato);
++    alpha=0 -> operador vira identidade (registrado).  A dimensao da cabeca (>= 1280, R11) nunca
++    muda: nenhum operador altera canais."""
++    g = {k: genes.get(k, v[0] if k != "attention_source_layers" else "auto")
++         for k, v in GENE_SPACE.items()}
++    for k in ("align_k", "max_logits"):
++        if k in genes:
++            g[k] = genes[k]
++    notes: list[str] = []
++    nb = len(block_channels)
++    if nb == 0:
++        raise ValueError("encoder sem blocos")
++
++    def fix(key, grid, default):
++        if g[key] not in grid:
++            notes.append(f"{key}={g[key]!r} invalido -> {default!r}")
++            g[key] = default
++    fix("attention_type", ATTENTION_TYPES, "none")
++    fix("attention_similarity", SIMILARITIES, "cosine")
++    fix("attention_normalization", NORMALIZATIONS, "none")
++    fix("attention_aggregation", AGGREGATIONS, "weighted_mean")
++    fix("attention_alignment", ALIGNMENTS, "none")
++    g["attention_exclude_self"] = bool(g["attention_exclude_self"])
++    t = g["attention_temperature"]
++    if not isinstance(t, (int, float)) or not t > 0 or not math.isfinite(t):
++        notes.append(f"attention_temperature={t!r} -> 0.1")
++        g["attention_temperature"] = 0.1
++    a = float(g["attention_residual_alpha"])
++    if a not in ALPHAS:
++        a2 = _nearest(min(max(a, 0.0), 1.0), ALPHAS)
++        notes.append(f"attention_residual_alpha={a} -> {a2}")
++        a = a2
++    g["attention_residual_alpha"] = a
++    tok = g["attention_tokens"]
++    if tok not in TOKENS:
++        tok2 = _nearest(float(tok) if isinstance(tok, (int, float)) else 49, TOKENS)
++        notes.append(f"attention_tokens={tok!r} -> {tok2}")
++        g["attention_tokens"] = int(tok2)
++
++    typ = g["attention_type"]
++    loc = g["attention_location"]
++    if isinstance(loc, str) and loc not in LOCATIONS:
++        try:
++            loc = int(loc)
++        except ValueError:
++            notes.append(f"attention_location={loc!r} -> final")
++            loc = "final"
++    if isinstance(loc, int):
++        if loc < 0:
++            loc += nb
++        if not 0 <= loc < nb:
++            notes.append(f"attention_location={g['attention_location']} fora de [0,{nb}) -> final")
++            loc = "final"
++        elif loc == nb - 1:
++            loc = "final"
++    if loc == "head" and typ in CROSS_OPS:
++        notes.append(f"location head nao vale p/ {typ} -> final")
++        loc = "final"
++    qidx = nb - 1 if loc in ("final", "head") else loc
++
++    src = g["attention_source_layers"]
++    if typ in CROSS_OPS:
++        if qidx == 0:
++            notes.append(f"{typ} sem camada mais rasa que a query (bloco 0) -> fixed_self")
++            typ = "fixed_self"
++        else:
++            if src in ("auto", None, (), []):
++                src = [qidx - 1] if typ == "fixed_cross" else list(range(max(0, qidx - 3), qidx))
++            src = sorted({(s + nb) if s < 0 else s for s in src})
++            bad = [s for s in src if not 0 <= s < qidx]
++            if bad:
++                notes.append(f"source_layers {bad} nao sao mais rasas que a query {qidx} -> removidas")
++                src = [s for s in src if 0 <= s < qidx]
++            if not src:
++                src = [qidx - 1]
++                notes.append(f"source_layers vazio -> [{qidx - 1}]")
++            if typ == "fixed_cross" and len(src) > 1:
++                notes.append(f"fixed_cross usa 1 fonte -> {src[-1]}")
++                src = [src[-1]]
++    if typ not in CROSS_OPS:
++        src = []
++    g["attention_source_layers"] = tuple(src)
++
++    al = g["attention_alignment"]
++    if typ in CROSS_OPS:
++        cq = block_channels[qidx]
++        if al in ("none", "shared_channels") and any(block_channels[s] != cq for s in src):
++            notes.append(f"alignment {al} com canais diferentes {[block_channels[s] for s in src]} vs {cq} -> pca")
++            al = "pca"
++        k = int(g.get("align_k", 64))
++        kmax = min([cq] + [block_channels[s] for s in src])
++        if n_fit_samples is not None:
++            kmax = min(kmax, max(1, n_fit_samples - 1))
++        if k > kmax:
++            notes.append(f"align_k={k} -> {kmax}")
++            k = kmax
++        g["align_k"] = k
++    elif al != "none":
++        notes.append(f"alignment {al} so vale p/ cross/multiscale -> none")
++        al = "none"
++    g["attention_alignment"] = al
++
++    if g["attention_exclude_self"] and typ not in ("fixed_self", "fixed_covariance"):
++        notes.append(f"exclude_self nao se aplica a {typ} -> False")
++        g["attention_exclude_self"] = False
++    if (typ == "fixed_pool" and g["attention_normalization"] == "zscore"
++            and g["attention_aggregation"] in ("mean", "weighted_mean")):
++        # GAP z-scored por canal = vetor nulo -> pesos uniformes (degenerado)
++        notes.append("fixed_pool: zscore com query GAP e degenerado (query nula) -> normalization none")
++        g["attention_normalization"] = "none"
++    # fixed_pool: tokens nao se aplica (query unica, custo O(N)); o gene fica so no hash
++
++    # tokens <= posicoes do mapa de keys
++    if typ in ("fixed_self",) + CROSS_OPS:
++        key_maps = [block_hw[qidx]] if typ == "fixed_self" else [block_hw[s] for s in src]
++        npos = min(h * w for h, w in key_maps)
++        while g["attention_tokens"] > npos and g["attention_tokens"] != TOKENS[0]:
++            new = TOKENS[TOKENS.index(g["attention_tokens"]) - 1]
++            notes.append(f"attention_tokens={g['attention_tokens']} > posicoes {npos} -> {new}")
++            g["attention_tokens"] = new
++        # memoria: logits de um pedaco + saida; se nem 1 linha de queries cabe, reduz tokens
++        hq, wq = block_hw[qidx]
++        cmax = head_width if loc == "head" else block_channels[qidx]
++        out_bytes = 4 * batch_size * hq * wq * cmax * 3
++        while (out_bytes + 4 * batch_size * g["attention_tokens"] * len(src or [0]) * 2
++               > mem_budget_bytes) and g["attention_tokens"] != TOKENS[0]:
++            new = TOKENS[TOKENS.index(g["attention_tokens"]) - 1]
++            notes.append(f"memoria > {mem_budget_bytes / 2**30:.1f} GiB -> tokens {new}")
++            g["attention_tokens"] = new
++        if out_bytes > mem_budget_bytes:
++            notes.append(f"saida {out_bytes / 2**30:.2f} GiB > orcamento: rodar com batch menor")
++    if typ == "fixed_covariance":
++        c = head_width if loc == "head" else block_channels[qidx]
++        if 4 * batch_size * c * c * 3 > mem_budget_bytes:
++            notes.append(f"covariance C={c}: Gram {4 * batch_size * c * c * 3 / 2**30:.2f} GiB > orcamento -> location final")
++            loc = "final" if loc == "head" else loc
++    if g["attention_residual_alpha"] == 0.0 and typ != "none":
++        notes.append("alpha=0: operador = identidade exata (equivalente a none)")
++    g["attention_type"], g["attention_location"] = typ, loc
++    return g, notes
++
++
++def spec_from_genes(genes: dict) -> AttentionSpec:
++    kw = {k: v for k, v in genes.items() if k in AttentionSpec.__dataclass_fields__}
++    kw["attention_source_layers"] = tuple(kw.get("attention_source_layers", ()) or ())
++    return AttentionSpec(**kw)
++
++
++# ─── encoder + cabeca + atencao ──────────────────────────────────────────────
++
++class eval_mode:
++    """Context manager: ``module.eval()`` temporario (restaura os flags de treino)."""
++
++    def __init__(self, module: nn.Module):
++        self.module = module
++
++    def __enter__(self):
++        self.flags = [(m, m.training) for m in self.module.modules()]
++        self.module.eval()
++        return self.module
++
++    def __exit__(self, *exc):
++        for m, f in self.flags:
++            m.training = f
++        return False
++
++
++class FixedAttentionEmbedder(nn.Module):
++    """``head(encoder(x))`` com um operador fixo inserido.  ``encoder`` (iteravel de blocos,
++    como os ``nn.Sequential`` do MO-DEHB) e ``head`` (``EmbeddingHead``) NAO sao submodulos
++    deste objeto (ficam em ``self._net``): ``self.attn`` e o unico submodulo e tem zero
++    parametros.  Nada nos pesos SPiFiL/cabeca e alterado."""
++
++    def __init__(self, encoder: nn.Module, head: nn.Module, spec: AttentionSpec):
++        super().__init__()
++        self._net = (encoder, head)
++        self.spec = spec
++        blocks = list(encoder)
++        self.n_blocks = len(blocks)
++        typ, loc = spec.attention_type, spec.attention_location
++        self.qidx = self.n_blocks - 1 if loc in ("final", "head") else int(loc)
++        self.attn: nn.Module | None = None
++        self.block_channels: list[int] | None = None
++        if typ == "none":
++            self.attn = None
++        elif typ == "fixed_self":
++            self.attn = FixedSelfAttention(spec)
++        elif typ == "fixed_pool":
++            self.attn = FixedAttentionPooling(spec)
++        elif typ == "fixed_covariance":
++            self.attn = FixedCovarianceAttention(spec)
++        elif typ in CROSS_OPS:
++            self._cross_pending = True   # canais so sao conhecidos apos um forward
++        else:
++            raise ValueError(f"attention_type invalido {typ!r}")
++
++    @property
++    def encoder(self):
++        return self._net[0]
++
++    @property
++    def head(self):
++        return self._net[1]
++
++    @property
++    def fitted_statistics(self) -> bool:
++        return bool(getattr(self.attn, "fitted_statistics", False))
++
++    def _block_outputs(self, x: Tensor, upto: int) -> list[Tensor]:
++        outs, h = [], x
++        for i, blk in enumerate(self.encoder):
++            h = blk(h)
++            outs.append(h)
++            if i >= upto:
++                break
++        return outs
++
++    @torch.no_grad()
++    def probe_shapes(self, x: Tensor) -> tuple[list[int], list[tuple[int, int]]]:
++        with eval_mode(self.encoder):        # nunca atualiza running stats do checkpoint
++            outs = self._block_outputs(x[:1], self.n_blocks)
++        return [o.shape[1] for o in outs], [tuple(o.shape[2:]) for o in outs]
++
++    def _build_cross(self, channels: Sequence[int]):
++        s = self.spec
++        src = list(s.attention_source_layers)
++        self.attn = FixedCrossAttention(s, channels[self.qidx], [channels[i] for i in src],
++                                        include_self=s.attention_type == "fixed_multiscale")
++        self._cross_pending = False
++
++    @torch.no_grad()
++    def fit(self, x_train: Tensor, *, bs: int = 32, n_img: int = 160, n_px: int = 256,
++            seed: int = 0, device=None) -> "FixedAttentionEmbedder":
++        """Ajusta as estatisticas (so C/D com alinhamento != none) em imagens de TREINO
++        (as ``n_img`` primeiras, ordem fixa; ``n_px`` posicoes co-localizadas por imagem,
++        sorteadas com gerador semeado -> deterministico).  Sem rotulos."""
++        if self.spec.attention_type not in CROSS_OPS:
++            return self
++        device = device or x_train.device
++        chans, hws = self.probe_shapes(x_train[:1].to(device))
++        self.block_channels = chans
++        self._build_cross(chans)
++        if self.spec.attention_alignment == "none":
++            return self
++        gen = torch.Generator(device="cpu").manual_seed(int(seed))
++        src = list(self.spec.attention_source_layers)
++        if self.spec.attention_type == "fixed_multiscale":
++            src_all = src + [self.qidx]
++        else:
++            src_all = src
++        hq, wq = hws[self.qidx]
++        xs = x_train[:n_img]
++        npx = min(n_px, hq * wq)
++        # um sorteio por IMAGEM (independe de bs): [n_img, npx]
++        idx_all = torch.stack([torch.randperm(hq * wq, generator=gen)[:npx] for _ in range(len(xs))])
++        pq, pk = [], [[] for _ in src_all]
++        for start in range(0, len(xs), bs):
++            b = xs[start:start + bs]
++            idx = idx_all[start:start + len(b)]                      # [b, npx]
++            with eval_mode(self.encoder):
++                outs = self._block_outputs(b.to(device), self.qidx)
++
++            def take(m):
++                f = m.flatten(2).cpu()                                # [b,C,HW]
++                g = torch.gather(f, 2, idx[:, None, :].expand(-1, f.shape[1], -1))
++                return g.transpose(1, 2).reshape(-1, f.shape[1])
++            q = outs[self.qidx].float()
++            pq.append(take(q))
++            for j, si in enumerate(src_all):
++                kmap = outs[si].float()
++                if kmap.shape[2:] != q.shape[2:]:
++                    kmap = F.adaptive_avg_pool2d(kmap, (hq, wq))     # co-localiza na grade da query
++                pk[j].append(take(kmap))
++        xq = torch.cat(pq)
++        xks = [torch.cat(p) for p in pk]
++        if self.spec.attention_type == "fixed_multiscale":
++            xks = xks[:-1]
++        self.attn.fit_pairs(xq, xks)
++        self.attn.to(device)
++        return self
++
++    def forward(self, x: Tensor) -> Tensor:
++        s = self.spec
++        typ = s.attention_type
++        if typ in CROSS_OPS and getattr(self, "_cross_pending", False):
++            if s.attention_alignment != "none":
++                raise RuntimeError("chame fit() (imagens de treino) antes do forward")
++            chans, _ = self.probe_shapes(x)
++            self._build_cross(chans)
++        h, outs = x, []
++        for i, blk in enumerate(self.encoder):
++            h = blk(h)
++            if typ in CROSS_OPS:
++                outs.append(h)
++            if i == self.qidx and s.attention_location != "head":
++                if typ in ("fixed_self", "fixed_covariance"):
++                    h = self.attn(h)
++                elif typ in CROSS_OPS:
++                    h = self.attn(h, [outs[j] for j in s.attention_source_layers])
++        enc_map = h
++        z = self.head.proj(h)
++        if s.attention_location == "head" and typ in ("fixed_self", "fixed_covariance"):
++            z = self.attn(z)
++        if typ == "fixed_pool":
++            src = z if s.attention_location == "head" else enc_map
++            return self.attn(self.head, z, src)
++        return self.head.pool(z)
++
++    @torch.no_grad()
++    def embed(self, X: Tensor, *, bs: int = 32, device=None, tta: str = "none",
++              geometry: str = "rot_flip", tta_agg: str = "mean") -> Tensor:
++        """Avaliacao pos-treino: ``eval()`` + ``no_grad()``, em lotes, com TTA opcional."""
++        enc, head = self._net
++        enc.eval(), head.eval(), self.eval()
++        device = device or X.device
++        views = tta_views(tta, geometry)
++        out = []
++        for b in X.split(bs):
++            b = b.to(device)
++            out.append(aggregate_views([self(v(b)).float() for v in views], tta_agg).cpu())
++        return torch.cat(out)
++
++
++# ─── TTA ──────────────────────────────────────────────────────────────────────
++
++def _rescale(f: float) -> Callable[[Tensor], Tensor]:
++    def t(x: Tensor) -> Tensor:
++        if f == 1.0:
++            return x
++        h, w = x.shape[-2:]
++        size = (max(8, round(h * f)), max(8, round(w * f)))
++        return F.interpolate(x, size=size, mode="bilinear", align_corners=False,
++                             antialias=f < 1.0)
++    return t
++
++
++def tta_views(mode: str = "none", geometry: str = "rot_flip") -> list[Callable[[Tensor], Tensor]]:
++    """Vistas deterministicas sobre ``[B,C,H,W]``.
++
++    rot_flip (cena aerea / microscopia / dermatoscopia):
++        tta4 = id, hflip, vflip, rot180;  tta8 = 4 rot90 x {id, hflip} (= pooling_head);
++    flip_scale (objetos com orientacao canonica, ex. flowers):
++        tta4 = {id, hflip} x escalas {1, 0.875};  tta8 = {id, hflip} x {0.75, 0.875, 1, 1.125};
++    multiscale (as duas geometrias): escalas 0.75 / 1 / 1.25 (bilinear; antialias ao reduzir).
++    O encoder e convolucional + pooling global, logo aceita qualquer tamanho (>= 8 px)."""
++    if mode not in TTA_MODES:
++        raise ValueError(f"tta invalido {mode!r}; use {TTA_MODES}")
++    if geometry not in TTA_GEOMETRIES:
++        raise ValueError(f"geometria invalida {geometry!r}; use {TTA_GEOMETRIES}")
++    ident = lambda x: x
++    if mode == "none":
++        return [ident]
++    if mode == "multiscale":
++        return [_rescale(f) for f in MULTISCALE_FACTORS]
++    if geometry == "rot_flip":
++        if mode == "tta4":
++            return [ident, lambda x: x.flip(3), lambda x: x.flip(2), lambda x: x.flip((2, 3))]
++        return ([lambda x, k=k: torch.rot90(x, k, (2, 3)) for k in range(4)]
++                + [lambda x, k=k: torch.rot90(x.flip(3), k, (2, 3)) for k in range(4)])
++    scales = (1.0, 0.875) if mode == "tta4" else (0.75, 0.875, 1.0, 1.125)
++    return [(lambda x, f=f, fl=fl: _rescale(f)(x.flip(3) if fl else x))
++            for f in scales for fl in (False, True)]
++
++
++def aggregate_views(embs: Sequence[Tensor], agg: str = "mean") -> Tensor:
++    """mean: media uniforme (= encode_tta); l2_mean: media das vistas normalizadas em L2."""
++    if agg == "mean":
++        return torch.stack(list(embs)).mean(0)
++    if agg == "l2_mean":
++        return torch.stack([e / e.norm(dim=1, keepdim=True).clamp_min(EPS) for e in embs]).mean(0)
++    raise ValueError(f"agregacao de TTA invalida {agg!r}; use {TTA_AGGS}")
++
++
++def tta_cost(mode: str, geometry: str = "rot_flip") -> float:
++    """Multiplicador de FLOPs de inferencia (soma das areas relativas das vistas)."""
++    if mode == "none":
++        return 1.0
++    if mode == "multiscale":
++        return float(sum(f * f for f in MULTISCALE_FACTORS))
++    if geometry == "rot_flip":
++        return 4.0 if mode == "tta4" else 8.0
++    scales = (1.0, 0.875) if mode == "tta4" else (0.75, 0.875, 1.0, 1.125)
++    return float(2 * sum(f * f for f in scales))
++
++
++# ─── custo: FLOPs, memoria, latencia ─────────────────────────────────────────
++
++def attention_cost(spec: AttentionSpec, block_channels: Sequence[int],
++                   block_hw: Sequence[tuple[int, int]], head_width: int, head_pooling: str = "gap",
++                   batch_size: int = 1) -> dict:
++    """FLOPs por imagem (2*MAC das matmuls + ~5/elem de softmax + normas/misturas) e bytes de
++    pico do operador para ``batch_size`` (logits de um pedaco + saida + tokens).  Zero params."""
++    typ, a = spec.attention_type, spec.attention_residual_alpha
++    nb = len(block_channels)
++    qidx = nb - 1 if spec.attention_location in ("final", "head") else int(spec.attention_location)
++    hq, wq = block_hw[qidx]
++    n = hq * wq
++    c = head_width if spec.attention_location == "head" else block_channels[qidx]
++    flops, peak, fitted = 0.0, 0.0, 0
++    if typ == "none" or a == 0.0:
++        return {"flops": 0.0, "peak_bytes": 0.0, "fitted_values": 0, "trainable_params": 0,
++                "n_queries": n, "n_keys": 0}
++    if typ == "fixed_self":
++        m = min(spec.attention_tokens, n) if spec.attention_tokens else n
++        flops = n * c + 2 * n * m * c + 5 * n * m + 2 * n * m * c + 3 * n * c + 4 * (n + m) * c
++        chunk = min(n, max(1, spec.max_logits // max(1, batch_size * m)))
++        peak = 4 * batch_size * (2 * chunk * m + 2 * n * c + m * c)
++        nk = m
++    elif typ == "fixed_pool":
++        hw = c if spec.attention_location == "head" else block_channels[qidx]
++        passes = 2 if spec.attention_aggregation == "weighted_mean" else 1
++        order = {"meanstd": 2, "moments": 4}.get(head_pooling, 1)
++        flops = passes * (2 * n * hw + 5 * n + n * hw) + 2 * order * n * head_width
++        peak = 4 * batch_size * (2 * n + n * hw)
++        nk = n
++    elif typ in CROSS_OPS:
++        src = list(spec.attention_source_layers) + ([qidx] if typ == "fixed_multiscale" else [])
++        k = c if spec.attention_alignment in ("none", "shared_channels") else spec.align_k
++        ms = [min(spec.attention_tokens, block_hw[s][0] * block_hw[s][1]) for s in src]
++        m = sum(ms)
++        pool = sum(block_hw[s][0] * block_hw[s][1] * block_channels[s] for s in src)
++        proj = sum(2 * mi * block_channels[s] * k for mi, s in zip(ms, src))
++        flops = pool + proj + 2 * n * c * k + 2 * n * m * k + 5 * n * m + 2 * n * m * k \
++            + 2 * n * k * c + 3 * n * c
++        chunk = min(n, max(1, spec.max_logits // max(1, batch_size * m)))
++        peak = 4 * batch_size * (2 * chunk * m + n * k * 2 + m * k + 2 * n * c)
++        fitted = sum(block_channels[s] * k + c * k + k * c + block_channels[s] + c for s in src)
++        nk = m
++    elif typ == "fixed_covariance":
++        flops = 3 * n * c + 2 * c * c * n + 5 * c * c + 2 * c * c * n + 3 * n * c
++        peak = 4 * batch_size * (2 * c * c + 3 * n * c)
++        nk = c
++    else:
++        raise ValueError(typ)
++    return {"flops": float(flops), "peak_bytes": float(peak), "fitted_values": int(fitted),
++            "trainable_params": 0, "n_queries": n, "n_keys": int(nk)}
++
++
++@torch.no_grad()
++def measure_latency(fn: Callable[[Tensor], Tensor], x: Tensor, reps: int = 5,
++                    warmup: int = 1) -> dict:
++    """Latencia de parede (ms por lote e por imagem) e pico de memoria CUDA quando houver."""
++    cuda = x.is_cuda
++    for _ in range(warmup):
++        fn(x)
++    if cuda:
++        torch.cuda.synchronize()
++        torch.cuda.reset_peak_memory_stats(x.device)
++    t0 = time.perf_counter()
++    for _ in range(reps):
++        fn(x)
++    if cuda:
++        torch.cuda.synchronize()
++    dt = (time.perf_counter() - t0) / reps
++    out = {"ms_per_batch": dt * 1e3, "ms_per_image": dt * 1e3 / len(x), "batch": len(x)}
++    if cuda:
++        out["peak_cuda_bytes"] = float(torch.cuda.max_memory_allocated(x.device))
++    return out
++
++
++# ─── experimentos E0–E8 (presets) ─────────────────────────────────────────────
++
++E_PRESETS: dict[str, dict] = {
++    "E0": {"attention_type": "none"},
++    "E1": {"attention_type": "fixed_pool", "attention_location": "final",
++           "attention_aggregation": "mean", "attention_similarity": "cosine",
++           "attention_temperature": 0.1, "attention_residual_alpha": 0.5},
++    "E2": {"attention_type": "fixed_self", "attention_location": "final", "attention_tokens": 49,
++           "attention_similarity": "cosine", "attention_temperature": 0.1,
++           "attention_residual_alpha": 0.25, "attention_aggregation": "weighted_mean"},
++    "E3": {"attention_type": "fixed_cross", "attention_location": "final",
++           "attention_source_layers": "auto", "attention_alignment": "svd", "attention_tokens": 49,
++           "attention_similarity": "cosine", "attention_temperature": 0.1,
++           "attention_residual_alpha": 0.25, "align_k": 32},
++    "E4": {"attention_type": "fixed_multiscale", "attention_location": "final",
++           "attention_source_layers": "auto", "attention_alignment": "svd", "attention_tokens": 49,
++           "attention_similarity": "cosine", "attention_temperature": 0.1,
++           "attention_residual_alpha": 0.25, "align_k": 32},
++    "E5": {"attention_type": "fixed_covariance", "attention_location": "final",
++           "attention_normalization": "zscore", "attention_temperature": 0.1,
++           "attention_residual_alpha": 0.25, "attention_aggregation": "weighted_mean"},
++}
++E_TTA = {"E6": "tta4", "E7": "tta8", "E8": "multiscale"}
++
++
++def build_embedder(encoder: nn.Module, head: nn.Module, genes: dict, x_probe: Tensor,
++                   *, batch_size: int = 64, mem_budget_bytes: float = 4 * 2 ** 30,
++                   n_fit_samples: int | None = None) -> tuple[FixedAttentionEmbedder, dict, list[str]]:
++    """Repara os genes contra os shapes reais do encoder e constroi o embedder."""
++    tmp = FixedAttentionEmbedder(encoder, head, AttentionSpec())
++    chans, hw = tmp.probe_shapes(x_probe)
++    g, notes = repair_attention_genes(genes, block_channels=chans, block_hw=hw,
++                                      head_width=int(head.width), batch_size=batch_size,
++                                      mem_budget_bytes=mem_budget_bytes,
++                                      n_fit_samples=n_fit_samples)
++    spec = spec_from_genes(g)
++    emb = FixedAttentionEmbedder(encoder, head, spec)
++    emb.block_channels = chans
++    cost = attention_cost(spec, chans, hw, int(head.width), head.pooling, batch_size)
++    cost["block_channels"], cost["block_hw"] = chans, hw
++    return emb, {"genes": spec.to_dict(), "cost": cost}, notes
+diff --git a/tests/modehb/test_fixed_attention.py b/tests/modehb/test_fixed_attention.py
+new file mode 100644
+index 0000000..ceb4353
+--- /dev/null
++++ b/tests/modehb/test_fixed_attention.py
+@@ -0,0 +1,412 @@
++"""Testes de ga_search/modehb/fixed_attention.py (atencao SEM parametros treinaveis)."""
++
++import copy
++import itertools
++
++import pytest
++import torch
++import torch.nn as nn
++
++from ga_search.modehb import fixed_attention as FA
++from ga_search.modehb.pooling_head import POOLINGS, EmbeddingHead, tta_transforms
++
++TYPES = [t for t in FA.ATTENTION_TYPES if t != "none"]
++CHANS = (8, 12, 16)
++
++
++def _encoder(chans=CHANS, bn=True, dead=0):
++    """3 blocos conv -> mapas 16x16, 8x8, 4x4 (entrada 32x32); ``dead`` canais mortos no fim."""
++    torch.manual_seed(0)
++    blocks, cin = [], 3
++    for i, c in enumerate(chans):
++        layers = [nn.Conv2d(cin, c, 3, padding=1)]
++        if bn:
++            layers.append(nn.BatchNorm2d(c))
++        layers += [nn.ReLU(), nn.MaxPool2d(2)]
++        blocks.append(nn.Sequential(*layers))
++        cin = c
++    enc = nn.Sequential(*blocks)
++    if dead:
++        with torch.no_grad():
++            last = enc[-1][0]
++            last.weight[-dead:] = 0
++            last.bias[-dead:] = -1.0     # ReLU -> canal identicamente 0
++    return enc.eval()
++
++
++def _head(pooling="gap", in_ch=CHANS[-1], dim=1280):
++    torch.manual_seed(1)
++    return EmbeddingHead(in_ch, dim, pooling).eval()
++
++
++def _x(n=4, seed=2, size=32):
++    g = torch.Generator().manual_seed(seed)
++    return torch.randn(n, 3, size, size, generator=g)
++
++
++def _genes(typ, **kw):
++    g = {"attention_type": typ, "attention_tokens": 16, "attention_residual_alpha": 0.5,
++         "attention_temperature": 0.25, "align_k": 8}
++    if typ in FA.CROSS_OPS:
++        g["attention_alignment"] = "svd"
++    g.update(kw)
++    return g
++
++
++def _build(typ, pooling="gap", enc=None, fit=True, **kw):
++    enc = enc or _encoder()
++    head = _head(pooling)
++    emb, info, notes = FA.build_embedder(enc, head, _genes(typ, **kw), _x(1))
++    if fit:
++        emb.fit(_x(6, seed=9), bs=3, n_img=6, n_px=16)
++    return emb, enc, head, info, notes
++
++
++# ─── zero parametros treinaveis ──────────────────────────────────────────────
++
++@pytest.mark.parametrize("typ,align", [(t, a) for t in TYPES for a in
++                                       (FA.ALIGNMENTS if t in FA.CROSS_OPS else ("none",))])
++def test_zero_trainable_parameters(typ, align):
++    kw = {"attention_alignment": align} if typ in FA.CROSS_OPS else {}
++    if typ in FA.CROSS_OPS and align in ("none", "shared_channels"):
++        enc = _encoder(chans=(8, 12, 12))     # canais iguais nas 2 ultimas -> sem reparo
++        head = EmbeddingHead(12, 1280, "gap").eval()
++        emb, _, notes = FA.build_embedder(enc, head, _genes(typ, **kw), _x(1))
++        emb.fit(_x(6, seed=9), bs=3, n_img=6, n_px=16)
++    else:
++        emb, *_ = _build(typ, **kw)
++    emb(_x(2))
++    m = emb.attn
++    assert m is not None
++    assert sum(p.numel() for p in m.parameters()) == 0
++    assert sum(p.numel() for p in emb.parameters()) == 0      # encoder/cabeca nao sao submodulos
++    assert list(m.parameters()) == []
++    assert not any(b.requires_grad for b in m.buffers())
++    assert not any(isinstance(x, nn.Linear) for x in m.modules())
++    assert m.n_trainable_params == 0
++    # operador com estatistica ajustada no treino e identificado
++    expected_fitted = typ in FA.CROSS_OPS and emb.spec.attention_alignment != "none"
++    assert emb.fitted_statistics == expected_fitted
++
++
++def test_cost_reports_zero_params_and_positive_flops():
++    for typ in TYPES:
++        emb, enc, head, info, _ = _build(typ)
++        c = info["cost"]
++        assert c["trainable_params"] == 0 and c["flops"] > 0 and c["peak_bytes"] > 0
++    _, _, _, info, _ = _build("fixed_self", attention_residual_alpha=0.0)
++    assert info["cost"]["flops"] == 0
++
++
++# ─── shapes ───────────────────────────────────────────────────────────────────
++
++@pytest.mark.parametrize("typ,pooling", list(itertools.product(TYPES, POOLINGS)))
++def test_embedding_shape_matches_head(typ, pooling):
++    emb, enc, head, _, _ = _build(typ, pooling)
++    y = emb.embed(_x(5), bs=2)
++    assert y.shape == (5, head.out_dim) and head.out_dim >= 1280
++    assert torch.isfinite(y).all()
++
++
++@pytest.mark.parametrize("tokens,hw", [(16, (16, 16)), (49, (14, 14)), (196, (14, 14)),
++                                       (196, (7, 9)), (16, (3, 3))])
++def test_map_operators_preserve_shape(tokens, hw):
++    x = torch.randn(2, 6, *hw)
++    for cls in (FA.FixedSelfAttention, FA.FixedCovarianceAttention):
++        spec = FA.AttentionSpec(attention_type="fixed_self", attention_tokens=tokens)
++        assert cls(spec)(x).shape == x.shape
++    t, (gh, gw) = FA.map_tokens(x, tokens)
++    g = FA.grid_side(tokens)
++    assert (gh, gw) == (min(g, hw[0]), min(g, hw[1])) and t.shape == (2, gh * gw, 6)
++
++
++def test_cross_preserves_query_shape_and_mass_sums_to_one():
++    emb, enc, *_ = _build("fixed_multiscale")
++    with torch.no_grad():
++        outs = emb._block_outputs(_x(2), 2)
++        y = emb.attn(outs[2], [outs[i] for i in emb.spec.attention_source_layers])
++    assert y.shape == outs[2].shape
++    assert torch.isclose(emb.attn.last_scale_mass.sum(), torch.tensor(1.0), atol=1e-5)
++
++
++# ─── estabilidade numerica ───────────────────────────────────────────────────
++
++@pytest.mark.parametrize("typ,norm,sim", list(itertools.product(
++    TYPES, FA.NORMALIZATIONS, FA.SIMILARITIES)))
++def test_no_nan_with_dead_channels(typ, norm, sim):
++    enc = _encoder(dead=8)                              # metade dos canais finais = 0
++    emb, *_ = _build(typ, "moments", enc=enc, attention_normalization=norm,
++                     attention_similarity=sim, attention_temperature=0.03)
++    y = emb.embed(_x(3), bs=3)
++    assert torch.isfinite(y).all()
++
++
++@pytest.mark.parametrize("cls", [FA.FixedSelfAttention, FA.FixedCovarianceAttention])
++def test_all_zero_and_constant_maps_are_finite(cls):
++    for x in (torch.zeros(2, 5, 6, 6), torch.full((2, 5, 6, 6), 3.0)):
++        for norm in FA.NORMALIZATIONS:
++            spec = FA.AttentionSpec(attention_tokens=16, attention_normalization=norm,
++                                    attention_exclude_self=True, attention_temperature=0.03)
++            assert torch.isfinite(cls(spec)(x)).all()
++    pool = FA.FixedAttentionPooling(FA.AttentionSpec(attention_aggregation="gem"))
++    w = pool.weights(torch.zeros(2, 5, 6, 6))
++    assert torch.isfinite(w).all() and torch.allclose(w.sum(1), torch.ones(2))
++
++
++def test_low_precision_inputs_are_finite():
++    x = torch.randn(2, 8, 7, 7) * 50
++    for dt in (torch.bfloat16, torch.float16):
++        for cls in (FA.FixedSelfAttention, FA.FixedCovarianceAttention):
++            y = cls(FA.AttentionSpec(attention_tokens=49, attention_temperature=0.03))(x.to(dt))
++            assert y.dtype == dt and torch.isfinite(y.float()).all()
++
++
++def test_alignment_with_dead_and_collinear_channels_is_finite():
++    g = torch.Generator().manual_seed(0)
++    base = torch.randn(200, 3, generator=g, dtype=torch.float64)
++    xq = torch.cat([base, base[:, :1] * 2, torch.zeros(200, 2, dtype=torch.float64)], 1)  # colinear + mortos
++    xk = torch.cat([base @ torch.randn(3, 4, generator=g, dtype=torch.float64),
++                    torch.zeros(200, 3, dtype=torch.float64)], 1)
++    for mode in ("pca", "svd"):
++        a = FA.Alignment(mode, 6, 7, 4).fit(xq, xk)
++        for b in a.buffers():
++            assert torch.isfinite(b).all()
++
++
++# ─── alpha = 0 => identidade exata ───────────────────────────────────────────
++
++@pytest.mark.parametrize("typ", TYPES)
++@pytest.mark.parametrize("pooling", POOLINGS)
++def test_alpha_zero_is_exact_identity_end_to_end(typ, pooling):
++    emb, enc, head, _, notes = _build(typ, pooling, attention_residual_alpha=0.0)
++    x = _x(3)
++    with torch.no_grad():
++        ref = head(enc(x))
++        assert torch.equal(emb(x), ref)
++        emb.attn.force_compute = True                   # mesmo calculando o operador
++        assert torch.equal(emb(x), ref)
++    assert any("identidade exata" in n for n in notes)
++
++
++def test_alpha_zero_operator_level_bitwise():
++    x = torch.randn(2, 9, 8, 8)
++    for cls in (FA.FixedSelfAttention, FA.FixedCovarianceAttention):
++        op = cls(FA.AttentionSpec(attention_residual_alpha=0.0, attention_tokens=16))
++        op.force_compute = True
++        assert torch.equal(op(x), x)
++
++
++def test_uniform_weights_reproduce_head_pooling():
++    for pooling in POOLINGS:
++        head = EmbeddingHead(8, 1280, pooling).eval()
++        zz = torch.randn(3, head.width, 5, 6)
++        w = torch.full((3, 30), 1 / 30)
++        assert torch.allclose(FA.weighted_head_pool(head, zz, w), head.pool(zz), atol=1e-4, rtol=1e-4)
++
++
++# ─── gradiente atravessa ate as ativacoes ────────────────────────────────────
++
++@pytest.mark.parametrize("typ", TYPES)
++def test_gradient_reaches_activations(typ):
++    emb, enc, head, _, _ = _build(typ)
++    enc.train(), head.train()
++    x = _x(3).requires_grad_(True)
++    emb(x).pow(2).sum().backward()
++    assert x.grad is not None and torch.isfinite(x.grad).all() and x.grad.abs().sum() > 0
++    assert sum(p.numel() for p in emb.attn.parameters()) == 0
++
++
++@pytest.mark.parametrize("cls,agg", list(itertools.product(
++    [FA.FixedSelfAttention, FA.FixedCovarianceAttention], ["weighted_mean", "gem"])))
++def test_operator_gradient_includes_attention_path(cls, agg):
++    """alpha=1: o gradiente passa SO pelo operador (softmax e values)."""
++    x = (torch.randn(2, 6, 7, 7).abs() + 0.1).requires_grad_(True)
++    y = cls(FA.AttentionSpec(attention_residual_alpha=1.0, attention_tokens=49,
++                             attention_aggregation=agg))(x)
++    y.pow(2).sum().backward()
++    assert torch.isfinite(x.grad).all() and x.grad.abs().sum() > 0
++
++
++def test_pooling_gradient():
++    head = _head("moments", in_ch=6)
++    z = torch.randn(2, head.width, 7, 7)
++    src = torch.randn(2, 6, 7, 7, requires_grad=True)
++    op = FA.FixedAttentionPooling(FA.AttentionSpec(attention_residual_alpha=1.0))
++    op(head, z, src).sum().backward()
++    assert torch.isfinite(src.grad).all() and src.grad.abs().sum() > 0
++
++
++# ─── PCA / SVD: deterministico, ajustado so no treino ────────────────────────
++
++@pytest.mark.parametrize("align", ["pca", "svd"])
++@pytest.mark.parametrize("typ", list(FA.CROSS_OPS))
++def test_alignment_deterministic_and_train_only(align, typ):
++    xtr, xva = _x(6, seed=9), _x(4, seed=10)
++    e1, enc, head, _, _ = _build(typ, attention_alignment=align, fit=False)
++    e1.fit(xtr, bs=3, n_img=6, n_px=16, seed=0)
++    e2, *_ = _build(typ, attention_alignment=align, enc=copy.deepcopy(enc), fit=False)
++    e2.fit(xtr.clone(), bs=2, n_img=6, n_px=16, seed=0)          # outro bs: mesmos pixels
++    b1 = {k: v.clone() for k, v in e1.attn.state_dict().items()}
++    for k, v in e2.attn.state_dict().items():
++        assert torch.equal(v, b1[k]), k
++    # avaliar val/teste NAO reajusta nada
++    with torch.no_grad():
++        e1.embed(xva, bs=2), e1.embed(xva, bs=2, tta="tta8")
++    for k, v in e1.attn.state_dict().items():
++        assert torch.equal(v, b1[k]), k
++    # outro conjunto de treino -> outras estatisticas (prova que vem do treino passado)
++    e3, *_ = _build(typ, attention_alignment=align, enc=copy.deepcopy(enc), fit=False)
++    e3.fit(_x(6, seed=11), bs=3, n_img=6, n_px=16, seed=0)
++    assert any(not torch.equal(v, b1[k]) for k, v in e3.attn.state_dict().items())
++    # sem fit -> erro explicito (nunca ajusta sozinho em val/teste)
++    e4, *_ = _build(typ, attention_alignment=align, enc=copy.deepcopy(enc), fit=False)
++    with pytest.raises(RuntimeError):
++        e4(xva)
++
++
++def test_fit_and_probe_do_not_touch_bn_running_stats():
++    enc = _encoder()
++    enc.train()
++    before = {k: v.clone() for k, v in enc.state_dict().items()}
++    emb, *_ = _build("fixed_cross", enc=enc, fit=False, attention_alignment="pca")
++    emb.fit(_x(6, seed=9), bs=3, n_img=6, n_px=16)
++    for k, v in enc.state_dict().items():
++        assert torch.equal(v, before[k]), k
++    assert enc.training                        # flags restaurados
++
++
++def test_alignment_svd_recovers_shared_subspace():
++    """CCA: duas camadas = rotacoes diferentes do mesmo sinal -> keys e queries alinhadas."""
++    g = torch.Generator().manual_seed(0)
++    s = torch.randn(500, 4, generator=g, dtype=torch.float64)
++    xq = s @ torch.linalg.qr(torch.randn(4, 4, generator=g, dtype=torch.float64))[0]
++    xk = s @ torch.randn(4, 6, generator=g, dtype=torch.float64)
++    for mode in ("svd", "pca"):
++        a = FA.Alignment(mode, 4, 6, 4).fit(xq, xk)
++        zq, zk = a.q(xq.float()), a.kv(xk.float())
++        cos = torch.nn.functional.cosine_similarity(zq, zk, dim=1)
++        assert cos.mean() > 0.99, mode
++
++
++# ─── TTA deterministico ──────────────────────────────────────────────────────
++
++@pytest.mark.parametrize("mode,geom", list(itertools.product(FA.TTA_MODES, FA.TTA_GEOMETRIES)))
++def test_tta_deterministic(mode, geom):
++    emb, *_ = _build("fixed_self")
++    x = _x(3)
++    y1 = emb.embed(x, bs=2, tta=mode, geometry=geom)
++    y2 = emb.embed(x, bs=3, tta=mode, geometry=geom)
++    assert torch.equal(y1, emb.embed(x, bs=2, tta=mode, geometry=geom))
++    assert torch.allclose(y1, y2, atol=1e-5)
++    assert torch.isfinite(y1).all()
++
++
++def test_tta_views_and_cost():
++    x = torch.randn(1, 3, 10, 10)
++    assert len(FA.tta_views("tta4")) == 4 and len(FA.tta_views("tta8")) == 8
++    ours = torch.stack([t(x) for t in FA.tta_views("tta8")])
++    ref = torch.stack([t(x) for t in tta_transforms(8)])
++    assert torch.equal(ours, ref)                     # = pooling_head (gem_tta do repo)
++    assert FA.tta_cost("none") == 1 and FA.tta_cost("tta4") == 4 and FA.tta_cost("tta8") == 8
++    assert FA.tta_cost("multiscale") == pytest.approx(0.75 ** 2 + 1 + 1.25 ** 2)
++    sizes = [t(x).shape[-1] for t in FA.tta_views("multiscale")]
++    assert sizes == [8, 10, 12]
++    e = [torch.randn(2, 5) for _ in range(3)]
++    assert torch.allclose(FA.aggregate_views(e, "mean"), sum(e) / 3)
++    assert torch.allclose(FA.aggregate_views(e, "l2_mean").norm(dim=1) <= 1 + 1e-6,
++                          torch.ones(2, dtype=torch.bool))
++
++
++def test_tta_none_equals_plain_forward():
++    emb, enc, head, _, _ = _build("none")
++    x = _x(3)
++    with torch.no_grad():
++        assert torch.equal(emb.embed(x, bs=3), head(enc(x)))
++
++
++# ─── atencao: exclusao da diagonal, pedacos, controle mean ───────────────────
++
++def test_exclude_self_masks_diagonal():
++    v = torch.eye(5)[None]                           # tokens ortogonais
++    out = FA.attend(v, v, v, similarity="cosine", tau=0.01, aggregation="weighted_mean",
++                    self_index=torch.arange(5))
++    assert torch.all(out[0].diagonal() < 1e-6)
++    out2 = FA.attend(v, v, v, similarity="cosine", tau=0.01, aggregation="weighted_mean")
++    assert torch.all(out2[0].diagonal() > 0.9)
++
++
++def test_chunked_attention_is_exact():
++    q, k, v = torch.randn(2, 50, 4), torch.randn(2, 9, 4), torch.randn(2, 9, 3)
++    a = FA.attend(q, k, v, similarity="normalized_dot", tau=0.5, aggregation="weighted_mean")
++    b = FA.attend(q, k, v, similarity="normalized_dot", tau=0.5, aggregation="weighted_mean",
++                  max_logits=18)                      # 1 query por pedaco
++    assert torch.allclose(a, b, atol=1e-6)
++
++
++def test_mean_aggregation_is_similarity_free_control():
++    q, k, v = torch.randn(1, 6, 4), torch.randn(1, 9, 4), torch.randn(1, 9, 3)
++    out = FA.attend(q, k, v, similarity="cosine", tau=0.1, aggregation="mean")
++    assert torch.allclose(out, v.mean(1, keepdim=True).expand(1, 6, 3))
++
++
++def test_self_attention_full_tokens_is_q_eq_k_eq_v():
++    x = torch.randn(1, 4, 3, 3)
++    spec = FA.AttentionSpec(attention_tokens=16, attention_residual_alpha=1.0,
++                            attention_temperature=0.5)
++    y = FA.FixedSelfAttention(spec)(x)
++    t = x.flatten(2).transpose(1, 2)
++    tn = t / t.norm(dim=-1, keepdim=True)
++    ref = torch.softmax(tn @ tn.transpose(1, 2) / 0.5, -1) @ t
++    assert torch.allclose(y, ref.transpose(1, 2).reshape(1, 4, 3, 3), atol=1e-6)
++
++
++# ─── reparo dos genes ─────────────────────────────────────────────────────────
++
++CTX = dict(block_channels=[8, 12, 16], block_hw=[(16, 16), (8, 8), (4, 4)], head_width=1280)
++
++
++def test_repair_tokens_shapes_and_values():
++    g, notes = FA.repair_attention_genes({"attention_type": "fixed_self", "attention_tokens": 196,
++                                          "attention_temperature": -1,
++                                          "attention_residual_alpha": 0.6}, **CTX)
++    assert g["attention_tokens"] == 16            # mapa 4x4
++    assert g["attention_temperature"] == 0.1 and g["attention_residual_alpha"] == 0.5
++    assert notes
++    g, _ = FA.repair_attention_genes({"attention_type": "fixed_self", "attention_tokens": 50}, **CTX)
++    assert g["attention_tokens"] in FA.TOKENS
++
++
++def test_repair_cross_rules():
++    g, notes = FA.repair_attention_genes({"attention_type": "fixed_cross",
++                                          "attention_alignment": "none"}, **CTX)
++    assert g["attention_source_layers"] == (1,) and g["attention_alignment"] == "pca"
++    g, _ = FA.repair_attention_genes({"attention_type": "fixed_cross", "attention_location": 0}, **CTX)
++    assert g["attention_type"] == "fixed_self"
++    g, _ = FA.repair_attention_genes({"attention_type": "fixed_multiscale",
++                                      "attention_source_layers": [0, 2, 5]}, **CTX)
++    assert g["attention_source_layers"] == (0,)
++    g, _ = FA.repair_attention_genes({"attention_type": "fixed_cross", "attention_location": "head",
++                                      "attention_alignment": "svd", "align_k": 999}, **CTX)
++    assert g["attention_location"] == "final" and g["align_k"] == 12
++    g, _ = FA.repair_attention_genes({"attention_type": "fixed_pool", "attention_alignment": "svd",
++                                      "attention_exclude_self": True,
++                                      "attention_normalization": "zscore"}, **CTX)
++    assert g["attention_alignment"] == "none" and not g["attention_exclude_self"]
++    assert g["attention_normalization"] == "none"
++    g, _ = FA.repair_attention_genes({"attention_type": "bogus"}, **CTX)
++    assert g["attention_type"] == "none"
++
++
++def test_repair_memory_budget_reduces_tokens():
++    ctx = dict(block_channels=[64], block_hw=[(56, 56)], head_width=1280)
++    g, notes = FA.repair_attention_genes({"attention_type": "fixed_self", "attention_tokens": 196},
++                                         batch_size=64, mem_budget_bytes=1.5e8, **ctx)
++    assert any("memoria" in n or "batch menor" in n for n in notes)
++    assert g["attention_tokens"] in FA.TOKENS
++
++
++def test_genes_never_change_embedding_dim():
++    for typ in TYPES:
++        for loc in ("final", "head", 1):
++            emb, enc, head, info, _ = _build(typ, "meanstd", attention_location=loc)
++            assert emb.embed(_x(2), bs=2).shape[1] == head.out_dim

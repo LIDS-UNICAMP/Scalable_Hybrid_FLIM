@@ -1,0 +1,134 @@
+--- fixed_attention_v1.py	2026-11-16 23:09:55.576102806 -0300
++++ attn6/ga_search/modehb/fixed_attention.py	2026-11-16 23:10:17.985374535 -0300
+@@ -99,6 +99,44 @@
+ GEM_EPS = 1e-6           # = pooling_head.GEM_EPS
+ ALIGN_SHRINK = 1e-3      # encolhimento relativo dos autovalores no branqueamento (canais mortos)
+ DEFAULT_MAX_LOGITS = 1 << 25   # elementos de logits por pedaco de queries (~128 MiB fp32)
++# UNIDADE (auditoria CHECK C5): todo "flops" deste modulo = 2*MAC (+ ~5/elem de softmax e
++# normas).  O campo ``flops`` da busca (result.json / profile()) e MAC de Conv2d/Linear:
++# compare sempre via ``encoder_flops_2mac`` (= 2 * MAC).
++FLOPS_UNIT = "2*MAC"
++ATTN_FLOPS_MAX_FRAC = 0.25     # criterio: FLOPs(operador) <= 25% de 2*MAC(encoder+cabeca)
++ALIGN_DEGENERATE_K = 5         # align_k <= 5: E3/E4 degenerado (relatar a parte)
++
++
++def encoder_macs(encoder: nn.Module, head: nn.Module, image_size: int = 224) -> int:
++    """MACs de Conv2d/Linear de ``head(encoder(x))`` por imagem -- MESMA metodologia do
++    ``run_search.profile`` (kernel terms, ``out.numel()*kh*kw*cin/groups``)."""
++    macs = 0
++
++    def count(mod, inp, out):
++        nonlocal macs
++        if isinstance(mod, nn.Conv2d):
++            macs += out.numel() * mod.kernel_size[0] * mod.kernel_size[1] * mod.in_channels // mod.groups
++        elif isinstance(mod, nn.Linear):
++            macs += out.numel() * mod.in_features
++    mods = [m for m in list(encoder.modules()) + list(head.modules())
++            if isinstance(m, (nn.Conv2d, nn.Linear))]
++    hs = [m.register_forward_hook(count) for m in mods]
++    dev = next(iter(encoder.parameters())).device
++    try:
++        with torch.no_grad(), eval_mode(encoder), eval_mode(head):
++            head(encoder(torch.zeros(1, 3, image_size, image_size, device=dev)))
++    finally:
++        for h in hs:
++            h.remove()
++    return int(macs)
++
++
++def cost_ratio(attn_flops: float, enc_macs: int) -> dict:
++    """Operador (2*MAC) contra encoder+cabeca na MESMA unidade (2*MAC)."""
++    enc = 2.0 * float(enc_macs)
++    r = float(attn_flops) / enc if enc > 0 else float("inf")
++    return {"encoder_flops_2mac": enc, "attn_over_encoder": r,
++            "attn_within_budget": bool(r <= ATTN_FLOPS_MAX_FRAC)}
+ 
+ 
+ # ─── especificacao ────────────────────────────────────────────────────────────
+@@ -678,6 +716,8 @@
+         if k > kmax:
+             notes.append(f"align_k={k} -> {kmax}")
+             k = kmax
++        if al in ("pca", "svd") and k <= ALIGN_DEGENERATE_K:
++            notes.append(f"DEGENERADO: align_k={k} <= {ALIGN_DEGENERATE_K} (relatar a parte)")
+         g["align_k"] = k
+     elif al != "none":
+         notes.append(f"alignment {al} so vale p/ cross/multiscale -> none")
+@@ -732,6 +772,13 @@
+ 
+ # ─── encoder + cabeca + atencao ──────────────────────────────────────────────
+ 
++def fit_sample_indices(n: int, n_img: int, seed: int = 0) -> list[int]:
++    """Sorteio UNIFORME semeado, sem rotulo, de ``min(n_img, n)`` indices em ``range(n)``
++    (ordem do sorteio; deterministico; independe da ordem por classe do treino)."""
++    g = torch.Generator(device="cpu").manual_seed(int(seed) + 7919)
++    return torch.randperm(int(n), generator=g)[: min(int(n_img), int(n))].tolist()
++
++
+ class eval_mode:
+     """Context manager: ``module.eval()`` temporario (restaura os flags de treino)."""
+ 
+@@ -814,10 +861,15 @@
+ 
+     @torch.no_grad()
+     def fit(self, x_train: Tensor, *, bs: int = 32, n_img: int = 160, n_px: int = 256,
+-            seed: int = 0, device=None) -> "FixedAttentionEmbedder":
+-        """Ajusta as estatisticas (so C/D com alinhamento != none) em imagens de TREINO
+-        (as ``n_img`` primeiras, ordem fixa; ``n_px`` posicoes co-localizadas por imagem,
+-        sorteadas com gerador semeado -> deterministico).  Sem rotulos."""
++            seed: int = 0, device=None, indices: Sequence[int] | None = None) -> "FixedAttentionEmbedder":
++        """Ajusta as estatisticas (so C/D com alinhamento != none) em imagens de TREINO, sem
++        rotulos.  As ``n_img`` imagens sao um SORTEIO UNIFORME semeado (``fit_sample_indices``:
++        permutacao com ``seed`` sobre ``range(len(x_train))``) -- nunca as primeiras, porque o
++        treino costuma vir ordenado por classe (auditoria CHECK C1).  ``indices`` explicitos
++        substituem o sorteio.  ``n_px`` posicoes co-localizadas por imagem, sorteadas por imagem
++        com o mesmo gerador -> deterministico e independente de ``bs``.  Os indices usados ficam
++        em ``self.fit_indices``."""
++        self.fit_indices: list[int] = []
+         if self.spec.attention_type not in CROSS_OPS:
+             return self
+         device = device or x_train.device
+@@ -833,7 +885,10 @@
+         else:
+             src_all = src
+         hq, wq = hws[self.qidx]
+-        xs = x_train[:n_img]
++        sel = (list(map(int, indices)) if indices is not None
++               else fit_sample_indices(len(x_train), n_img, seed))
++        self.fit_indices = sel
++        xs = x_train[torch.as_tensor(sel, dtype=torch.long)]
+         npx = min(n_px, hq * wq)
+         # um sorteio por IMAGEM (independe de bs): [n_img, npx]
+         idx_all = torch.stack([torch.randperm(hq * wq, generator=gen)[:npx] for _ in range(len(xs))])
+@@ -982,8 +1037,8 @@
+     c = head_width if spec.attention_location == "head" else block_channels[qidx]
+     flops, peak, fitted = 0.0, 0.0, 0
+     if typ == "none" or a == 0.0:
+-        return {"flops": 0.0, "peak_bytes": 0.0, "fitted_values": 0, "trainable_params": 0,
+-                "n_queries": n, "n_keys": 0}
++        return {"flops": 0.0, "flops_unit": FLOPS_UNIT, "peak_bytes": 0.0, "fitted_values": 0,
++                "trainable_params": 0, "n_queries": n, "n_keys": 0}
+     if typ == "fixed_self":
+         m = min(spec.attention_tokens, n) if spec.attention_tokens else n
+         flops = n * c + 2 * n * m * c + 5 * n * m + 2 * n * m * c + 3 * n * c + 4 * (n + m) * c
+@@ -1016,8 +1071,8 @@
+         nk = c
+     else:
+         raise ValueError(typ)
+-    return {"flops": float(flops), "peak_bytes": float(peak), "fitted_values": int(fitted),
+-            "trainable_params": 0, "n_queries": n, "n_keys": int(nk)}
++    return {"flops": float(flops), "flops_unit": FLOPS_UNIT, "peak_bytes": float(peak),
++            "fitted_values": int(fitted), "trainable_params": 0, "n_queries": n, "n_keys": int(nk)}
+ 
+ 
+ @torch.no_grad()
+@@ -1082,4 +1137,9 @@
+     emb.block_channels = chans
+     cost = attention_cost(spec, chans, hw, int(head.width), head.pooling, batch_size)
+     cost["block_channels"], cost["block_hw"] = chans, hw
++    cost["encoder_macs"] = encoder_macs(encoder, head, int(x_probe.shape[-1]))
++    cost.update(cost_ratio(cost["flops"], cost["encoder_macs"]))
++    cost["align_degenerate"] = bool(spec.attention_type in CROSS_OPS
++                                    and spec.attention_alignment in ("pca", "svd")
++                                    and spec.align_k <= ALIGN_DEGENERATE_K)
+     return emb, {"genes": spec.to_dict(), "cost": cost}, notes

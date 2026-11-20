@@ -1,0 +1,2554 @@
+diff --git a/ga_search/config/hmodehb_b0b4/arms/A.yaml b/ga_search/config/hmodehb_b0b4/arms/A.yaml
+new file mode 100644
+index 0000000..7765701
+--- /dev/null
++++ b/ga_search/config/hmodehb_b0b4/arms/A.yaml
+@@ -0,0 +1,3 @@
++# Braco A: MO-DEHB independente por porte (B0-B4), SEM heranca e sem transferencia; init SPiFiL-0.
++# Nada a sobrescrever alem do base.yaml (lemonade ausente = sem morfismos).
++arm_note: "A: MO-DEHB independente por porte, sem heranca"
+diff --git a/ga_search/config/hmodehb_b0b4/arms/B.yaml b/ga_search/config/hmodehb_b0b4/arms/B.yaml
+new file mode 100644
+index 0000000..7058ac3
+--- /dev/null
++++ b/ga_search/config/hmodehb_b0b4/arms/B.yaml
+@@ -0,0 +1,34 @@
++# Braco B: LEMONADE (lemonade.py existente) sobre as subpopulacoes B0-B4 e a fitness v2.
++# Morfismos + heranca lamarckiana; a cand_key inclui o checkpoint do pai (sha256), entao um filho
++# herdado nunca recebe o resultado em cache de um candidato de mesma arquitetura treinado do zero.
++# Desvio declarado: sem a amostragem por KDE do paper (lemonade.py nao a implementa).
++arm_note: "B: LEMONADE (sem KDE) + heranca, faixas B0-B4"
++lemonade:
++  enabled: true
++  seeds:
++    - name: seed_B
++      widths: [40, 80, 152, 152, 152, 312]
++      kernel: 3
++      activation: relu
++      norm: zca
++      pool: [max, max, max, max, none, none]
++      pooling: gem
++      protect: lowlr
++      ae_schedule: decoder_first
++    - name: seed_A
++      widths: [32, 48, 64]
++      kernel: 5
++      activation: relu
++      norm: none
++      pool: [max, max, max]
++      pooling: gap
++      protect: lowlr
++      ae_schedule: decoder_first
++  n_descendants: 5
++  morph_prob: 0.5
++  morph_random_fill: true
++  operators: [deepen, widen, residual, kernel]
++  widen_factors: [1.25, 1.5, 2.0]
++  kernels: [3, 5, 7]
++  inherit: true
++  inherit_fidelity: le_child
+diff --git a/ga_search/config/hmodehb_b0b4/base.yaml b/ga_search/config/hmodehb_b0b4/base.yaml
+new file mode 100644
+index 0000000..fec08a4
+--- /dev/null
++++ b/ga_search/config/hmodehb_b0b4/base.yaml
+@@ -0,0 +1,121 @@
++# H-MODEHB B0-B4 (Agente 4) — config BASE, autocontido (schema I11 do search_v3; nao herda arquivos).
++# Desenho: research/spifil_b0b4/agent4/prep_desenho_modehb_hierarquico.md (secoes 5, 6, 7, 10).
++# Uso: python -m ga_search.hmodehb.run_hsearch --arm A --dataset remote_sensing [--seed 42]
++# O braco (arms/<X>.yaml) e mesclado por cima deste arquivo. O hash do config COMPLETO vai para o
++# search_state.json: mudar qualquer chave e retomar = ConfigDrift (salvo --allow-drift chave).
++# [H] = valor de desenho ainda a validar na Fase A do Agente 5 (GPU 3 da athena, 49 GB).
++project: progressive_mo_dehb
++entity: ophira-ai
++seed: 42
++seeds: [42, 43, 44]            # 3 seeds de busca por (dataset, braco)
++dataset_config_dir: ga_search/config/modehb/datasets   # mesmos datasets/splits do search_v3 (imutaveis)
++datasets: [remote_sensing, ham10000, flowers, eggs, larvae, protozoan, aid, coconut_trees]
++split: 1
++val_max_samples: null           # validacao INTEIRA (a fitness v2 recusa subamostrar a validacao)
++search_split_key: validation    # teste NUNCA na busca (o monitor_report mede o teste fora do controller)
++image_size: 224
++spifil_ops: true
++spifil_images_choices: [1, 2, 4, 8, 16, 32]
++channel_space:
++  type: int_range
++  min: 1
++  max: 1024
++  scale: log
++  monotonic: true
++
++# --- DEHB: fidelidade = epocas (AE + SSL 1:2). Busca em 5/15/45; 100/200 so como extensao (fora do HV) [H]
++fidelities: [5, 15, 45]
++max_brackets: 6
++eta: 3
++fidelity_split: {ae: 1, ssl: 2, rounding: floor_ae}
++operators_from_start: true
++search_space_from_yaml: true
++
++population:
++  random_baseline: false        # so SPiFiL (gemeas random so em braco de controle declarado)
++  initial_operators: sampled
++  initial_size: 15              # 3 sementes por B_k (round-robin B0..B4)
++  initial_grid:
++    filters: [16, 32, 64, 128]
++    init: [spifil]
++    depth: [2, 3]
++    pyramid_growth: 2.0
++  spifil_offspring_share: 1.0
++  random_twin_at_max_fidelity: false
++  exploration_epsilon: 0.1
++  de: {mutation_factor: 0.5, crossover_prob: 0.5, strategy: rand1_bin}
++
++stages:
++  stage2:
++    space:                      # vocabulario por gene (search_space_from_yaml). embed_dim fica no codigo (>= 1280)
++      operator: [conv, dwsep, inception]
++      softhebb: [true, false]
++      kernel: [3, 5, 7]
++      activation: [relu, gelu, silu, selu]
++      norm: [none, batch, zca, dbn, batch_zca, batch_dbn]
++      pool: [none, max, avg]
++      residual: [true, false]
++      pooling: [gap, gem, moments]
++      protect: [full, lowlr, freeze]
++      projector: [true, false]
++      ae_schedule: [decoder_first, joint]
++
++# --- Subpopulacoes B0-B4: FAIXAS FIXAS (o codigo recusa outras) e teto DURO de 5,5M (sem fator 1,05).
++# Parametros = encoder + cabeca (embedding >= 1280); decoders/projetores registrados a parte.
++stratified:
++  enabled: true
++  strata:
++    B0: [0, 300000]
++    B1: [300000, 800000]
++    B2: [800000, 1500000]
++    B3: [1500000, 3000000]
++    B4: [3000000, 5500000]
++  param_cap: 5500000
++  tiny_floor: 5000
++  min_share: 0.2                # 1 quota por B_k em cada promocao
++  protected_brackets: 3
++  cross_category_prob: 0.3
++  projection_prob: 0.7
++  explore_extra: 1
++  explore_min_slope: 0.0
++  explore_strata: [B2, B3, B4]
++  calibration: true
++  extension_fidelities: [100, 200]
++  extension_min_gain: 0.01
++  extension_max_per_bracket: 2
++  memory_budget_gb: 38          # [H] GPU 3 da athena (49 GB) com cap de processo 44
++  spifil_seeds_per_image: 100
++
++# --- Fitness v2 (regua ORIG): head(encoder(x)) >= 1280, core.svm.fit_svm linear C=100, SEM scaler,
++# SEM whitening, tta 1, kappa_weight 1.0. COV/GTP/label-free so em result["aux"].
++fitness_mode: svm_kappa
++svm_fitness: {C: 100, scaler: none, readout: head, kappa_weight: 1.0, tta: 1, whiten: none, solver: libsvm,
++              max_train: 4000, wise_alphas: [0.0, 0.25, 0.5, 0.75, 1.0], gram_reduce: false}
++
++collapse:
++  min_embedding_std: 1.0e-4
++  min_effective_rank_frac: 0.05
++tta:
++  search: 1
++training:
++  batch_size: 64
++  max_images_per_epoch: 2048
++  lr_new: 1.0e-3
++  lr_old: 1.0e-4
++  ssl: lejepa
++  local_ae: true
++
++resources:
++  host: athena_gpu3
++  num_workers: 16
++  ram_cache_gb: 96
++  max_concurrent_trials: 1
++  gpu_process_cap_gb: 44        # [H] GPU 3 da athena: 49 GB - contexto/margem
++
++paths:
++  state_dir: "artifacts/hmodehb_b0b4/arm_{arm}/{dataset}/state"
++
++# --- Integridade H-MODEHB (ga_search/hmodehb/integrity.py)
++hmodehb:
++  oom: {retries: 4, sleep_s: 180}   # R5 (FILA_E_INSTRUCOES): 4 x 180 s, depois failed/oom
++  allow_drift: []                   # chaves que podem mudar no resume (preferir --allow-drift na linha de comando)
+diff --git a/ga_search/hmodehb/__init__.py b/ga_search/hmodehb/__init__.py
+new file mode 100644
+index 0000000..05c001d
+--- /dev/null
++++ b/ga_search/hmodehb/__init__.py
+@@ -0,0 +1,8 @@
++"""H-MODEHB B0-B4 (Agente 4): MO-DEHB hierarquico com integridade de busca.
++
++Namespace novo e isolado: importa as primitivas de ``ga_search.modehb`` (MODEHB, Evaluator, strata,
++lemonade) sem modifica-las. Buscas existentes (H-MODEHB, H-LEM, H-SEED, PNAS-CS) nao mudam.
++
++Entrada: ``python -m ga_search.hmodehb.run_hsearch --arm A --dataset remote_sensing``.
++Desenho: research/spifil_b0b4/agent4/prep_desenho_modehb_hierarquico.md (secoes 5, 6.1, 7, 10).
++"""
+diff --git a/ga_search/hmodehb/bk.py b/ga_search/hmodehb/bk.py
+new file mode 100644
+index 0000000..f52a6e6
+--- /dev/null
++++ b/ga_search/hmodehb/bk.py
+@@ -0,0 +1,70 @@
++"""Subpopulacoes B0-B4: faixas FIXAS de parametros (encoder + cabeca >= 1280) e teto duro de 5,5M.
++
++Faixas (lo, hi] como em ``strata.stratum_of``; 300000 -> B0, 300001 -> B1; > 5.500.000 -> None
++(infeasivel, nunca gerado e nunca aceito). Sem fator 1,05 (o PNAS-CS usa 5,775M: viola a missao).
++Decoders do AE local e projetores SSL ficam fora da contagem (registrados a parte pelo avaliador).
++"""
++from __future__ import annotations
++
++from typing import Optional
++
++BK_BANDS = (("B0", 0, 300_000), ("B1", 300_000, 800_000), ("B2", 800_000, 1_500_000),
++            ("B3", 1_500_000, 3_000_000), ("B4", 3_000_000, 5_500_000))
++HARD_CAP = 5_500_000
++BK_NAMES = tuple(n for n, _, _ in BK_BANDS)
++MIN_EMBED_DIM = 1280     # decisao do usuario 17/11: cabeca de alta dimensao obrigatoria
++
++
++class BandError(ValueError):
++    """Config de estratos diferente das faixas fixas B0-B4."""
++
++
++def bands_dict() -> dict:
++    return {n: [lo, hi] for n, lo, hi in BK_BANDS}
++
++
++def bk_of(params) -> Optional[str]:
++    """Faixa de uma contagem de parametros; None acima do teto duro."""
++    if params is None:
++        return None
++    p = int(params)
++    if p > HARD_CAP or p < 0:
++        return None
++    for n, lo, hi in BK_BANDS:
++        if lo < p <= hi or (lo == 0 and p <= hi):
++            return n
++    return None
++
++
++def _norm_strata(raw):
++    if raw is None:
++        return None
++    if isinstance(raw, dict):
++        raw = [(k, v[0], v[1]) for k, v in raw.items()]
++    return tuple((str(n), int(lo), int(hi)) for n, lo, hi in raw)
++
++
++def stratified_block(user: Optional[dict] = None) -> dict:
++    """Bloco ``search.stratified`` com as faixas B0-B4 impostas.
++
++    O usuario pode ajustar os knobs de promocao (min_share, explore_*, calibration, ...), mas NAO as
++    faixas nem o teto: se vierem diferentes, ``BandError`` (nunca uma troca silenciosa)."""
++    u = dict(user or {})
++    got = _norm_strata(u.get("strata"))
++    if got is not None and got != BK_BANDS:
++        raise BandError(f"stratified.strata deve ser exatamente {bands_dict()}, veio {u.get('strata')}")
++    cap = u.get("param_cap")
++    if cap is not None and int(cap) != HARD_CAP:
++        raise BandError(f"stratified.param_cap deve ser {HARD_CAP} (teto duro), veio {cap}")
++    u.update(enabled=True, strata=bands_dict(), param_cap=HARD_CAP)
++    ex = [s for s in (u.get("explore_strata") or ["B2", "B3", "B4"]) if s in BK_NAMES]
++    u["explore_strata"] = ex
++    return u
++
++
++def check_strat(sc: dict) -> None:
++    """Confere um ``strat_config`` ja resolvido (MODEHB.strat)."""
++    if sc is None:
++        raise BandError("H-MODEHB exige estratificacao B0-B4 (stratified.enabled)")
++    if tuple(tuple(x) for x in sc["strata"]) != BK_BANDS or int(sc["param_cap"]) != HARD_CAP:
++        raise BandError(f"faixas/teto resolvidos diferem de B0-B4/{HARD_CAP}: {sc['strata']} cap={sc['param_cap']}")
+diff --git a/ga_search/hmodehb/fitness_v2.py b/ga_search/hmodehb/fitness_v2.py
+new file mode 100644
+index 0000000..0ddd15f
+--- /dev/null
++++ b/ga_search/hmodehb/fitness_v2.py
+@@ -0,0 +1,188 @@
++"""Fitness v2 do H-MODEHB (desenho secao 5).
++
++Objetivos (minimizados, em [0,1]):
++  f0 = 1 - clip(kappa_val_ORIG, 0, 1)
++  f1 = clip(log10(MACs/1e6) / log10(1e11/1e6), 0, 1)       (limites fixos: HV comparavel entre runs)
++
++kappa_val_ORIG = ``core.svm.fit_svm`` linear, C=100, SEM scaler, SEM whitening, sobre o embedding
++``head(encoder(x))`` (dimensao >= 1280), tta=1, kappa_weight=1.0, treino estratificado e semeado
++(``max_train``), validacao INTEIRA. Teste nunca e carregado.
++
++Auxiliares (COV/cov_head+scaler, GTP, macro-F1, label-free, kappa_val_alpha0, ...) vao SO para
++``result["aux"]`` e nunca entram em F. A assinatura ``fitness_sig`` resume a regua; o estado,
++cada job e o id do controller W&B a carregam, e o resume recusa misturar assinaturas.
++"""
++from __future__ import annotations
++
++import hashlib
++import json
++import math
++from typing import Optional, Sequence
++
++from ga_search.hmodehb.bk import MIN_EMBED_DIM
++
++VERSION = "fitness_v2"
++FLOPS_BOUNDS = (1e6, 1e11)
++# valores obrigatorios do bloco eval.svm_fitness (a regua ORIG)
++REQUIRED = {"C": 100.0, "scaler": "none", "readout": "head", "kappa_weight": 1.0, "tta": 1,
++            "whiten": "none", "solver": "libsvm"}
++DEFAULTS = {"max_train": 4000, "wise_alphas": [0.0, 0.25, 0.5, 0.75, 1.0], "gram_reduce": False}
++# chaves de eval.svm_fitness que nao mudam a regua (velocidade / memoria)
++SPEED_KEYS = ("cov_eigh", "cov_eigh_workers", "svm_workers", "svm_ram_gb", "svm_blas_threads", "gram_reduce")
++AUX_ONLY_KEYS = ("cov_k", "aux_cov")
++
++
++class FitnessConfigError(ValueError):
++    """Config de fitness que nao e a regua v2 (ex.: C=0.1, scaler=standard, readout=cov_head)."""
++
++
++class FitnessSigMismatch(RuntimeError):
++    """Resume/replay com uma regua de fitness diferente da gravada no estado."""
++
++
++class NonFiniteFitness(RuntimeError):
++    """Embedding ou loss nao finitos: o candidato falha com reason=nan."""
++
++
++def _same(a, b) -> bool:
++    if isinstance(b, float):
++        try:
++            return math.isclose(float(a), b)
++        except (TypeError, ValueError):
++            return False
++    if isinstance(b, int) and not isinstance(b, bool):
++        try:
++            return int(a) == b
++        except (TypeError, ValueError):
++            return False
++    return str(a).lower() == str(b).lower()
++
++
++def validate_eval(ev: dict) -> dict:
++    """Confere ``cfg["eval"]`` e devolve o bloco svm_fitness efetivo (v2). Erro em qualquer desvio."""
++    if (ev or {}).get("fitness_mode") != "svm_kappa":
++        raise FitnessConfigError("fitness v2 exige eval.fitness_mode: svm_kappa")
++    sv = dict((ev or {}).get("svm_fitness") or {})
++    bad = {k: sv[k] for k, v in REQUIRED.items() if k in sv and not _same(sv[k], v)}
++    if bad:
++        raise FitnessConfigError(f"eval.svm_fitness fora da regua v2 (ORIG): {bad}; exigido {REQUIRED}")
++    if bool(sv.get("dimensional_collapse_penalty", False)):
++        raise FitnessConfigError("fitness v2: penalidade de colapso dimensional proibida (so flag)")
++    out = {**REQUIRED, **DEFAULTS, **sv}
++    out["C"], out["kappa_weight"], out["tta"] = float(out["C"]), float(out["kappa_weight"]), int(out["tta"])
++    out["max_train"] = None if out["max_train"] is None else int(out["max_train"])
++    out["wise_alphas"] = [float(a) for a in (out.get("wise_alphas") or [])]
++    return out
++
++
++def spec(sv: dict, *, val_sha256: str, n_val: Optional[int], dataset: str, split=None) -> dict:
++    """Tudo o que define a regua (o que muda o numero que vira f0/f1)."""
++    return {"v": VERSION, "readout": "head", "min_embed_dim": MIN_EMBED_DIM, "svm": "core.svm.fit_svm",
++            "C": float(sv["C"]), "scaler": "none", "kappa_weight": 1.0, "tta": 1, "whiten": "none",
++            "solver": "libsvm", "max_train": sv.get("max_train"),
++            "wise_alphas": [float(a) for a in sv.get("wise_alphas") or []],
++            "val_sha256": str(val_sha256), "n_val": None if n_val is None else int(n_val),
++            "dataset": str(dataset), "split": split, "flops_bounds": list(FLOPS_BOUNDS)}
++
++
++def signature(sp: dict) -> str:
++    blob = json.dumps(sp, sort_keys=True, separators=(",", ":"), default=str)
++    return hashlib.sha256(blob.encode()).hexdigest()[:12]
++
++
++def objectives(result: dict):
++    """[f0, f1] com os limites fixos (falha -> [1, 1])."""
++    from ga_search.modehb import modehb as M
++    return M.objectives(result, False, {"flops_lo": FLOPS_BOUNDS[0], "flops_hi": FLOPS_BOUNDS[1]})
++
++
++def quality_of(kappa: float) -> float:
++    if kappa is None or not math.isfinite(float(kappa)):
++        raise NonFiniteFitness(f"kappa nao finito: {kappa}")
++    return float(min(max(float(kappa), 0.0), 1.0))
++
++
++# chaves do resultado do Evaluator historico que sao so diagnostico -> aux
++_AUX_FROM_BASE = ("quality_label_free", "fitness_macro_f1", "fitness_balanced_acc", "wise_kappas", "metrics",
++                  "collapse_multiplier", "ssl_final_loss", "quality_raw")
++
++
++def finalize(base: dict, *, kappa: float, nonfinite: bool = False, aux_extra: Optional[dict] = None,
++             alphas: Sequence[float] = ()) -> dict:
++    """Resultado v2 a partir do resultado do ``run_search.Evaluator``.
++
++    ``quality`` = clip(kappa ORIG) SEM multiplicador de colapso; colapso total so vira flag.
++    As chaves que o ``Evaluator.__call__`` historico le continuam presentes (quality_raw = quality,
++    collapse_multiplier = 1.0); os valores antigos vao para ``aux``."""
++    if nonfinite:
++        raise NonFiniteFitness("embedding nao finito na fitness (svm_fitness.nonfinite)")
++    loss = base.get("ssl_final_loss")
++    if loss is not None and not math.isfinite(float(loss)):
++        raise NonFiniteFitness(f"loss SSL final nao finita: {loss}")
++    q = quality_of(kappa)
++    aux = {k: base.get(k) for k in _AUX_FROM_BASE if k in base}
++    aux["quality_legacy"] = base.get("quality")
++    wk = base.get("wise_kappas") or {}
++    if wk:
++        a0 = wk.get("0.0", wk.get("0"))
++        aux["kappa_val_alpha0"] = None if a0 is None else float(a0)
++    aux.update(aux_extra or {})
++    col = base.get("collapse") or {}
++    out = {k: v for k, v in base.items() if k not in ("quality_label_free", "fitness_macro_f1",
++                                                       "fitness_balanced_acc", "wise_kappas", "metrics")}
++    out.update(quality=q, quality_raw=q, collapse_multiplier=1.0, fitness_kappa=float(kappa),
++               kappa_val_orig=float(kappa), fitness_version=VERSION,
++               collapse_total=bool(col.get("total", False)), collapse_dimensional=bool(col.get("dimensional", False)),
++               aux=aux)
++    return out
++
++
++# ────────────────────────────────────────────────────────────────── regua em TODA decisao
++# A1b (17/11): o fitness, o WiSE e a calibracao historicos decidiam por cov_head+StandardScaler enquanto o
++# reportado e ORIG (rho(val COV, teste ORIG) = 0,09; o alpha do WiSE escolhido pelo COV piora o ORIG em 5/11).
++# Aqui cada leitura SVM que DECIDE algo (alpha do WiSE e kappa final; selecao, promocao, calibracao e
++# extensao leem ``quality``/F, derivados dela) carrega um carimbo ``ruler_sig``; o controller recusa
++# (RulerViolation, fatal, nada gravado) qualquer resultado com carimbo diferente da regua da assinatura.
++RULER_KEYS = ("readout", "C", "scaler", "whiten", "tta", "kappa_weight", "solver", "max_train")
++
++
++class RulerViolation(FitnessSigMismatch):
++    """Uma decisao da busca usou uma regua diferente da gravada (ex.: COV no WiSE)."""
++
++
++def ruler(d: dict) -> dict:
++    """Componentes da regua de um spec v2 OU de uma leitura efetiva (readout + kwargs do svm_fitness)."""
++    mt = d.get("max_train")
++    return {"readout": str(d.get("readout", "head")), "C": float(d.get("C", 100.0)),
++            "scaler": str(d.get("scaler", "none")), "whiten": str(d.get("whiten", "none")),
++            "tta": int(d.get("tta", 1)), "kappa_weight": float(d.get("kappa_weight", 1.0)),
++            "solver": str(d.get("solver", "libsvm")), "max_train": None if mt is None else int(mt)}
++
++
++def ruler_sig(d: dict) -> str:
++    return signature(ruler(d))
++
++
++def check_decisions(result: dict, sp: dict) -> None:
++    """Falha se alguma decisao deste resultado nao foi tomada pela regua de ``sp`` (ORIG-val)."""
++    if result.get("status", "ok") != "ok":
++        return
++    want = ruler_sig(sp)
++    got = result.get("decision_rulers")
++    if not got:
++        raise RulerViolation("resultado ok sem carimbo de regua (decision_rulers): decisao nao auditavel")
++    bad = sorted(set(got) - {want})
++    if bad:
++        raise RulerViolation(f"decisao com regua {bad} != {want} (ORIG-val da assinatura)")
++    k = result.get("kappa_val_orig")
++    if k is None or not math.isclose(float(result.get("quality", -1.0)), quality_of(k), abs_tol=1e-12):
++        raise RulerViolation(f"quality {result.get('quality')} != clip(kappa_val_orig={k}): F nao vem da regua ORIG")
++    wk = (result.get("aux") or {}).get("wise_kappas") or {}
++    a = result.get("wise_alpha")
++    if wk and a is not None:            # o WiSE escolhe pelo quality = clip(kappa ORIG), 1o maximo
++        best = max(quality_of(v) for v in wk.values())
++        ka = wk.get(str(a), wk.get(str(float(a))))
++        if ka is None or not math.isclose(quality_of(ka), best, abs_tol=1e-12):
++            raise RulerViolation(f"alpha do WiSE {a} nao e o argmax do kappa ORIG-val {wk}")
++        if not math.isclose(float(ka), float(k), abs_tol=1e-12):
++            raise RulerViolation(f"kappa final {k} != kappa ORIG-val do alpha escolhido {ka}")
+diff --git a/ga_search/hmodehb/hevaluate.py b/ga_search/hmodehb/hevaluate.py
+new file mode 100644
+index 0000000..7ae6304
+--- /dev/null
++++ b/ga_search/hmodehb/hevaluate.py
+@@ -0,0 +1,91 @@
++"""Avaliador do H-MODEHB: subclasse de ``run_search.Evaluator`` com a fitness v2.
++
++Reusa todo o pipeline historico (SPiFiL -> AE local -> SSL global LeJEPA+SIGReg -> WiSE -> perfil de
++custo -> checkpoint). Muda so a leitura da fitness:
++
++* ``_svm_score`` chama ``supervised_fitness.svm_fitness`` com a regua ORIG fixa (C=100, scaler none,
++  whiten none, kappa_weight 1.0) sobre ``head(encoder(x))``, recusando embedding < 1280;
++* o resultado vira v2 (``fitness_v2.finalize``): quality = kappa ORIG sem multiplicador de colapso,
++  diagnosticos em ``aux``; embedding/loss nao finitos -> ``NonFiniteFitness`` (controller: reason=nan);
++* ``result.json`` leva ``cand_key``, ``fitness_sig``, ``config_sha`` e ``checkpoint_sha256`` (adocao
++  no resume).
++
++O split de teste nunca e carregado (``progressive_data.load_data`` devolve so treino/validacao).
++"""
++from __future__ import annotations
++
++from ga_search.hmodehb import bk as BK
++from ga_search.hmodehb import fitness_v2 as FV
++from ga_search.hmodehb import integrity as I
++from ga_search.modehb import run_search as RS
++
++
++class EmbedDimError(FV.FitnessConfigError):
++    """Cabeca com embedding < 1280 (proibido pela decisao do usuario de 17/11)."""
++
++
++class HEvaluator(RS.Evaluator):
++    def __init__(self, cfg, out_dir):
++        self.sv2 = FV.validate_eval(cfg.get("eval") or {})
++        if (cfg.get("data") or {}).get("val_max_samples") is not None:
++            raise FV.FitnessConfigError("fitness v2 usa a validacao INTEIRA: data.val_max_samples deve ser null")
++        super().__init__(cfg, out_dir)
++        self.fitness_spec = FV.spec(self.sv2, val_sha256=self.split_hash, n_val=int(len(self.val_y)),
++                                    dataset=self.dataset, split=(cfg.get("data") or {}).get("split"))
++        self.fitness_sig = FV.signature(self.fitness_spec)
++        self._fit_sv, self._readouts, self._svm_stamps = None, [], []
++
++    # ---- regua ORIG (em TODA leitura que decide: alpha do WiSE e kappa final)
++    def _svm_features(self, encoder, head):
++        """Sempre head(encoder(x)), tta 1: nunca cov_head, qualquer que seja o config."""
++        self.__dict__.setdefault("_readouts", []).append("head")
++        tr = self._embed(encoder, head, self.svm_train_x, tta=1, readout="head").numpy()
++        va = self._embed(encoder, head, self.val_x, tta=1, readout="head").numpy()
++        return tr, va
++
++    def _embed_cov(self, encoder, head, extra=None):
++        self.__dict__.setdefault("_readouts", []).append("cov_head")      # so diagnostico; se alimentar uma decisao, o carimbo acusa
++        return super()._embed_cov(encoder, head, extra)
++
++    def _svm_score(self, tr, va):
++        from ga_search.modehb.supervised_fitness import svm_fitness
++        d = int(va.reshape(len(va), -1).shape[1])
++        if d < BK.MIN_EMBED_DIM:
++            raise EmbedDimError(f"embedding de dimensao {d} < {BK.MIN_EMBED_DIM}")
++        kw = {"C": FV.REQUIRED["C"], "scaler": "none", "whiten": "none", "kappa_weight": 1.0,
++              "max_train": self.sv2["max_train"]}
++        if self.sv2.get("gram_reduce"):
++            kw["gram_reduce"] = True
++        self.__dict__.setdefault("_svm_stamps", []).append({k: kw[k] for k in ("C", "scaler", "whiten", "kappa_weight", "max_train")})
++        return svm_fitness(tr, self.svm_train_y.numpy(), va, self.val_y.numpy(), seed=self.seed, **kw)
++
++    def _svm_quality(self, encoder, head):
++        sv = super()._svm_quality(encoder, head)
++        self._fit_sv = sv
++        return sv
++
++    def _wise_select(self, encoder, head, anchor, trained, alphas, run):
++        out = super()._wise_select(encoder, head, anchor, trained, alphas, run)
++        self._fit_sv = out["sv"]
++        return out
++
++    # ---- uma avaliacao
++    def _evaluate(self, genome, fidelity, ctx, cand_dir, run):
++        if int(genome.get("embed_dim", 0)) < BK.MIN_EMBED_DIM:
++            raise EmbedDimError(f"genoma com embed_dim={genome.get('embed_dim')} < {BK.MIN_EMBED_DIM}")
++        if ctx.get("fitness_sig") not in (None, self.fitness_sig):
++            raise FV.FitnessSigMismatch(f"controller {ctx.get('fitness_sig')} != avaliador {self.fitness_sig}")
++        self._fit_sv, self._readouts, self._svm_stamps = None, [], []
++        base = super()._evaluate(genome, fidelity, ctx, cand_dir, run)
++        sv = self._fit_sv or {}
++        res = FV.finalize(base, kappa=base.get("fitness_kappa"), nonfinite=bool(sv.get("nonfinite")))
++        # carimbo de cada leitura que decidiu (readouts x kwargs do SVM; solver/tta fixos no _svm_features)
++        res["decision_rulers"] = sorted({FV.ruler_sig({"readout": r, "tta": 1, "solver": "libsvm", **st})
++                                         for r in set(self._readouts) for st in self._svm_stamps})
++        res["n_svm_decisions"] = len(self._svm_stamps)
++        res.update(cand_key=ctx.get("cand_key"), lineage_key=ctx.get("lineage_key"),
++                   fitness_sig=self.fitness_sig, config_sha=ctx.get("config_sha"),
++                   checkpoint_sha256=I.file_sha256(res.get("checkpoint")),
++                   embed_dim=int(genome["embed_dim"]), bk=BK.bk_of(res.get("params")),
++                   params_counted="encoder+head (decoders/projetores fora)")
++        return res
+diff --git a/ga_search/hmodehb/hsearch.py b/ga_search/hmodehb/hsearch.py
+new file mode 100644
+index 0000000..ab30256
+--- /dev/null
++++ b/ga_search/hmodehb/hsearch.py
+@@ -0,0 +1,319 @@
++"""Controller do H-MODEHB: subclasse de ``modehb.MODEHB`` com a camada de integridade.
++
++O que muda em relacao ao MODEHB (que continua intocado e e reusado por heranca):
++
++* faixas B0-B4 fixas e teto duro de 5,5M (``bk.py``); pre-checagem estrutural antes de gastar GPU;
++* fitness v2 (``fitness_v2.py``): F = [1 - kappa_val_ORIG, MACs log-normalizados]; ``fitness_sig``
++  gravada no estado e em cada job; o resume recusa outra regua (``FitnessSigMismatch``);
++* ``cand_key`` = genoma + origem dos pesos (ancestral + sha256 do checkpoint) + fidelidade +
++  assinatura. O cache e o resume de promocao usam essa chave (``lineage_key`` sem a fidelidade),
++  nunca so o ``arch_hash``: um filho herdado com a mesma arquitetura de um candidato ja avaliado nao
++  recebe o resultado em cache (a heranca nao e descartada);
++* ``config_sha`` do config completo e ``config_full`` no estado; deriva no resume -> ``ConfigDrift``
++  (salvo ``allow_drift``, registrado em ``drift_log``);
++* trava ``flock`` contra dois controladores no mesmo diretorio;
++* adocao, no resume, de um resultado ja gravado (``hjobs/<job>.json`` do controller ou
++  ``candidates/<id>/f<F>/result.json`` do avaliador) com a mesma ``cand_key`` e checkpoint integro;
++* OOM com tentativas parametrizadas e motivo de falha explicito (oom, nan, missing_ancestor, ...);
++* ids ``h4-<braco>-c#####`` e ``kind = h4_<braco>`` no estado (monitor_report).
++"""
++from __future__ import annotations
++
++import json
++import time
++from pathlib import Path
++from typing import Callable, Iterable, Optional
++
++from ga_search.hmodehb import bk as BK
++from ga_search.hmodehb import fitness_v2 as FV
++from ga_search.hmodehb import integrity as I
++from ga_search.modehb import modehb as M
++
++STATE_VERSION = 1
++
++
++class HMODEHB(M.MODEHB):
++    def __init__(self, config: dict, evaluate: Callable, output_dir, *, arm: str, fitness_spec: dict,
++                 full_config: dict, allow_drift: Iterable[str] = (), oom_retries: int = 4,
++                 oom_sleep_s: float = 180.0, lock: Optional[I.ControllerLock] = None, logger=None,
++                 spifil_repair: Optional[Callable] = None, param_fn: Optional[Callable] = None):
++        cfg = dict(config or {})
++        if (cfg.get("pnas_cs") or {}).get("enabled") or cfg.get("pnas_cs"):
++            raise NotImplementedError("braco C (PNAS-CS) ainda nao roda no H-MODEHB: os niveis do pnas_cs.py "
++                                      "(pontos medios geometricos, cap x1,05) nao sao as faixas B0-B4")
++        if cfg.get("use_latency"):
++            raise FV.FitnessConfigError("fitness v2: latencia nao e objetivo (use_latency: false)")
++        ob = cfg.get("objective_bounds") or {}
++        want = {"flops_lo": FV.FLOPS_BOUNDS[0], "flops_hi": FV.FLOPS_BOUNDS[1]}
++        if any(float(ob[k]) != v for k, v in want.items() if k in ob) or set(ob) - set(want):
++            raise FV.FitnessConfigError(f"objective_bounds deve ser {want}, veio {ob}")
++        cfg["objective_bounds"] = want
++        cfg["stratified"] = BK.stratified_block(cfg.get("stratified"))
++        super().__init__(cfg, evaluate, output_dir, logger=logger, spifil_repair=spifil_repair, param_fn=param_fn)
++        BK.check_strat(self.strat)
++        self.arm = I.check_arm(arm)
++        self.kind = f"h4_{self.arm}"
++        self.fitness_spec = dict(fitness_spec)
++        self.fitness_sig = FV.signature(self.fitness_spec)
++        self.full_config = I._plain(full_config)
++        self.config_sha = I.config_sha(self.full_config)
++        self.allow_drift = tuple(allow_drift or ())
++        self.oom_retries, self.oom_sleep_s = int(oom_retries), float(oom_sleep_s)
++        self._lock = lock
++        self._carry = {}
++
++    # ---- estado
++    def _fresh_state(self):
++        st = super()._fresh_state()
++        st.update({
++            "hmodehb_version": STATE_VERSION, "arm": self.arm, "kind": self.kind,
++            "id_prefix": f"{I.ID_PREFIX}-{self.arm}-",
++            "fitness_sig": self.fitness_sig, "fitness_spec": self.fitness_spec,
++            "config_sha": self.config_sha, "config_full": self.full_config,
++            "config_sha_initial": self._carry.get("config_sha_initial", self.config_sha),
++            "drift_log": list(self._carry.get("drift_log", [])),
++            "created": self._carry.get("created") or time.time(),
++            "bk_bands": BK.bands_dict(), "param_cap": BK.HARD_CAP,
++            "oom": {"retries": self.oom_retries, "sleep_s": self.oom_sleep_s}})
++        return st
++
++    def _check_resume(self):
++        if not self.state_path.exists():
++            return
++        old = json.loads(self.state_path.read_text())
++        if old.get("fitness_sig") != self.fitness_sig:
++            raise FV.FitnessSigMismatch(
++                f"{self.state_path}: regua gravada {old.get('fitness_sig')} != atual {self.fitness_sig}. "
++                f"Uma busca nunca mistura reguas (ex.: C=0.1 x C=100, cov_head x head): use outro diretorio.")
++        if old.get("arm") != self.arm:
++            raise I.ConfigDrift(f"{self.state_path}: braco gravado {old.get('arm')} != {self.arm}")
++        drift = I.check_drift(old, self.full_config, self.allow_drift)
++        self._carry = {"drift_log": list(old.get("drift_log") or []) + ([drift] if drift else []),
++                       "config_sha_initial": old.get("config_sha_initial", old.get("config_sha")),
++                       "created": old.get("created")}
++
++    def run(self, resume: bool = False) -> dict:
++        own = self._lock is None
++        lock = I.ControllerLock(self.out).acquire() if own else self._lock
++        try:
++            self._carry = {}
++            if self.state_path.exists() and resume:
++                self._check_resume()
++            return super().run(resume=resume)
++        finally:
++            if own:
++                lock.release()
++
++    # ---- ids
++    def _new_id(self):
++        self.state["n_candidates"] += 1
++        return I.cand_id(self.arm, self.state["n_candidates"])
++
++    # ---- identidade do candidato
++    def _weight_origin(self, genome, cand_id, role, inherit):
++        """Origem dos pesos: a do candidato (promocao/extensao/gemea seguinte) ou uma nova."""
++        if cand_id is not None:
++            for j in self.state["jobs"]:
++                if j["cand_id"] == cand_id and j["role"] == role and j.get("weight_origin") is not None:
++                    return j["weight_origin"]
++        if inherit and role == "search":
++            jobs, pj, sha = self.state["jobs"], inherit.get("parent_job"), None
++            if pj is not None and 0 <= int(pj) < len(jobs):
++                sha = (jobs[int(pj)].get("result") or {}).get("checkpoint_sha256")
++            if sha is None:
++                sha = I.file_sha256(inherit.get("checkpoint"))
++            return {"kind": "inherit", "parent_cand_id": inherit.get("parent_cand_id"),
++                    "parent_fidelity": inherit.get("parent_fidelity"), "parent_ckpt_sha256": sha,
++                    "n_blocks": inherit.get("n_blocks"), "layer_map": inherit.get("layer_map")}
++        if genome.get("external"):
++            return {"kind": "external", "external": genome["external"]}
++        return {"kind": "scratch", "init": genome.get("init")}
++
++    def _keys(self, genome, fid, cand_id, role, inherit):
++        origin = self._weight_origin(genome, cand_id, role, inherit)
++        lkey = I.lineage_key(M.canonical(genome), genome.get("seed"), origin, self.fitness_sig)
++        return origin, lkey, I.cand_key(lkey, fid)
++
++    # ---- avaliacao (mesma estrutura de MODEHB._evaluate; cache/resume por cand_key/lineage_key)
++    def _evaluate(self, genome, fid, *, parent_id, generation, rung, cand_id=None, vector=None,
++                  role="search", twin_of=None, twin_source=None, inherit=None, extra_ctx=None):
++        genome = M.repair(genome, **self.repair_kw)
++        origin, lkey, ckey = self._keys(genome, fid, cand_id, role, inherit)
++        jobs = self.state["jobs"]
++        cached = [j for j in jobs if j.get("cand_key") == ckey and j["role"] == role]
++        lower = [j for j in jobs if j.get("lineage_key") == lkey and j["role"] == role and j["fidelity"] < fid
++                 and j["status"] == "ok" and j["result"].get("checkpoint")]
++        resume = max(lower, key=lambda j: j["fidelity"]) if lower else None
++        if cand_id is None:
++            cand_id = resume["cand_id"] if resume else (cached[0]["cand_id"] if cached else self._new_id())
++        ctx = {"cand_id": cand_id, "parent_id": parent_id, "generation": generation, "bracket": generation,
++               "rung": rung, "role": role, "twin_of": twin_of, "resume": resume, "twin_source": twin_source,
++               "front_rank": lambda result, _f=fid: self.rank_of(result, _f),
++               "cand_key": ckey, "lineage_key": lkey, "fitness_sig": self.fitness_sig,
++               "config_sha": self.config_sha, "job_index": len(jobs), "weight_origin": origin, "arm": self.arm}
++        if extra_ctx:
++            ctx.update(extra_ctx)
++        if inherit and resume is None and not cached and role == "search":
++            ctx["inherit"] = inherit
++        p_est = int(self.param_fn(genome))
++        if cached:
++            result = {k: v for k, v in cached[0]["result"].items()}
++            result["cached_from"] = cached[0]["job"]
++            cost_free = True
++        elif p_est > BK.HARD_CAP:         # teto duro: nunca gasta GPU num genoma acima de 5,5M
++            result = {"status": "failed", "infeasible": "param_cap", "reason": "param_cap",
++                      "error": f"params estimados {p_est} > teto {BK.HARD_CAP}"}
++            cost_free = True
++        else:
++            result = self._call(genome, fid, ctx)
++            cost_free = False
++        FV.check_decisions(result, self.fitness_spec)   # toda decisao pela regua gravada, senao para tudo
++        from ga_search.modehb import strata as S
++        p_meas = result.get("params") if result.get("status", "ok") == "ok" else None
++        stratum = S.stratum_of(p_meas if p_meas is not None else p_est, self.strat)
++        if result.get("status", "ok") == "ok" and p_meas is not None and int(p_meas) > BK.HARD_CAP:
++            result = {**result, "status": "failed", "infeasible": "param_cap", "reason": "param_cap",
++                      "error": f"params {p_meas} > teto {BK.HARD_CAP}"}
++        F = FV.objectives(result)
++        rec = {"job": len(jobs), "cand_id": cand_id, "parent_id": parent_id,
++               "generation": generation, "rung": rung, "fidelity": fid, "role": role, "twin_of": twin_of,
++               "genome": genome, "arch_hash": M.arch_hash(genome),
++               "twin_key": M.arch_hash(genome, include_init=False),
++               "vector": list(vector) if vector is not None else self._encode(genome).tolist(),
++               "status": result.get("status", "ok"), "F": F, "result": result,
++               "resumed_from": resume["job"] if resume else None, "cached": cost_free,
++               "time": time.time(), "cand_key": ckey, "lineage_key": lkey, "weight_origin": origin,
++               "fitness_sig": self.fitness_sig, "config_sha": self.config_sha,
++               "stratum": stratum, "bk": stratum, "params_est": p_est,
++               **({"inherit": {k: v for k, v in ctx["inherit"].items() if k != "effective_specs"}}
++                  if ctx.get("inherit") else {})}
++        jobs.append(rec)
++        if not cost_free:
++            self.state["gpu_hours"] += float(result.get("gpu_hours", 0.0) or 0.0)
++        self._save()
++        if role == "search" and genome["init"] == "spifil" and fid == self.fidelities[-1] and rec["status"] == "ok" \
++                and self.random_baseline:
++            self._evaluate_twin(rec)
++        return rec
++
++    def _evaluate_twin(self, rec):
++        """Gemea random ao longo do caminho de fidelidades DESTE candidato (cand_id, nao arch_hash)."""
++        twin = M.make_twin(rec["genome"])
++        mine = [j for j in self.state["jobs"] if j["cand_id"] == rec["cand_id"] and j["role"] == "search"]
++        path = sorted({j["fidelity"] for j in mine if j["status"] == "ok"})
++        twin_id = None
++        for f in path:
++            done = [j for j in self.state["jobs"] if j["role"] == "twin" and j["twin_of"] == rec["cand_id"]
++                    and j["fidelity"] == f]
++            if done:
++                twin_id = done[0]["cand_id"]
++                continue
++            src = next(j for j in mine if j["fidelity"] == f)
++            t = self._evaluate(twin, f, parent_id=rec["cand_id"], generation=rec["generation"],
++                               rung=src["rung"], cand_id=twin_id, role="twin",
++                               twin_of=rec["cand_id"], twin_source=src)
++            twin_id = t["cand_id"]
++
++    # ---- chamada do avaliador: replay, adocao, OOM, motivo de falha
++    def _hjob_path(self, k):
++        return self.out / "hjobs" / f"{int(k):06d}.json"
++
++    def _adopt(self, k, ctx, fid):
++        """Resultado ja gravado deste job (crash entre a escrita e o _save) ou None."""
++        srcs = [(self._hjob_path(k), lambda d: (d or {}).get("result")),
++                (self.out / "candidates" / ctx["cand_id"] / f"f{int(fid)}" / "result.json", lambda d: d)]
++        for path, get in srcs:
++            res = get(I.read_json(path)) if path.exists() else None
++            if res is None:
++                continue
++            why = I.adoptable(res, ckey=ctx["cand_key"], fitness_sig=self.fitness_sig)
++            if why is None:
++                res = dict(res)
++                res["adopted"] = {"from": str(path), "job": int(k), "time": time.time()}
++                print(f"[hmodehb] job {k} ({ctx['cand_id']}@{fid:g}) adotado de {path} (sem re-treino)", flush=True)
++                return res
++            print(f"[hmodehb] job {k}: {path} nao adotado ({why})", flush=True)
++        return None
++
++    def _call(self, genome, fid, ctx):
++        k = len(self.state["jobs"])
++        if k < len(self._replay):
++            old = self._replay[k]
++            if old["arch_hash"] != M.arch_hash(genome) or float(old["fidelity"]) != float(fid) \
++                    or old["role"] != ctx["role"] or old.get("cand_key") != ctx["cand_key"] \
++                    or old.get("fitness_sig") != self.fitness_sig:
++                raise M.ReplayMismatch(
++                    f"job {k}: gravado {old['arch_hash']}@{old['fidelity']} key={old.get('cand_key')} "
++                    f"sig={old.get('fitness_sig')} vs {M.arch_hash(genome)}@{fid} key={ctx['cand_key']} "
++                    f"sig={self.fitness_sig}")
++            return old["result"]
++        result = self._adopt(k, ctx, fid)
++        if result is None:
++            I.atomic_write_json(self.out / "pending_job.json",
++                                {"job": k, "cand_id": ctx["cand_id"], "cand_key": ctx["cand_key"], "fidelity": fid,
++                                 "role": ctx["role"], "config_sha": self.config_sha,
++                                 "fitness_sig": self.fitness_sig, "time": time.time()})
++            result = self._run_with_retries(genome, fid, ctx, k)
++        FV.check_decisions(result, self.fitness_spec)       # antes de gravar qualquer coisa
++        result.setdefault("status", "ok")
++        result.setdefault("cand_key", ctx["cand_key"])
++        result.setdefault("fitness_sig", self.fitness_sig)
++        result.setdefault("config_sha", self.config_sha)
++        if result["status"] == "ok" and result.get("checkpoint") and not result.get("checkpoint_sha256"):
++            result["checkpoint_sha256"] = I.file_sha256(result["checkpoint"])
++        I.atomic_write_json(self._hjob_path(k), {"job": k, "cand_id": ctx["cand_id"], "cand_key": ctx["cand_key"],
++                                                 "fidelity": fid, "role": ctx["role"], "result": result})
++        return result
++
++    def _run_with_retries(self, genome, fid, ctx, k):
++        attempt = 0
++        while True:
++            try:
++                res = dict(self.evaluate_fn(genome, fid, ctx))
++                if attempt:
++                    res["oom_retries"] = attempt
++                return res
++            except Exception as exc:       # falha de avaliacao = candidato inviavel, nao crash
++                if M._fatal_cuda(exc):        # contexto CUDA envenenado: sem registro, o resume refaz
++                    raise
++                if isinstance(exc, FV.FitnessSigMismatch):   # regua errada (inclui RulerViolation): fatal
++                    raise
++                if M._is_oom(exc) and attempt < self.oom_retries:
++                    attempt += 1
++                    print(f"[hmodehb] OOM no job {k}; tentativa {attempt}/{self.oom_retries} em {self.oom_sleep_s:g}s",
++                          flush=True)
++                    time.sleep(self.oom_sleep_s)
++                    continue
++                if M._is_oom(exc):
++                    reason = "oom"
++                elif isinstance(exc, FV.NonFiniteFitness):
++                    reason = "nan"
++                elif type(exc).__name__ == "EmbedDimError":
++                    reason = "embed_dim"
++                elif isinstance(exc, FV.FitnessConfigError):
++                    reason = "fitness_config"
++                elif isinstance(exc, FileNotFoundError) and ctx.get("inherit"):
++                    reason = "missing_ancestor"
++                else:
++                    reason = "error"
++                res = {"status": "failed", "reason": reason, "error": f"{type(exc).__name__}: {exc}"}
++                if attempt:
++                    res["oom_retries"] = attempt
++                return res
++
++    # ---- exportacao: melhor por B_k (validacao, fidelidade maxima)
++    def best_by_bk(self, fidelity=None) -> dict:
++        fid = float(fidelity if fidelity is not None else self.fidelities[-1])
++        out = {}
++        for j in self.state["jobs"]:
++            if j["role"] != "search" or j["status"] != "ok" or float(j["fidelity"]) != fid or not j.get("bk"):
++                continue
++            cur = out.get(j["bk"])
++            key = (j["F"][0], j["F"][1])
++            if cur is None or key < (cur["F"][0], cur["F"][1]):
++                out[j["bk"]] = {"cand_id": j["cand_id"], "cand_key": j["cand_key"], "F": j["F"],
++                                "kappa_val_orig": j["result"].get("kappa_val_orig", j["result"].get("fitness_kappa")),
++                                "params": j["result"].get("params"), "flops": j["result"].get("flops"),
++                                "checkpoint": j["result"].get("checkpoint"),
++                                "checkpoint_sha256": j["result"].get("checkpoint_sha256"), "fidelity": fid}
++        return {"fitness_sig": self.fitness_sig, "fidelity": fid, "best": out}
+diff --git a/ga_search/hmodehb/integrity.py b/ga_search/hmodehb/integrity.py
+new file mode 100644
+index 0000000..b68f6ee
+--- /dev/null
++++ b/ga_search/hmodehb/integrity.py
+@@ -0,0 +1,210 @@
++"""Integridade do H-MODEHB (desenho secao 7): hash de config + deriva, trava de controlador,
++identidade de candidato (cand_key) e adocao de resultados ja gravados no resume.
++
++Nada aqui importa torch: tudo testavel em CPU e sem GPU.
++"""
++from __future__ import annotations
++
++import datetime as _dt
++import fcntl
++import hashlib
++import json
++import os
++import socket
++import time
++from pathlib import Path
++from typing import Iterable, Optional
++
++# chaves fora do hash de config: nao mudam o experimento (modo do W&B, dispositivo)
++DRIFT_EXCLUDE = ("wandb.mode", "device", "hmodehb.allow_drift")
++ARMS = ("A", "B", "C", "D0", "D", "E")
++ID_PREFIX = "h4"
++
++
++# ────────────────────────────────────────────────────────────────── config hash / deriva
++class ConfigDrift(RuntimeError):
++    """O config atual difere do gravado no search_state.json (resume com outra receita)."""
++
++
++def _plain(x):
++    return json.loads(json.dumps(x, sort_keys=True, default=str))
++
++
++def flatten(d, prefix: str = "") -> dict:
++    out = {}
++    if isinstance(d, dict):
++        if not d and prefix:
++            out[prefix] = {}
++        for k in sorted(d, key=str):
++            out.update(flatten(d[k], f"{prefix}.{k}" if prefix else str(k)))
++    else:
++        out[prefix] = d
++    return out
++
++
++def _strip(cfg: dict, exclude: Iterable[str] = DRIFT_EXCLUDE) -> dict:
++    flat = flatten(_plain(cfg))
++    ex = tuple(exclude)
++    return {k: v for k, v in flat.items() if not any(k == e or k.startswith(e + ".") for e in ex)}
++
++
++def config_sha(cfg: dict, exclude: Iterable[str] = DRIFT_EXCLUDE) -> str:
++    """sha256 do config completo (search + eval + train + data + ...) canonico (chaves ordenadas)."""
++    blob = json.dumps(_strip(cfg, exclude), sort_keys=True, separators=(",", ":"))
++    return hashlib.sha256(blob.encode()).hexdigest()
++
++
++def config_diff(old: dict, new: dict, exclude: Iterable[str] = DRIFT_EXCLUDE) -> list:
++    a, b = _strip(old, exclude), _strip(new, exclude)
++    return sorted(k for k in set(a) | set(b) if a.get(k, "<ausente>") != b.get(k, "<ausente>"))
++
++
++def _allowed(key: str, allow: Iterable[str]) -> bool:
++    return any(key == a or key.startswith(a + ".") for a in allow)
++
++
++def check_drift(old_state: dict, cfg: dict, allow: Iterable[str] = ()) -> Optional[dict]:
++    """None se nao ha deriva; dict de registro se a deriva e toda permitida; ``ConfigDrift`` senao."""
++    old_cfg = old_state.get("config_full")
++    old_sha = old_state.get("config_sha")
++    if old_cfg is None or old_sha is None:
++        raise ConfigDrift("search_state.json sem config_full/config_sha: nao e um estado H-MODEHB")
++    new_sha = config_sha(cfg)
++    if new_sha == old_sha:
++        return None
++    keys = config_diff(old_cfg, cfg)
++    allow = tuple(allow or ())
++    bad = [k for k in keys if not _allowed(k, allow)]
++    if bad:
++        a, b = _strip(old_cfg), _strip(cfg)
++        show = {k: [a.get(k, "<ausente>"), b.get(k, "<ausente>")] for k in bad[:20]}
++        raise ConfigDrift(f"config mudou desde o inicio da busca ({len(bad)} chave(s) nao permitidas): {show}. "
++                          f"Use --allow-drift <chave> so se a mudanca for intencional (fica no drift_log).")
++    return {"time": time.time(), "keys": keys, "old_sha": old_sha, "new_sha": new_sha, "allowed": list(allow)}
++
++
++# ────────────────────────────────────────────────────────────────── trava de controlador
++class ControllerLocked(RuntimeError):
++    """Outro controlador ja segura o lock deste search_state."""
++
++
++class ControllerLock:
++    """``fcntl.flock`` exclusivo e nao bloqueante em ``<out>/controller.lock``.
++
++    O lock e do kernel (some quando o processo morre, inclusive kill -9): nunca fica preso. O arquivo
++    guarda pid/host/inicio do dono atual so para diagnostico."""
++
++    def __init__(self, out_dir, name: str = "controller.lock"):
++        self.path = Path(out_dir) / name
++        self.fd = None
++
++    def acquire(self):
++        self.path.parent.mkdir(parents=True, exist_ok=True)
++        fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
++        try:
++            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
++        except OSError:
++            try:
++                owner = os.pread(fd, 4096, 0).decode(errors="replace").strip()
++            finally:
++                os.close(fd)
++            raise ControllerLocked(f"{self.path} ja esta travado por outro controlador: {owner or '?'}")
++        info = {"pid": os.getpid(), "host": socket.gethostname(),
++                "start": _dt.datetime.now().isoformat(timespec="seconds")}
++        os.ftruncate(fd, 0)
++        os.pwrite(fd, json.dumps(info).encode(), 0)
++        os.fsync(fd)
++        self.fd = fd
++        return self
++
++    def release(self):
++        if self.fd is not None:
++            try:
++                fcntl.flock(self.fd, fcntl.LOCK_UN)
++            finally:
++                os.close(self.fd)
++                self.fd = None
++
++    def __enter__(self):
++        return self.acquire()
++
++    def __exit__(self, *exc):
++        self.release()
++        return False
++
++
++# ────────────────────────────────────────────────────────────────── ids e chaves
++def check_arm(arm: str) -> str:
++    if arm not in ARMS:
++        raise ValueError(f"braco {arm!r} invalido; use um de {ARMS}")
++    return arm
++
++
++def cand_id(arm: str, n: int) -> str:
++    return f"{ID_PREFIX}-{check_arm(arm)}-c{int(n):05d}"
++
++
++def _h(obj) -> str:
++    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()[:20]
++
++
++def lineage_key(canonical_genome: dict, seed, origin: dict, fitness_sig: str) -> str:
++    """Identidade do candidato sem a fidelidade: genoma efetivo + seed + origem dos pesos + regua.
++    Uma promocao (mesmo candidato, fidelidade maior) mantem a lineage_key."""
++    return _h({"g": canonical_genome, "seed": seed, "origin": origin, "fsig": fitness_sig})
++
++
++def cand_key(lkey: str, fidelity) -> str:
++    """Identidade de um JOB: lineage_key + fidelidade (= genoma + origem + fidelidade + assinatura)."""
++    return _h({"l": lkey, "fid": float(fidelity)})
++
++
++def file_sha256(path, chunk: int = 1 << 20) -> Optional[str]:
++    p = Path(path) if path else None
++    if p is None or not p.is_file():
++        return None
++    h = hashlib.sha256()
++    with p.open("rb") as f:
++        for b in iter(lambda: f.read(chunk), b""):
++            h.update(b)
++    return h.hexdigest()
++
++
++# ────────────────────────────────────────────────────────────────── adocao no resume
++def atomic_write_json(path, value):
++    path = Path(path)
++    path.parent.mkdir(parents=True, exist_ok=True)
++    tmp = path.with_name(path.name + f".tmp{os.getpid()}")
++    with tmp.open("w") as f:
++        f.write(json.dumps(value, indent=1, sort_keys=True, default=str))
++        f.flush()
++        os.fsync(f.fileno())
++    tmp.replace(path)
++
++
++def read_json(path) -> Optional[dict]:
++    try:
++        v = json.loads(Path(path).read_text())
++    except Exception:          # ausente, parcial (kill durante a escrita) ou corrompido -> nao adota
++        return None
++    return v if isinstance(v, dict) else None
++
++
++def adoptable(result: Optional[dict], *, ckey: str, fitness_sig: str) -> Optional[str]:
++    """Motivo para NAO adotar (None = adotavel). Exige mesma cand_key e regua; se ok, checkpoint
++    presente com o mesmo sha256 gravado (nunca adota checkpoint parcial/trocado)."""
++    if result is None:
++        return "sem resultado"
++    if result.get("cand_key") != ckey:
++        return f"cand_key {result.get('cand_key')} != {ckey}"
++    if result.get("fitness_sig") != fitness_sig:
++        return f"fitness_sig {result.get('fitness_sig')} != {fitness_sig}"
++    if result.get("status", "ok") == "ok":
++        ck, sha = result.get("checkpoint"), result.get("checkpoint_sha256")
++        if not ck or not sha:
++            return "resultado ok sem checkpoint/sha256"
++        got = file_sha256(ck)
++        if got != sha:
++            return f"checkpoint {ck} ausente ou com sha256 diferente"
++    return None
++
+diff --git a/ga_search/hmodehb/run_hsearch.py b/ga_search/hmodehb/run_hsearch.py
+new file mode 100644
+index 0000000..f6b9da1
+--- /dev/null
++++ b/ga_search/hmodehb/run_hsearch.py
+@@ -0,0 +1,177 @@
++"""Entrada do H-MODEHB B0-B4.
++
++    python -m ga_search.hmodehb.run_hsearch --arm A --dataset remote_sensing [--seed 42]
++        [--config ga_search/config/hmodehb_b0b4/base.yaml] [--set a.b=VALOR] [--allow-drift chave]
++
++Config = ``base.yaml`` (schema I11 do search_v3, autocontido) + ``arms/<braco>.yaml`` (merge profundo)
+++ ``--set``. O bloco ``hmodehb:`` do YAML (oom, allow_drift) vai para ``cfg["hmodehb"]``. Diretorio:
++``artifacts/hmodehb_b0b4/arm_<braco>/<dataset>/state/seed<k>`` (sem as substrings lemonade/seeded/pnas_cs,
++que o monitor_report usaria para classificar o run).
++"""
++from __future__ import annotations
++
++import argparse
++import copy
++import hashlib
++import json
++from pathlib import Path
++
++import numpy as np
++import torch
++import yaml
++
++from ga_search.hmodehb import bk as BK
++from ga_search.hmodehb import fitness_v2 as FV
++from ga_search.hmodehb import integrity as I
++from ga_search.modehb import run_search as RS
++
++CONFIG_DIR = Path("ga_search/config/hmodehb_b0b4")
++BASE = CONFIG_DIR / "base.yaml"
++H_DEFAULTS = {"oom": {"retries": 4, "sleep_s": 180}, "allow_drift": []}   # R5: 4 x 180 s
++
++
++def deep_merge(a: dict, b: dict) -> dict:
++    out = copy.deepcopy(a)
++    for k, v in (b or {}).items():
++        out[k] = deep_merge(out[k], v) if isinstance(out.get(k), dict) and isinstance(v, dict) else copy.deepcopy(v)
++    return out
++
++
++def load_raw(arm: str, base=BASE, arms_dir=None) -> dict:
++    I.check_arm(arm)
++    raw = yaml.safe_load(Path(base).read_text()) or {}
++    arm_path = Path(arms_dir or Path(base).parent / "arms") / f"{arm}.yaml"
++    if not arm_path.exists():
++        raise FileNotFoundError(f"braco {arm}: {arm_path} nao existe (bracos D0/D/E dependem dos gates A2/A3)")
++    return deep_merge(raw, yaml.safe_load(arm_path.read_text()) or {})
++
++
++def load_hconfig(arm: str, dataset: str, seed=None, overrides=(), base=BASE, arms_dir=None) -> dict:
++    """Config resolvido (mesmo schema do run_search.load_config) + ``cfg["hmodehb"]``."""
++    raw = load_raw(arm, base, arms_dir)
++    h = deep_merge(H_DEFAULTS, raw.pop("hmodehb", None) or {})
++    if (raw.get("pnas_cs") or {}).get("enabled"):
++        raise NotImplementedError("braco C (PNAS-CS) ainda nao suportado no H-MODEHB (niveis != B0-B4)")
++    paths = raw.setdefault("paths", {})
++    paths["state_dir"] = str(paths.get("state_dir", "artifacts/hmodehb_b0b4/arm_{arm}/{dataset}/state")).replace(
++        "{arm}", arm)
++    if "dataset_config_dir" in raw:            # mesma traducao do run_search.load_config
++        raw = RS.from_search_yaml(raw, dataset, seed)
++        raw["eval"] = {**raw.get("eval", {}), **raw.pop("eval_fitness", {})}
++    elif seed is not None:
++        raw["seed"] = int(seed)
++    for item in overrides or ():
++        if item.startswith("hmodehb."):
++            RS._set_dotted(h, item[len("hmodehb."):])
++        else:
++            RS._set_dotted(raw, item)
++    cfg = copy.deepcopy(RS.DEFAULTS)
++    for k, v in raw.items():
++        cfg[k] = {**cfg[k], **v} if isinstance(cfg.get(k), dict) and isinstance(v, dict) else v
++    if cfg["device"] == "auto":
++        cfg["device"] = "cuda" if torch.cuda.is_available() else "cpu"
++    cfg["search"] = {**cfg["search"], "seed": int(cfg["seed"]),
++                     "image_size": int(cfg["data"].get("image_size", 200))}
++    cfg["search"]["stratified"] = BK.stratified_block(cfg["search"].get("stratified"))
++    cfg["search"]["objective_bounds"] = {"flops_lo": FV.FLOPS_BOUNDS[0], "flops_hi": FV.FLOPS_BOUNDS[1]}
++    cfg["search"]["use_latency"] = False
++    FV.validate_eval(cfg["eval"])
++    h.update(arm=arm, kind=f"h4_{arm}", id_prefix=f"{I.ID_PREFIX}-{arm}-")
++    h["allow_drift"] = list(h.get("allow_drift") or [])
++    cfg["hmodehb"] = h
++    return cfg
++
++
++def controller_id(cfg: dict, fitness_sig: str) -> str:
++    """Id do controller W&B: diretorio + braco + REGUA (outra regua = outro controller, nunca curvas misturadas)."""
++    key = f"{Path(cfg['output_dir']).resolve()}|{cfg['hmodehb']['arm']}|{fitness_sig}"
++    return "hctrl-" + hashlib.sha1(key.encode()).hexdigest()[:16]
++
++
++def hcontroller(cfg: dict, fitness_sig: str):
++    w = cfg.get("wandb") or {}
++    if not w.get("enabled"):
++        return None
++    from ga_search.modehb import wandb_logger as WL
++    arm, ds = cfg["hmodehb"]["arm"], cfg.get("dataset_name") or ""
++    kw = {k: w[k] for k in ("project", "entity", "mode") if w.get(k)}
++    return WL.ControllerRun(ref_point=[float(cfg["search"].get("ref_point", 1.1))] * 2,
++                            max_fidelity=float(cfg["search"]["fidelities"][-1]),
++                            name=f"h4-controller-{ds}-{arm}-v2_{fitness_sig}",
++                            group=f"hmodehb_b0b4/{ds}",
++                            tags=["controller", "hmodehb_b0b4", "fitness_v2", f"arm_{arm}", f"fsig_{fitness_sig}"],
++                            config={**cfg, "fitness_sig": fitness_sig}, id=controller_id(cfg, fitness_sig),
++                            resume="allow", **kw)
++
++
++def build(cfg: dict, evaluator, *, allow_drift=(), lock=None, logger=None, param_fn=None):
++    """HMODEHB pronto para ``run`` (sem efeitos alem do diretorio). Separado do main para os testes."""
++    from ga_search.hmodehb.hsearch import HMODEHB
++    spifil_repair = None
++    if (cfg.get("spifil") or {}).get("spifil_ops", False):
++        import functools
++        from ga_search.modehb.init import repair_for_spifil
++        spifil_repair = functools.partial(repair_for_spifil, spifil_ops=True)
++    h = cfg["hmodehb"]
++    return HMODEHB(cfg["search"], evaluator, cfg["output_dir"], arm=h["arm"], fitness_spec=evaluator.fitness_spec,
++                   full_config=cfg, allow_drift=list(h.get("allow_drift") or []) + list(allow_drift or []),
++                   oom_retries=int(h["oom"]["retries"]), oom_sleep_s=float(h["oom"]["sleep_s"]), lock=lock,
++                   logger=logger, spifil_repair=spifil_repair, param_fn=param_fn)
++
++
++def write_outputs(search, state, out: Path):
++    top = float(search.fidelities[-1])
++    summary = {"n_jobs": len(state["jobs"]), "gpu_hours": state["gpu_hours"], "fitness_sig": search.fitness_sig,
++               "config_sha": search.config_sha, "arm": search.arm,
++               "pareto_max_fidelity": [{"cand_id": j["cand_id"], "bk": j.get("bk"), "F": j["F"],
++                                        "checkpoint": j["result"].get("checkpoint")} for j in search.front(top)],
++               "brackets": state["brackets_log"]}
++    I.atomic_write_json(out / "summary.json", summary)
++    I.atomic_write_json(out / "best_by_bk.json", search.best_by_bk(top))
++    return summary
++
++
++def main(argv=None):
++    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
++    ap.add_argument("--arm", required=True, choices=I.ARMS)
++    ap.add_argument("--dataset", required=True)
++    ap.add_argument("--seed", type=int)
++    ap.add_argument("--config", default=str(BASE))
++    ap.add_argument("--resume", action="store_true")
++    ap.add_argument("--set", action="append", default=[], metavar="a.b=VALOR")
++    ap.add_argument("--allow-drift", action="append", default=[], metavar="chave[,chave]",
++                    help="chaves de config que podem mudar no resume (registradas em drift_log)")
++    args = ap.parse_args(argv)
++    torch.multiprocessing.set_sharing_strategy("file_system")
++    RS._cap_cpu_threads()
++    cfg = load_hconfig(args.arm, args.dataset, args.seed, args.set, base=args.config)
++    out = Path(cfg["output_dir"])
++    out.mkdir(parents=True, exist_ok=True)
++    lock = I.ControllerLock(out).acquire()      # antes de carregar dados: o 2o controlador sai na hora
++    try:
++        resolved = out / "config_resolved.yaml"
++        if not resolved.exists():
++            resolved.write_text(yaml.safe_dump(cfg, sort_keys=False))
++        torch.manual_seed(int(cfg["seed"]))
++        np.random.seed(int(cfg["seed"]))
++        from ga_search.hmodehb.hevaluate import HEvaluator
++        evaluator = HEvaluator(cfg, out)
++        if cfg["search"].get("external_seed"):
++            from ga_search.modehb.external_seed import prepare
++            cfg["search"]["external_seed"] = prepare(cfg["search"]["external_seed"], out)
++        cfg["search"]["spifil_pool_sizes"] = [len(v) for _, v in sorted(evaluator.spifil_pool.items())]
++        controller = hcontroller(cfg, evaluator.fitness_sig)
++        allow = [k for a in args.allow_drift for k in a.split(",") if k]
++        search = build(cfg, evaluator, allow_drift=allow, lock=lock, logger=controller)
++        resume = args.resume or search.state_path.exists()
++        state = search.run(resume=resume)
++        summary = write_outputs(search, state, out)
++        if controller is not None:
++            controller.finish()
++        print(json.dumps({k: summary[k] for k in ("n_jobs", "gpu_hours", "fitness_sig")}))
++    finally:
++        lock.release()
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/ga_search/modehb/monitor_report.py b/ga_search/modehb/monitor_report.py
+index 79a119b..43f1ee1 100644
+--- a/ga_search/modehb/monitor_report.py
++++ b/ga_search/modehb/monitor_report.py
+@@ -22,7 +22,8 @@ import torch
+ ROOT_GLOBS = ["artifacts/modehb_hybrid", "artifacts/modehb_lemonade",
+               "artifacts/modehb_hybrid_C01_*", "artifacts/modehb_lemonade_C01_*",
+               "artifacts/modehb_seeded", "artifacts/modehb_lemonade_seeded",   # external-seed searches
+-              "artifacts/pnas_cs"]                                           # PNAS-CS (pnas_cs.py)
++              "artifacts/pnas_cs",                                           # PNAS-CS (pnas_cs.py)
++              "artifacts/hmodehb_b0b4/arm_*"]                                # H-MODEHB B0-B4 (ga_search/hmodehb)
+ # roles reported on TEST (never fed back): search jobs + the PNAS-CS Phase-0 AE ablation arms
+ REPORT_ROLES = ("search", "phase0_ae", "phase0_noae")
+ OUT_JSONL = Path("ga_search/modehb/reports/test_svm_C100.jsonl")   # C=100 sempre; o C=0.1 antigo fica em test_svm.jsonl
+@@ -39,7 +40,13 @@ FM = {"remote_sensing": {"AIMv2": 0.746, "DINOv2": 0.719, "ResNet-50": 0.704, "I
+       "protozoan": {"AIMv2": 0.968, "DINOv2": 0.956, "I-JEPA": 0.938, "ConvNeXtV2-pico": 0.853, "ResNet-50": 0.822}}
+ 
+ 
+-def _kind(root):
++def _kind(root, state=None):
++    # H-MODEHB B0-B4 (ga_search/hmodehb) first: own kind h4_<arm> from its state (ids h4-<arm>-c#####),
++    # never folded into hybrid/lemonade even when a directory name contains those substrings
++    if (state or {}).get("kind", "").startswith("h4_"):
++        return state["kind"]
++    if "hmodehb_b0b4" in Path(root).parts:
++        return "h4_" + Path(root).name.replace("arm_", "")
+     if "pnas_cs" in Path(root).name:
+         return "pnas_cs"
+     kind = "lemonade" if "lemonade" in Path(root).name else "hybrid"
+@@ -50,6 +57,8 @@ def _fit_sig(state, root=None):
+     """Fitness signature of a search. search_state.json does not store the eval block, so fall back to the
+     directory convention: archives named *_C01_* hold the old C=0.1/kw=0.75 runs; every live / seeded / pnas
+     directory was (re)started after 15/11 20:50 with C=100, kappa_weight=1.0."""
++    if state.get("fitness_sig"):           # H-MODEHB: the state carries its fitness_v2 signature
++        return f"v2_{state['fitness_sig']}"
+     sv = ((state.get("config") or {}).get("eval") or {}).get("svm_fitness") or {}
+     if sv:
+         return f"C{float(sv.get('C', 100.0)):g}_kw{float(sv.get('kappa_weight', 1.0)):g}"
+@@ -108,7 +117,7 @@ def pending():
+                     s = json.loads(st.read_text())
+                 except Exception:
+                     continue
+-                sig, kind = _fit_sig(s, root), _kind(root)
++                sig, kind = _fit_sig(s, root), _kind(root, s)
+                 if st.parts[-2] != "seed42":          # other search seeds get their own keys (cand ids restart)
+                     kind = f"{kind}_{st.parts[-2]}"
+                 for k, j in enumerate(s["jobs"]):
+@@ -241,7 +250,7 @@ def write_csv():
+                     s = json.loads(st.read_text())
+                 except Exception:
+                     continue
+-                sig, kind = _fit_sig(s, root), _kind(root)
++                sig, kind = _fit_sig(s, root), _kind(root, s)
+                 if st.parts[-2] != "seed42":
+                     kind = f"{kind}_{st.parts[-2]}"
+                 for j in s["jobs"]:
+@@ -256,7 +265,8 @@ def write_csv():
+         w.writerow(["tecnica", "base", "tipo", "pct", "split", "conjunto", "metrica", "valor", "params", "flops",
+                     "fidelidade_epocas", "estrato", "cand_id", "fitness", "regua", "genoma", "fonte"])
+         for key, (i, r) in sorted(best.items(), key=lambda kv: (kv[1][1]["dataset"], -kv[1][1]["test_kappa"])):
+-            tec = ("Hybrid SPiFiL PNAS-CS" if r["kind"].startswith("pnas_cs") else
++            tec = (f"H-MODEHB B0-B4 braco {r['kind'].split('_')[1]}" if r["kind"].startswith("h4_") else
++                   "Hybrid SPiFiL PNAS-CS" if r["kind"].startswith("pnas_cs") else
+                    ("Hybrid SPiFiL MO-DEHB" if r["kind"].startswith("hybrid") else "Hybrid SPiFiL LEMONADE") +
+                    (" semeada (SPiFiL pequeno + LeJEPA)" if "_seeded" in r["kind"] else "")) + \
+                 (f" ({r['kind'].rsplit('_', 1)[-1]})" if "_seed4" in r["kind"] else "")
+diff --git a/tests/hmodehb/_helpers.py b/tests/hmodehb/_helpers.py
+new file mode 100644
+index 0000000..2f856b6
+--- /dev/null
++++ b/tests/hmodehb/_helpers.py
+@@ -0,0 +1,97 @@
++"""Utilitarios dos testes do H-MODEHB: avaliador sintetico (sem GPU, sem dados) que se comporta como o
++``HEvaluator`` no que importa para a integridade (result.json + checkpoint + sha256 + chaves)."""
++from __future__ import annotations
++
++import hashlib
++import json
++import math
++import os
++import signal
++import sys
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[2]
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
++from ga_search.hmodehb import fitness_v2 as FV  # noqa: E402
++from ga_search.hmodehb import integrity as I  # noqa: E402
++from ga_search.hmodehb import run_hsearch as R  # noqa: E402
++from ga_search.modehb import strata as S  # noqa: E402
++
++SPEC = FV.spec(FV.validate_eval({"fitness_mode": "svm_kappa", "svm_fitness": {"C": 100, "scaler": "none"}}),
++               val_sha256="synthetic-val", n_val=60, dataset="remote_sensing", split=1)
++
++
++def search_cfg(arm="A", fids=(5, 15), brackets=2, overrides=(), base=None):
++    ov = [f"search.fidelities={list(fids)}", f"search.max_brackets={brackets}", "wandb.enabled=false",
++          "device=cpu", *overrides]
++    cfg = R.load_hconfig(arm, "remote_sensing", 42, ov, **({"base": base} if base else {}))
++    cfg["search"]["spifil_pool_sizes"] = [48] * 14
++    return cfg
++
++
++class FakeEval:
++    """``quality`` deterministica do genoma e da origem dos pesos; escreve checkpoint e result.json
++    como o ``run_search.Evaluator`` (crashes por variavel de ambiente ``H4_CRASH=job:fase``)."""
++
++    fitness_spec = SPEC
++    fitness_sig = FV.signature(SPEC)
++    ruler_stamp = FV.ruler_sig(SPEC)            # a regua de cada decisao (ORIG-val)
++
++    def __init__(self, out, oom_times=0, nan_jobs=(), fatal_jobs=(), missing_jobs=()):
++        self.out = Path(out)
++        self.oom_left = {}
++        self.oom_times = int(oom_times)
++        self.nan_jobs, self.fatal_jobs, self.missing_jobs = set(nan_jobs), set(fatal_jobs), set(missing_jobs)
++        self.calls = []
++
++    def _crash(self, k, phase):
++        want = os.environ.get("H4_CRASH", "")
++        if want == f"{k}:{phase}":
++            os.kill(os.getpid(), signal.SIGKILL)
++
++    def __call__(self, g, fid, ctx):
++        import torch
++        k = int(ctx["job_index"])
++        self.calls.append((k, ctx["cand_id"], float(fid)))
++        self._crash(k, "start")
++        if self.oom_times:
++            n = self.oom_left.setdefault(k, self.oom_times)
++            if n > 0:
++                self.oom_left[k] = n - 1
++                raise torch.cuda.OutOfMemoryError("CUDA out of memory. Tried to allocate 2.00 GiB")
++        if k in self.fatal_jobs:
++            self.fatal_jobs.discard(k)
++            raise RuntimeError("CUDA error: an illegal memory access was encountered")
++        if k in self.nan_jobs:
++            raise FV.NonFiniteFitness("loss SSL final nao finita: nan")
++        if k in self.missing_jobs and ctx.get("inherit"):
++            raise FileNotFoundError(ctx["inherit"]["checkpoint"])
++        p = S.param_estimate(g)
++        bonus = 0.01 if (ctx.get("weight_origin") or {}).get("kind") == "inherit" else 0.0
++        kappa = min(0.95, 0.3 + 0.05 * math.log10(max(p, 1e3)) + bonus) * (1 - math.exp(-float(fid) / 30))
++        d = self.out / "candidates" / ctx["cand_id"] / f"f{int(fid)}"
++        d.mkdir(parents=True, exist_ok=True)
++        ck = d / "encoder.pt"
++        ck.write_bytes(json.dumps({"g": I._plain(g), "fid": float(fid), "key": ctx["cand_key"]}, sort_keys=True).encode())
++        self._crash(k, "before_result")
++        res = {"status": "ok", "quality": kappa, "quality_raw": kappa, "fitness_kappa": kappa,
++               "kappa_val_orig": kappa, "flops": p * 3000, "params": int(p), "gpu_hours": 0.001,
++               "checkpoint": str(ck), "checkpoint_sha256": I.file_sha256(ck),
++               "cand_key": ctx["cand_key"], "fitness_sig": ctx["fitness_sig"], "config_sha": ctx["config_sha"],
++               "effective_specs": [{"channels": L["channels"]} for L in g["layers"][:g["depth"]]], "aux": {},
++               "decision_rulers": [self.ruler_stamp]}
++        (d / "result.json").write_text(json.dumps(res, indent=1))
++        self._crash(k, "after_result")
++        return res
++
++
++def fingerprint(state):
++    """O que tem de ser identico entre uma execucao continua e uma interrompida/retomada."""
++    return [(j["job"], j["cand_id"], j["cand_key"], float(j["fidelity"]), j["role"], j["status"],
++             [round(x, 12) for x in j["F"]], (j.get("op") or {}).get("type")) for j in state["jobs"]]
++
++
++def digest(x) -> str:
++    return hashlib.sha256(json.dumps(x, sort_keys=True, default=str).encode()).hexdigest()[:16]
+diff --git a/tests/hmodehb/_runner.py b/tests/hmodehb/_runner.py
+new file mode 100644
+index 0000000..da73d37
+--- /dev/null
++++ b/tests/hmodehb/_runner.py
+@@ -0,0 +1,126 @@
++"""Processo controlador usado pelos testes de kill -9 / dois controladores / adocao.
++
++    python tests/hmodehb/_runner.py OUT [--arm A] [--slow S] [--real] [--set a.b=V ...]
++
++``H4_CRASH=k:fase`` mata o PROPRIO processo com SIGKILL (kill -9 real) num ponto exato:
++  start | before_result | after_result   (dentro do avaliador; after_result = result.json ja gravado)
++  after_hjob                             (hjobs/<k>.json gravado, antes do _save do estado)
++  after_save                             (estado salvo com k+1 jobs)
++Cada chamada real do avaliador e anotada em OUT/../calls.log (contagem de re-treinos).
++"""
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import signal
++import sys
++import time
++from pathlib import Path
++
++sys.path.insert(0, str(Path(__file__).resolve().parent))
++import _helpers as H  # noqa: E402
++
++from ga_search.hmodehb import integrity as I  # noqa: E402
++from ga_search.hmodehb import hsearch as HS  # noqa: E402
++from ga_search.hmodehb import run_hsearch as R  # noqa: E402
++
++REAL_OV = ["data.synthetic=true", "data.image_size=32", "data.synthetic_train_samples=16",
++           "data.synthetic_val_samples=12", "data.batch_size=4", "data.num_workers=0", "data.ram_cache=true",
++           "train.max_steps_per_epoch=1", "search.fidelities=[1,2]", "search.max_brackets=1", "search.n_classes=2",
++           "search.initial_size=5", "search.stratified.calibration=false", "search.stratified.extension_fidelities=[]",
++           "search.stratified.memory_budget_gb=null", "search.spifil_images_choices=[1,2,4]"]
++
++
++def real_cfg(out, overrides=()):
++    cfg = R.load_hconfig("A", "remote_sensing", 42, ["device=cpu", "wandb.enabled=false", *REAL_OV,
++                                                     f"output_dir={out}", *overrides])
++    cfg["train"].pop("max_images_per_epoch", None)
++    return cfg
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("out")
++    ap.add_argument("--arm", default="A")
++    ap.add_argument("--slow", type=float, default=0.0)
++    ap.add_argument("--real", action="store_true")
++    ap.add_argument("--set", action="append", default=[])
++    ap.add_argument("--allow-drift", action="append", default=[])
++    a = ap.parse_args()
++    out = Path(a.out)
++    calls = out.parent / "calls.log"
++    crash = os.environ.get("H4_CRASH", "")
++    ck, _, phase = crash.partition(":")
++
++    real_write = I.atomic_write_json
++
++    def write(path, value):                  # after_hjob: morre entre hjobs/<k>.json e o _save
++        real_write(path, value)
++        if phase == "after_hjob" and Path(path).name == f"{int(ck):06d}.json" and Path(path).parent.name == "hjobs":
++            os.kill(os.getpid(), signal.SIGKILL)
++    I.atomic_write_json = write
++
++    real_save = HS.HMODEHB._save
++
++    def save(self):
++        real_save(self)
++        if phase == "after_save" and len(self.state["jobs"]) == int(ck) + 1 and \
++                len(self.state["jobs"]) >= len(getattr(self, "_replay", [])):
++            os.kill(os.getpid(), signal.SIGKILL)
++    HS.HMODEHB._save = save
++
++    if a.real:
++        from ga_search.hmodehb.hevaluate import HEvaluator
++        cfg = real_cfg(out, a.set)
++        ev = HEvaluator(cfg, out)
++        cfg["search"]["spifil_pool_sizes"] = [len(v) for _, v in sorted(ev.spifil_pool.items())]
++        base_call = ev._evaluate
++
++        def logged(genome, fidelity, ctx, cand_dir, run):
++            with calls.open("a") as f:
++                f.write(json.dumps([ctx["job_index"], ctx["cand_id"], float(fidelity)]) + "\n")
++            return base_call(genome, fidelity, ctx, cand_dir, run)
++        ev._evaluate = logged
++        base_full = ev.__call__
++
++        class _Ev:                            # after_result: result.json gravado pelo Evaluator.__call__
++            fitness_spec, fitness_sig, split_hash = ev.fitness_spec, ev.fitness_sig, ev.split_hash
++
++            def __call__(self, g, fid, ctx):
++                r = base_full(g, fid, ctx)
++                if phase == "after_result" and int(ctx["job_index"]) == int(ck):
++                    os.kill(os.getpid(), signal.SIGKILL)
++                return r
++        evaluator = _Ev()
++    else:
++        cfg = H.search_cfg(a.arm, overrides=[f"output_dir={out}", *a.set])
++        fake = H.FakeEval(out)
++        base = fake.__call__
++
++        class _Ev:
++            fitness_spec, fitness_sig = fake.fitness_spec, fake.fitness_sig
++
++            def __call__(self, g, fid, ctx):
++                with calls.open("a") as f:
++                    f.write(json.dumps([ctx["job_index"], ctx["cand_id"], float(fid)]) + "\n")
++                if a.slow:
++                    time.sleep(a.slow)
++                return base(g, fid, ctx)
++        evaluator = _Ev()
++    allow = [k for x in a.allow_drift for k in x.split(",") if k]
++    s = R.build(cfg, evaluator, allow_drift=allow)
++    try:
++        st = s.run(resume=s.state_path.exists())
++    except I.ControllerLocked as exc:
++        print(f"LOCKED {exc}", flush=True)
++        sys.exit(3)
++    except I.ConfigDrift as exc:
++        print(f"DRIFT {exc}", flush=True)
++        sys.exit(4)
++    R.write_outputs(s, st, out)
++    print(json.dumps({"n_jobs": len(st["jobs"]), "fp": H.digest(H.fingerprint(st))}), flush=True)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/hmodehb/test_h4_bk_fitness.py b/tests/hmodehb/test_h4_bk_fitness.py
+new file mode 100644
+index 0000000..d94842a
+--- /dev/null
++++ b/tests/hmodehb/test_h4_bk_fitness.py
+@@ -0,0 +1,216 @@
++"""Unitarios: faixas B0-B4 / teto duro e fitness v2 (regua ORIG, assinatura, aux, NaN)."""
++import math
++
++import numpy as np
++import pytest
++import torch
++
++import _helpers as H
++from ga_search.hmodehb import bk as BK
++from ga_search.hmodehb import fitness_v2 as FV
++from ga_search.hmodehb import run_hsearch as R
++from ga_search.modehb import strata as S
++
++
++# ---------------------------------------------------------------- B0-B4
++@pytest.mark.parametrize("p,want", [(0, "B0"), (1, "B0"), (300_000, "B0"), (300_001, "B1"), (800_000, "B1"),
++                                    (800_001, "B2"), (1_500_000, "B2"), (1_500_001, "B3"), (3_000_000, "B3"),
++                                    (3_000_001, "B4"), (5_500_000, "B4"), (5_500_001, None), (10**8, None)])
++def test_bk_boundaries(p, want):
++    assert BK.bk_of(p) == want
++    assert S.stratum_of(p, S.strat_config(BK.stratified_block())) == want    # mesma regra do strata.py
++
++
++def test_bands_fixed_and_hard_cap():
++    sb = BK.stratified_block({"min_share": 0.2})
++    assert sb["strata"] == BK.bands_dict() and sb["param_cap"] == 5_500_000 and sb["enabled"]
++    with pytest.raises(BK.BandError):
++        BK.stratified_block({"strata": {"tiny": [0, 300000], "huge": [300000, 3500000]}})
++    with pytest.raises(BK.BandError):
++        BK.stratified_block({"param_cap": 5_775_000})                      # o x1,05 do PNAS-CS
++    bad = S.strat_config({"strata": {"B0": [0, 300000], "B1": [300000, 5500000]}, "param_cap": 5_500_000})
++    with pytest.raises(BK.BandError):
++        BK.check_strat(bad)
++    BK.check_strat(S.strat_config(BK.stratified_block()))
++
++
++def test_config_resolves_bands_and_v2():
++    cfg = H.search_cfg("A")
++    sc = S.strat_config(cfg["search"]["stratified"])
++    BK.check_strat(sc)
++    assert cfg["search"]["objective_bounds"] == {"flops_lo": 1e6, "flops_hi": 1e11}
++    assert cfg["output_dir"].startswith("artifacts/hmodehb_b0b4/arm_A/remote_sensing/state/seed42")
++    sv = FV.validate_eval(cfg["eval"])
++    assert (sv["C"], sv["scaler"], sv["readout"], sv["kappa_weight"], sv["tta"], sv["whiten"]) == \
++        (100.0, "none", "head", 1.0, 1, "none")
++    assert cfg["data"]["val_max_samples"] is None
++
++
++def test_arm_c_and_missing_arms_refused(tmp_path):
++    with pytest.raises(FileNotFoundError):
++        R.load_hconfig("D", "remote_sensing", 42)
++    with pytest.raises(ValueError):
++        R.load_hconfig("Z", "remote_sensing", 42)
++    from ga_search.hmodehb.hsearch import HMODEHB
++    cfg = H.search_cfg("A")
++    with pytest.raises(NotImplementedError):
++        HMODEHB({**cfg["search"], "pnas_cs": {"enabled": True}}, H.FakeEval(tmp_path), tmp_path, arm="C",
++                fitness_spec=H.SPEC, full_config=cfg)
++
++
++def test_protected_promotions_cover_bk():
++    sc = S.strat_config(BK.stratified_block())
++    rng = np.random.default_rng(0)
++    cands = [{"F": rng.random(2).tolist(), "stratum": BK.BK_NAMES[i % 5], "slope": None} for i in range(15)]
++    from ga_search.modehb.modehb import select_promotions
++    idx = S.stratified_promotions(cands, 5, sc, lambda F, k: select_promotions(F, k))
++    assert sorted(cands[i]["stratum"] for i in idx) == list(BK.BK_NAMES)       # 1 quota por B_k
++    idx = S.stratified_promotions(cands[:3], 2, sc, lambda F, k: select_promotions(F, k), counts={"B0": 5})
++    assert {cands[i]["stratum"] for i in idx} == {"B1", "B2"}                    # menos promovidas primeiro
++
++
++# ---------------------------------------------------------------- fitness v2
++BASE_EV = {"fitness_mode": "svm_kappa", "svm_fitness": {"C": 100, "scaler": "none", "readout": "head",
++                                                         "kappa_weight": 1.0, "tta": 1, "whiten": "none"}}
++
++
++@pytest.mark.parametrize("bad", [{"C": 0.1}, {"scaler": "standard"}, {"readout": "cov_head"}, {"whiten": "pw"},
++                                 {"kappa_weight": 0.75}, {"tta": 8}, {"solver": "liblinear"},
++                                 {"dimensional_collapse_penalty": True}])
++def test_validate_rejects_other_rulers(bad):
++    ev = {**BASE_EV, "svm_fitness": {**BASE_EV["svm_fitness"], **bad}}
++    with pytest.raises(FV.FitnessConfigError):
++        FV.validate_eval(ev)
++
++
++def test_validate_requires_svm_kappa_and_fills_defaults():
++    with pytest.raises(FV.FitnessConfigError):
++        FV.validate_eval({"svm_fitness": BASE_EV["svm_fitness"]})
++    sv = FV.validate_eval({"fitness_mode": "svm_kappa"})                      # tudo implicito = regua v2
++    assert sv["kappa_weight"] == 1.0 and sv["scaler"] == "none" and sv["C"] == 100.0
++
++
++def test_signature_changes_with_any_field():
++    sp = FV.spec(FV.validate_eval(BASE_EV), val_sha256="v", n_val=10, dataset="d", split=1)
++    s0 = FV.signature(sp)
++    assert FV.signature(dict(sp)) == s0
++    for k, v in [("C", 0.1), ("scaler", "standard"), ("readout", "cov_head"), ("max_train", 10),
++                 ("wise_alphas", [0.0]), ("val_sha256", "w"), ("n_val", 11), ("flops_bounds", [1, 2]),
++                 ("dataset", "e"), ("kappa_weight", 0.75), ("whiten", "pw"), ("tta", 8)]:
++        assert FV.signature({**sp, k: v}) != s0, k
++
++
++def test_objectives_fixed_bounds_and_failure():
++    assert FV.objectives({"status": "ok", "quality": 0.7, "flops": 1e6}) == pytest.approx([0.3, 0.0])
++    assert FV.objectives({"status": "ok", "quality": 0.7, "flops": 1e11}) == pytest.approx([0.3, 1.0])
++    assert FV.objectives({"status": "ok", "quality": 0.5, "flops": 1e8 * 1.0}) == pytest.approx([0.5, 0.4])
++    assert FV.objectives({"status": "failed"}) == [1.0, 1.0]
++
++
++def _base_result(**kw):
++    r = {"status": "ok", "quality": 0.1, "quality_raw": 0.2, "collapse_multiplier": 0.0,
++         "collapse": {"total": True, "dimensional": True}, "fitness_kappa": 0.42, "quality_label_free": 0.9,
++         "fitness_macro_f1": 0.5, "fitness_balanced_acc": 0.6, "wise_kappas": {"0.0": 0.3, "1.0": 0.42},
++         "metrics": {"rank": 3}, "flops": 1e8, "params": 1000, "ssl_final_loss": 1.5}
++    r.update(kw)
++    return r
++
++
++def test_finalize_quality_is_orig_kappa_aux_separated():
++    r = FV.finalize(_base_result(), kappa=0.42)
++    assert r["quality"] == r["quality_raw"] == r["fitness_kappa"] == r["kappa_val_orig"] == 0.42
++    assert r["collapse_multiplier"] == 1.0 and r["collapse_total"] is True     # colapso: so flag
++    for k in ("quality_label_free", "fitness_macro_f1", "fitness_balanced_acc", "wise_kappas", "metrics"):
++        assert k not in r and k in r["aux"]
++    assert r["aux"]["kappa_val_alpha0"] == 0.3 and r["aux"]["quality_legacy"] == 0.1
++    assert FV.finalize(_base_result(), kappa=-0.2)["quality"] == 0.0
++
++
++@pytest.mark.parametrize("kw", [dict(nonfinite=True), dict(kappa=float("nan")), dict(base_loss=float("nan")),
++                                dict(base_loss=float("inf"))])
++def test_finalize_nan_raises(kw):
++    base = _base_result(**({"ssl_final_loss": kw.pop("base_loss")} if "base_loss" in kw else {}))
++    with pytest.raises(FV.NonFiniteFitness):
++        FV.finalize(base, **{"kappa": 0.4, **kw})
++
++
++def _hev(monkeypatch, calls):
++    from ga_search.hmodehb.hevaluate import HEvaluator
++    from ga_search.modehb import supervised_fitness as SF
++    ev = HEvaluator.__new__(HEvaluator)
++    ev.sv2 = FV.validate_eval({**BASE_EV, "svm_fitness": {**BASE_EV["svm_fitness"], "max_train": 77}})
++    ev.svm_train_y, ev.val_y, ev.seed = torch.tensor([0, 1, 0, 1]), torch.tensor([0, 1]), 3
++    monkeypatch.setattr(SF, "svm_fitness", lambda *a, **k: calls.append((a, k)) or {"kappa": 0.5})
++    return ev
++
++
++def test_hevaluator_svm_call_is_orig(monkeypatch):
++    calls = []
++    ev = _hev(monkeypatch, calls)
++    ev._svm_score(np.zeros((4, 1280)), np.zeros((2, 1280)))
++    (a, k), = calls
++    assert k == {"C": 100.0, "scaler": "none", "whiten": "none", "kappa_weight": 1.0, "max_train": 77, "seed": 3}
++    assert a[0].shape == (4, 1280)
++
++
++def test_hevaluator_refuses_small_embedding(monkeypatch):
++    from ga_search.hmodehb.hevaluate import EmbedDimError
++    ev = _hev(monkeypatch, [])
++    with pytest.raises(EmbedDimError):
++        ev._svm_score(np.zeros((4, 48)), np.zeros((2, 48)))
++    with pytest.raises(EmbedDimError):
++        ev._evaluate({"embed_dim": 512}, 1.0, {}, None, None)
++
++
++def test_hevaluator_refuses_subsampled_val_and_cov_ruler(tmp_path):
++    from ga_search.hmodehb.hevaluate import HEvaluator
++    cfg = H.search_cfg("A")
++    with pytest.raises(FV.FitnessConfigError):
++        HEvaluator({**cfg, "data": {**cfg["data"], "val_max_samples": 512}}, tmp_path)
++    with pytest.raises(FV.FitnessConfigError):
++        HEvaluator({**cfg, "eval": {**cfg["eval"], "svm_fitness": {"readout": "cov_head"}}}, tmp_path)
++
++
++def test_quality_of_nan():
++    with pytest.raises(FV.NonFiniteFitness):
++        FV.quality_of(math.nan)
++
++
++# ---------------------------------------------------------------- regua em TODA decisao (A1b)
++def _ok(**kw):
++    r = {"status": "ok", "quality": 0.4, "kappa_val_orig": 0.4, "decision_rulers": [FV.ruler_sig(H.SPEC)],
++         "wise_alpha": 0.5, "aux": {"wise_kappas": {"0.0": 0.3, "0.5": 0.4, "1.0": 0.35}}}
++    r.update(kw)
++    return r
++
++
++def test_check_decisions_accepts_orig():
++    FV.check_decisions(_ok(), H.SPEC)
++    FV.check_decisions({"status": "failed"}, H.SPEC)
++    FV.check_decisions(_ok(quality=0.0, kappa_val_orig=-0.1, wise_alpha=0.0,
++                           aux={"wise_kappas": {"0.0": -0.1, "1.0": -0.05}}), H.SPEC)   # empate em quality 0
++
++
++@pytest.mark.parametrize("bad", [
++    {"decision_rulers": []},                                                         # nao auditavel
++    {"decision_rulers": [FV.ruler_sig({**H.SPEC, "readout": "cov_head"})]},           # WiSE/fitness por COV
++    {"decision_rulers": [FV.ruler_sig(H.SPEC), FV.ruler_sig({**H.SPEC, "scaler": "standard"})]},
++    {"decision_rulers": [FV.ruler_sig({**H.SPEC, "C": 0.1})]},
++    {"decision_rulers": [FV.ruler_sig({**H.SPEC, "tta": 8})]},
++    {"quality": 0.9},                                                                # F de outra leitura
++    {"wise_alpha": 1.0},                                                             # alpha nao e o argmax ORIG
++    {"aux": {"wise_kappas": {"0.0": 0.3, "0.5": 0.4, "1.0": 0.45}}},                  # idem
++])
++def test_check_decisions_rejects_other_ruler(bad):
++    with pytest.raises(FV.RulerViolation):
++        FV.check_decisions(_ok(**bad), H.SPEC)
++
++
++def test_hevaluator_stamps_cov_if_it_ever_feeds_a_decision(monkeypatch):
++    calls = []
++    ev = _hev(monkeypatch, calls)
++    ev._readouts, ev._svm_stamps = ["head", "cov_head"], []
++    ev._svm_score(np.zeros((4, 1280)), np.zeros((2, 1280)))
++    sigs = {FV.ruler_sig({"readout": r, "tta": 1, "solver": "libsvm", **st})
++            for r in set(ev._readouts) for st in ev._svm_stamps}
++    assert FV.ruler_sig({**ev.sv2}) in sigs and len(sigs) == 2
+diff --git a/tests/hmodehb/test_h4_e2e.py b/tests/hmodehb/test_h4_e2e.py
+new file mode 100644
+index 0000000..1684b0d
+--- /dev/null
++++ b/tests/hmodehb/test_h4_e2e.py
+@@ -0,0 +1,276 @@
++"""End-to-end em CPU: kill -9 real (processo controlador separado) em pontos exatos e em instantes
++aleatorios, dois controladores, e uma mini-busca REAL (HEvaluator: SPiFiL -> AE -> LeJEPA -> WiSE ->
++SVM ORIG) com fidelidade 1, adocao no resume, NaN injetado e kill -9 depois do result.json."""
++import json
++import os
++import random
++import signal
++import subprocess
++import sys
++import time
++from collections import Counter
++from pathlib import Path
++
++import numpy as np
++import pytest
++
++import _helpers as H
++
++RUNNER = Path(__file__).with_name("_runner.py")
++PY = sys.executable
++
++
++def _env(crash=None):
++    env = {**os.environ, "CUDA_VISIBLE_DEVICES": "", "OMP_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "2",
++           "MKL_NUM_THREADS": "2", "PYTHONPATH": str(H.ROOT)}
++    env.pop("H4_CRASH", None)
++    if crash:
++        env["H4_CRASH"] = crash
++    return env
++
++
++def _runner(out, *args, crash=None, timeout=600):
++    return subprocess.run([PY, str(RUNNER), str(out), *args], cwd=H.ROOT, env=_env(crash), capture_output=True,
++                          text=True, timeout=timeout)
++
++
++def _fp(proc):
++    assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-3000:]
++    return json.loads(proc.stdout.strip().splitlines()[-1])
++
++
++def _calls(out):
++    p = Path(out).parent / "calls.log"
++    return [tuple(json.loads(x)) for x in p.read_text().splitlines()] if p.exists() else []
++
++
++def _paid_unique(out):
++    st = json.loads(Path(out, "search_state.json").read_text())
++    paid = [j for j in st["jobs"] if not j["cached"]]
++    assert len({(j["cand_id"], j["fidelity"], j["role"]) for j in paid}) == len(paid)
++    assert len({j["cand_id"] for j in st["jobs"]}) == st["n_candidates"]
++    return st
++
++
++@pytest.fixture(scope="module")
++def reference(tmp_path_factory):
++    out = tmp_path_factory.mktemp("ref") / "run"
++    return _fp(_runner(out, "--arm", "B"))
++
++
++# ---------------------------------------------------------------- kill -9 em pontos exatos
++@pytest.mark.parametrize("k,phase,retrained", [(3, "start", True), (6, "before_result", True),
++                                               (9, "after_result", False), (12, "after_hjob", False),
++                                               (15, "after_save", False), (30, "after_result", False)])
++def test_kill9_points_resume_identical(tmp_path, reference, k, phase, retrained):
++    out = tmp_path / "run"
++    p1 = _runner(out, "--arm", "B", crash=f"{k}:{phase}")
++    assert p1.returncode == -signal.SIGKILL, p1.stderr[-2000:]
++    disk = json.loads(Path(out, "search_state.json").read_text())
++    assert len(disk["jobs"]) == (k + 1 if phase == "after_save" else k)       # estado nunca parcial
++    got = _fp(_runner(out, "--arm", "B"))
++    assert got == reference                                                   # mesma sequencia, F, chaves, ids
++    n = Counter(c[0] for c in _calls(out))
++    assert n[k] == (2 if retrained else 1)                                    # adotado = sem re-treino
++    assert all(v == 1 for j, v in n.items() if j != k)
++    st = _paid_unique(out)
++    if phase in ("after_result", "after_hjob"):
++        assert st["jobs"][k]["result"]["adopted"]["job"] == k
++    assert not list(Path(out).rglob("*.tmp*"))
++
++
++# ---------------------------------------------------------------- kill -9 em instantes aleatorios
++def test_kill9_random_rounds(tmp_path, reference):
++    """12 kill -9 externos em instantes aleatorios (inclusive durante import, replay, avaliacao e _save),
++    depois uma execucao ate o fim: mesma sequencia que a execucao continua."""
++    out = tmp_path / "run"
++    rnd = random.Random(1234)
++    kills, done = 0, None
++    for r in range(13):
++        p = subprocess.Popen([PY, str(RUNNER), str(out), "--arm", "B", "--slow", "0.3"], cwd=H.ROOT, env=_env(),
++                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
++        try:
++            so, se = p.communicate(timeout=None if r == 12 else rnd.uniform(1.0, 7.0))
++            assert p.returncode == 0, se[-3000:]
++            done = json.loads(so.strip().splitlines()[-1])
++            break
++        except subprocess.TimeoutExpired:
++            p.send_signal(signal.SIGKILL)
++            p.communicate()
++            kills += 1
++    assert done == reference and kills >= 10
++    _paid_unique(out)
++    n = Counter(c[0] for c in _calls(out))
++    assert sum(v - 1 for v in n.values()) <= kills                            # so o job em voo de cada kill refeito
++
++
++# ---------------------------------------------------------------- dois controladores
++def test_two_controllers_second_exits(tmp_path, reference):
++    out = tmp_path / "run"
++    a = subprocess.Popen([PY, str(RUNNER), str(out), "--arm", "B", "--slow", "0.1"], cwd=H.ROOT, env=_env(),
++                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
++    t0 = time.time()
++    while not Path(out, "search_state.json").exists() and time.time() - t0 < 120:
++        time.sleep(0.2)
++    assert a.poll() is None
++    b = _runner(out, "--arm", "B")
++    assert b.returncode == 3 and "LOCKED" in b.stdout and str(a.pid) in b.stdout
++    so, se = a.communicate(timeout=600)
++    assert a.returncode == 0, se[-3000:]
++    assert json.loads(so.strip().splitlines()[-1]) == reference
++    assert all(v == 1 for v in Counter(c[0] for c in _calls(out)).values())
++
++
++def test_config_drift_cli(tmp_path):
++    out = tmp_path / "run"
++    _fp(_runner(out, "--set", "search.max_brackets=1"))
++    p = _runner(out, "--set", "search.max_brackets=1", "--set", "eval.svm_fitness.wise_alphas=[0.0]")
++    assert p.returncode == 4 and "DRIFT" in p.stdout and "wise_alphas" in p.stdout
++    p = _runner(out, "--set", "search.max_brackets=2", "--allow-drift", "search.max_brackets")
++    assert p.returncode == 0
++    assert json.loads(Path(out, "search_state.json").read_text())["drift_log"][0]["keys"] == ["search.max_brackets"]
++
++
++# ---------------------------------------------------------------- mini-busca REAL em CPU (fidelidade 1)
++@pytest.fixture(scope="module")
++def real_run(tmp_path_factory):
++    import _runner as RN
++    from ga_search.hmodehb import run_hsearch as R
++    from ga_search.hmodehb.hevaluate import HEvaluator
++    from ga_search.modehb import supervised_fitness as SF
++    out = tmp_path_factory.mktemp("real") / "run"
++    cfg = RN.real_cfg(out)
++    ev = HEvaluator(cfg, out)
++    cfg["search"]["spifil_pool_sizes"] = [len(v) for _, v in sorted(ev.spifil_pool.items())]
++    svm_calls = []
++    real_svm = SF.svm_fitness
++
++    def spy(*a, **k):
++        svm_calls.append({"d": int(np.asarray(a[2]).reshape(len(a[2]), -1).shape[1]), **k})
++        return real_svm(*a, **k)
++    SF.svm_fitness = spy
++    try:
++        s = R.build(cfg, ev)
++        st = s.run()
++        R.write_outputs(s, st, Path(out))
++    finally:
++        SF.svm_fitness = real_svm
++    return out, cfg, ev, s, st, svm_calls
++
++
++def test_real_e2e_zero_failed_v2(real_run):
++    out, cfg, ev, s, st, svm_calls = real_run
++    assert st["done"] and len(st["jobs"]) >= 6 and all(j["status"] == "ok" for j in st["jobs"])
++    assert {j["fidelity"] for j in st["jobs"]} == {1.0, 2.0}
++    assert all(c["C"] == 100.0 and c["scaler"] == "none" and c["whiten"] == "none" and c["kappa_weight"] == 1.0
++               and c["d"] >= 1280 for c in svm_calls) and svm_calls
++    for j in st["jobs"]:
++        r = j["result"]
++        assert r["fitness_version"] == "fitness_v2" and r["embed_dim"] >= 1280 and r["collapse_multiplier"] == 1.0
++        assert r["quality"] == min(max(r["kappa_val_orig"], 0.0), 1.0) and "aux" in r
++        assert r["params"] <= 5_500_000 and j["bk"] == r["bk"]
++        assert r["fitness_sig"] == st["fitness_sig"] == ev.fitness_sig and r["cand_key"] == j["cand_key"]
++        from ga_search.hmodehb import integrity as I
++        assert I.file_sha256(r["checkpoint"]) == r["checkpoint_sha256"]
++        assert json.loads(Path(r["checkpoint"]).with_name("result.json").read_text())["cand_key"] == j["cand_key"]
++    assert st["fitness_spec"]["val_sha256"] == ev.split_hash and st["fitness_spec"]["n_val"] == 12
++    # A1b: TODA decisao (5 alphas do WiSE por job + kappa final) pela regua ORIG-val gravada
++    from ga_search.hmodehb import fitness_v2 as FV
++    want = FV.ruler_sig(st["fitness_spec"])
++    paid = [j for j in st["jobs"] if not j["cached"]]
++    assert all(j["result"]["decision_rulers"] == [want] for j in st["jobs"])
++    assert all(j["result"]["n_svm_decisions"] == len(cfg["eval"]["svm_fitness"]["wise_alphas"]) for j in paid)
++    assert len(svm_calls) == sum(j["result"]["n_svm_decisions"] for j in paid)
++    for j in paid:                                     # alpha = argmax do kappa ORIG-val
++        wk = j["result"]["aux"]["wise_kappas"]
++        assert wk[str(j["result"]["wise_alpha"])] == max(wk.values()) == j["result"]["kappa_val_orig"]
++    best = json.loads(Path(out, "best_by_bk.json").read_text())
++    assert best["fitness_sig"] == st["fitness_sig"] and set(best["best"]) <= {"B0", "B1", "B2", "B3", "B4"}
++
++
++def test_real_checkpoint_reloads_bitwise(real_run):
++    import torch
++    out, cfg, ev, s, st, _ = real_run
++    j = st["jobs"][0]
++    ck = torch.load(j["result"]["checkpoint"], map_location="cpu", weights_only=False)
++    enc, head = ck["encoder"].eval(), ck["head"].eval()
++    x = ev.val_x[:4]
++    with torch.no_grad():
++        a, b = head(enc(x)), head(enc(x))
++    assert a.shape[1] >= 1280 and torch.equal(a, b) and ck["cand_id"] == j["cand_id"]
++
++
++def test_real_resume_adopts_without_retraining(real_run, monkeypatch):
++    from ga_search.hmodehb import run_hsearch as R
++    out, cfg, ev, s, st, _ = real_run
++    p = Path(out, "search_state.json")
++    full = json.loads(p.read_text())
++    k = len(full["jobs"]) - 1
++    p.write_text(json.dumps({**full, "jobs": full["jobs"][:k], "done": False}))
++    calls = []
++    monkeypatch.setattr(ev, "_evaluate", lambda *a, **kw: calls.append(a) or (_ for _ in ()).throw(AssertionError))
++    s2 = R.build(cfg, ev)
++    st2 = s2.run(resume=True)
++    assert calls == [] and st2["jobs"][k]["result"]["adopted"]["job"] == k
++    assert H.fingerprint(st2) == H.fingerprint(full)
++
++
++def test_real_nan_in_ssl_fails_and_search_continues(tmp_path):
++    import _runner as RN
++    from ga_search.hmodehb import run_hsearch as R
++    from ga_search.hmodehb.hevaluate import HEvaluator
++    from ga_search.modehb import ssl_trainers as SSL
++    out = tmp_path / "run"
++    cfg = RN.real_cfg(out, ["search.initial_size=3"])
++    ev = HEvaluator(cfg, out)
++    cfg["search"]["spifil_pool_sizes"] = [len(v) for _, v in sorted(ev.spifil_pool.items())]
++    real = SSL.train_global_ssl
++    n = {"i": 0}
++
++    def nan_once(*a, **k):
++        log = real(*a, **k)
++        n["i"] += 1
++        return {**log, "final_loss_total": float("nan")} if n["i"] == 2 else log
++    SSL.train_global_ssl = nan_once
++    try:
++        st = R.build(cfg, ev).run()
++    finally:
++        SSL.train_global_ssl = real
++    failed = [j for j in st["jobs"] if j["status"] == "failed"]
++    assert len(failed) == 1 and failed[0]["result"]["reason"] == "nan" and failed[0]["job"] == 1
++    assert st["done"] and sum(j["status"] == "ok" for j in st["jobs"]) >= 3
++    assert (Path(out) / "candidates" / failed[0]["cand_id"] / "f1" / "error.txt").exists()
++
++
++def test_real_kill9_after_result_adopted(tmp_path):
++    out = tmp_path / "run"
++    p1 = _runner(out, "--real", crash="2:after_result", timeout=900)
++    assert p1.returncode == -signal.SIGKILL, p1.stderr[-3000:]
++    st1 = json.loads(Path(out, "search_state.json").read_text())
++    assert len(st1["jobs"]) == 2
++    p2 = _runner(out, "--real", timeout=900)
++    assert p2.returncode == 0, p2.stderr[-3000:]
++    st = _paid_unique(out)
++    n = Counter(c[0] for c in _calls(out))
++    assert n[2] == 1 and all(v == 1 for v in n.values())                      # job 2 nao re-treinado
++    assert st["jobs"][2]["result"]["adopted"]["job"] == 2
++    # "op" do ultimo job entra no disco so no _save seguinte (mesmo atraso do MODEHB historico)
++    strip = lambda js: [x[:-1] for x in H.fingerprint({"jobs": js})]
++    assert strip(st["jobs"][:2]) == strip(st1["jobs"])
++    assert all(j["status"] == "ok" for j in st["jobs"])
++
++
++def test_real_cov_in_any_decision_fails(tmp_path, monkeypatch):
++    """Se o WiSE/fitness voltar a ler cov_head (o bug medido pelo A1b), a busca para no 1o job."""
++    import _runner as RN
++    from ga_search.hmodehb import fitness_v2 as FV
++    from ga_search.hmodehb import run_hsearch as R
++    from ga_search.hmodehb.hevaluate import HEvaluator
++    out = tmp_path / "run"
++    cfg = RN.real_cfg(out, ["search.initial_size=2"])
++    ev = HEvaluator(cfg, out)
++    cfg["search"]["spifil_pool_sizes"] = [len(v) for _, v in sorted(ev.spifil_pool.items())]
++    monkeypatch.setattr(ev, "_svm_features", lambda enc, head: ev._embed_cov(enc, head))
++    with pytest.raises(FV.RulerViolation, match="regua"):
++        R.build(cfg, ev).run()
++    assert not Path(out, "hjobs", "000000.json").exists()
+diff --git a/tests/hmodehb/test_h4_integrity.py b/tests/hmodehb/test_h4_integrity.py
+new file mode 100644
+index 0000000..72e88e6
+--- /dev/null
++++ b/tests/hmodehb/test_h4_integrity.py
+@@ -0,0 +1,167 @@
++"""Unitarios de integridade: hash de config + deriva, trava flock, ids, chaves, adocao, monitor_report."""
++import json
++import multiprocessing as mp
++import os
++from pathlib import Path
++
++import pytest
++
++import _helpers as H
++from ga_search.hmodehb import integrity as I
++from ga_search.hmodehb import run_hsearch as R
++
++
++# ---------------------------------------------------------------- config hash / deriva
++def test_config_sha_canonical_and_excludes():
++    a = {"search": {"x": 1, "y": [1, 2]}, "eval": {"svm_fitness": {"C": 100}}, "device": "cuda",
++         "wandb": {"mode": "online", "project": "p"}}
++    b = {"wandb": {"project": "p", "mode": "offline"}, "device": "cpu",
++         "eval": {"svm_fitness": {"C": 100}}, "search": {"y": [1, 2], "x": 1}}
++    assert I.config_sha(a) == I.config_sha(b)                                  # ordem, device, wandb.mode
++    assert I.config_sha(a) != I.config_sha({**a, "wandb": {"mode": "online", "project": "q"}})
++    assert I.config_sha(a) != I.config_sha({**a, "train": {"lr_new": 1e-3}})
++
++
++def test_drift_detected_on_eval_C():
++    cfg = H.search_cfg("A")
++    st = {"config_full": I._plain(cfg), "config_sha": I.config_sha(cfg)}
++    assert I.check_drift(st, cfg) is None
++    new = json.loads(json.dumps(cfg))
++    new["eval"]["svm_fitness"]["C"] = 0.1
++    with pytest.raises(I.ConfigDrift, match="eval.svm_fitness.C"):
++        I.check_drift(st, new)
++    new2 = json.loads(json.dumps(cfg))
++    new2["train"]["lr_new"] = 5e-4
++    new2["search"]["max_brackets"] = 9
++    with pytest.raises(I.ConfigDrift):
++        I.check_drift(st, new2, allow=["search.max_brackets"])                 # lr_new nao permitido
++    log = I.check_drift(st, new2, allow=["search.max_brackets", "train"])
++    assert log["keys"] == ["search.max_brackets", "train.lr_new"] and log["old_sha"] != log["new_sha"]
++    with pytest.raises(I.ConfigDrift):
++        I.check_drift({"config": {}}, cfg)                                   # estado legado: nao e H-MODEHB
++
++
++def test_allow_drift_key_itself_not_hashed():
++    cfg = H.search_cfg("A")
++    c2 = json.loads(json.dumps(cfg))
++    c2["hmodehb"]["allow_drift"] = ["train"]
++    assert I.config_sha(cfg) == I.config_sha(c2)
++
++
++# ---------------------------------------------------------------- trava
++def test_lock_blocks_second_controller_in_process(tmp_path):
++    a = I.ControllerLock(tmp_path).acquire()
++    info = json.loads((tmp_path / "controller.lock").read_text())
++    assert info["pid"] == os.getpid() and info["host"] and info["start"]
++    with pytest.raises(I.ControllerLocked, match=str(os.getpid())):
++        I.ControllerLock(tmp_path).acquire()
++    a.release()
++    with I.ControllerLock(tmp_path):
++        pass
++
++
++def _hold(path, q, ev):
++    lk = I.ControllerLock(path).acquire()
++    q.put("held")
++    ev.wait(30)
++    lk.release()
++
++
++def test_lock_blocks_other_process_and_dies_with_it(tmp_path):
++    ctx = mp.get_context("fork")
++    q, ev = ctx.Queue(), ctx.Event()
++    p = ctx.Process(target=_hold, args=(tmp_path, q, ev))
++    p.start()
++    assert q.get(timeout=30) == "held"
++    with pytest.raises(I.ControllerLocked):
++        I.ControllerLock(tmp_path).acquire()
++    p.kill()                                                                  # kill -9 do dono
++    p.join(10)
++    I.ControllerLock(tmp_path).acquire().release()                           # lock do kernel some com ele
++
++
++# ---------------------------------------------------------------- ids / chaves
++def test_ids():
++    assert I.cand_id("A", 12) == "h4-A-c00012" and I.cand_id("D0", 1) == "h4-D0-c00001"
++    with pytest.raises(ValueError):
++        I.cand_id("X", 1)
++
++
++def test_cand_key_components():
++    g = {"depth": 2, "layers": []}
++    o1, o2 = {"kind": "scratch", "init": "spifil"}, {"kind": "inherit", "parent_ckpt_sha256": "ab"}
++    l1 = I.lineage_key(g, 0, o1, "s1")
++    assert l1 == I.lineage_key(dict(g), 0, dict(o1), "s1")
++    assert len({l1, I.lineage_key(g, 0, o2, "s1"), I.lineage_key(g, 1, o1, "s1"), I.lineage_key(g, 0, o1, "s2"),
++                I.lineage_key({**g, "depth": 3}, 0, o1, "s1"),
++                I.lineage_key(g, 0, {**o2, "parent_ckpt_sha256": "cd"}, "s1")}) == 6
++    assert I.cand_key(l1, 5) != I.cand_key(l1, 15) and I.cand_key(l1, 5) == I.cand_key(l1, 5.0)
++
++
++# ---------------------------------------------------------------- adocao
++def test_adoptable_rules(tmp_path):
++    ck = tmp_path / "encoder.pt"
++    ck.write_bytes(b"weights")
++    ok = {"status": "ok", "cand_key": "k", "fitness_sig": "s", "checkpoint": str(ck),
++          "checkpoint_sha256": I.file_sha256(ck)}
++    assert I.adoptable(ok, ckey="k", fitness_sig="s") is None
++    assert I.adoptable(ok, ckey="k2", fitness_sig="s")
++    assert I.adoptable(ok, ckey="k", fitness_sig="s2")
++    assert I.adoptable({**ok, "checkpoint_sha256": None}, ckey="k", fitness_sig="s")
++    ck.write_bytes(b"weights-truncad")                                       # checkpoint trocado/parcial
++    assert "sha256" in I.adoptable(ok, ckey="k", fitness_sig="s")
++    ck.unlink()
++    assert I.adoptable(ok, ckey="k", fitness_sig="s")
++    assert I.adoptable({"status": "failed", "cand_key": "k", "fitness_sig": "s"}, ckey="k", fitness_sig="s") is None
++    (tmp_path / "r.json").write_text('{"status": "ok", "cand_')                # kill durante a escrita
++    assert I.read_json(tmp_path / "r.json") is None
++    I.atomic_write_json(tmp_path / "a.json", {"x": 1})
++    assert I.read_json(tmp_path / "a.json") == {"x": 1}
++    assert not list(tmp_path.glob("*.tmp*"))
++
++
++# ---------------------------------------------------------------- monitor_report: kind proprio
++def test_monitor_kind_and_sig_no_collision(tmp_path, monkeypatch):
++    from ga_search.modehb import monitor_report as MR
++    assert "artifacts/hmodehb_b0b4/arm_*" in MR.ROOT_GLOBS
++    # legado inalterado
++    assert MR._kind("artifacts/modehb_hybrid") == "hybrid"
++    assert MR._kind("artifacts/modehb_lemonade") == "lemonade"
++    assert MR._kind("artifacts/modehb_lemonade_seeded") == "lemonade_seeded"
++    assert MR._kind("artifacts/pnas_cs") == "pnas_cs"
++    assert MR._kind("artifacts/modehb_lemonade", {"config": {}}) == "lemonade"
++    assert MR._fit_sig({"config": {}}, "artifacts/modehb_hybrid") == "C100_kw1"
++    # H-MODEHB: kind do estado, mesmo com "lemonade" no caminho
++    assert MR._kind("artifacts/hmodehb_b0b4/arm_B", {"kind": "h4_B"}) == "h4_B"
++    assert MR._kind("artifacts/hmodehb_b0b4/arm_B") == "h4_B"
++    assert MR._kind("artifacts/x/lemonade_like", {"kind": "h4_B"}) == "h4_B"
++    assert MR._fit_sig({"fitness_sig": "abc123"}, "artifacts/hmodehb_b0b4/arm_A") == "v2_abc123"
++    # arvore falsa: o mesmo id numerico em H-LEM e H4-B nao colide
++    monkeypatch.chdir(tmp_path)
++    job = {"status": "ok", "role": "search", "fidelity": 5.0, "result": {"checkpoint": "x.pt", "fitness_kappa": 0.5}}
++    for root, st in (("artifacts/modehb_lemonade", {"config": {}, "jobs": [{**job, "cand_id": "c00001"}]}),
++                     ("artifacts/hmodehb_b0b4/arm_B", {"kind": "h4_B", "fitness_sig": "f00d",
++                                                      "jobs": [{**job, "cand_id": "h4-B-c00001"}]})):
++        p = Path(root) / "remote_sensing" / "state" / "seed42"
++        p.mkdir(parents=True)
++        (p / "search_state.json").write_text(json.dumps(st))
++    monkeypatch.setattr(MR, "ROOT_GLOBS", ["artifacts/modehb_lemonade", "artifacts/hmodehb_b0b4/arm_*"])
++    monkeypatch.setattr(MR, "OUT_JSONL", tmp_path / "none.jsonl")
++    keys = sorted(t[8] for t in MR.pending())
++    assert keys == ["h4_B|remote_sensing|v2_f00d|h4-B-c00001|5", "lemonade|remote_sensing|C100_kw1|c00001|5"]
++
++
++# ---------------------------------------------------------------- W&B controller id inclui a regua
++def test_controller_id_includes_ruler(monkeypatch):
++    cfg = H.search_cfg("A")
++    a, b = R.controller_id(cfg, "aaaa"), R.controller_id(cfg, "bbbb")
++    assert a != b and a.startswith("hctrl-") and a == R.controller_id(cfg, "aaaa")
++    assert R.controller_id(H.search_cfg("B"), "aaaa") != a                    # outro braco, outro dir
++    seen = {}
++    from ga_search.modehb import wandb_logger as WL
++    monkeypatch.setattr(WL, "ControllerRun", lambda **k: seen.update(k) or "run")
++    assert R.hcontroller(cfg, "aaaa") is None                                 # wandb desligado
++    cfg["wandb"]["enabled"] = True
++    assert R.hcontroller(cfg, "aaaa") == "run"
++    assert seen["id"] == a and "v2_aaaa" in seen["name"] and "fsig_aaaa" in seen["tags"]
++    assert seen["group"] == "hmodehb_b0b4/remote_sensing" and seen["resume"] == "allow"
+diff --git a/tests/hmodehb/test_h4_search.py b/tests/hmodehb/test_h4_search.py
+new file mode 100644
+index 0000000..757b11a
+--- /dev/null
++++ b/tests/hmodehb/test_h4_search.py
+@@ -0,0 +1,289 @@
++"""Controller H-MODEHB em processo (avaliador sintetico): estado, ids, cand_key x cache, resume,
++regua, deriva, OOM / NaN / CUDA fatal / ancestral ausente, adocao."""
++import json
++from collections import Counter
++from pathlib import Path
++
++import pytest
++
++import _helpers as H
++from ga_search.hmodehb import bk as BK
++from ga_search.hmodehb import fitness_v2 as FV
++from ga_search.hmodehb import integrity as I
++from ga_search.hmodehb import run_hsearch as R
++from ga_search.modehb import modehb as M
++
++
++def _run(out, arm="A", ev=None, overrides=(), allow=(), resume=None, **kw):
++    cfg = H.search_cfg(arm, overrides=[f"output_dir={out}", *overrides])
++    ev = ev or H.FakeEval(out, **kw)
++    s = R.build(cfg, ev, allow_drift=allow)
++    st = s.run(resume=s.state_path.exists() if resume is None else resume)
++    return s, st, ev
++
++
++@pytest.fixture(scope="module")
++def ref_a(tmp_path_factory):
++    out = tmp_path_factory.mktemp("refA")
++    return _run(out)
++
++
++@pytest.fixture(scope="module")
++def ref_b(tmp_path_factory):
++    out = tmp_path_factory.mktemp("refB")
++    return _run(out, arm="B")
++
++
++def test_state_ids_and_subpops(ref_a):
++    s, st, _ = ref_a
++    assert st["kind"] == "h4_A" and st["arm"] == "A" and st["id_prefix"] == "h4-A-"
++    assert st["fitness_sig"] == H.FakeEval.fitness_sig and st["fitness_spec"] == H.SPEC
++    assert st["config_sha"] == I.config_sha(st["config_full"]) == st["config_sha_initial"]
++    for k in ("search", "eval", "train", "data", "hmodehb"):                  # config COMPLETO no estado
++        assert k in st["config_full"]
++    assert st["bk_bands"] == BK.bands_dict() and st["param_cap"] == 5_500_000 and st["drift_log"] == []
++    assert all(j["cand_id"].startswith("h4-A-c") and len(j["cand_id"]) == len("h4-A-c00001") for j in st["jobs"])
++    assert set(Counter(j["bk"] for j in st["jobs"])) == set(BK.BK_NAMES)          # 5 subpopulacoes presentes
++    assert all(j["status"] == "ok" for j in st["jobs"])
++    assert all(j["result"]["params"] <= 5_500_000 and BK.bk_of(j["result"]["params"]) == j["bk"] for j in st["jobs"])
++    assert all(j["fitness_sig"] == st["fitness_sig"] and j["config_sha"] == st["config_sha"] for j in st["jobs"])
++    paid = [j for j in st["jobs"] if not j["cached"]]                         # cache = registro sem custo
++    assert len({(j["cand_id"], j["fidelity"], j["role"]) for j in paid}) == len(paid)
++    assert len({j["cand_key"] for j in paid}) == len(paid)
++    assert all(j["cand_key"] == st["jobs"][j["result"]["cached_from"]]["cand_key"] for j in st["jobs"] if j["cached"])
++    assert all(len(list(Path(s.out, "hjobs").glob(f"{j['job']:06d}.json"))) == 1 for j in st["jobs"] if not j["cached"])
++
++
++def test_deterministic(tmp_path, ref_a):
++    _, st, _ = _run(tmp_path)
++    assert H.fingerprint(st) == H.fingerprint(ref_a[1])
++
++
++def test_promotion_keeps_lineage_new_cand_key(ref_a):
++    st = ref_a[1]
++    promos = [j for j in st["jobs"] if (j.get("op") or {}).get("type") in ("promotion", "extension")]
++    assert promos
++    for p in promos:
++        low = [j for j in st["jobs"] if j["cand_id"] == p["cand_id"] and j["fidelity"] < p["fidelity"]]
++        assert low and all(j["lineage_key"] == p["lineage_key"] and j["cand_key"] != p["cand_key"] for j in low)
++        assert p["resumed_from"] is not None
++
++
++def test_inherited_child_never_gets_cached_result(tmp_path):
++    """Regressao da colisao heranca x cache (desenho 2.1): mesma arquitetura, pesos herdados -> outro job."""
++    s, st, ev = _run(tmp_path, overrides=["search.max_brackets=1"])
++    s._replay = []
++    src = st["jobs"][0]
++    inherit = {"checkpoint": src["result"]["checkpoint"], "n_blocks": 1, "parent_cand_id": src["cand_id"],
++               "parent_fidelity": src["fidelity"], "parent_job": src["job"]}
++    n_calls = len(ev.calls)
++    rec = s._evaluate(src["genome"], src["fidelity"], parent_id=src["cand_id"], generation=9, rung=0,
++                      inherit=inherit)
++    assert len(ev.calls) == n_calls + 1 and not rec["cached"]                  # treinou de verdade
++    assert rec["cand_id"] != src["cand_id"] and rec["cand_key"] != src["cand_key"]
++    assert rec["arch_hash"] == src["arch_hash"] and rec["inherit"]["parent_cand_id"] == src["cand_id"]
++    assert rec["weight_origin"]["parent_ckpt_sha256"] == src["result"]["checkpoint_sha256"]
++    # o mesmo filho herdado de novo: AGORA sim e cache (mesma cand_key)
++    again = s._evaluate(src["genome"], src["fidelity"], parent_id=src["cand_id"], generation=9, rung=0,
++                        inherit=inherit)
++    assert again["cached"] and again["cand_key"] == rec["cand_key"] and len(ev.calls) == n_calls + 1
++    # e o MODEHB historico (intocado) teria descartado a heranca: resultado em cache do pai
++    base = M.MODEHB(s.cfg, lambda g, f, c: {"status": "ok", "quality": 0.5, "flops": 1e8, "checkpoint": "x"},
++                    tmp_path / "base")
++    base.state, base._replay = base._fresh_state(), []
++    first = base._evaluate(src["genome"], src["fidelity"], parent_id=None, generation=0, rung=0)
++    second = base._evaluate(src["genome"], src["fidelity"], parent_id=None, generation=0, rung=0, inherit=inherit)
++    assert second["cached"] and "inherit" not in second and second["cand_id"] == first["cand_id"]
++
++
++def test_arm_b_inheritance_keys(ref_b):
++    st = ref_b[1]
++    inh = [j for j in st["jobs"] if j["weight_origin"]["kind"] == "inherit"]
++    assert inh and all(j["cand_id"].startswith("h4-B-") for j in st["jobs"])
++    by_cand = {(j["cand_id"], j["fidelity"]): j for j in st["jobs"]}
++    for j in inh:
++        o = j["weight_origin"]
++        parent = by_cand[(o["parent_cand_id"], o["parent_fidelity"])]
++        assert o["parent_ckpt_sha256"] == parent["result"]["checkpoint_sha256"] is not None
++        assert j["cand_key"] != parent["cand_key"]
++
++
++# ---------------------------------------------------------------- resume / regua / deriva
++def test_resume_replays_identically_and_extends(tmp_path, ref_a):
++    _, st1, _ = _run(tmp_path, overrides=["search.max_brackets=1"])
++    n1 = len(st1["jobs"])
++    with pytest.raises(I.ConfigDrift, match="search.max_brackets"):
++        _run(tmp_path)                                                       # 1 -> 2 brackets sem permissao
++    s, st, ev = _run(tmp_path, allow=["search.max_brackets"])
++    assert H.fingerprint(st) == H.fingerprint(ref_a[1])                       # replay sem ReplayMismatch
++    assert len(st["drift_log"]) == 1 and st["drift_log"][0]["keys"] == ["search.max_brackets"]
++    assert st["config_sha_initial"] != st["config_sha"]
++    assert ev.calls and min(k for k, _, _ in ev.calls) >= n1                  # nada do 1o processo re-treinado
++    disk = json.loads(Path(tmp_path, "search_state.json").read_text())
++    assert len(disk["jobs"]) == len(st["jobs"]) and disk["drift_log"] == st["drift_log"]
++
++
++def test_resume_refuses_other_ruler(tmp_path):
++    _run(tmp_path, overrides=["search.max_brackets=1"])
++    other = H.FakeEval(tmp_path)
++    other.fitness_spec = {**H.SPEC, "C": 0.1}
++    cfg = H.search_cfg("A", overrides=[f"output_dir={tmp_path}", "search.max_brackets=1"])
++    s = R.build(cfg, other)
++    with pytest.raises(FV.FitnessSigMismatch):
++        s.run(resume=True)
++
++
++def test_resume_refuses_eval_drift(tmp_path):
++    _run(tmp_path, overrides=["search.max_brackets=1"])
++    with pytest.raises((I.ConfigDrift, FV.FitnessConfigError)):
++        _run(tmp_path, overrides=["search.max_brackets=1", "eval.svm_fitness.max_train=10"])
++    with pytest.raises(I.ConfigDrift, match="train.lr_new"):
++        _run(tmp_path, overrides=["search.max_brackets=1", "train.lr_new=0.5"])
++
++
++def test_replay_mismatch_on_tampered_key(tmp_path):
++    _run(tmp_path, overrides=["search.max_brackets=1"])
++    p = Path(tmp_path, "search_state.json")
++    st = json.loads(p.read_text())
++    st["jobs"][2]["cand_key"] = "tampered"
++    p.write_text(json.dumps(st))
++    with pytest.raises(M.ReplayMismatch):
++        _run(tmp_path, overrides=["search.max_brackets=1"])
++
++
++def test_fresh_run_refuses_existing_state(tmp_path):
++    _run(tmp_path, overrides=["search.max_brackets=1"])
++    with pytest.raises(FileExistsError):
++        _run(tmp_path, overrides=["search.max_brackets=1"], resume=False)
++
++
++# ---------------------------------------------------------------- falhas injetadas
++def test_oom_retried_then_ok(tmp_path):
++    s, st, ev = _run(tmp_path, overrides=["search.max_brackets=1", "hmodehb.oom.sleep_s=0"], oom_times=2)
++    assert s.oom_retries == 4
++    assert all(j["status"] == "ok" and j["result"]["oom_retries"] == 2 for j in st["jobs"] if not j["cached"])
++
++
++def test_oom_exhausted_fails_without_loop(tmp_path):
++    s, st, ev = _run(tmp_path, overrides=["search.max_brackets=1", "hmodehb.oom.retries=2",
++                                          "hmodehb.oom.sleep_s=0"], oom_times=99)
++    failed = [j for j in st["jobs"] if j["status"] == "failed"]
++    assert failed and all(j["result"]["reason"] == "oom" and j["result"]["oom_retries"] == 2 for j in failed)
++    assert all(n == 3 for n in Counter(k for k, _, _ in ev.calls).values())   # 1 + 2 tentativas, nunca mais
++    assert all(j["F"] == [1.0, 1.0] for j in failed)
++
++
++def test_nan_fails_and_search_continues(tmp_path, ref_a):
++    s, st, ev = _run(tmp_path, nan_jobs={3})
++    j = st["jobs"][3]
++    assert j["status"] == "failed" and j["result"]["reason"] == "nan" and j["F"] == [1.0, 1.0]
++    assert len(st["jobs"]) > 10 and sum(x["status"] == "failed" for x in st["jobs"]) == 1
++    assert not any(x["cand_id"] == j["cand_id"] and x["fidelity"] > j["fidelity"] for x in st["jobs"])
++
++
++def test_fatal_cuda_unrecorded_then_resume(tmp_path, ref_a):
++    ev = H.FakeEval(tmp_path, fatal_jobs={4})
++    with pytest.raises(RuntimeError, match="illegal memory access"):
++        _run(tmp_path, ev=ev)
++    st = json.loads(Path(tmp_path, "search_state.json").read_text())
++    assert len(st["jobs"]) == 4                                                # nada parcial do job 4
++    assert json.loads(Path(tmp_path, "pending_job.json").read_text())["job"] == 4
++    _, st2, _ = _run(tmp_path, ev=ev)
++    assert H.fingerprint(st2) == H.fingerprint(ref_a[1])
++
++
++def test_missing_ancestor_reason(tmp_path):
++    ev = H.FakeEval(tmp_path, missing_jobs=set(range(200)))
++    s, st, _ = _run(tmp_path, arm="B", ev=ev)
++    inh = [j for j in st["jobs"] if j.get("inherit")]
++    assert inh and all(j["status"] == "failed" and j["result"]["reason"] == "missing_ancestor" for j in inh)
++    assert st["done"]
++
++
++def test_param_cap_hard(tmp_path):
++    s, st, ev = _run(tmp_path, overrides=["search.max_brackets=1"])
++    s._replay = []
++    big = M.repair({**st["jobs"][0]["genome"], "embed_dim": 2560}, **s.repair_kw)
++    s.param_fn = lambda g: 6_000_000
++    n = len(ev.calls)
++    rec = s._evaluate(big, 5.0, parent_id=None, generation=9, rung=0)
++    assert rec["status"] == "failed" and rec["result"]["reason"] == "param_cap" and len(ev.calls) == n
++    s.param_fn = lambda g: 100_000                                           # estimado ok, medido acima
++    ev2 = s.evaluate_fn
++    s.evaluate_fn = lambda g, f, c: {**ev2(g, f, c), "params": 5_500_001}
++    rec = s._evaluate({**big, "embed_dim": 1536}, 5.0, parent_id=None, generation=9, rung=0)
++    assert rec["status"] == "failed" and rec["result"]["infeasible"] == "param_cap" and rec["bk"] is None
++
++
++# ---------------------------------------------------------------- adocao (crash entre gravar e _save)
++@pytest.mark.parametrize("source", ["hjobs", "candidate"])
++def test_adoption_without_retraining(tmp_path, ref_a, source):
++    _, st, ev = _run(tmp_path)
++    p = Path(tmp_path, "search_state.json")
++    full = json.loads(p.read_text())
++    k = 7
++    cut = {**full, "jobs": full["jobs"][:k], "done": False}
++    p.write_text(json.dumps(cut))                                            # morreu antes do _save do job k
++    j = full["jobs"][k]
++    if source == "candidate":                                                # ... e antes do hjobs/<k>.json
++        Path(tmp_path, "hjobs", f"{k:06d}.json").unlink()
++    later = sorted(Path(tmp_path, "hjobs").glob("*.json"))
++    for f in later:
++        if int(f.stem) > k:
++            f.unlink()
++    for x in full["jobs"][k + 1:]:                                           # jobs seguintes nunca rodaram
++        d = Path(tmp_path, "candidates", x["cand_id"], f"f{int(x['fidelity'])}")
++        if (d / "result.json").exists() and not (x["cand_id"] == j["cand_id"] and x["fidelity"] == j["fidelity"]):
++            (d / "result.json").unlink()
++    ev2 = H.FakeEval(tmp_path)
++    _, st2, _ = _run(tmp_path, ev=ev2)
++    assert H.fingerprint(st2) == H.fingerprint(ref_a[1])
++    assert k not in [c[0] for c in ev2.calls]                                 # job k adotado, nao re-treinado
++    assert st2["jobs"][k]["result"]["adopted"]["job"] == k
++    assert ("hjobs" in st2["jobs"][k]["result"]["adopted"]["from"]) == (source == "hjobs")
++
++
++def test_adoption_refuses_corrupted_checkpoint(tmp_path):
++    _, st, _ = _run(tmp_path, overrides=["search.max_brackets=1"])
++    p = Path(tmp_path, "search_state.json")
++    full = json.loads(p.read_text())
++    k = max(j["job"] for j in full["jobs"] if not j["cached"])
++    p.write_text(json.dumps({**full, "jobs": full["jobs"][:k], "done": False}))
++    Path(full["jobs"][k]["result"]["checkpoint"]).write_bytes(b"truncated")
++    ev2 = H.FakeEval(tmp_path)
++    _, st2, _ = _run(tmp_path, ev=ev2, overrides=["search.max_brackets=1"])
++    assert [c[0] for c in ev2.calls] == [k] and "adopted" not in st2["jobs"][k]["result"]
++
++
++def test_decision_with_other_ruler_stops_search_unrecorded(tmp_path):
++    """Qualquer decisao (aqui: o job 2 decidido por cov_head+scaler) para a busca sem gravar nada."""
++    from ga_search.hmodehb import fitness_v2 as FV2
++    ev = H.FakeEval(tmp_path)
++    base = ev.__call__
++
++    class _Cov:
++        fitness_spec, fitness_sig = ev.fitness_spec, ev.fitness_sig
++
++        def __call__(self, g, f, ctx):
++            r = base(g, f, ctx)
++            if ctx["job_index"] == 2:
++                r["decision_rulers"] = [FV2.ruler_sig({**H.SPEC, "readout": "cov_head", "scaler": "standard"})]
++            return r
++    with pytest.raises(FV2.RulerViolation):
++        _run(tmp_path, ev=_Cov())
++    st = json.loads(Path(tmp_path, "search_state.json").read_text())
++    assert len(st["jobs"]) == 2 and not Path(tmp_path, "hjobs", "000002.json").exists()
++
++
++def test_all_decisions_read_orig_quality(ref_a):
++    """Selecao/promocao/calibracao/extensao leem F/quality: F[0] = 1 - clip(kappa ORIG) em todo job."""
++    st = ref_a[1]
++    for j in st["jobs"]:
++        r = j["result"]
++        assert r["decision_rulers"] == [FV.ruler_sig(st["fitness_spec"])]
++        assert j["F"][0] == pytest.approx(1 - min(max(r["kappa_val_orig"], 0), 1), abs=1e-12)
++    cal = st["calibration"]
++    for b, c in cal.items():
++        path = {float(k): v for k, v in c["quality_by_epochs"].items()}
++        js = {float(j["fidelity"]): j for j in st["jobs"] if j["cand_id"] == c["cand_id"] and not j["cached"]}
++        assert all(path[f] == js[f]["result"]["kappa_val_orig"] for f in path)

@@ -1,0 +1,504 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 22:12:52.317774143 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 22:12:52.319774176 -0300
+@@ -128,7 +128,11 @@
+            "weight_decay": None,
+            # v3.1 cov_gate: ops "cov_gate" (y = x + g*act(ZCA/DBN(conv_SPiFiL(x))), g=0) e "deepen_rezero";
+            # cov_gate_head: no SSL o embedding vira [cabeça antiga congelada, g_h * Cov 2ª ordem diferenciável]
+-           "cov_gate_mode": "channel", "cov_gate_fit_images": 64, "cov_gate_head": False, "cov_gate_head_k": 16},
++           "cov_gate_mode": "channel", "cov_gate_fit_images": 64, "cov_gate_head": False, "cov_gate_head_k": 16,
++           # v3.1 bloco 2 (receita fiel com batch maior): ssl_batch_size = batch do SSL (com ssl_recipe: paper);
++           #   OOM -> metade, até ssl_batch_min (registrado "adaptação: batch X por memória"); época = passada
++           #   completa; LARS (SimCLR/VICReg) / AdamW (LeJEPA) + warmup + cosseno pelo passo global
++           "ssl_batch_size": None, "ssl_batch_min": 32},
+ }
+ 
+ V3_SSL_REG = {"lejepa": "sigreg", "simclr": "none", "vicreg": "none"}
+@@ -139,6 +143,9 @@
+ V3_RECIPES = {
+     "lejepa": {"kwargs": {"n_views": 8, "sigreg_lambda": 0.05, "weight_decay": 5e-4, "projector": True,
+                           "projector_dims": [2048, 2048, 128], "reg_kwargs": {"n_proj": 1024}},
++               # v3.1 (bloco 2): AdamW lr 5e-4, warmup linear de 1 passada (fator inicial 0,01) + cosseno até lr/1000
++               "optim": {"optimizer": "adamw", "lr": 5e-4, "lr_rule": "fixo (5e-4, não escala com B)",
++                         "warmup": {"epochs": 1}, "start_ratio": 0.01, "end_ratio": 1e-3, "wd_exclude_1d": False},
+                "fiel": ["projetor MLP 3 camadas BN d->2048->2048->128, perda NO projetor, SVM no embedding",
+                         "V=8, lambda=0,05", "AdamW wd 5e-4", "SIGReg com 1024 slices", "épocas = passadas completas"],
+                "adaptacao": ["aug oficial (ColorJitter .4/.4/.2/.1 p.8, gray .2, blur .5, solarize .2) em LAB -> preset "
+@@ -147,6 +154,10 @@
+                "pendente": ["warmup + cosseno até lr/1000 (trainer só tem lr fixo)"],
+                "small_views": {"n_views": 4, "sigreg_lambda": 0.02}},
+     "simclr": {"kwargs": {"tau": 0.5, "weight_decay": 1e-4, "projector_dims": [0, 128]},
++               # v3.1: LARS (eta 1e-3, m 0,9; bias/BN fora do wd e da adaptação), lr = 0,075*sqrt(B) (v1 Tab. B.1,
++               # batch pequeno), warmup 10% dos passos, cosseno até 0
++               "optim": {"optimizer": "lars", "lr_sqrt": 0.075, "lr_rule": "0,075*sqrt(B)", "warmup": {"frac": 0.10},
++                         "start_ratio": 0.0, "end_ratio": 0.0},
+                "fiel": ["projetor d->d->128 com BN", "2N vistas numa única chamada", "tau=0,5", "wd 1e-4"],
+                "adaptacao": ["aug oficial (crop .08-1, jitter s=1 p=.8, gray .2, blur .5) -> preset 'strong' em LAB",
+                              "wd aplicado também a BN/bias (o trainer não separa grupos)",
+@@ -154,12 +165,49 @@
+                "pendente": ["LARS", "warmup + cosseno"]},
+     "vicreg": {"kwargs": {"weight_decay": 1e-6, "vicreg_kwargs": {"expander_dims": [2048, 2048, 2048],
+                                                                   "sim_coeff": 25.0, "std_coeff": 25.0, "cov_coeff": 1.0}},
++               # v3.1: LARS, lr = 0,2*B/256 (base 0,2, 1000 ép.), warmup 10 ép. (<= 10% dos passos), cosseno até 1e-3
++               "optim": {"optimizer": "lars", "lr_base": 0.2, "lr_rule": "0,2*B/256", "warmup": {"epochs": 10, "max_frac": 0.10},
++                         "start_ratio": 0.0, "end_ratio": 1e-3},
+                "fiel": ["perda inv/var/cov 25/25/1", "expander 3 camadas Linear-BN-ReLU", "2 vistas"],
+                "adaptacao": ["expander 2048 (paper 8192) por memória", "AdamW no lugar de LARS"],
+                "pendente": ["LARS", "warmup + cosseno"]},
+ }
+ 
+ 
++def recipe_optim(rec: dict, batch: int, steps_per_epoch: int, planned_epochs: int) -> dict:
++    """growth v3.1 (bloco 2): otimizador/lr/agenda da receita para o batch B real e os passos planejados
++    (agenda definida sobre a fidelidade MAIS ALTA planejada; a retomada continua pelo passo global)."""
++    o = dict(rec.get("optim") or {})
++    if not o:
++        return {}
++    B = int(batch)
++    if "lr_sqrt" in o:
++        lr = float(o["lr_sqrt"]) * math.sqrt(B)
++    elif "lr_base" in o:
++        lr = float(o["lr_base"]) * B / 256.0
++    else:
++        lr = float(o["lr"])
++    total = max(1, int(planned_epochs) * int(steps_per_epoch))
++    w = o.get("warmup") or {}
++    warm = int(w["epochs"]) * int(steps_per_epoch) if "epochs" in w else int(round(float(w.get("frac", 0.0)) * total))
++    if "max_frac" in w:
++        warm = min(warm, int(round(float(w["max_frac"]) * total)))
++    return {"optimizer": o["optimizer"], "lr": lr, "lr_rule": o.get("lr_rule"),
++            "lr_schedule": {"total_steps": total, "warmup_steps": int(warm), "end_ratio": float(o.get("end_ratio", 1e-3)),
++                            "start_ratio": float(o.get("start_ratio", 0.0))},
++            "wd_exclude_1d": bool(o.get("wd_exclude_1d", o["optimizer"] == "adamw"))}
++
++
++def _ssl_loader(ev, batch: int, seed: int):
++    """growth v3.1: loader do SSL com o batch da receita e época = PASSADA COMPLETA do treino (sem o teto de
++    imagens por época), shuffle semeado, drop_last (estatísticas de batch sem lote residual)."""
++    from torch.utils.data import DataLoader
++    ds = ev.train_loader.dataset
++    B = min(int(batch), len(ds))
++    return DataLoader(ds, batch_size=B, shuffle=True, generator=torch.Generator().manual_seed(int(seed)),
++                      drop_last=len(ds) > B, num_workers=0)
++
++
+ def ssl_recipe(gcfg: dict) -> Optional[dict]:
+     """Receita do artigo para o SSL efetivo do filho (``v3.ssl_recipe: paper``) ou None (chamada histórica)."""
+     v3 = _v3(gcfg)
+@@ -1599,7 +1647,8 @@
+ 
+ 
+ def _global_ssl(gev: GrowthEvaluator, model: BB.Backbone, masks: dict, scale: float, epochs: int, gcfg: dict,
+-                seed: int, mem: dict, *, resume: Optional[dict] = None, return_state: bool = False) -> dict:
++                seed: int, mem: dict, *, resume: Optional[dict] = None, return_state: bool = False,
++                planned_epochs: Optional[int] = None) -> dict:
+     """LeJEPA+SIGReg global (mesma chamada em f_low, no treino contínuo e na retomada de f_high)."""
+     from ga_search.modehb.external_seed import ElementProtect
+     from ga_search.modehb.run_search import _amp_kw, _NullRun
+@@ -1622,6 +1671,8 @@
+         extra["vicreg_kwargs"] = dict(v3["vicreg_kwargs"])
+     rec = ssl_recipe(gcfg)                    # receita do artigo (fiel/adaptação/pendente registrados)
+     lam = float(tr.get("sigreg_lambda", 0.05))
++    loader = ev.train_loader
++    batch_info = None
+     if rec is not None:
+         kw = dict(rec["kwargs"])
+         lam = float(kw.pop("sigreg_lambda", lam))
+@@ -1630,6 +1681,17 @@
+         extra.update(kw)
+         if v3.get("aug") in (None, "default"):
+             extra["aug_cfg"] = "strong"
++        sb = v3.get("ssl_batch_size")         # v3.1 (bloco 2): batch do SSL da receita (maior que couber)
++        if sb:
++            B = int((resume or {}).get("ssl_batch") or sb)
++            loader = _ssl_loader(ev, B, seed)
++            spe = len(loader) if tr.get("max_steps_per_epoch") is None else min(len(loader), int(tr["max_steps_per_epoch"]))
++            om = recipe_optim(rec, loader.batch_size, spe, int(planned_epochs or epochs))
++            if om:
++                lr = om["lr"]
++                extra.update(optimizer=om["optimizer"], lr_schedule=om["lr_schedule"], wd_exclude_1d=om["wd_exclude_1d"])
++            batch_info = {"requested": int(sb), "used": int(loader.batch_size), "steps_per_epoch": int(spe),
++                          "epoch": "passada completa do treino (sem max_images_per_epoch)", "optim": om}
+     elif v3.get("weight_decay") is not None:  # correção do wd=0 efetivo (run_search não repassa): só na v3
+         extra["weight_decay"] = float(v3["weight_decay"])
+     head_for_ssl, gh, old_rg = model.head, None, None
+@@ -1643,12 +1705,37 @@
+             gh.load_state_dict(resume["extra"]["_cov_gate_head"])
+         head_for_ssl = gh
+         extra.pop("freeze_head", None)        # a cabeça antiga já está congelada; só g_h treina
+-    with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
+-            ElementProtect(model.head, _masks_under(masks, "head."), scale):
+-        ssl_log = train_global_ssl(enc, head_for_ssl, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
+-                                   epochs, lr, lr, [], dev, _NullRun(), int(seed), lam,
+-                                   max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
+-                                   progress=f"[ssl] {epochs} ép.", **{"projector": False, **amp_kw, **extra})
++    snap0 = {k: v.detach().to("cpu", copy=True) for k, v in model.state_dict().items()} if batch_info else None
++    gh0 = {k: v.detach().clone() for k, v in gh.state_dict().items()} if (batch_info and gh is not None) else None
++    while True:
++        try:
++            with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
++                    ElementProtect(model.head, _masks_under(masks, "head."), scale):
++                ssl_log = train_global_ssl(enc, head_for_ssl, loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
++                                           epochs, lr, lr, [], dev, _NullRun(), int(seed), lam,
++                                           max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
++                                           progress=f"[ssl] {epochs} ép.", **{"projector": False, **amp_kw, **extra})
++            break
++        except Exception as exc:              # v3.1: o maior batch que couber (sem acumulação de gradiente)
++            B = int(loader.batch_size) if batch_info else 0
++            if not (batch_info and _is_oom(exc) and resume is None and B // 2 >= int(v3.get("ssl_batch_min", 32))):
++                raise
++            print(f"[ssl] OOM com batch {B}: refaz com {B // 2} (adaptação registrada)", flush=True)
++            model.load_state_dict(snap0)
++            if gh0 is not None:
++                gh.load_state_dict(gh0)
++            for p_ in model.parameters():
++                p_.grad = None
++            _free(dev, True)
++            loader = _ssl_loader(ev, B // 2, seed)
++            spe = len(loader) if tr.get("max_steps_per_epoch") is None else min(len(loader), int(tr["max_steps_per_epoch"]))
++            om = recipe_optim(rec, loader.batch_size, spe, int(planned_epochs or epochs))
++            if om:
++                lr = om["lr"]
++                extra.update(optimizer=om["optimizer"], lr_schedule=om["lr_schedule"], wd_exclude_1d=om["wd_exclude_1d"])
++            batch_info.update(used=int(loader.batch_size), steps_per_epoch=int(spe), optim=om,
++                              oom_halvings=int(batch_info.get("oom_halvings", 0)) + 1)
++    del snap0
+     if gh is not None:
+         for p, rg in old_rg:
+             p.requires_grad_(rg)
+@@ -1659,12 +1746,21 @@
+                                                                           for k, v in gh.state_dict().items()}
+     if rec is not None:
+         ssl_log["recipe"] = {k: rec[k] for k in ("fiel", "adaptacao", "pendente")}
++        if batch_info is not None:            # v3.1: o que foi implementado sai de "pendente"
++            ssl_log["recipe"]["pendente"] = [x for x in rec["pendente"] if "LARS" not in x and "warmup" not in x]
++            ssl_log["recipe"]["batch"] = batch_info
++            if isinstance(ssl_log.get("state"), dict):
++                ssl_log["state"]["ssl_batch"] = int(batch_info["used"])
+         ssl_log["recipe"]["kwargs"] = {k: v for k, v in rec["kwargs"].items()}
+-        ssl_log["recipe"]["batch_size"] = int(gev.cfg["data"].get("batch_size", 64))
++        bsz = int(batch_info["used"]) if batch_info is not None else int(gev.cfg["data"].get("batch_size", 64))
++        ssl_log["recipe"]["batch_size"] = bsz
+         ssl_log["recipe"]["variant"] = rec.get("variant")
+-        if int(gev.cfg["data"].get("batch_size", 64)) < 128:
++        if batch_info is not None and batch_info["used"] < batch_info["requested"]:
++            ssl_log["recipe"]["adaptacao"] = list(ssl_log["recipe"]["adaptacao"]) + [
++                f"adaptação: batch {bsz} por memória (pedido {batch_info['requested']})"]
++        if bsz < 128:
+             ssl_log["recipe"]["adaptacao"] = list(ssl_log["recipe"]["adaptacao"]) + [
+-                f"batch {int(gev.cfg['data'].get('batch_size', 64))} (< 128 do artigo; rank da cov <= N-1)"]
++                f"batch {bsz} (< 128 do artigo; rank da cov <= N-1)"]
+     del enc
+     return ssl_log
+ 
+@@ -1754,7 +1850,12 @@
+     if ssl_off:                              # growth_fix4: ablação ``ssl: none`` (só o AE local nos blocos novos)
+         ssl_log = {"steps": 0, "final_loss_total": 0.0, "skipped": True}
+     else:
+-        ssl_log = _global_ssl(gev, model, masks, scale, ssl_ep, gcfg, seed, mem, return_state=capture is not None)
++        planned = ssl_ep
++        fl_, fh_ = int(gcfg.get("fid_low", 0) or 0), int(gcfg.get("fid_high", 0) or 0)
++        if capture is not None and fh_ > fl_ and int(fidelity) == fl_:      # v3.1: agenda até a fidelidade alta
++            planned = int(ssl_ep) + resume_extra_epochs(fl_, fh_, gcfg, tr)
++        ssl_log = _global_ssl(gev, model, masks, scale, ssl_ep, gcfg, seed, mem, return_state=capture is not None,
++                              planned_epochs=planned)
+     for p in model.parameters():
+         p.grad = None
+     _free(dev, mem["empty_cache"])
+@@ -1898,7 +1999,7 @@
+         p.requires_grad_(True)
+     resume = dict(ssl_state) if ssl_state is not None else {"opt": None, "rng": None, "extra": {}, "step": 0}
+     ssl_log = _global_ssl(gev, model, masks, scale, int(extra_epochs), gcfg, seed, mem, resume=resume,
+-                          return_state=True)
++                          return_state=True, planned_epochs=int(state["ssl_epochs"]) + int(extra_epochs))
+     for p in model.parameters():
+         p.grad = None
+     _free(dev, mem["empty_cache"])
+diff -ruN a/ga_search/modehb/ssl_trainers.py b/ga_search/modehb/ssl_trainers.py
+--- a/ga_search/modehb/ssl_trainers.py	2026-11-17 22:12:52.323774244 -0300
++++ b/ga_search/modehb/ssl_trainers.py	2026-11-17 22:12:52.329774345 -0300
+@@ -352,6 +352,59 @@
+     return nn.Sequential(*layers)
+ 
+ 
++# ---------------------------------------------------------------------------
++# growth v3.1 bloco 2: LARS (cópia do oficial VICReg main_vicreg.py) + agenda warmup/cosseno por passo
++# ---------------------------------------------------------------------------
++def exclude_bias_and_norm(p) -> bool:
++    """Filtro oficial (VICReg/SimCLR): parâmetros 1-D (bias, BN) fora do wd e da adaptação LARS."""
++    return p.ndim == 1
++
++
++class LARS(torch.optim.Optimizer):
++    """LARS do código oficial do VICReg (``main_vicreg.py``): wd e adaptação de confiança por camada (eta),
++    momentum clássico; ``weight_decay_filter``/``lars_adaptation_filter`` True = parâmetro EXCLUÍDO."""
++
++    def __init__(self, params, lr, weight_decay=0, momentum=0.9, eta=0.001,
++                 weight_decay_filter=None, lars_adaptation_filter=None):
++        defaults = dict(lr=lr, weight_decay=weight_decay, momentum=momentum, eta=eta,
++                        weight_decay_filter=weight_decay_filter, lars_adaptation_filter=lars_adaptation_filter)
++        super().__init__(params, defaults)
++
++    @torch.no_grad()
++    def step(self, closure=None):
++        for g in self.param_groups:
++            for p in g["params"]:
++                dp = p.grad
++                if dp is None:
++                    continue
++                if g["weight_decay_filter"] is None or not g["weight_decay_filter"](p):
++                    dp = dp.add(p, alpha=g["weight_decay"])
++                if g["lars_adaptation_filter"] is None or not g["lars_adaptation_filter"](p):
++                    param_norm = torch.norm(p)
++                    update_norm = torch.norm(dp)
++                    one = torch.ones_like(param_norm)
++                    q = torch.where(param_norm > 0.,
++                                    torch.where(update_norm > 0, (g["eta"] * param_norm / update_norm), one), one)
++                    dp = dp.mul(q)
++                param_state = self.state[p]
++                if "mu" not in param_state:
++                    param_state["mu"] = torch.zeros_like(p)
++                mu = param_state["mu"]
++                mu.mul_(g["momentum"]).add_(dp)
++                p.add_(mu, alpha=-g["lr"])
++
++
++def schedule_factor(step: int, total_steps: int, warmup_steps: int, end_ratio: float = 1e-3,
++                    start_ratio: float = 0.0) -> float:
++    """Fator do lr no passo GLOBAL ``step``: warmup linear de ``start_ratio`` a 1 em ``warmup_steps``, depois
++    cosseno de 1 até ``end_ratio`` em ``total_steps`` (VICReg: end 1e-3; SimCLR: 0; LeJEPA: 1e-3)."""
++    step, total_steps, warmup_steps = int(step), max(1, int(total_steps)), max(0, int(warmup_steps))
++    if warmup_steps > 0 and step < warmup_steps:
++        return start_ratio + (1.0 - start_ratio) * step / warmup_steps
++    t = min(1.0, (step - warmup_steps) / max(1, total_steps - warmup_steps))
++    return end_ratio + (1.0 - end_ratio) * 0.5 * (1.0 + math.cos(math.pi * t))
++
++
+ def _make_projector(d: int, hidden: int = 128, out: int = 64) -> nn.Module:
+     return nn.Sequential(nn.Linear(d, hidden), nn.BatchNorm1d(hidden),
+                          nn.ReLU(inplace=True), nn.Linear(hidden, out))
+@@ -405,6 +458,8 @@
+                      resume: Optional[Dict[str, Any]] = None, return_state: bool = False,
+                      progress: Optional[str] = None, freeze_head: bool = False,
+                      projector_dims: Optional[Sequence[int]] = None,
++                     optimizer: str = "adamw", lars_kwargs: Optional[dict] = None,
++                     lr_schedule: Optional[dict] = None, wd_exclude_1d: bool = False,
+                      vicreg_kwargs: Optional[dict] = None) -> Dict[str, Any]:
+     """Global SSL on the full encoder + head. Learning rates are fixed (never tuned).
+ 
+@@ -510,7 +565,26 @@
+             groups = [{**g, "params": [p for p in g["params"] if id(p) not in hid]} for g in groups]
+             groups = [g for g in groups if g["params"]]
+         groups = _scale_conv_groups(groups, encoder, conv_lr_scale)
+-        opt = torch.optim.AdamW(groups)
++        if wd_exclude_1d and optimizer == "adamw":     # growth v3.1: bias/BN sem wd (receita dos artigos)
++            split = []
++            for g_ in groups:
++                nd = [p for p in g_["params"] if p.ndim == 1]
++                dd = [p for p in g_["params"] if p.ndim != 1]
++                if dd:
++                    split.append({**g_, "params": dd})
++                if nd:
++                    split.append({**g_, "params": nd, "weight_decay": 0.0, "name": g_.get("name", "") + "_nowd"})
++            groups = split
++        for g_ in groups:                                # lr de referência do grupo (a agenda multiplica)
++            g_["base_lr"] = g_["lr"]
++        if optimizer == "lars":                          # growth v3.1: LARS oficial (VICReg/SimCLR)
++            lk = {"momentum": 0.9, "eta": 0.001, **(lars_kwargs or {})}
++            opt = LARS(groups, lr=0.0, weight_decay=weight_decay, momentum=lk["momentum"], eta=lk["eta"],
++                       weight_decay_filter=exclude_bias_and_norm, lars_adaptation_filter=exclude_bias_and_norm)
++        elif optimizer == "adamw":
++            opt = torch.optim.AdamW(groups)
++        else:
++            raise ValueError(f"optimizer {optimizer!r} (adamw|lars)")
+ 
+     if resume is not None and resume.get("rng") is not None:
+         _rng_restore(resume["rng"], device, gen, loader)
+@@ -627,6 +701,11 @@
+             if grad_clip:
+                 torch.nn.utils.clip_grad_norm_([p for g in opt.param_groups for p in g["params"]],
+                                                grad_clip)
++            if lr_schedule is not None:                  # growth v3.1: agenda por passo GLOBAL (retomada continua)
++                fac = schedule_factor(step, lr_schedule["total_steps"], lr_schedule.get("warmup_steps", 0),
++                                      float(lr_schedule.get("end_ratio", 1e-3)), float(lr_schedule.get("start_ratio", 0.0)))
++                for g in opt.param_groups:
++                    g["lr"] = g.get("base_lr", g["lr"]) * fac
+             log_now = logger is not None and (step % max(log_every, 1) == 0)
+             if log_now:
+                 gn = _per_layer_norms(encoder, "grad_norm/encoder", grad=True)
+diff -ruN a/tests/hmodehb/test_growth_v31_recipe.py b/tests/hmodehb/test_growth_v31_recipe.py
+--- a/tests/hmodehb/test_growth_v31_recipe.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_recipe.py	2026-11-17 22:12:52.336774464 -0300
+@@ -0,0 +1,172 @@
++"""growth v3.1 bloco 2: receita fiel com batch maior (LARS oficial, AdamW + warmup + cosseno, lr = f(B), época =
++passada completa, batch por OOM -> metade registrado), retomada contínua da agenda pelo passo global."""
++from __future__ import annotations
++
++import json
++import math
++import sys
++from pathlib import Path
++
++import pytest
++import torch
++from torch import nn
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.modehb import ssl_trainers as T  # noqa: E402
++
++
++def _ref_lars_step(p, grad, mu, lr, wd, m=0.9, eta=1e-3):
++    dp = grad.clone()
++    if p.ndim != 1:
++        dp = dp + wd * p
++        pn, un = p.norm(), dp.norm()
++        q = eta * pn / un if (pn > 0 and un > 0) else torch.tensor(1.0)
++        dp = dp * q
++    mu = m * mu + dp
++    return p - lr * mu, mu
++
++
++def test_lars_matches_official_formula():
++    torch.manual_seed(0)
++    w, b = nn.Parameter(torch.randn(4, 3)), nn.Parameter(torch.randn(4))
++    opt = T.LARS([w, b], lr=0.5, weight_decay=1e-4, momentum=0.9, eta=1e-3,
++                 weight_decay_filter=T.exclude_bias_and_norm, lars_adaptation_filter=T.exclude_bias_and_norm)
++    refs = {"w": (w.detach().clone(), torch.zeros(4, 3)), "b": (b.detach().clone(), torch.zeros(4))}
++    for it in range(3):
++        gw, gb = torch.randn(4, 3), torch.randn(4)
++        w.grad, b.grad = gw.clone(), gb.clone()
++        opt.step()
++        refs["w"] = _ref_lars_step(refs["w"][0], gw, refs["w"][1], 0.5, 1e-4)
++        refs["b"] = _ref_lars_step(refs["b"][0], gb, refs["b"][1], 0.5, 1e-4)
++        assert torch.allclose(w, refs["w"][0], atol=1e-6) and torch.allclose(b, refs["b"][0], atol=1e-6)
++
++
++def test_schedule_factor_shape():
++    f = lambda s: T.schedule_factor(s, 100, 10, 1e-3, 0.0)        # noqa: E731
++    assert f(0) == 0.0 and f(10) == pytest.approx(1.0) and f(100) == pytest.approx(1e-3)
++    vals = [f(s) for s in range(10, 101)]
++    assert all(a >= b for a, b in zip(vals, vals[1:]))
++    assert T.schedule_factor(0, 100, 10, 1e-3, 0.01) == pytest.approx(0.01)
++
++
++def test_recipe_optim_values():
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"ssl_recipe": "paper"}
++    s = G.recipe_optim(G.ssl_recipe(G.apply_genes(g, {"ssl": "simclr"})), 256, 10, 100)
++    assert s["optimizer"] == "lars" and s["lr"] == pytest.approx(0.075 * 16)
++    assert s["lr_schedule"]["warmup_steps"] == 100 and s["lr_schedule"]["end_ratio"] == 0.0
++    v = G.recipe_optim(G.ssl_recipe(G.apply_genes(g, {"ssl": "vicreg"})), 256, 10, 100)
++    assert v["optimizer"] == "lars" and v["lr"] == pytest.approx(0.2) and v["lr_schedule"]["warmup_steps"] == 100
++    l_ = G.recipe_optim(G.ssl_recipe(G.apply_genes(g, {"ssl": "lejepa"})), 512, 10, 100)
++    assert l_["optimizer"] == "adamw" and l_["lr"] == pytest.approx(5e-4) and l_["lr_schedule"]["warmup_steps"] == 10
++    assert l_["lr_schedule"]["start_ratio"] == 0.01 and not l_["wd_exclude_1d"]   # AdamW oficial: wd em tudo
++
++
++def _toy():
++    torch.manual_seed(1)
++    enc = nn.Sequential(nn.Conv2d(3, 8, 3, padding=1), nn.BatchNorm2d(8), nn.ReLU())
++    head = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(), nn.Linear(8, 16))
++    return enc, head
++
++
++def _loader():
++    from torch.utils.data import DataLoader, TensorDataset
++    x = torch.rand(32, 3, 16, 16, generator=torch.Generator().manual_seed(2))
++    return DataLoader(TensorDataset(x), batch_size=8, shuffle=True, generator=torch.Generator().manual_seed(3),
++                      drop_last=True)
++
++
++@pytest.mark.parametrize("ssl,optim", [("vicreg", "lars"), ("simclr", "lars"), ("lejepa", "adamw")])
++def test_schedule_resume_equals_continuous(ssl, optim):
++    kw = dict(optimizer=optim, lr_schedule={"total_steps": 12, "warmup_steps": 3, "end_ratio": 1e-3},
++              weight_decay=1e-4, wd_exclude_1d=True, vicreg_kwargs={"expander_dims": [16, 16, 16]},
++              reg_kwargs={"n_proj": 16}, n_views=2)
++    if ssl != "vicreg":
++        kw.pop("vicreg_kwargs")
++    if ssl != "lejepa":
++        kw.pop("reg_kwargs")
++    reg = "sigreg" if ssl == "lejepa" else "none"
++    e1, h1 = _toy()
++    T.train_global_ssl(e1, h1, _loader(), ssl, reg, 3, 0.1, 0.1, [], "cpu", None, 0, 0.05, **kw)
++    e2, h2 = _toy()
++    ld = _loader()
++    st = T.train_global_ssl(e2, h2, ld, ssl, reg, 1, 0.1, 0.1, [], "cpu", None, 0, 0.05, return_state=True, **kw)["state"]
++    T.train_global_ssl(e2, h2, ld, ssl, reg, 2, 0.1, 0.1, [], "cpu", None, 0, 0.05, resume=st, **kw)
++    for a, b in zip(list(e1.state_dict().values()) + list(h1.state_dict().values()),
++                    list(e2.state_dict().values()) + list(h2.state_dict().values())):
++        assert torch.equal(a, b)
++
++
++def test_lr_is_scheduled_per_step():
++    e, h = _toy()
++    seen = []
++    orig = T.LARS.step
++
++    def spy(self, closure=None):
++        seen.append(self.param_groups[0]["lr"])
++        return orig(self, closure)
++    T.LARS.step = spy
++    try:
++        T.train_global_ssl(e, h, _loader(), "vicreg", "none", 2, 0.2, 0.2, [], "cpu", None, 0, 0.05,
++                           optimizer="lars", lr_schedule={"total_steps": 8, "warmup_steps": 2, "end_ratio": 1e-3},
++                           vicreg_kwargs={"expander_dims": [16, 16, 16]})
++    finally:
++        T.LARS.step = orig
++    assert seen[0] == 0.0 and seen[2] == pytest.approx(0.2) and seen[-1] < 0.2
++
++
++# ───────────────────────────────────────────────────────────────── e2e mini (flowers, CPU): receita fiel + OOM
++FL_ROOT = Path("/dados/home/moliveira/datasets/organized/flowers")
++FL_B0 = ROOT / "artifacts/modehb_spifil/flowers/state/seed42/candidates/c00003/f15/encoder.pt"
++
++
++@pytest.mark.skipif(not (FL_ROOT.exists() and FL_B0.exists()), reason="dados/semente de flowers ausentes")
++def test_e2e_v31_recipe_batch_flowers(tmp_path, monkeypatch):
++    from ga_search.hmodehb import fitness_v2 as FV
++    calls = {"n": 0}
++    real = T.train_global_ssl
++
++    def flaky(enc, head, loader, *a, **k):                    # 1ª tentativa com batch > 16: OOM simulado
++        calls["n"] += 1
++        if getattr(loader, "batch_size", 0) > 16 and k.get("resume") is None and calls["n"] == 1:
++            raise torch.cuda.OutOfMemoryError("CUDA out of memory. Tried to allocate 9.00 GiB")
++        return real(enc, head, loader, *a, **k)
++    monkeypatch.setattr(T, "train_global_ssl", flaky)
++    out = tmp_path / "fl"
++    ov = ["device=cpu", "wandb.enabled=false", "data.image_size=64", "data.batch_size=16", "data.num_workers=0",
++          "train.max_steps_per_epoch=1"]
++    cfg = G.build_cfg("flowers", 42, ov, out)
++    g = G.load_growth_config(ROOT / "ga_search/config/hmodehb_b0b4/growth_v3.yaml",
++                             ["seeds.top_k=1", "n_parents=1", "n_children=3", "generations=1", "fid_low=1",
++                              "fid_high=2", "eta=1", "end_band=B1", "spifil_images_per_class=1", "debug_train=48",
++                              "debug_val=32", "test_channel=false", "seeds.external_small=false",
++                              f"seeds.registry={ROOT / 'research/spifil_b0b4/agent1/seed_registry.csv'}",
++                              "v3.ssl_recipe=paper", "v3.ssl_batch_size=32", "v3.ssl_batch_min=8",
++                              "v3.so2.seed_mode=fixed", "v3.recipe_small_views=true"])
++    g["v3"]["genes"] = {"ssl": ["simclr", "vicreg", "lejepa"]}
++    g["v3"]["vicreg_kwargs"] = {"expander_dims": [64, 64, 64]}
++    g["v3"]["families"] = None
++    g["v3"]["ops"] = []
++    gev = G.GrowthEvaluator(cfg, out / "eval", g["debug_train"], g["debug_val"], v3=g["v3"])
++    G.GrowthChain(cfg, g, gev, out).run()
++    res = [json.loads(p.read_text()) for p in out.glob("nodes/*/f1/result.json")]
++    assert res
++    seen = set()
++    for r in res:
++        assert r["status"] == "ok", r.get("error")
++        FV.check_decisions(r, gev.fitness_spec)
++        b = r["ssl_recipe"]["batch"]
++        seen.add(b["optim"]["optimizer"])
++        assert b["epoch"].startswith("passada completa") and b["optim"]["lr_schedule"]["total_steps"] >= 1
++        if b.get("oom_halvings"):
++            assert b["used"] == 16 and any("por memória" in a for a in r["ssl_recipe"]["adaptacao"])
++    assert seen == {"lars", "adamw"}
++    assert any(r["ssl_recipe"]["batch"].get("oom_halvings") for r in res)
++    hi = [json.loads(p.read_text()) for p in out.glob("nodes/*/f2/result.json")]
++    for r in hi:                                               # retomada f1 -> f2 com o mesmo batch
++        assert r["status"] == "ok", r.get("error")
++        if r.get("ssl_recipe"):
++            assert r["ssl_recipe"]["batch"]["used"] in (16, 32)

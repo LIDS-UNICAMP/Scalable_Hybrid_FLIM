@@ -1,0 +1,262 @@
+diff -ruN a/ga_search/backbones/morphisms_v3.py b/ga_search/backbones/morphisms_v3.py
+--- a/ga_search/backbones/morphisms_v3.py	2026-11-17 22:32:46.708522892 -0300
++++ b/ga_search/backbones/morphisms_v3.py	2026-11-17 22:32:46.709522906 -0300
+@@ -436,5 +436,76 @@
+     return out
+ 
+ 
++# ─────────────────────────────────────────────────────────────────── v3.1 bloco 3: add_dense_layer (DenseNet)
++@torch.no_grad()
++def add_dense_layer(res: GrowthResult, at: int, growth: int, *, kernel: int = 3, norm: str = "batch",
++                    act: str = "relu", new_filters: Optional[BranchInit] = None, seed: int = 0) -> GrowthResult:
++    """Insere antes da camada ``at`` uma camada DenseNet H (conv k -> ``growth`` canais, norm, act, sem pool) cuja
++    saída é cat(H(x), x): o consumidor (bloco ``at`` antigo ou o 1x1 da cabeça) passa a ver growth + C canais, com
++    as colunas de H = 0 e as de x = as antigas (mapa [-1]*growth + 0..C-1) -> exato para qualquer entrada.
++    ``new_filters(at, conv, rows)``: filtros SPiFiL de H sobre o prefixo herdado."""
++    from ga_search.backbones.spec import LayerSpec
++    M = res.child
++    spec = M.spec.copy()
++    layers = spec.layers()
++    n = len(layers)
++    if not 1 <= at < n:                          # no fim a cabeça leria a passagem (spec proíbe dense_out no último)
++        raise MorphismError(f"add_dense_layer em {at}: use 1..{n - 1}")
++    if at < n:
++        Lc = layers[at]
++        if Lc.residual in ("identity", "gated") or Lc.conv == "depthwise" or getattr(Lc, "cov_gate", "none") != "none":
++            raise MorphismError(f"add_dense_layer: consumidor {at} exige cin == cout (residual/depthwise/cov_gate)")
++    C = int(spec.block_out_channels(at - 1))
++    newL = LayerSpec(channels=int(growth), kernel=int(kernel), conv="conv", norm=norm, activation=act, residual="none",
++                     pool="none", init="dense_layer", flavor=layers[at - 1].flavor, dense_out=True)
++    if at < n:
++        s_, pos = spec.locate(at)
++        spec.stages[s_].layers.insert(pos, newL)
++    else:
++        spec.stages[-1].layers.append(newL)
++    torch.manual_seed(int(seed))
++    child = Backbone(spec)
++    masks: Dict[str, torch.Tensor] = {}
++    in_cons = [-1] * int(growth) + list(range(C))
++    exact, notes = True, []
++    for j in range(n + 1):
++        cb = child.blocks[j]
++        if j < at:
++            masks.update({f"blocks.{j}.{q}": v for q, v in _copy_block(cb, M.blocks[j], _prefixed(res.masks, f"blocks.{j}.")).items()})
++        elif j == at:
++            if new_filters is not None:
++                new_filters(at, cb.conv, list(range(int(growth))))
++            for q, v in cb.named_parameters():
++                masks[f"blocks.{j}.{q}"] = torch.zeros_like(v, dtype=torch.bool)
++        elif j == at + 1:
++            pb = M.blocks[at]
++            conv_local = list(range(_conv_rows(pb)))
++            bm, ex, nt = _fill_block(cb, pb, in_cons, conv_local, _prefixed(res.masks, f"blocks.{at}."))
++            exact &= ex
++            notes += nt
++            masks.update({f"blocks.{j}.{q}": v for q, v in bm.items()})
++        else:
++            masks.update({f"blocks.{j}.{q}": v for q, v in _copy_block(cb, M.blocks[j - 1], _prefixed(res.masks, f"blocks.{j - 1}.")).items()})
++    if at == n:
++        masks.update({f"head.{q}": v for q, v in _fill_head(child.head, M.head, in_cons, _prefixed(res.masks, "head.")).items()})
++    else:
++        child.head.load_state_dict(M.head.state_dict())
++        masks.update({q: v.clone() for q, v in res.masks.items() if q.startswith("head.")})
++    shift = lambda d: {(k if k < at else k + 1): v for k, v in d.items()}          # noqa: E731
++    out = GrowthResult(parent=res.parent, child=child,
++                       layer_map=list(res.layer_map[:at]) + ["dense_layer"] + list(res.layer_map[at:]),
++                       out_maps=list(res.out_maps[:at]) + [None] + list(res.out_maps[at:]), masks=masks,
++                       ops=list(res.ops), new_init={**shift(res.new_init), at: "dense_layer"},
++                       skip_added={k if k < at else k + 1 for k in res.skip_added}, head_mode=res.head_mode)
++    out.ops.append(OpRecord(op="add_dense_layer", where={"before": int(at)},
++                            params={"growth": int(growth), "kernel": int(kernel), "norm": norm, "act": act,
++                                    "init": "new_filters" if new_filters is not None else "pytorch"},
++                            exact_claimed=bool(exact),
++                            condition="saída = cat(H(x), x); colunas de H no consumidor = 0" +
++                                      ("; " + "; ".join(sorted(set(notes))) if notes else "")))
++    return out
++
++
+ OPS_V3 = {"inception_branch_add": inception_branch_add, "dense_concat": dense_concat,
+-          "replace_filters": replace_filters, "add_gated_residual": add_gated_residual}
++          "replace_filters": replace_filters, "add_gated_residual": add_gated_residual,
++          "add_dense_layer": add_dense_layer}
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 22:32:46.713522962 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 22:32:46.714522976 -0300
+@@ -1086,6 +1086,11 @@
+         return MO.deepen_residual_zero(res, int(o["at"]), act=o.get("act", "silu"), kernel=int(o.get("kernel", 3)), **kw)
+     if name == "add_skip_zero":
+         return MO.add_skip_zero(res, int(o["layer"]))
++    if name == "add_dense_layer":                  # growth v3.1 bloco 3: camada DenseNet (cat(H(x), x))
++        from ga_search.backbones import morphisms_v3 as MV3
++        return MV3.add_dense_layer(res, int(o["at"]), int(o["growth"]), kernel=int(o.get("kernel", 3)),
++                                   norm=str(o.get("norm", "batch")), act=str(o.get("act", "relu")),
++                                   new_filters=hook, seed=int(o.get("seed", 0)))
+     if name in ("cov_gate", "deepen_rezero"):      # growth v3.1: residual gated (covariância / ReZero), g = 0
+         from ga_search.backbones import morphisms_v3 as MV3
+         return MV3.add_gated_residual(res, int(o["at"]), kernel=int(o.get("kernel", 3)),
+@@ -1244,7 +1249,7 @@
+     return None, None
+ 
+ 
+-V3_OPS = ("inception_branch_add", "dense_concat", "replace_bad_filters", "cov_gate", "deepen_rezero")
++V3_OPS = ("inception_branch_add", "dense_concat", "replace_bad_filters", "cov_gate", "deepen_rezero", "add_dense_layer")
+ 
+ 
+ def plan_families(parent: BB.Backbone, gcfg: Optional[dict] = None) -> List[Tuple[str, Any]]:
+@@ -1270,6 +1275,10 @@
+                        and layers[j + 1].residual not in ("identity", "gated") and layers[j + 1].conv != "depthwise"])
+     if "replace_bad_filters" in ops:
+         groups.append([("replace_bad_filters", j) for j in range(n) if layers[j].conv in ("conv", "pointwise")])
++    if "add_dense_layer" in ops:                        # v3.1 bloco 3: consumidor sem amarra cin == cout
++        groups.append([("add_dense_layer", a) for a in range(n - 1, 0, -1)
++                       if (layers[a].residual not in ("identity", "gated") and layers[a].conv != "depthwise"
++                                     and getattr(layers[a], "cov_gate", "none") == "none")])
+     for kind in ("cov_gate", "deepen_rezero"):           # growth v3.1: residual gated, inserido antes de a
+         if kind in ops:
+             groups.append([(kind, a) for a in range(n, 0, -1)])
+@@ -1291,7 +1300,7 @@
+             "add_skip_zero": f"add_skip_zero@{j}", "deepen_identity": f"deepen_identity@{j}",
+             "inception_branch_add": f"inception_branch_add@{j}", "dense_concat": f"dense_concat@{j}",
+             "replace_bad_filters": f"replace_bad_filters@{j}", "cov_gate": f"cov_gate@{j}",
+-            "deepen_rezero": f"deepen_rezero@{j}"}[kind]
++            "deepen_rezero": f"deepen_rezero@{j}", "add_dense_layer": f"add_dense_layer@{j}"}[kind]
+ 
+ 
+ def plan_with_family(parent: BB.Backbone, target_band: str, family: Tuple[str, Any], theta: Sequence[float],
+@@ -1342,7 +1351,11 @@
+                            "norm": str(v3["whiten_new"]) if v3.get("whiten_new") not in (None, "none") else "zca",
+                            "act": "relu", "seed": sd()},
+               "deepen_rezero": {"op": "deepen_rezero", "at": int(j), "kernel": 3, "gate": "scalar", "norm": "none",
+-                                "act": "relu", "seed": sd()}}[kind]
++                                "act": "relu", "seed": sd()},
++              "add_dense_layer": {"op": "add_dense_layer", "at": int(j), "kernel": 3, "norm": "batch", "act": "relu",
++                                  "growth": max(4, int(round(float(v3.get("dense_growth_frac", 0.25))
++                                                             * int(parent.spec.block_out_channels(int(j) - 1))))),
++                                  "seed": sd()} if kind == "add_dense_layer" else None}[kind]
+         r = _try_apply(res, op)
+         if r is None:
+             return None, f"{family_label(family)}: morfismo inaplicável"
+@@ -1458,6 +1471,8 @@
+             op = {**op, "new_init": f"{nfi.method}:residual_zero_out"}
+         elif op["op"] == "inception_branch_add" and nfi is not None:
+             hook = nfi.conv_hook(res.child, tag="inception_branch")
++        elif op["op"] == "add_dense_layer" and nfi is not None:                   # v3.1: SPiFiL na camada densa
++            hook = nfi.conv_hook(res.child, tag="add_dense_layer")
+         elif op["op"] in ("cov_gate", "deepen_rezero") and nfi is not None:      # growth v3.1: SPiFiL na conv do ramo
+             hook = nfi.conv_hook(res.child, tag=op["op"])
+             res = _apply(res, op, hook, fit_x=nfi.gev.ev.svm_train_x[: int(v3.get("cov_gate_fit_images", 64))])
+diff -ruN a/tests/hmodehb/test_growth_v31_dense.py b/tests/hmodehb/test_growth_v31_dense.py
+--- a/tests/hmodehb/test_growth_v31_dense.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_dense.py	2026-11-17 22:32:46.718523031 -0300
+@@ -0,0 +1,111 @@
++"""growth v3.1 bloco 3: add_dense_layer (DenseNet, cat(H(x), x), SPiFiL em H, colunas zero no consumidor) e
++deepen_rezero com SPiFiL (bloco gated do bloco 1)."""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++
++import pytest
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.backbones import morphisms_v3 as MV3  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++
++sys.path.insert(0, str(Path(__file__).parent))
++from test_growth_v31_covgate import _rand_filters, _tiny, _x  # noqa: E402
++
++
++@pytest.mark.parametrize("flavor", ["spifil_ops", "convblock"])
++@pytest.mark.parametrize("at", [1, 2])
++def test_add_dense_layer_exact(flavor, at):
++    m = _tiny(flavor)
++    out = MV3.add_dense_layer(MO.start(m), at, 6, new_filters=_rand_filters)
++    x = _x()
++    with torch.no_grad():
++        assert torch.allclose(out.child.eval()(x), m(x), atol=1e-6, rtol=0)
++    assert float(out.child.blocks[at].conv.weight.abs().sum()) > 0          # H com filtros (não zero)
++    gs = MO.finalize(out, x, data={"split": "synthetic"})
++    assert gs.preservation.verdict == "exact"
++    assert out.child.spec.layers()[at].dense_out
++    assert not any(bool(v.any()) for k, v in out.masks.items() if k.startswith(f"blocks.{at}."))
++
++
++def test_two_dense_layers_chain_and_ckpt(tmp_path):
++    m = _tiny()
++    r = MV3.add_dense_layer(MO.start(m), 2, 4, new_filters=_rand_filters)
++    r = MV3.add_dense_layer(r, 3, 4, new_filters=_rand_filters)                # DenseNet: a 2ª vê x + H1
++    MO.finalize(r)
++    x = _x()
++    with torch.no_grad():
++        assert torch.allclose(r.child.eval()(x), m(x), atol=1e-6, rtol=0)
++    info = G.BB_save(r.child, tmp_path / "d.pt")
++    m2, _ = G.BB_load(info["path"], info["file_sha256"])
++    with torch.no_grad():
++        assert torch.equal(m2(x), r.child(x))
++
++
++def test_add_dense_layer_refuses_tied_consumer():
++    m = _tiny()
++    with pytest.raises(MO.MorphismError):
++        MV3.add_dense_layer(MO.start(m), 3, 4)                              # fim: a cabeça leria a passagem
++    g = MV3.add_gated_residual(MO.start(m), 2, norm="none", gate="scalar", tag="deepen_rezero")
++    with pytest.raises(MO.MorphismError):
++        MV3.add_dense_layer(g, 2, 4)
++
++
++def test_planner_add_dense_layer_family():
++    m = _tiny()
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"ops": ["add_dense_layer"], "families": ["add_dense_layer", "widen"]}
++    fams = [f for f in G.plan_families(m, g) if f[0] == "add_dense_layer"]
++    assert fams
++    ok = 0
++    for f in fams:
++        ops, why = G.plan_with_family(m, "B1", f, [0.5] * 4, 9, g)
++        if ops is None:
++            continue
++        res = G.realize_plan(m, ops, None, g)
++        gs = MO.finalize(res, _x(), data={"split": "synthetic"})
++        assert gs.preservation.verdict == "exact" and ops[0]["op"] == "add_dense_layer"
++        ok += 1
++    assert ok >= 1
++
++
++FL_ROOT = Path("/dados/home/moliveira/datasets/organized/flowers")
++FL_B0 = ROOT / "artifacts/modehb_spifil/flowers/state/seed42/candidates/c00003/f15/encoder.pt"
++
++
++@pytest.mark.skipif(not (FL_ROOT.exists() and FL_B0.exists()), reason="dados/semente de flowers ausentes")
++def test_e2e_v31_dense_rezero_flowers(tmp_path):
++    import json
++    from ga_search.hmodehb import fitness_v2 as FV
++    out = tmp_path / "fl"
++    ov = ["device=cpu", "wandb.enabled=false", "data.image_size=64", "data.batch_size=16", "data.num_workers=0",
++          "train.max_steps_per_epoch=1"]
++    cfg = G.build_cfg("flowers", 42, ov, out)
++    g = G.load_growth_config(ROOT / "ga_search/config/hmodehb_b0b4/growth_v3.yaml",
++                             ["seeds.top_k=1", "n_parents=1", "n_children=3", "generations=1", "fid_low=1",
++                              "fid_high=1", "end_band=B1", "spifil_images_per_class=1", "debug_train=48",
++                              "debug_val=32", "test_channel=false", "seeds.external_small=false",
++                              f"seeds.registry={ROOT / 'research/spifil_b0b4/agent1/seed_registry.csv'}",
++                              "v3.so2.seed_mode=fixed"])
++    g["v3"]["genes"] = {"ssl": ["none", "lejepa"]}
++    g["v3"]["ops"] = ["add_dense_layer", "deepen_rezero"]
++    g["v3"]["families"] = ["add_dense_layer", "deepen_rezero"]
++    gev = G.GrowthEvaluator(cfg, out / "eval", g["debug_train"], g["debug_val"], v3=g["v3"])
++    G.GrowthChain(cfg, g, gev, out).run()
++    res = [json.loads(p.read_text()) for p in out.glob("nodes/*/f1/result.json")]
++    assert res
++    kinds = set()
++    for r in res:
++        assert r["status"] == "ok", r.get("error")
++        FV.check_decisions(r, gev.fitness_spec)
++        assert r["preservation_verdict"] == "exact"
++        kinds.add(r["ops"][0]["op"])
++        recs = [x for x in r["new_filter_init"] if x.get("target") in ("add_dense_layer", "deepen_rezero")]
++        assert recs and all(x["n_fit"] > 0 or x["fallback"] for x in recs)      # SPiFiL (ou fallback registrado)
++    assert kinds == {"add_dense_layer", "deepen_rezero"}

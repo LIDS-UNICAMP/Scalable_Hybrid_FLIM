@@ -1,0 +1,808 @@
+--- a/ga_search/hmodehb/growth_chain.py
++++ b/ga_search/hmodehb/growth_chain.py
+@@ -14,8 +14,9 @@
+    (``external_seed.ElementProtect``); elementos novos com lr cheio;
+ 4. AE local SÓ nos blocos com elementos novos -> LeJEPA+SIGReg curto -> WiSE com âncora = o filho no passo 0
+    (= o PAI em função: alpha=0 devolve exatamente os pesos do morfismo) -> alpha escolhido pela ORIG-val;
+-5. aceitação: kappa_ORIG_val(filho) >= kappa_ORIG_val(pai) + delta (delta=0 padrão). alpha=0 reproduz o pai,
+-   então o filho nunca é pior que o pai na validação; ``require_improvement`` exige alpha>0.
++5. aceitação (growth_fix4): o pai é re-pontuado no MESMO processo e na MESMA leitura fp32 do filho;
++   kappa_ORIG_val(filho) >= kappa_ORIG_val(pai re-pontuado) + delta (delta=0 padrão). Preservação exata +
++   alpha=0 => ``adopted_as_parent`` (o filho é o pai: não ocupa a faixa nem é promovido).
+ 
+ Seleção por faixa (MO-DEHB de crescimento): pais = frente de Pareto (kappa ORIG-val máx, FLOPs 2·MAC mín)
+ da faixa; filhos com vetor de plano theta em [0,1]^4 gerado por DE rand1/bin entre os thetas aceitos da
+@@ -34,6 +35,7 @@
+ from __future__ import annotations
+ 
+ import argparse
++import contextlib
+ import copy
+ import hashlib
+ import json
+@@ -63,6 +65,10 @@
+ GROWTH_CONFIG = Path(__file__).resolve().parents[1] / "config" / "hmodehb_b0b4" / "growth.yaml"
+ PROTECT_SCALE = {"full": 1.0, "lowlr": 0.01, "freeze": 0.0}
+ KIND = "h4_growth"
++# growth_fix4 (a): toda leitura SVM do growth (sementes, pai re-pontuado, alphas do WiSE, canal de teste) usa a
++# MESMA precisão: fp32, autocast desligado e TF32 desligado (cuDNN/matmul). Entra na fitness_spec -> muda a
++# fitness_sig: estados/resultados lidos em FP16 (autocast sem dtype) não são adotados nem misturados.
++EMBED_PRECISION = "fp32_noautocast_notf32"
+ 
+ GROWTH_DEFAULTS: Dict[str, Any] = {
+     "n_parents": 4, "n_children": 8, "generations": 2, "eta": 3,
+@@ -304,6 +310,24 @@
+ 
+ 
+ # ═════════════════════════════════════════════════════════════════ 2. avaliador (dados + régua ORIG)
++@contextlib.contextmanager
++def fp32_reading(ev):
++    """growth_fix4 (a): leitura determinística para a SVM. Autocast desligado (``ev.embed_amp=False``) e TF32
++    desligado em conv/matmul enquanto o embedding é extraído; estado anterior restaurado na saída."""
++    old_amp = getattr(ev, "embed_amp", True)
++    cudnn_tf32 = torch.backends.cudnn.allow_tf32
++    mm_tf32 = torch.backends.cuda.matmul.allow_tf32
++    ev.embed_amp = False
++    torch.backends.cudnn.allow_tf32 = False
++    torch.backends.cuda.matmul.allow_tf32 = False
++    try:
++        yield
++    finally:
++        ev.embed_amp = old_amp
++        torch.backends.cudnn.allow_tf32 = cudnn_tf32
++        torch.backends.cuda.matmul.allow_tf32 = mm_tf32
++
++
+ class GrowthEvaluator:
+     """Dados e régua ORIG do ``HEvaluator`` (A4): ``head(encoder(x))`` >= 1280, core.svm.fit_svm C=100 sem scaler."""
+ 
+@@ -324,8 +348,11 @@
+             idx = torch.as_tensor(_stratified_indices(ev.val_y.numpy(), int(debug_val), ev.seed))
+             ev.val_x, ev.val_y = ev.val_x[idx], ev.val_y[idx]
+         self.device = ev.device
++        ev.embed_amp = False                     # growth_fix4 (a): run_search._embed sem autocast (fp32)
++        self.embed_precision = EMBED_PRECISION
+         self.fitness_spec = FV.spec(ev.sv2, val_sha256=ev.split_hash, n_val=int(len(ev.val_y)),
+                                     dataset=ev.dataset, split=(cfg.get("data") or {}).get("split"))
++        self.fitness_spec["embed_precision"] = EMBED_PRECISION
+         self.fitness_sig = FV.signature(self.fitness_spec)
+         self.reset_stamps()
+ 
+@@ -345,7 +372,8 @@
+         if embed_batch_size:                  # OPÇÃO DESLIGADA (null): micro-lote só na extração da SVM
+             data["batch_size"] = int(embed_batch_size)
+         try:
+-            feats = self.ev._svm_features(enc, model.head)
++            with fp32_reading(self.ev):
++                feats = self.ev._svm_features(enc, model.head)
+         finally:
+             if embed_batch_size:
+                 if old_bs is None:
+@@ -357,6 +385,7 @@
+             sv = self.ev._svm_score(*feats)
+         if sv.get("nonfinite"):
+             raise FV.NonFiniteFitness("embedding não finito")
++        sv["embed_precision"] = self.embed_precision
+         return sv
+ 
+     def spifil_cfg(self, seed: int) -> dict:
+@@ -550,6 +579,197 @@
+     return ops if lo < n_now <= hi else None
+ 
+ 
++# ---- growth_fix4 (c): planner por família de operação (variedade + widen encadeado até a faixa)
++_PLAN_ERRORS = (MO.MorphismError, BB.BudgetError, ValueError, KeyError, IndexError, RuntimeError)
++
++
++def _try_apply(res: MO.GrowthResult, op: dict) -> Optional[MO.GrowthResult]:
++    try:
++        return _apply(res, op)
++    except _PLAN_ERRORS:
++        return None
++
++
++def _widen_op(res: MO.GrowthResult, idx: Sequence[int], f: float, seed: int) -> dict:
++    spec = res.child.spec
++    layers = spec.layers()
++    idx = sorted({int(j) for j in idx})
++    while True:          # camada amarrada (residual identity/gated, depthwise): alarga junto o bloco anterior
++        widths = {j: max(int(layers[j].channels) + 1, int(round(int(layers[j].channels) * float(f)))) for j in idx}
++        widths = _tied_widths(spec, widths)
++        stuck = [j for j in idx if widths.get(j, int(layers[j].channels)) <= int(layers[j].channels)]
++        if not stuck or min(stuck) == 0 or (min(stuck) - 1) in idx:
++            break
++        idx = sorted(set(idx) | {min(stuck) - 1})
++    return {"op": "widen", "widths": {str(j): int(v) for j, v in sorted(widths.items())}, "seed": int(seed)}
++
++
++def _widen_toward(res: MO.GrowthResult, idx: Sequence[int], target: int, lo: int, hi: int, fmax: float,
++                  seed: int, iters: int = 14):
++    """UM widen dos blocos ``idx`` (fator em (1, fmax]) que leva params o mais perto possível de ``target`` sem
++    passar de ``hi``. Devolve (op, res) — possivelmente ainda abaixo da faixa (o chamador encadeia) — ou
++    (None, None) se nem o incremento mínimo (+1 canal) cabe/aplica."""
++    n0 = _params(res)
++    op = _widen_op(res, idx, fmax, seed)
++    r = _try_apply(res, op)
++    if r is not None and n0 < _params(r) <= target:
++        return op, r
++    a, b = 1.0, float(fmax)
++    below = above = None
++    for _ in range(int(iters)):
++        f = 0.5 * (a + b)
++        op = _widen_op(res, idx, f, seed)
++        r = _try_apply(res, op)
++        if r is None or _params(r) <= _params(res):
++            b = f
++            continue
++        p = _params(r)
++        if p <= target:
++            a, below = f, (op, r)
++        else:
++            b = f
++            if p <= hi:
++                above = (op, r)
++    if below is not None and lo < _params(below[1]) <= hi:
++        return below
++    if above is not None:
++        return above
++    if below is not None:
++        return below
++    op = _widen_op(res, idx, 1.0, seed)        # incremento mínimo: +1 canal
++    r = _try_apply(res, op)
++    if r is not None and n0 < _params(r) <= hi:
++        return op, r
++    return None, None
++
++
++def plan_families(parent: BB.Backbone) -> List[Tuple[str, Any]]:
++    """Famílias de 1ª operação, intercaladas por tipo: widen do bloco j (j < último), head_widen (widen do
++    último bloco, que alarga a entrada da cabeça), deepen_residual_zero, add_skip_zero, deepen_identity."""
++    layers = parent.spec.layers()
++    n = len(layers)
++    groups = [[("widen", j) for j in range(n - 1)],
++              [("head_widen", n - 1)] + ([("widen_all", None)] if n > 1 else []),
++              [("deepen_residual_zero", a) for a in range(n, 0, -1)],
++              [("add_skip_zero", j) for j, L in enumerate(layers) if L.residual == "none" and j > 0],
++              [("deepen_identity", a) for a in range(1, n + 1) if MO._nonneg_output(layers[a - 1])]]
++    out: List[Tuple[str, Any]] = []
++    for k in range(max(len(g) for g in groups)):
++        out += [g[k] for g in groups if k < len(g)]
++    return out
++
++
++def family_label(fam: Tuple[str, Any]) -> str:
++    kind, j = fam
++    return {"widen": f"widen_b{j}", "head_widen": "head_widen", "widen_all": "widen_all", "deepen_residual_zero": f"deepen_residual_zero@{j}",
++            "add_skip_zero": f"add_skip_zero@{j}", "deepen_identity": f"deepen_identity@{j}"}[kind]
++
++
++def plan_with_family(parent: BB.Backbone, target_band: str, family: Tuple[str, Any], theta: Sequence[float],
++                     seed: int, gcfg: dict, hard_cap: int = HARD_CAP) -> Tuple[Optional[List[dict]], Optional[str]]:
++    """Plano exato que começa pela operação da ``family`` e completa a faixa com widens encadeados (fator
++    <= ``max_widen_factor`` por op; pais tiny precisam de vários). Devolve (ops, None) ou (None, motivo)."""
++    lo, hi = _band_bounds(target_band)
++    hi = min(hi, int(hard_cap))
++    t = [min(max(float(x), 0.0), 1.0) for x in (list(theta) + [0.5] * 4)[:4]]
++    target = int(lo + (hi - lo) * (0.2 + 0.6 * t[2]))      # ponto-alvo dentro da faixa (theta[2])
++    fmax = float(gcfg.get("max_widen_factor", 2.5))
++    max_ops = int(gcfg.get("max_ops", 12))
++    rng = np.random.default_rng(int(seed))
++    sd = lambda: int(rng.integers(0, 2 ** 31 - 1))           # noqa: E731
++    res = MO.start(parent)
++    if _params(res) > hi:
++        return None, f"pai com {_params(res)} params já acima da faixa {target_band} (<= {hi})"
++    kind, j = family
++    ops: List[dict] = []
++    if kind in ("widen", "head_widen", "widen_all"):
++        idx0 = list(range(len(parent.spec.layers()))) if kind == "widen_all" else [int(j)]
++        for _ in range(3):                                    # widen do bloco escolhido, encadeado se preciso
++            op, r = _widen_toward(res, idx0, target, lo, hi, fmax, sd())
++            if op is None:
++                break
++            res, ops = r, ops + [op]
++            if lo < _params(res) <= hi or _params(res) >= target:
++                break
++        if not ops:
++            return None, f"{family_label(family)}: nem +1 canal cabe/aplica"
++    else:
++        op = {"deepen_residual_zero": {"op": "deepen_residual_zero", "at": int(j),
++                                       "act": gcfg.get("residual_act", "silu"), "kernel": 3},
++              "deepen_identity": {"op": "deepen_identity", "at": int(j), "kernel": 3},
++              "add_skip_zero": {"op": "add_skip_zero", "layer": int(j)}}[kind]
++        r = _try_apply(res, op)
++        if r is None:
++            return None, f"{family_label(family)}: morfismo inaplicável"
++        if _params(r) > hi:
++            return None, f"{family_label(family)}: {_params(r)} params passa do teto da faixa {hi}"
++        res, ops = r, [op]
++    while not (lo < _params(res) <= hi):                     # completa com widens encadeados
++        if len(ops) >= max_ops:
++            return None, f"{family_label(family)}: {_params(res)} params após {max_ops} ops (faixa ({lo}, {hi}])"
++        n = len(res.child.spec.layers())
++        step = None
++        for idx in [list(range(n)), [n - 1]] + [[k] for k in range(n - 1)]:
++            op, r = _widen_toward(res, idx, target, lo, hi, fmax, sd())
++            if op is not None and _params(r) > _params(res):
++                step = (op, r)
++                break
++        if step is None:
++            return None, f"{family_label(family)}: nenhum widen cabe a partir de {_params(res)} params"
++        res, ops = step[1], ops + [step[0]]
++    return ops, None
++
++
++def _plan_shape(ops: Sequence[dict]) -> str:
++    """Forma do plano (op + onde; sem os valores das larguras): dois planos com a mesma forma no mesmo pai
++    contam como repetidos (ex.: widen_b0 e head_widen amarrados por residual identity)."""
++    return json.dumps([[o["op"], sorted(o["widths"]) if o["op"] == "widen" else o.get("at", o.get("layer"))]
++                       for o in ops])
++
++
++def plan_children(parents: List[Tuple[dict, BB.Backbone]], target_band: str, n_children: int,
++                  thetas: Sequence[Sequence[float]], seeds: Sequence[int], gcfg: dict,
++                  hard_cap: int = HARD_CAP) -> List[dict]:
++    """n_children planos válidos, pais em round-robin; o k-ésimo filho de um pai começa pela k-ésima família
++    (widen em blocos diferentes, head_widen, deepen, add_skip...). Plano repetido do mesmo pai é pulado; pai
++    esgotado cede a vaga ao próximo pai. Cada item: {parent, ops, family, theta, seed} ou {parent, ops=None,
++    reason} quando NENHUM pai/família produz plano (motivos agregados)."""
++    P = len(parents)
++    used: Dict[int, set] = {p: set() for p in range(P)}
++    nxt = {p: 0 for p in range(P)}
++    fams = {p: plan_families(parents[p][1]) for p in range(P)}
++    reasons: Dict[int, List[str]] = {p: [] for p in range(P)}
++    out: List[dict] = []
++    for i in range(int(n_children)):
++        got = None
++        for d in range(P):
++            p = (i + d) % P
++            pm = parents[p][1]
++            while nxt[p] < len(fams[p]) and got is None:
++                fam = fams[p][nxt[p]]
++                nxt[p] += 1
++                ops, why = plan_with_family(pm, target_band, fam, thetas[i], seeds[i], gcfg, hard_cap)
++                if ops is None:
++                    reasons[p].append(why)
++                    continue
++                key = _plan_shape(ops)
++                if key in used[p]:
++                    reasons[p].append(f"{family_label(fam)}: plano repetido")
++                    continue
++                used[p].add(key)
++                got = {"parent": parents[p][0], "ops": ops, "family": family_label(fam), "theta": list(thetas[i]),
++                       "seed": int(seeds[i]), "parent_index": p}
++            if got is not None:
++                break
++        if got is None:
++            why = "; ".join(f"{parents[p][0].get('node_id')}: " + " | ".join(reasons[p][-6:]) for p in range(P)) \
++                or "sem pais"
++            got = {"parent": parents[i % P][0] if P else None, "ops": None, "theta": list(thetas[i]),
++                   "seed": int(seeds[i]), "reason": f"sem plano na faixa (todas as famílias esgotadas): {why}"}
++        out.append(got)
++    return out
++
++
+ def realize_plan(parent: BB.Backbone, ops: Sequence[dict], nfi: Optional[NewFilterInit]) -> MO.GrowthResult:
+     """Reaplica o plano com SPiFiL nos canais novos (o plano foi achado com init PyTorch; exatidão igual)."""
+     res = MO.start(parent)
+@@ -565,6 +785,12 @@
+ 
+ 
+ # ═════════════════════════════════════════════════════════════════ 5. treino de um filho
++def ssl_disabled(gcfg: dict) -> bool:
++    """``ssl: none`` (ou null/false): pula o SSL global; fica só o AE local nos blocos novos. Padrão: lejepa."""
++    v = gcfg.get("ssl", "lejepa")
++    return v is None or v is False or str(v).strip().lower() in ("none", "off", "false", "")
++
++
+ def _blend_into(model: BB.Backbone, anchor: dict, trained: dict, a: float) -> None:
+     """WiSE: (1-a)*âncora + a*treinado. a == 0 carrega a ÂNCORA literalmente (bit a bit)."""
+     if a == 0.0:
+@@ -638,12 +864,16 @@
+     else:
+         amp_kw = _amp_kw(ev)
+     lr = float(gcfg.get("lr", tr.get("lr_new", 1e-3)))
+-    with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
+-            ElementProtect(model.head, _masks_under(masks, "head."), scale):
+-        ssl_log = train_global_ssl(enc, model.head, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
+-                                   ssl_ep, lr, lr, [], dev, run, int(seed), float(tr.get("sigreg_lambda", 0.05)),
+-                                   max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
+-                                   projector=False, **amp_kw)
++    ssl_off = ssl_disabled(gcfg)
++    if ssl_off:                              # growth_fix4: ablação ``ssl: none`` (só o AE local nos blocos novos)
++        ssl_log = {"steps": 0, "final_loss_total": 0.0, "skipped": True}
++    else:
++        with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
++                ElementProtect(model.head, _masks_under(masks, "head."), scale):
++            ssl_log = train_global_ssl(enc, model.head, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
++                                       ssl_ep, lr, lr, [], dev, run, int(seed), float(tr.get("sigreg_lambda", 0.05)),
++                                       max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
++                                       projector=False, **amp_kw)
+     for p in model.parameters():
+         p.grad = None
+     del enc
+@@ -674,6 +904,8 @@
+            "ae_epochs": ae_ep, "ssl_epochs": ssl_ep, "ae_blocks": new_blocks, "ae_logs": ae_logs,
+            "ssl_final_loss": ssl_log.get("final_loss_total"), "ssl_steps": int(ssl_log.get("steps", 0)),
+            "ssl_finite": bool(ssl_finite), "parent_kappa_val_orig": float(parent_kappa),
++           "ssl": "none" if ssl_off else gcfg.get("ssl", "lejepa"), "ssl_skipped": bool(ssl_off),
++           "embed_precision": gev.embed_precision,
+            "mem": dict(mem),
+            "status": "ok"}
+     FV.check_decisions(out, gev.fitness_spec)     # toda decisão (alpha e kappa) pela régua ORIG-val
+@@ -681,6 +913,21 @@
+ 
+ 
+ # ═════════════════════════════════════════════════════════════════ 6. utilidades de seleção
++def decide(r: dict, delta: float, require_improvement: bool) -> Tuple[str, bool]:
++    """growth_fix4 (b). -> (decisão, entra na faixa?). Preservação exata + WiSE alpha=0 => o filho É o pai:
++    ``adopted_as_parent`` (nem aceito nem rejeitado por ruído; não ocupa a faixa, não é promovido). Senão,
++    aceitação real: kappa_filho >= kappa_pai_re-pontuado (mesma leitura, mesmo processo) + delta."""
++    if r.get("status") != "ok":
++        return "failed", False
++    if float(r.get("wise_alpha", 0.0)) == 0.0 and r.get("preservation_verdict") == "exact":
++        return "adopted_as_parent", False
++    pk = r.get("kappa_parent_rescored")
++    if pk is None:                              # resultado anterior ao fix4 (não deveria ser adotado: fitness_sig)
++        pk = r.get("parent_kappa_val_orig")
++    ok = accept(r.get("kappa_val_orig"), pk, delta, r.get("wise_alpha", 0.0), require_improvement)
++    return ("accepted" if ok else "rejected"), ok
++
++
+ def accept(child_kappa: float, parent_kappa: float, delta: float, alpha: float, require_improvement: bool) -> bool:
+     """Regra de aceitação: kappa_ORIG_val(filho) >= kappa_ORIG_val(pai) + delta (e alpha>0 se exigido)."""
+     if child_kappa is None or not math.isfinite(float(child_kappa)):
+@@ -831,6 +1078,7 @@
+                 ck = BB_save(model, ndir / "backbone.pt")
+                 rec = {"status": "ok", "node_id": node, "band": band_of(model.spec.cost.params_total),
+                        "kappa_val_orig": float(sv["kappa"]), "quality": FV.quality_of(sv["kappa"]),
++                       "embed_precision": sv.get("embed_precision"),
+                        "decision_rulers": self.gev.decision_rulers(), "params": int(model.spec.cost.params_total),
+                        "flops_2mac": int(model.spec.cost.flops), "flops": int(model.spec.cost.macs),
+                        "checkpoint": ck["path"], "checkpoint_sha256": ck["file_sha256"], "arch": model.spec.id,
+@@ -904,6 +1152,11 @@
+             torch.cuda.empty_cache()
+             torch.cuda.reset_peak_memory_stats(dev)
+         pmodel, _ = BB_load(parent["checkpoint"], parent["checkpoint_sha256"])
++        # growth_fix4 (b): o pai é re-pontuado AQUI, na mesma leitura (fp32) e no mesmo processo do filho
++        self.gev.reset_stamps()
++        psv = self.gev.score(pmodel)
++        parent_rescored = float(psv["kappa"])
++        parent_rulers = self.gev.decision_rulers()
+         nfi = NewFilterInit(self.gev, self.g["init_method"], self.g.get("init_config") or {},
+                             int(self.g.get("spifil_images_per_class", 4)), seed)
+         res = realize_plan(pmodel, ops, nfi)
+@@ -918,7 +1171,7 @@
+             raise BB.BudgetError("teto duro")
+         del pmodel                               # growth_mem: o pai não fica vivo durante o treino do filho
+         _free(dev, _mem(self.g)["empty_cache"])
+-        model, out = train_child(self.gev, res, fid, self.g, seed, parent["kappa_val_orig"])
++        model, out = train_child(self.gev, res, fid, self.g, seed, parent_rescored)
+         model.spec.provenance.parent = parent["node_id"]
+         model.spec.provenance.wise_alpha = out["wise_alpha"]
+         model.spec.provenance.fidelity_epochs = int(fid)
+@@ -933,7 +1186,9 @@
+                    preservation=pres, preservation_rel_l2_emb=gs.preservation.emb_rel_l2,
+                    preservation_verdict=gs.preservation.verdict, new_filter_init=nfi.log,
+                    protect=self.g["protect"], init_method=self.g["init_method"],
+-                   delta_kappa=out["kappa_val_orig"] - float(parent["kappa_val_orig"]),
++                   delta_kappa=out["kappa_val_orig"] - parent_rescored,
++                   kappa_parent_rescored=parent_rescored, parent_kappa_val_orig_member=float(parent["kappa_val_orig"]),
++                   parent_rescore_rulers=parent_rulers,
+                    wall_s=time.time() - t0, peak_gpu_reserved_gb=peak,
+                    inheritance_totals=gs.inheritance.get("totals"))
+         I.atomic_write_json(ndir / "result.json", _jsonable(out))
+@@ -971,26 +1226,32 @@
+         rng = np.random.default_rng(_h({"tag": tag, "seed": self.cfg["seed"]}))
+         fl, fh = int(self.g["fid_low"]), int(self.g["fid_high"])
+         low: List[Tuple[dict, dict]] = []
+-        for i in range(int(self.g["n_children"])):
+-            parent = parents[i % len(parents)]
+-            theta = de_theta(pool, rng)
++        nch = int(self.g["n_children"])
++        thetas = [de_theta(pool, rng) for _ in range(nch)]
++        pseeds = [_h({"tag": tag, "i": i, "plan": True}) % (2 ** 31 - 1) for i in range(nch)]
++        pm = [(m, BB_load(m["checkpoint"], m["checkpoint_sha256"])[0]) for m in parents]
++        plans = plan_children(pm, target, nch, thetas, pseeds, self.g, int(self.g.get("hard_cap", HARD_CAP)))
++        del pm
++        for i, pl in enumerate(plans):
++            parent, ops, theta = pl["parent"], pl["ops"], pl["theta"]
+             seed = _h({"tag": tag, "i": i, "parent": parent["checkpoint_sha256"]}) % (2 ** 31 - 1)
+-            pmodel, _ = BB_load(parent["checkpoint"], parent["checkpoint_sha256"])
+-            ops = propose_plan(pmodel, target, theta, seed, self.g, int(self.g.get("hard_cap", HARD_CAP)))
+             node = f"{target}g{gen}c{i:02d}"
+             origin = {"kind": "inherit", "parent_sha256": parent["checkpoint_sha256"], "protect": self.g["protect"],
+                       "init": self.g["init_method"], "init_config": self.g.get("init_config") or {}}
+             lkey = I.lineage_key({"ops": ops, "theta": theta}, seed, origin, self.gev.fitness_sig)
+             if ops is None:
++                print(f"[growth] {node}: {pl['reason'][:500]}", flush=True)
+                 self._lineage({"cand_key": I.cand_key(lkey, 0), "node_id": node, "parent": parent["node_id"],
+-                               "op": None, "accepted": False, "reason": "sem plano na faixa", "band": target})
++                               "op": None, "accepted": False, "decision": "no_plan", "reason": pl["reason"],
++                               "band": target})
+                 continue
+             r = self._job(parent, ops, theta, fl, node, seed, I.cand_key(lkey, fl))
+-            ok = r.get("status") == "ok" and accept(r["kappa_val_orig"], parent["kappa_val_orig"], self.g["delta"],
+-                                                    r.get("wise_alpha", 0.0), self.g.get("require_improvement", False))
+-            self._lineage(self._lin_rec(r, parent, ops, fl, ok, final=(fl == fh)))
++            decision, ok = decide(r, self.g["delta"], self.g.get("require_improvement", False))
++            self._lineage(self._lin_rec(r, parent, ops, fl, ok, final=(fl == fh) or decision == "adopted_as_parent",
++                                        decision=decision, family=pl.get("family")))
+             if ok:
+-                low.append((r, {"parent": parent, "ops": ops, "theta": theta, "seed": seed, "node": node, "lkey": lkey}))
++                low.append((r, {"parent": parent, "ops": ops, "theta": theta, "seed": seed, "node": node, "lkey": lkey,
++                                "family": pl.get("family")}))
+             self._save()
+         # promoção: 1/eta melhores aceitos em fid_low (Pareto kappa x FLOPs) -> fid_high
+         n_prom = max(1, int(math.ceil(len(low) / float(self.g.get("eta", 3))))) if low else 0
+@@ -1002,10 +1263,9 @@
+             if fh != fl:
+                 r = self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
+                               I.cand_key(meta["lkey"], fh))
+-                ok = r.get("status") == "ok" and accept(r["kappa_val_orig"], meta["parent"]["kappa_val_orig"],
+-                                                        self.g["delta"], r.get("wise_alpha", 0.0),
+-                                                        self.g.get("require_improvement", False))
+-                self._lineage(self._lin_rec(r, meta["parent"], meta["ops"], fh, ok, final=True))
++                decision, ok = decide(r, self.g["delta"], self.g.get("require_improvement", False))
++                self._lineage(self._lin_rec(r, meta["parent"], meta["ops"], fh, ok, final=True, decision=decision,
++                                            family=meta.get("family")))
+                 if not ok:
+                     continue
+             m = {k: r[k] for k in ("node_id", "band", "kappa_val_orig", "params", "flops_2mac", "checkpoint",
+@@ -1020,11 +1280,17 @@
+         self.state["gens_done"].append(tag)
+         self._save()
+ 
+-    def _lin_rec(self, r: dict, parent: dict, ops, fid, ok, final) -> dict:
++    def _lin_rec(self, r: dict, parent: dict, ops, fid, ok, final, decision=None, family=None) -> dict:
++        pk = r.get("kappa_parent_rescored")
+         return {"cand_key": r.get("cand_key"), "node_id": r.get("node_id"), "parent": parent["node_id"],
+                 "parent_checkpoint_sha256": parent["checkpoint_sha256"], "op": "+".join(o["op"] for o in ops),
+                 "ops": ops, "fid": fid, "status": r.get("status"), "reason": r.get("reason"),
+-                "kappa_val_orig": r.get("kappa_val_orig"), "parent_kappa_val_orig": parent["kappa_val_orig"],
++                "decision": decision, "family": family,
++                # growth_fix4 (b): os dois kappas da decisão (mesma leitura fp32, mesmo processo)
++                "kappa_val_orig": r.get("kappa_val_orig"),
++                "parent_kappa_val_orig": parent["kappa_val_orig"] if pk is None else pk,
++                "kappa_parent_rescored": pk, "parent_kappa_val_orig_member": parent["kappa_val_orig"],
++                "embed_precision": r.get("embed_precision"),
+                 "delta_kappa": r.get("delta_kappa"), "wise_alpha": r.get("wise_alpha"),
+                 "preservation_rel_l2": r.get("preservation_rel_l2_emb"),
+                 "preservation_verdict": r.get("preservation_verdict"), "params": r.get("params"),
+--- a/ga_search/hmodehb/growth_test_channel.py
++++ b/ga_search/hmodehb/growth_test_channel.py
+@@ -62,7 +62,7 @@
+         print("[test_channel] dados sintéticos: sem split de teste", flush=True)
+         return 0
+     from ga_search.backbones.checkpoint import load_backbone
+-    from ga_search.hmodehb.growth_chain import GrowthEvaluator
++    from ga_search.hmodehb.growth_chain import GrowthEvaluator, fp32_reading
+     from ga_search.hmodehb.integrity import file_sha256
+     from ga_search.modehb.supervised_fitness import svm_fitness
+     from ga_search.modehb.svm_on_demand import _test_loader
+@@ -78,15 +78,16 @@
+         model, spec = load_backbone(r["checkpoint"], expected_sha256=r["checkpoint_sha256"])
+         model.to(ev.device)
+         enc = nn.Sequential(*model.blocks)
+-        tr = ev._embed(enc, model.head, ev.svm_train_x, tta=1, readout="head").numpy()
+-        te = ev._embed(enc, model.head, tx, tta=1, readout="head").numpy()
++        with fp32_reading(ev):               # growth_fix4: mesma leitura fp32 do controlador
++            tr = ev._embed(enc, model.head, ev.svm_train_x, tta=1, readout="head").numpy()
++            te = ev._embed(enc, model.head, tx, tta=1, readout="head").numpy()
+         sv = svm_fitness(tr, ev.svm_train_y.numpy(), te, ty, C=100.0, scaler="none", whiten="none",
+                          kappa_weight=1.0, max_train=ev.sv2["max_train"], seed=ev.seed)
+         rec = {"node_id": r["node_id"], "checkpoint": r["checkpoint"], "checkpoint_sha256": r["checkpoint_sha256"],
+                "band": r["band"], "fid": r["fid"], "regua": "ORIG_full" if len(ev.svm_train_y) < 4000 else "ORIG_sub4000",
+                "svm_protocol": "scaler=none;kernel=linear;C=100;ovo;max_iter=-1", "split_eval": "test",
+                "kappa_test": float(sv["kappa"]), "macro_f1_test": float(sv["macro_f1"]), "n_test": int(len(ty)),
+-               "embed_dim": int(te.shape[1]), "params": int(spec.cost.params_total), "flops_2mac": int(spec.cost.flops),
++               "embed_dim": int(te.shape[1]), "embed_precision": gev.embed_precision, "params": int(spec.cost.params_total), "flops_2mac": int(spec.cost.flops),
+                "never_feeds_fitness": True, "used_for_selection": False, "time": time.time()}
+         with (out / TEST_FILE).open("a") as f:
+             f.write(json.dumps(rec) + "\n")
+--- a/ga_search/modehb/run_search.py
++++ b/ga_search/modehb/run_search.py
+@@ -481,7 +481,8 @@
+         from ga_search.modehb.pooling_head import encode_tta
+         encoder.eval(), head.eval()
+         bs = int(self.cfg["data"].get("batch_size", 32))
+-        amp = self.device.type == "cuda"
++        # growth_fix4: ``embed_amp=False`` (atributo da instância) = leitura fp32; padrão histórico inalterado
++        amp = self.device.type == "cuda" and bool(getattr(self, "embed_amp", True))
+         out = []
+         with torch.no_grad():
+             for b in x.split(bs):
+--- a/ga_search/config/hmodehb_b0b4/growth.yaml
++++ b/ga_search/config/hmodehb_b0b4/growth.yaml
+@@ -24,7 +24,7 @@
+   checkpoints: []
+   external_small: true  # "SPiFiL pequeno" (entra na faixa em que cair; RS ~B2)
+   top_k: 4
+-ssl: lejepa
++ssl: lejepa             # growth_fix4: 'none' = ablação sem SSL global (só AE local nos blocos novos)
+ reg: sigreg
+ ae_target: pixel
+ ae_schedule: joint
+--- a/tests/hmodehb/test_growth_chain.py
++++ b/tests/hmodehb/test_growth_chain.py
+@@ -232,7 +232,11 @@
+             assert r["preservation_rel_l2"] <= 1e-5 and r["preservation_verdict"] == "exact"
+             assert abs(r["delta_kappa"] - (r["kappa_val_orig"] - r["parent_kappa_val_orig"])) < 1e-12
+             assert r["params"] <= HARD_CAP
+-            assert r["accepted"] == G.accept(r["kappa_val_orig"], r["parent_kappa_val_orig"], 0.0, r["wise_alpha"], False)
++            # growth_fix4 (b): alpha=0 com preservação exata = adopted_as_parent (não entra na faixa)
++            adopted = r["wise_alpha"] == 0.0 and r["preservation_verdict"] == "exact"
++            assert r["decision"] == ("adopted_as_parent" if adopted else ("accepted" if r["accepted"] else "rejected"))
++            assert r["accepted"] == (not adopted and G.accept(r["kappa_val_orig"], r["parent_kappa_val_orig"], 0.0,
++                                                              r["wise_alpha"], False))
+     for b, ms in st["members"].items():                       # todo membro está na própria faixa
+         for m in ms:
+             assert G.band_of(m["params"]) == b
+--- a/tests/hmodehb/test_growth_fix4.py
++++ b/tests/hmodehb/test_growth_fix4.py
+@@ -0,0 +1,266 @@
++"""growth_fix4: (a) leitura fp32 determinística na SVM do growth, (b) adopted_as_parent + pai re-pontuado na
++mesma leitura, (c) planner com n_children planos válidos (round-robin, ops variadas, pais tiny), ``ssl: none``."""
++from __future__ import annotations
++
++import csv
++import json
++import os
++import subprocess
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++import numpy as np
++import pytest
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import build as BB  # noqa: E402
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.backbones.spec import HeadSpec, LayerSpec  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++
++PY = sys.executable
++SYN = ["data.synthetic=true", "data.image_size=32", "data.synthetic_train_samples=16", "data.synthetic_val_samples=12",
++       "data.batch_size=4", "data.num_workers=0", "data.ram_cache=true", "train.max_steps_per_epoch=1",
++       "search.n_classes=2", "search.spifil_images_choices=[1,2]", "device=cpu", "wandb.enabled=false"]
++REGISTRY = ROOT / "research/spifil_b0b4/agent1/seed_registry.csv"
++EXACT_OPS = ([{"op": "deepen_residual_zero", "at": 2, "act": "silu", "kernel": 3}],
++             [{"op": "add_skip_zero", "layer": 1}],
++             [{"op": "deepen_residual_zero", "at": 1, "act": "gelu", "kernel": 3}, {"op": "add_skip_zero", "layer": 2}])
++
++
++def _tiny(seed=0, widths=(12, 24, 24), res=32):
++    L = [LayerSpec(channels=widths[0], kernel=3, conv="conv", norm="batch", activation="relu", pool="max",
++                   flavor="spifil_ops", init="inherited"),
++         LayerSpec(channels=widths[1], kernel=3, conv="dwsep", norm="batch_dbn", activation="silu", pool="max",
++                   flavor="spifil_ops", init="inherited"),
++         LayerSpec(channels=widths[2], kernel=3, conv="conv", norm="none", activation="gelu", residual="identity",
++                   pool="none", flavor="spifil_ops", init="inherited")]
++    spec = G.spec_from_layers(L, HeadSpec(embed_dim=1280, pooling="meanstd"), "synthetic", res)
++    m = BB.build_backbone(spec, seed=seed, enforce_budget=False)
++    with torch.no_grad():
++        m.train()
++        for _ in range(3):
++            m(torch.rand(8, 3, res, res))
++    return m.eval()
++
++
++@pytest.fixture(scope="module")
++def gev(tmp_path_factory):
++    out = tmp_path_factory.mktemp("gev")
++    cfg = G.build_cfg("remote_sensing", 42, SYN, out)
++    return G.GrowthEvaluator(cfg, out / "eval")
++
++
++# ───────────────────────────────────────────────────────────────── (a) leitura fp32
++def test_fp32_reading_context_restores_flags():
++    ev = SimpleNamespace(embed_amp=True)
++    c0, m0 = torch.backends.cudnn.allow_tf32, torch.backends.cuda.matmul.allow_tf32
++    with G.fp32_reading(ev):
++        assert ev.embed_amp is False
++        assert torch.backends.cudnn.allow_tf32 is False and torch.backends.cuda.matmul.allow_tf32 is False
++    assert ev.embed_amp is True
++    assert torch.backends.cudnn.allow_tf32 == c0 and torch.backends.cuda.matmul.allow_tf32 == m0
++
++
++def test_run_search_embed_amp_switch_static():
++    """run_search._embed: autocast só liga se ``embed_amp`` (padrão True, histórico) e device cuda."""
++    src = (ROOT / "ga_search/modehb/run_search.py").read_text()
++    assert 'amp = self.device.type == "cuda" and bool(getattr(self, "embed_amp", True))' in src
++    gsrc = (ROOT / "ga_search/hmodehb/growth_chain.py").read_text()
++    assert "ev.embed_amp = False" in gsrc and "with fp32_reading(self.ev):" in gsrc
++    tsrc = (ROOT / "ga_search/hmodehb/growth_test_channel.py").read_text()
++    assert "with fp32_reading(ev):" in tsrc
++
++
++def test_evaluator_declares_precision(gev):
++    assert gev.ev.embed_amp is False
++    assert gev.fitness_spec["embed_precision"] == G.EMBED_PRECISION == gev.embed_precision
++    from ga_search.hmodehb import fitness_v2 as FV
++    assert gev.fitness_sig == FV.signature(gev.fitness_spec)
++
++
++@pytest.mark.parametrize("ops", EXACT_OPS)
++def test_alpha0_child_equals_parent_embedding_and_kappa_bitwise(gev, ops):
++    """Com alpha=0 (âncora do morfismo exato), o embedding do filho == pai bit a bit na leitura do growth,
++    e o kappa (C=100, sem scaler, cabeça 1280) é idêntico."""
++    from torch import nn
++    m = _tiny()
++    res = G.realize_plan(m, ops, None)
++    child = res.child.eval()
++    anchor = {k: v.detach().clone() for k, v in child.state_dict().items()}
++    trained = {k: (v + 0.1 * torch.randn_like(v)) if v.is_floating_point() else v for k, v in anchor.items()}
++    G._blend_into(child, anchor, trained, 0.0)
++    child.eval()
++    ev = gev.ev
++    with G.fp32_reading(ev):
++        ep = ev._embed(nn.Sequential(*m.blocks), m.head, ev.val_x).numpy()
++        ec = ev._embed(nn.Sequential(*child.blocks), child.head, ev.val_x).numpy()
++    assert ep.shape[1] >= 1280 and ep.dtype == np.float32
++    assert np.array_equal(ep, ec)
++    gev.reset_stamps()
++    sp, sc = gev.score(m), gev.score(child)
++    assert sp["kappa"] == sc["kappa"]
++    assert sp["embed_precision"] == sc["embed_precision"] == G.EMBED_PRECISION
++    assert float(gev.ev.cfg["eval"]["svm_fitness"].get("C", 100.0)) == 100.0
++
++
++def test_score_is_repeatable_bitwise(gev):
++    m = _tiny(seed=3)
++    gev.reset_stamps()
++    assert gev.score(m)["kappa"] == gev.score(m)["kappa"]
++
++
++# ───────────────────────────────────────────────────────────────── (b) aceitação
++def _r(**kw):
++    base = {"status": "ok", "kappa_val_orig": 0.60, "kappa_parent_rescored": 0.60, "wise_alpha": 0.25,
++            "preservation_verdict": "exact", "parent_kappa_val_orig": 0.6747}
++    base.update(kw)
++    return base
++
++
++def test_decide_rules():
++    # caso flowers B1g0c00: alpha=0, kappa abaixo do pai por ruído -> é o pai, não é rejeitado
++    assert G.decide(_r(wise_alpha=0.0, kappa_val_orig=0.6656, kappa_parent_rescored=0.6718), 0.0, False) == \
++        ("adopted_as_parent", False)
++    # caso RS B1g0c00: alpha=0 com kappa IDÊNTICO -> também adopted (não promove, não ocupa a faixa)
++    assert G.decide(_r(wise_alpha=0.0, kappa_val_orig=0.5719, kappa_parent_rescored=0.5719), 0.0, False) == \
++        ("adopted_as_parent", False)
++    assert G.decide(_r(wise_alpha=0.0), 0.0, True) == ("adopted_as_parent", False)
++    # aceitação real contra o pai RE-PONTUADO (não contra o kappa gravado no membro)
++    assert G.decide(_r(kappa_val_orig=0.61, kappa_parent_rescored=0.60, parent_kappa_val_orig=0.70), 0.0, False) == \
++        ("accepted", True)
++    assert G.decide(_r(kappa_val_orig=0.59, kappa_parent_rescored=0.60, parent_kappa_val_orig=0.10), 0.0, False) == \
++        ("rejected", False)
++    assert G.decide(_r(kappa_val_orig=0.61, kappa_parent_rescored=0.60), 0.02, False) == ("rejected", False)
++    assert G.decide({"status": "failed"}, 0.0, False) == ("failed", False)
++
++
++# ───────────────────────────────────────────────────────────────── ssl: none (ablação)
++def test_ssl_disabled_flag():
++    assert not G.ssl_disabled(G.GROWTH_DEFAULTS)
++    for v in ("none", "None", None, False, "off"):
++        assert G.ssl_disabled({"ssl": v})
++    assert not G.ssl_disabled({"ssl": "lejepa"})
++
++
++def test_train_child_ssl_none_skips_global_ssl(gev):
++    m = _tiny()
++    res = G.realize_plan(m, [{"op": "widen", "widths": {"0": 16}, "seed": 1}], None)
++    g = {**G.GROWTH_DEFAULTS, "ssl": "none", "wise_alphas": [0.0, 1.0]}
++    model, out = G.train_child(gev, res, 1, g, 0, 0.5)
++    assert out["ssl_skipped"] is True and out["ssl"] == "none" and out["ssl_steps"] == 0
++    assert out["embed_precision"] == G.EMBED_PRECISION
++    assert out["ae_blocks"] == [0, 1]
++
++
++# ───────────────────────────────────────────────────────────────── (c) planner
++def test_plan_children_synthetic_varied_and_round_robin():
++    a, b = _tiny(widths=(4, 8, 8)), _tiny(widths=(32, 64, 64), seed=1)
++    parents = [({"node_id": "a"}, a), ({"node_id": "b"}, b)]
++    rng = np.random.default_rng(0)
++    plans = G.plan_children(parents, "B1", 8, [list(rng.uniform(0, 1, 4)) for _ in range(8)], list(range(8)),
++                            G.GROWTH_DEFAULTS)
++    assert len(plans) == 8 and all(p["ops"] is not None for p in plans), [p.get("reason") for p in plans]
++    assert [p["parent"]["node_id"] for p in plans[:4]] == ["a", "b", "a", "b"]
++    assert len({p["family"] for p in plans}) >= 4
++    for p in plans:
++        r = G.realize_plan(parents[p["parent_index"]][1], p["ops"], None)
++        assert G.band_of(G._params(r)) == "B1"
++        gs = MO.finalize(r, torch.rand(2, 3, 32, 32))
++        assert gs.preservation.verdict == "exact"
++
++
++def test_plan_children_impossible_gives_reason():
++    m = _tiny(widths=(64, 256, 256))           # já acima de B0 -> nenhum plano para B0 é possível
++    pl = G.plan_children([({"node_id": "big"}, m)], "B0", 2, [[0.5] * 4] * 2, [0, 1], G.GROWTH_DEFAULTS)
++    assert all(p["ops"] is None for p in pl)
++    assert all("acima da faixa" in p["reason"] for p in pl)
++
++
++def _registry_seeds(ds):
++    rows = []
++    if REGISTRY.exists():
++        for r in csv.DictReader(open(REGISTRY)):
++            if r["dataset"] == ds and r["regua"] == "ORIG" and r["faixa"] == "B0" and r.get("checkpoint") \
++                    and r.get("utilizavel", "sim") == "sim" and (ROOT / r["checkpoint"]).exists():
++                rows.append(ROOT / r["checkpoint"])
++    return rows
++
++
++@pytest.mark.parametrize("ds", ["remote_sensing", "flowers"])
++def test_real_seed_genomes_each_parent_ge2_plans_b1(ds):
++    """Genomas REAIS das sementes B0 do seed_registry (seed00/01; a seed02 'SPiFiL pequeno' só entra se cair em
++    B0): cada pai gera >= 2 planos válidos e distintos para B1; juntos, 8 filhos válidos sem 'sem plano'."""
++    paths = _registry_seeds(ds)
++    if len(paths) < 2:
++        pytest.skip(f"checkpoints de semente de {ds} ausentes")
++    parents = []
++    for i, p in enumerate(paths):
++        m, _ = G.backbone_from_production(p, ds, 224)
++        parents.append(({"node_id": f"seed{i:02d}"}, m))
++    try:
++        ext, _ = G.backbone_from_external_small(ds, 224, seed=42)
++        if G.band_of(ext.spec.cost.params_total) == "B0":
++            parents.append(({"node_id": f"seed{len(parents):02d}"}, ext))
++    except Exception:
++        pass
++    rng = np.random.default_rng(1)
++    th = [list(rng.uniform(0, 1, 4)) for _ in range(8)]
++    tiny_chain = False
++    for meta, m in parents:
++        pl = G.plan_children([(meta, m)], "B1", 8, th, list(range(8)), G.GROWTH_DEFAULTS)
++        ok = [p for p in pl if p["ops"] is not None]
++        assert len(ok) >= 2, (meta, m.spec.cost.params_total, [p.get("reason") for p in pl])
++        assert len({G._plan_shape(p["ops"]) for p in ok}) == len(ok)
++        for p in ok:
++            r = G.realize_plan(m, p["ops"], None)
++            assert G.band_of(G._params(r)) == "B1"
++            assert r.child.spec.head.embed_dim >= 1280
++        if m.spec.cost.params_total < 50_000:
++            tiny_chain |= any(sum(o["op"] == "widen" for o in p["ops"]) >= 2 for p in ok)
++    if any(m.spec.cost.params_total < 50_000 for _, m in parents):
++        assert tiny_chain                       # o tiny chega a B1 por widens encadeados
++    pl = G.plan_children(parents, "B1", 8, th, list(range(8)), G.GROWTH_DEFAULTS)
++    assert all(p["ops"] is not None for p in pl), [p.get("reason") for p in pl]
++    assert len({p["parent"]["node_id"] for p in pl}) == len(parents)
++    fams = {p["family"] for p in pl}
++    assert len(fams) >= 3 and any(f.startswith("widen") or f == "head_widen" for f in fams) \
++        and any(f.startswith("deepen") for f in fams), fams
++
++
++# ───────────────────────────────────────────────────────────────── controlador: decisão, kappas, sem 'sem plano'
++def test_controller_decisions_and_two_kappas(tmp_path):
++    seed = Path(G.BB_save(_tiny(widths=(16, 32, 32)), tmp_path / "seed_b0.pt")["path"])
++    out = tmp_path / "ctl"
++    env = {**os.environ, "CUDA_VISIBLE_DEVICES": "", "OMP_NUM_THREADS": "2", "PYTHONPATH": str(ROOT)}
++    g = ["seeds.registry=null", "seeds.external_small=false", f"seeds.checkpoints=[{seed}]", "n_children=4",
++         "n_parents=1", "generations=1", "fid_low=1", "fid_high=1", "eta=1", "end_band=B1",
++         "spifil_images_per_class=1", "test_channel=false", "oom.sleep_s=0", "wise_alphas=[0.0,1.0]"]
++    cmd = [PY, "-m", "ga_search.hmodehb.growth_chain", "--dataset", "remote_sensing", "--out", str(out),
++           *sum((["--set", s] for s in SYN), []), *sum((["--gset", s] for s in g), [])]
++    p = subprocess.run(cmd, cwd=str(ROOT), env=env, capture_output=True, text=True, timeout=1800)
++    assert p.returncode == 0, p.stdout[-3000:] + p.stderr[-3000:]
++    st = json.loads((out / "growth_state.json").read_text())
++    lin = [json.loads(x) for x in (out / "lineage.jsonl").read_text().splitlines()]
++    kids = [r for r in lin if r.get("op") != "seed"]
++    assert len(kids) == 4 and not any(r.get("decision") == "no_plan" for r in kids), kids
++    seedk = next(r for r in lin if r.get("op") == "seed")["kappa_val_orig"]
++    members_b1 = {m["node_id"] for m in st["members"]["B1"]}
++    for r in kids:
++        assert r["status"] == "ok", r
++        assert r["embed_precision"] == G.EMBED_PRECISION
++        assert r["kappa_parent_rescored"] == seedk            # mesma leitura fp32 -> pai idêntico ao da semente
++        assert r["parent_kappa_val_orig"] == r["kappa_parent_rescored"]
++        assert r["kappa_val_orig"] is not None and r["family"]
++        if r["wise_alpha"] == 0.0:
++            assert r["decision"] == "adopted_as_parent" and not r["accepted"]
++            assert r["node_id"] not in members_b1
++        else:
++            assert r["decision"] == ("accepted" if r["kappa_val_orig"] >= r["kappa_parent_rescored"] else "rejected")
++            assert (r["node_id"] in members_b1) == r["accepted"]
++        res = json.loads((out / "nodes" / r["node_id"] / "f1" / "result.json").read_text())
++        assert res["embed_precision"] == G.EMBED_PRECISION and res["kappa_parent_rescored"] == r["kappa_parent_rescored"]

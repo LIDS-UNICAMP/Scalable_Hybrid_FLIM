@@ -1,0 +1,108 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 12:20:49.619170724 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 12:20:49.621170750 -0300
+@@ -128,6 +128,71 @@
+         return False
+ 
+ 
++class _ActPool(torch.autograd.Function):
++    """``pool(act(y) [+ s])`` em micro-lotes de amostras, salvando SÓ ``y`` (e ``s``).
++
++    Act sem parâmetros (elementwise) e pool são por amostra: o micro-lote no eixo N dá exatamente os
++    mesmos números (mesmos kernels, mesma ordem por elemento). Evita guardar a saída da ativação e os
++    índices int64 do MaxPool em resolução cheia (no bloco 0 de RS: 2 x 9 GiB a 256 imagens 224 px)."""
++
++    @staticmethod
++    def forward(ctx, y, s, act, pool, chunk):
++        ctx.act, ctx.pool, ctx.chunk, ctx.has_s = act, pool, int(chunk), s is not None
++        outs = []
++        for i in range(0, y.shape[0], ctx.chunk):
++            z = act(y[i:i + ctx.chunk])
++            if s is not None:
++                z = z + s[i:i + ctx.chunk]
++            outs.append(pool(z))
++        ctx.save_for_backward(y, s) if s is not None else ctx.save_for_backward(y)
++        return torch.cat(outs, 0)
++
++    @staticmethod
++    def backward(ctx, g):
++        y, s = (ctx.saved_tensors + (None,))[:2]
++        gy = gs = None          # layout do grad = o da 1ª fatia (o que o autograd produziria): a redução
++                                # a jusante (ex.: grad do afim do DBN) depende dos strides -> bit a bit
++        for i in range(0, y.shape[0], ctx.chunk):
++            with torch.enable_grad():
++                yc = y[i:i + ctx.chunk].detach().requires_grad_(True)
++                ins = [yc]
++                z = ctx.act(yc)
++                if s is not None:
++                    sc = s[i:i + ctx.chunk].detach().requires_grad_(True)
++                    ins.append(sc)
++                    z = z + sc
++                o = ctx.pool(z)
++                grads = torch.autograd.grad(o, ins, g[i:i + ctx.chunk])
++            if gy is None:
++                fmt = lambda t, ref: torch.empty(ref.shape, dtype=t.dtype, device=t.device) \
++                    if t.is_contiguous() else torch.empty_like(ref)
++                gy = fmt(grads[0], y)
++                gs = fmt(grads[1], s) if s is not None else None
++            gy[i:i + ctx.chunk] = grads[0]
++            if s is not None:
++                gs[i:i + ctx.chunk] = grads[1]
++        return gy, gs, None, None, None
++
++
++ACTPOOL_CHUNK = 16
++
++
++def _fusable(blk) -> bool:
++    from ga_search.modehb.spifil_ops import SpifilOpsBlock
++    return (type(blk) is SpifilOpsBlock and isinstance(blk.dropout, nn.Identity)
++            and not any(True for _ in blk.activation.parameters()) and not any(True for _ in blk.pool.parameters())
++            and (blk.skip is None or isinstance(blk.skip, nn.Identity)))
++
++
++def _block_forward(blk, x):
++    """== ``SpifilOpsBlock.forward`` (mesmas ops), com act+skip+pool por ``_ActPool``."""
++    if not _fusable(blk):
++        return blk(x)
++    y = blk.norm(blk.conv(x))
++    s = x if blk.skip is not None else None
++    return _ActPool.apply(y, s, blk.activation, blk.pool, ACTPOOL_CHUNK)
++
++
+ class _CkptSequential(nn.Sequential):
+     """``nn.Sequential`` com os MESMOS filhos e nomes ('0.conv.weight'...), checkpoint por bloco no treino."""
+ 
+@@ -141,9 +206,9 @@
+             def run(inp, blk=blk, calls=calls):
+                 calls[0] += 1
+                 if calls[0] == 1:
+-                    return blk(inp)
++                    return _block_forward(blk, inp)
+                 with _FrozenStats(blk):
+-                    return blk(inp)
++                    return _block_forward(blk, inp)
+             x = checkpoint(run, x, use_reentrant=False, preserve_rng_state=True)
+         return x
+ 
+diff -ruN a/tests/hmodehb/test_growth_mem.py b/tests/hmodehb/test_growth_mem.py
+--- a/tests/hmodehb/test_growth_mem.py	2026-11-17 12:20:49.620170737 -0300
++++ b/tests/hmodehb/test_growth_mem.py	2026-11-17 12:20:49.623170775 -0300
+@@ -138,3 +138,17 @@
+     mem = G._mem({})
+     assert mem["grad_checkpoint"] and mem["wise_on_cpu"] and mem["empty_cache"]
+     assert mem["embed_batch_size"] is None and mem["ssl_amp_bf16"] is False     # mudam a ciência: desligados
++
++
++@pytest.mark.parametrize("chunk", [1, 3, 10**9])
++def test_actpool_fused_bitwise(chunk, monkeypatch):
++    """growth_mem3: act+skip+pool em micro-lotes (_ActPool) == forward/backward original, bit a bit."""
++    monkeypatch.setattr(G, "ACTPOOL_CHUNK", chunk)
++    base = _rs_like()
++    assert all(G._fusable(b) for b in base.blocks)
++    x = torch.rand(7, 3, 32, 32)
++    ha, ga, sa, _ = _ssl_step(copy.deepcopy(base), False, x)
++    hb, gb, sb, _ = _ssl_step(copy.deepcopy(base), True, x)
++    assert torch.equal(ha, hb)
++    assert all(torch.equal(ga[k], gb[k]) for k in ga), [k for k in ga if not torch.equal(ga[k], gb[k])]
++    assert all(torch.equal(sa[k], sb[k]) for k in sa)

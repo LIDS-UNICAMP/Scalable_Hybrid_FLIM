@@ -1,0 +1,542 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-18 12:35:17.166323360 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-18 12:35:17.167323371 -0300
+@@ -81,6 +81,23 @@
+               "checkpoints": [], "external_small": True, "top_k": 4},
+     "ssl": "lejepa", "reg": "sigreg", "ae_target": "pixel", "ae_schedule": "joint",
+     "lr": 1.0e-3, "lr_ae": 1.0e-3, "wise_alphas": [0.0, 0.25, 0.5, 0.75, 1.0],
++    # growth_v31_hotfix_ae_diverge: AE local nos blocos alargados divergia (RS: 0,63 -> 1,85; tiny 86 -> 370).
++    # Causa medida (CPU, RS c00306 widen->455 e tiny c00001 widens->500): o DECODER aleatório dá o 1º passo do Adam
++    # sobre z de RMS ~8-16 com fan-in 9*C (C ~ 450-500): |dw| ~ lr por peso, coerente em sinal -> a reconstrução
++    # anda ~lr*9C*|z| -> pico no passo 2 (tiny 21 -> 6017; RS 0,40 -> 2,57). Não é a init SPiFiL (o W&B mostra o
++    # pico com o SPiFiL congelado). Correção (só no decoder descartável; o bloco, o alvo e o lr do bloco não mudam):
++    #   ae_dec_in_norm: entrada do decoder padronizada (média/desvio FIXOS do lote-sonda) -> tira |z|
++    #   ae_lr_scale_fanin: lr dos pesos do decoder * sqrt(144/fan_in) -> tira o fan-in 9C
++    #   (os dois juntos = padrão; só a norma ainda deixa pico 0,38 -> 4,1 no tiny; warmup/clip testados, piores)
++    #   ae_grad_clip / ae_warmup_steps: opções (desligadas)
++    #   ae_diverge_guard: razão + tendência por época (nunca o valor absoluto): média/inicial > guard E subindo,
++    #     ou no fim último-quarto/inicial > guard, ou não finita -> o bloco volta ao estado pré-AE (o morfismo) e o
++    #     filho segue sem AE nesse bloco, registrado "ae_diverged" ("começa alto e cai" passa). null = desligada
++    #   ae_smoke_strict: recon_ratio > 1 em algum bloco -> o filho FALHA (ChainError). false (padrão) = só alerta
++    #     ("[ae] ALERTA" + ae_alerts/ae_diverged_blocks no result.json); null = estrito se fid_high <= 1.
++    #     Smoke da v3: --gset ae_smoke_strict=true
++    "ae_dec_in_norm": True, "ae_grad_clip": None, "ae_lr_scale_fanin": True, "ae_warmup_steps": 0,
++    "ae_diverge_guard": 1.0, "ae_smoke_strict": False,
+     "preservation_images": 8, "preservation_tol": 1.0e-5,
+     "oom": {"retries": 10, "sleep_s": 300},
+     "test_channel": True, "debug_train": None, "debug_val": None,
+@@ -338,6 +355,30 @@
+     return g
+ 
+ 
++def ae_extra_kw(gcfg: dict) -> dict:
++    """growth_v31_hotfix_ae_diverge: kwargs do ``train_local_ae`` a partir do growth.yaml. Valores ausentes/
++    desligados não entram (chamada idêntica à histórica)."""
++    kw = {}
++    if gcfg.get("ae_dec_in_norm"):
++        kw["dec_in_norm"] = True
++    if gcfg.get("ae_grad_clip") not in (None, 0, 0.0, False):
++        kw["grad_clip"] = float(gcfg["ae_grad_clip"])
++    if gcfg.get("ae_lr_scale_fanin"):
++        kw["lr_scale_fanin"] = True
++    if int(gcfg.get("ae_warmup_steps") or 0) > 0:
++        kw["warmup_steps"] = int(gcfg["ae_warmup_steps"])
++    if gcfg.get("ae_diverge_guard") not in (None, False):
++        kw["diverge_ratio"] = float(gcfg["ae_diverge_guard"])
++    return kw
++
++
++def ae_smoke_strict(gcfg: dict) -> bool:
++    v = gcfg.get("ae_smoke_strict")
++    if v is None:
++        return int(gcfg.get("fid_high", 0) or 0) <= 1
++    return bool(v)
++
++
+ def _mem(gcfg: dict) -> dict:
+     return {**GROWTH_DEFAULTS["mem"], **(gcfg.get("mem") or {})}
+ 
+@@ -2037,14 +2078,37 @@
+         ae_ck = mem.get("ae_grad_checkpoint")
+         ae_ck = mem["grad_checkpoint"] if ae_ck is None else bool(ae_ck)
+         ae_blk = _CkptSequential(blk) if ae_ck else blk
++        akw = ae_extra_kw(gcfg)                # hotfix ae_diverge (ausente = chamada histórica)
++        pre_ae = {k: v.detach().clone() for k, v in blk.state_dict().items()} \
++            if akw.get("diverge_ratio") is not None else None
+         with ElementProtect(blk, _masks_under(masks, f"blocks.{j}."), scale):
+             ae = train_local_ae(prefix, ae_blk, ae_loader, gcfg.get("ae_target", "pixel"), ae_ep,
+                                 float(gcfg.get("lr_ae", tr.get("lr_ae", 1e-3))), dev, run, int(seed) + j,
+                                 conv_lr_scale=1.0, decoder_warmup_frac=M.AE_WARMUP_FRAC[gcfg.get("ae_schedule", "joint")],
+-                                progress=f"[ae] bloco {j}", **_amp_kw(ev))
+-        ae_logs.append({"block": j, **{k: v for k, v in ae.items() if isinstance(v, (int, float, str, bool))}})
++                                progress=f"[ae] bloco {j}", **_amp_kw(ev), **akw)
++        rec_ae = {"block": j, **{k: v for k, v in ae.items() if isinstance(v, (int, float, str, bool))}}
++        if pre_ae is not None:
++            rec_ae["ae_diverged"] = bool(ae.get("diverged"))
++            if ae.get("diverged"):               # guarda: o bloco volta ao morfismo (pré-AE); o filho segue sem AE nele
++                with torch.no_grad():
++                    blk.load_state_dict(pre_ae)
++                rec_ae["ae_restored"] = True
++                print(f"[ae] bloco {j}: ae_diverged ({ae.get('diverge_reason')}) -> bloco restaurado ao "
++                      f"estado pré-AE (morfismo)", flush=True)
++            del pre_ae
++        rr = rec_ae.get("recon_ratio")
++        if rr is not None and (not math.isfinite(float(rr)) or float(rr) > 1.0):
++            rec_ae["ae_alert"] = f"recon_ratio={float(rr):.4g} > 1"
++            print(f"[ae] ALERTA (hotfix ae_diverge): bloco {j} recon_ratio={float(rr):.4g} > 1 "
++                  f"(perda {rec_ae.get('initial_recon_loss')} -> {rec_ae.get('final_recon_loss')}; "
++                  f"restaurado={bool(rec_ae.get('ae_restored'))})", flush=True)
++        ae_logs.append(rec_ae)
+         del prefix, ae
+         _free(dev, mem["empty_cache"])
++    ae_alerts = [r for r in ae_logs if r.get("ae_alert")]
++    if ae_alerts and ae_smoke_strict(gcfg):   # hotfix ae_diverge: o smoke falha com recon_ratio > 1
++        raise ChainError("AE local com recon_ratio > 1 (smoke estrito): " + "; ".join(
++            f"bloco {r['block']} {r['ae_alert']} restaurado={bool(r.get('ae_restored'))}" for r in ae_alerts))
+     for p in model.parameters():
+         p.grad = None
+         p.requires_grad_(True)
+@@ -2078,6 +2142,8 @@
+            "decision_rulers": gev.decision_rulers(), "n_svm_decisions": len(ev._svm_stamps),
+            "_val_pred": best[1].get("pred"), "_val_true": best[1].get("y_true"),
+            "ae_epochs": ae_ep, "ssl_epochs": ssl_ep, "ae_blocks": new_blocks, "ae_logs": ae_logs,
++           "ae_diverged_blocks": [r["block"] for r in ae_logs if r.get("ae_diverged")],
++           "ae_alerts": [{"block": r["block"], "alert": r["ae_alert"]} for r in ae_alerts],
+            "ae_full_epoch": bool(_v3(gcfg).get("full_epoch_ae")),
+            "ssl_final_loss": ssl_log.get("final_loss_total"), "ssl_steps": int(ssl_log.get("steps", 0)),
+            "ssl_finite": bool(ssl_finite), "parent_kappa_val_orig": float(parent_kappa),
+@@ -2269,46 +2335,6 @@
+     return model, out
+ 
+ 
+-_SEL_FROM_LOW = ("kappa_val_orig", "quality", "wise_alpha", "checkpoint", "checkpoint_sha256", "aux", "so2_head",
+-                  "so2_head_sha256", "so2_head_meta", "band", "params", "flops_2mac", "flops", "arch", "delta_kappa",
+-                  "kappa_parent_rescored", "parent_kappa_val_orig", "decision_rulers", "preservation",
+-                  "preservation_rel_l2_emb", "preservation_verdict", "bootstrap", "cov_gates", "cov_gates_trained",
+-                  "cov_gate_head", "ssl_recipe", "growth_spec_id", "status")
+-
+-
+-def select_low_high(r_low: dict, r_high: dict, fl: int, fh: int) -> dict:
+-    """HOTFIX member_fid: o resultado PROMOVIDO é o melhor de f_low/f_high pela ORIG-val (empate = f_high; f_high
+-    falho = f_low). Vale em todos os caminhos (retomada, retrain, ssl: none). Quando f_low vence, checkpoint, kappa,
+-    alpha, aux (wise_kappas), so2 e o resto da decisão vêm de f_low; a cand_key continua a da promoção (linhagem)."""
+-    r = dict(r_high)
+-    if r.get("selected_fid") is not None and int(r["selected_fid"]) == int(fl):
+-        return r                                    # a retomada já escolheu f_low (fix6)
+-    k_low = r_low.get("kappa_val_orig")
+-    if k_low is None or r_low.get("status", "ok") != "ok":   # f_low sem kappa (não deveria ser promovido): fica f_high
+-        r.setdefault("selected_fid", int(fh))
+-        return r
+-    k_high = r.get("kappa_val_orig") if r.get("status") == "ok" else None
+-    pick_high = k_high is not None and best_of_low_high(float(k_low), float(k_high)) == 1
+-    r.setdefault("kappa_val_orig_f_low", float(k_low))
+-    r.setdefault("wise_alpha_f_low", r_low.get("wise_alpha"))
+-    r.setdefault("kappa_val_orig_f_high", None if k_high is None else float(k_high))
+-    r.setdefault("wise_alpha_f_high", r.get("wise_alpha"))
+-    r["fid_low"], r["fid_high"] = int(fl), int(fh)
+-    if pick_high:
+-        r["selected_fid"] = int(fh)
+-        return r
+-    r["checkpoint_f_high"], r["checkpoint_sha256_f_high"] = r_high.get("checkpoint"), r_high.get("checkpoint_sha256")
+-    r["status_f_high"] = r_high.get("status")
+-    r["aux_f_high"] = {"wise_kappas": (r_high.get("aux") or {}).get("wise_kappas")}
+-    for k in _SEL_FROM_LOW:
+-        if k in r_low:
+-            r[k] = r_low[k]
+-    r["selected_fid"] = int(fl)
+-    r["selection"] = ("best_of_low_high (hotfix member_fid): f_low venceu pela ORIG-val"
+-                      + ("" if k_high is not None else " (f_high falhou)") + "; teste nunca lido")
+-    return r
+-
+-
+ def best_of_low_high(k_low: float, k_high: float) -> int:
+     """Seleção do nó promovido pela ORIG-val: f_high, a não ser que kappa_val(f_high) < kappa_val(f_low)
+     (empate fica com f_high). Devolve 0 (f_low) ou 1 (f_high). Nunca usa teste."""
+@@ -2820,15 +2846,15 @@
+             rkey = I.lineage_key({"resume_from": r_low["cand_key"], "extra_ssl_epochs": n_extra,
+                                   "format": RESUME_FORMAT}, meta["seed"], {"kind": "resume", "lkey": meta["lkey"]},
+                                  self.gev.fitness_sig)
+-            r = self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
+-                          I.cand_key(rkey, fh), resume_from=r_low, **_gk(meta.get("genes")))
+-            return select_low_high(r_low, r, fl, fh)
++            return self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
++                             I.cand_key(rkey, fh), resume_from=r_low, **_gk(meta.get("genes")))
+         print(f"[growth] {meta['node']}: promoção f{fl}->f{fh} REFEITA do morfismo ({why})", flush=True)
+         r = self._job(meta["parent"], meta["ops"], meta["theta"], fh, meta["node"], meta["seed"],
+                       I.cand_key(meta["lkey"], fh), **_gk(meta.get("genes")))
+         r = dict(r)
+         r["promotion"] = {**(r.get("promotion") or {}), "mode": "retrain", "reason": why}
+-        return select_low_high(r_low, r, fl, fh)      # HOTFIX member_fid: melhor de f_low/f_high também no retrain
++        r.setdefault("selected_fid", fh)
++        return r
+ 
+     # ---- teste (canal separado; nunca lido aqui)
+     def _submit_test(self, member: dict):
+@@ -2935,7 +2961,6 @@
+                                    "checkpoint_sha256", "fid", "parent", "theta")}
+             if r.get("selected_fid") is not None and fh != fl:   # growth_fix6: qual fidelidade ficou (val)
+                 m["selected_fid"] = int(r["selected_fid"])
+-                m["fid"] = int(r["selected_fid"])                # hotfix member_fid: o checkpoint é o dessa fid
+             mem = self.state["members"][target]
+             if r["band"] != target or r["params"] > HARD_CAP:
+                 continue
+diff -ruN a/ga_search/modehb/local_ae.py b/ga_search/modehb/local_ae.py
+--- a/ga_search/modehb/local_ae.py	2026-11-18 12:35:17.160323294 -0300
++++ b/ga_search/modehb/local_ae.py	2026-11-18 12:35:17.161323305 -0300
+@@ -31,16 +31,27 @@
+ 
+ 
+ class _LocalDecoder(nn.Module):
+-    """conv3x3 -> ReLU -> bilinear resize to target size -> conv1x1 to target channels."""
++    """conv3x3 -> ReLU -> bilinear resize to target size -> conv1x1 to target channels.
+ 
+-    def __init__(self, in_ch: int, out_ch: int, out_hw: tuple[int, int], hidden: int | None = None):
++    growth_v31_hotfix_ae_diverge: ``in_scale`` (opcional, buffer FIXO) = 1/desvio por canal de z no lote-sonda;
++    o decoder lê ``(z - in_mu) * in_scale``. É uma reparametrização da 1ª conv do decoder (mesma classe de
++    funções; o decoder é descartado), que tira a escala de z (e o fan-in C) do passo do Adam."""
++
++    def __init__(self, in_ch: int, out_ch: int, out_hw: tuple[int, int], hidden: int | None = None,
++                 in_mu: torch.Tensor | None = None, in_scale: torch.Tensor | None = None):
+         super().__init__()
+         hidden = hidden or max(16, min(128, in_ch))
+         self.out_hw = tuple(int(v) for v in out_hw)
+         self.body = nn.Sequential(nn.Conv2d(in_ch, hidden, 3, padding=1), nn.ReLU(inplace=True))
+         self.head = nn.Conv2d(hidden, out_ch, 1)
++        self.normed = in_scale is not None
++        if self.normed:
++            self.register_buffer("in_mu", in_mu.detach().reshape(1, -1, 1, 1).clone())
++            self.register_buffer("in_scale", in_scale.detach().reshape(1, -1, 1, 1).clone())
+ 
+     def forward(self, z):
++        if self.normed:
++            z = (z - self.in_mu.to(z.dtype)) * self.in_scale.to(z.dtype)
+         h = self.body(z)
+         if tuple(h.shape[-2:]) != self.out_hw:
+             h = F.interpolate(h, size=self.out_hw, mode="bilinear", align_corners=False)
+@@ -82,6 +93,28 @@
+     return float(torch.exp(-(p * p.log()).sum()))
+ 
+ 
++def ae_guard_verdict(losses: list, prev_mean, initial_loss, ratio: float, last_epoch: bool):
++    """hotfix ae_diverge: veredito da guarda numa época (razão + tendência; nunca o valor absoluto).
++    Devolve (diverged, motivo, média da época)."""
++    ep_mean = sum(losses) / len(losses) if losses else float("nan")
++    if not losses or not math.isfinite(ep_mean):
++        return True, "perda não finita", ep_mean
++    if not initial_loss:
++        return False, None, ep_mean
++    q = max(1, len(losses) // 4)
++    head_m, tail_m = sum(losses[:q]) / q, sum(losses[-q:]) / q
++    ratio_ep = ep_mean / float(initial_loss)
++    rising = (prev_mean is not None and ep_mean > prev_mean) or (prev_mean is None and tail_m > head_m)
++    if ratio_ep > float(ratio) and rising:
++        return True, (f"média/inicial = {ratio_ep:.4g} > {float(ratio):g} e subindo (média {ep_mean:.5g}, "
++                      f"anterior {prev_mean}, início/fim da época {head_m:.5g}/{tail_m:.5g})"), ep_mean
++    final_ratio = tail_m / float(initial_loss)
++    if last_epoch and final_ratio > float(ratio):
++        return True, (f"fim do AE: perda final (último quarto) / inicial = {final_ratio:.4g} > {float(ratio):g} "
++                      f"({tail_m:.5g} vs {float(initial_loss):.5g})"), ep_mean
++    return False, None, ep_mean
++
++
+ def _patch_size(h: int, w: int) -> int:
+     return max(1, min(16, h // 4, w // 4))
+ 
+@@ -113,6 +146,11 @@
+     decoder_warmup_frac: float = 0.0,
+     amp_dtype: torch.dtype | None = None,
+     progress: str | None = None,
++    grad_clip: float | None = None,
++    dec_in_norm: bool = False,
++    lr_scale_fanin: bool = False,
++    warmup_steps: int = 0,
++    diverge_ratio: float | None = None,
+ ) -> dict:
+     """Train ``new_block`` as a local AE on top of the frozen ``prefix``.
+ 
+@@ -122,6 +160,20 @@
+     loss in fp32; None (default) = fp32 everywhere, unchanged.
+     growth_fix8: ``progress="<prefixo>"`` imprime 1 linha por época (perda, tempo, passos/s); None = silencioso.
+     As normas de gradiente por parâmetro saem numa única sincronização (mesmos valores, mesma ordem).
++
++    growth_v31_hotfix_ae_diverge (todos desligados por padrão = histórico bit a bit):
++      ``dec_in_norm``: entrada do decoder padronizada por canal com média/desvio FIXOS do lote-sonda (buffer,
++        sem gradiente; reparametrização do decoder descartável). Causa medida da divergência: com z de RMS
++        ~16 e fan-in 9*C (C=455..500), o 1º passo do Adam (|Δw| ~ lr por peso, coerente em sinal) move a saída
++        do decoder em ~lr*9C*|z| >> |x| -> perda 20 -> 6000 no passo 2.
++      ``grad_clip``: clip da norma global (bloco + decoder) antes do passo.
++      ``lr_scale_fanin``: lr dos pesos do DECODER * min(1, sqrt(ref/fan_in)), ref = 9*16 (a 1ª conv do decoder tem
++        fan-in 9*C; mesmo com a entrada padronizada, o passo coerente do Adam move a saída ~lr*9C). O bloco não muda.
++      ``warmup_steps``: lr linear de 1/(n+1) até 1 nos primeiros n passos.
++      ``diverge_ratio``: guarda por RAZÃO e TENDÊNCIA (nunca o valor absoluto): diverge se (a) perda não
++        finita; (b) média da época / perda inicial > ratio E subindo (média > a da época anterior; na 1ª época,
++        último quarto > primeiro quarto); (c) no fim, último quarto da última época / inicial > ratio.
++        "Começa alto e cai" passa. ``diverged=True`` -> o chamador restaura o bloco. None = sem checagem.
+     """
+     if target not in TARGETS:
+         raise ValueError(f"target must be one of {TARGETS}, got {target!r}")
+@@ -142,7 +194,18 @@
+         f0 = prefix(x0)
+         z0 = new_block(f0)
+     tgt0 = f0 if target == "feature" else x0
+-    decoder = _LocalDecoder(z0.shape[1], tgt0.shape[1], tuple(tgt0.shape[-2:])).to(device)
++    dec_kw = {}
++    if dec_in_norm:                      # hotfix ae_diverge: escala fixa da entrada do decoder (lote-sonda)
++        zc = z0.detach().float().transpose(0, 1).reshape(z0.shape[1], -1)
++        zc = torch.nan_to_num(zc, nan=0.0, posinf=0.0, neginf=0.0)
++        mu = zc.mean(1)
++        sd = zc.std(1, unbiased=False)
++        floor = sd.max().clamp_min(1e-6) * 1e-3 + 1e-6
++        dec_kw = {"in_mu": mu, "in_scale": 1.0 / sd.clamp_min(floor)}
++    if dec_kw:
++        decoder = _LocalDecoder(z0.shape[1], tgt0.shape[1], tuple(tgt0.shape[-2:]), **dec_kw).to(device)
++    else:
++        decoder = _LocalDecoder(z0.shape[1], tgt0.shape[1], tuple(tgt0.shape[-2:])).to(device)
+ 
+     # Hybrid SPiFiL kernel protection: SPiFiL conv weights get lr * conv_lr_scale (0 = frozen)
+     conv_ids = {id(p) for m in new_block.modules() if isinstance(m, nn.Conv2d) for p in m.parameters()}
+@@ -160,9 +223,31 @@
+         groups.append({"params": rest, "lr": lr, "block": True})
+     if convs:
+         groups.append({"params": convs, "lr": lr * float(conv_lr_scale), "block": True})
++    if lr_scale_fanin:                   # hotfix ae_diverge: pesos do DECODER com fan-in grande -> lr * sqrt(ref/fan_in)
++        ref = 9.0 * 16.0                 # (só o decoder descartável; o lr do bloco novo/herdado não muda)
++        split = []
++        for g in groups:
++            if g.get("block"):
++                split.append(g)
++                continue
++            keep, big = [], {}
++            for p in g["params"]:
++                fan = p[0].numel() if p.dim() > 1 else 0
++                f = min(1.0, math.sqrt(ref / fan)) if fan > ref else 1.0
++                (keep.append(p) if f == 1.0 else big.setdefault(f, []).append(p))
++            if keep:
++                split.append({**g, "params": keep})
++            for f, ps in big.items():
++                split.append({**g, "params": ps, "lr": g["lr"] * f})
++        groups = split
+     base_lr = [g["lr"] for g in groups]
+     n_warm = int(round(float(decoder_warmup_frac) * epochs))
+     opt = torch.optim.Adam(groups, lr=lr)
++    clip_params = [p for g in groups for p in g["params"]]
++    warm_n = max(0, int(warmup_steps or 0))
++    diverged, diverge_reason = False, None
++    guard_means: list = []
++    clip_hits = 0
+     named = [(f"new_block.{n}", p) for n, p in new_block.named_parameters() if p.requires_grad]
+ 
+     amp = (lambda: torch.autocast(device.type, dtype=amp_dtype)) if amp_dtype is not None else contextlib.nullcontext
+@@ -228,7 +313,19 @@
+                     logger.log(log, step=step)
+                 step += 1
+                 continue
++            if grad_clip is not None and float(grad_clip) > 0:
++                tn = torch.nn.utils.clip_grad_norm_(clip_params, float(grad_clip))
++                log["ae/grad_total_norm"] = float(tn)
++                clip_hits += int(float(tn) > float(grad_clip))
++            if warm_n and step < warm_n:
++                for g, b in zip(opt.param_groups, base_lr):
++                    if g["lr"] != 0.0:
++                        g["lr"] = b * float(step + 1) / float(warm_n + 1)
+             opt.step()
++            if warm_n and step < warm_n:
++                for g, b in zip(opt.param_groups, base_lr):
++                    if g["lr"] != 0.0:
++                        g["lr"] = b
+             if initial_loss is None:
+                 initial_loss = log["ae/recon_loss"]
+             losses.append(log["ae/recon_loss"])
+@@ -237,6 +334,13 @@
+             step += 1
+         ep_time = time.perf_counter() - t_ep
+         epoch_losses.append(losses)
++        if diverge_ratio is not None and not diverged:     # hotfix ae_diverge: guarda por época (razão + tendência)
++            # nunca o valor absoluto: "começa alto e cai" (escala) passa; "sobe" (razão > guard E subindo) diverge.
++            prev = guard_means[-1] if guard_means else None
++            dv, why, ep_mean = ae_guard_verdict(losses, prev, initial_loss, float(diverge_ratio), epoch == epochs - 1)
++            guard_means.append(ep_mean)
++            if dv:
++                diverged, diverge_reason = True, f"época {epoch}: {why}"
+         if progress is not None:             # growth_fix8: o log não fica mudo durante o AE local
+             n_ep = len(losses)
+             print(f"{progress} época {epoch + 1}/{epochs} passos={n_ep} "
+@@ -282,4 +386,11 @@
+         "steps": step,
+         "skipped_steps": len(skipped),
+         "epochs": epochs,
++        **({"diverged": bool(diverged), "diverge_reason": diverge_reason,
++            "epoch_mean_losses": [float(v) for v in guard_means]} if diverge_ratio is not None else {}),
++        **({"grad_clip": float(grad_clip), "grad_clip_hits": int(clip_hits)}
++           if grad_clip is not None and float(grad_clip) > 0 else {}),
++        **({"dec_in_norm": True} if dec_in_norm else {}),
++        **({"lr_scale_fanin": True} if lr_scale_fanin else {}),
++        **({"warmup_steps": warm_n} if warm_n else {}),
+     }
+diff -ruN a/tests/hmodehb/test_growth_v31_ae_diverge.py b/tests/hmodehb/test_growth_v31_ae_diverge.py
+--- a/tests/hmodehb/test_growth_v31_ae_diverge.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_ae_diverge.py	2026-11-18 12:35:17.170323404 -0300
+@@ -0,0 +1,163 @@
++"""growth_v31_hotfix_ae_diverge: AE local divergindo nos blocos alargados.
++
++- desligado (sem kwargs novos) = chamada histórica: bit a bit;
++- a guarda (diverge_ratio) só observa: sem divergência, pesos bit a bit iguais aos sem guarda;
++- dec_in_norm corrige o caso "z grande x fan-in grande" (a perda cai);
++- train_child: bloco divergente volta bit a bit ao morfismo (pré-AE), "ae_diverged" registrado, o resto segue;
++- smoke estrito: recon_ratio > 1 -> ChainError; fora do smoke só alerta.
++"""
++from __future__ import annotations
++
++import copy
++import sys
++from pathlib import Path
++
++import pytest
++import torch
++from torch import nn
++from torch.utils.data import DataLoader, TensorDataset
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import build as BB  # noqa: E402
++from ga_search.backbones.spec import HeadSpec, LayerSpec  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.modehb.local_ae import train_local_ae  # noqa: E402
++
++SYN = ["data.synthetic=true", "data.image_size=32", "data.synthetic_train_samples=16", "data.synthetic_val_samples=12",
++       "data.batch_size=4", "data.num_workers=0", "data.ram_cache=true", "train.max_steps_per_epoch=2",
++       "search.n_classes=2", "search.spifil_images_choices=[1,2]", "device=cpu", "wandb.enabled=false"]
++OPS = [{"op": "widen", "widths": {"0": 16}, "seed": 1}]
++
++
++def _loader(n=32, hw=16, seed=0):
++    g = torch.Generator().manual_seed(seed)
++    x = torch.rand(n, 3, hw, hw, generator=g)
++    return DataLoader(TensorDataset(x), batch_size=8, shuffle=True, generator=torch.Generator().manual_seed(seed))
++
++
++def _wide_block(C=256, gain=40.0, seed=0):
++    """Bloco 'alargado' com saída grande (RMS ~ dezenas) e muitos canais: o caso que diverge."""
++    torch.manual_seed(seed)
++    blk = nn.Sequential(nn.Conv2d(3, C, 3, padding=1), nn.ReLU())
++    with torch.no_grad():
++        blk[0].weight.mul_(gain)
++    return blk
++
++
++def _sd(m):
++    return {k: v.detach().clone() for k, v in m.state_dict().items()}
++
++
++def _run(blk, **kw):
++    blk = copy.deepcopy(blk)
++    out = train_local_ae(nn.Identity(), blk, _loader(), "pixel", 2, 1e-3, "cpu", None, 3, **kw)
++    return blk, out
++
++
++def test_defaults_and_guard_observe_only_bitwise():
++    blk = _wide_block(C=16, gain=1.0)
++    a, oa = _run(blk)
++    b, ob = _run(blk, dec_in_norm=False, grad_clip=None, lr_scale_fanin=False, warmup_steps=0)
++    c, oc = _run(blk, diverge_ratio=1e9)                    # guarda ligada, nunca dispara
++    for m in (b, c):
++        for k, v in _sd(a).items():
++            assert torch.equal(v, _sd(m)[k]), k
++    assert oa["final_recon_loss"] == ob["final_recon_loss"] == oc["final_recon_loss"]
++    assert "diverged" not in oa and oc["diverged"] is False
++    assert G.ae_extra_kw({}) == {}                           # sem chaves -> chamada histórica
++
++
++def test_guard_verdict_ratio_and_trend_not_absolute():
++    from ga_search.modehb.local_ae import ae_guard_verdict as V
++    # athena superpixels_prune: começa alto e cai (escala) -> ok
++    assert V([10.85, 8.0, 6.1, 5.0], None, 10.85, 1.0, False)[0] is False
++    assert V([4.1, 3.6, 3.4, 3.28], 7.5, 10.85, 1.0, True)[0] is False
++    # widen RS 0,626 -> 1,846 e tiny 86,4 -> 369,5 (sobe na época) -> diverge
++    assert V([0.626, 2.9, 2.1, 1.9, 1.846], None, 0.626, 1.0, True)[0] is True
++    assert V([86.4, 150.0, 250.0, 369.5], None, 86.4, 1.0, True)[0] is True
++    # época 2 mais alta que a 1 e acima do inicial -> diverge antes do fim
++    assert V([3.0, 3.2, 3.4], 2.0, 1.0, 1.0, False)[0] is True
++    assert V([float("nan")], None, 1.0, 1.0, False)[0] is True
++
++
++def test_wide_block_diverges_and_dec_in_norm_fixes():
++    blk = _wide_block()
++    _, bad = _run(blk, diverge_ratio=1.0)
++    _, good = _run(blk, diverge_ratio=1.0, dec_in_norm=True)
++    assert bad["recon_ratio"] > 1.0 and bad["diverged"] is True
++    assert good["recon_ratio"] < 1.0 and good["diverged"] is False and good["dec_in_norm"] is True
++    _, both = _run(blk, diverge_ratio=1.0, dec_in_norm=True, lr_scale_fanin=True)     # padrão do growth.yaml
++    assert both["recon_ratio"] < 1.0 and both["diverged"] is False
++    _, clip = _run(blk, diverge_ratio=1.0, dec_in_norm=True, grad_clip=1.0)
++    assert clip["recon_ratio"] < 1.0 and clip["grad_clip"] == 1.0
++
++
++def _tiny(seed=0, widths=(12, 24), res=32):
++    L = [LayerSpec(channels=widths[0], kernel=3, conv="conv", norm="batch", activation="relu", pool="max",
++                   flavor="spifil_ops", init="inherited"),
++         LayerSpec(channels=widths[1], kernel=3, conv="conv", norm="batch", activation="silu", pool="max",
++                   flavor="spifil_ops", init="inherited")]
++    spec = G.spec_from_layers(L, HeadSpec(embed_dim=1280, pooling="meanstd"), "synthetic", res)
++    m = BB.build_backbone(spec, seed=seed, enforce_budget=False)
++    with torch.no_grad():
++        m.train()
++        for _ in range(3):
++            m(torch.rand(8, 3, res, res))
++    return m.eval()
++
++
++@pytest.fixture(scope="module")
++def gev(tmp_path_factory):
++    out = tmp_path_factory.mktemp("gev_aed")
++    cfg = G.build_cfg("remote_sensing", 42, SYN, out)
++    return G.GrowthEvaluator(cfg, out / "eval")
++
++
++def _g(**kw):
++    return {**G.GROWTH_DEFAULTS, "wise_alphas": [0.0, 1.0], "ssl": "none", "fid_high": 15, **kw}
++
++
++def test_train_child_guard_restores_block_bitwise(gev):
++    m = _tiny()
++    res = G.realize_plan(copy.deepcopy(m), OPS, None)
++    pre = _sd(res.child.blocks[0])
++    # lr absurdo -> o AE do bloco 0 diverge -> o bloco volta bit a bit ao morfismo
++    cap = {}
++    model, out = G.train_child(gev, res, 2, _g(lr_ae=50.0, ae_dec_in_norm=False), 7, 0.5, capture=cap)
++    r0 = next(r for r in out["ae_logs"] if r["block"] == 0)
++    assert r0["ae_diverged"] is True and r0["ae_restored"] is True
++    assert 0 in out["ae_diverged_blocks"] and out["ae_alerts"]
++    post = {k[len("blocks.0."):]: v for k, v in cap["trained"].items() if k.startswith("blocks.0.")}   # pré-WiSE
++    assert set(post) == set(pre) and all(torch.equal(pre[k], post[k]) for k in pre)
++    # mesma semente, guarda desligada: o bloco muda (o AE treinou) -> a guarda é quem restaurou
++    res2 = G.realize_plan(copy.deepcopy(m), OPS, None)
++    cap2 = {}
++    model2, out2 = G.train_child(gev, res2, 2, _g(lr_ae=50.0, ae_dec_in_norm=False, ae_diverge_guard=None), 7, 0.5,
++                                 capture=cap2)
++    assert "ae_diverged" not in out2["ae_logs"][0] and not out2["ae_diverged_blocks"]
++    post2 = {k[len("blocks.0."):]: v for k, v in cap2["trained"].items() if k.startswith("blocks.0.")}
++    assert any(not torch.equal(pre[k], post2[k]) for k in pre if pre[k].is_floating_point())
++
++
++def test_train_child_off_equals_historic_bitwise(gev):
++    """Opções desligadas (= histórico) e guarda ligada sem disparar dão o MESMO filho bit a bit."""
++    m = _tiny()
++    off = dict(ae_dec_in_norm=False, ae_diverge_guard=None, ae_grad_clip=None)
++    a, oa = G.train_child(gev, G.realize_plan(copy.deepcopy(m), OPS, None), 2, _g(**off), 7, 0.5)
++    b, ob = G.train_child(gev, G.realize_plan(copy.deepcopy(m), OPS, None), 2,
++                          _g(**{**off, "ae_diverge_guard": 1e9}), 7, 0.5)
++    sa, sb = a.state_dict(), b.state_dict()
++    assert all(torch.equal(sa[k], sb[k]) for k in sa)
++    assert oa["kappa_val_orig"] == ob["kappa_val_orig"]
++    assert ob["ae_logs"][0]["ae_diverged"] is False
++
++
++def test_smoke_strict_fails_on_ratio_gt1(gev):
++    m = _tiny()
++    g = _g(lr_ae=50.0, ae_dec_in_norm=False, ae_smoke_strict=True)   # smoke: --gset ae_smoke_strict=true
++    assert not G.ae_smoke_strict(_g()) and not G.ae_smoke_strict(_g(fid_high=1))      # padrão: só alerta
++    assert G.ae_smoke_strict(_g(ae_smoke_strict=None, fid_high=1))                     # null = automático
++    with pytest.raises(G.ChainError, match="recon_ratio > 1"):
++        G.train_child(gev, G.realize_plan(copy.deepcopy(m), OPS, None), 2, g, 7, 0.5)

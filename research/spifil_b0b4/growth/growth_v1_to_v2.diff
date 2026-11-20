@@ -1,0 +1,197 @@
+diff --git a/ga_search/backbones/checkpoint.py b/ga_search/backbones/checkpoint.py
+index 39a9d0a..76ecbe3 100644
+--- a/ga_search/backbones/checkpoint.py
++++ b/ga_search/backbones/checkpoint.py
+@@ -6,7 +6,7 @@
+ * ``torchscript``: bytes de ``torch.jit.trace`` do modelo em eval() -> infere só com ``torch``
+   (``load_standalone``), sem importar este repo.
+ 
+-Carregável com ``torch.load(path, weights_only=True)`` (só str/bytes/tensores/dicts).
++Carregável com ``torch.load(path, weights_only=True)`` também no torch 2.2 (só str/int/tensores/dicts; TorchScript = tensor uint8).
+ """
+ from __future__ import annotations
+ 
+@@ -14,7 +14,7 @@ import hashlib
+ import io
+ import warnings
+ from pathlib import Path
+-from typing import Tuple, Union
++from typing import Optional, Tuple, Union
+ 
+ import torch
+ 
+@@ -57,7 +57,8 @@ def save_backbone(model: Backbone, path: Union[str, Path], *, torchscript: bool
+                "state_dict": sd, "state_sha256": state_sha256(sd), "torch_version": str(torch.__version__),
+                "embed_dim": int(model.spec.head.embed_dim)}
+     if torchscript:
+-        payload["torchscript"] = _trace(model, trace_resolution)
++        # uint8 tensor (não bytes): torch 2.2 com weights_only=True recusa bytes (_codecs.encode)
++        payload["torchscript"] = torch.frombuffer(bytearray(_trace(model, trace_resolution)), dtype=torch.uint8).clone()
+     model.train(was)
+     path = Path(path)
+     path.parent.mkdir(parents=True, exist_ok=True)
+@@ -67,9 +68,30 @@ def save_backbone(model: Backbone, path: Union[str, Path], *, torchscript: bool
+             "arch_sha256": payload["arch_sha256"]}
+ 
+ 
+-def load_backbone(path: Union[str, Path], map_location="cpu") -> Tuple[Backbone, BackboneSpec]:
++def ts_bytes(v) -> bytes:
++    """TorchScript gravado como tensor uint8 (v2) ou bytes (v1)."""
++    return bytes(v) if isinstance(v, (bytes, bytearray)) else v.contiguous().numpy().tobytes()
++
++
++def file_sha256(path) -> str:
++    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
++
++
++def load_payload(path, map_location="cpu", expected_sha256: Optional[str] = None) -> dict:
++    """``weights_only=True``; checkpoint v1 (bytes) recusado pelo torch 2.2 -> ``weights_only=False`` SÓ se o
++    sha256 do arquivo for o esperado (gravado na linhagem/estado)."""
++    try:
++        return torch.load(path, map_location=map_location, weights_only=True)
++    except Exception as exc:
++        if not expected_sha256 or file_sha256(path) != expected_sha256:
++            raise ValueError(f"{path}: weights_only recusou ({exc}); fallback exige sha256 conferido") from exc
++        return torch.load(path, map_location=map_location, weights_only=False)
++
++
++def load_backbone(path: Union[str, Path], map_location="cpu",
++                  expected_sha256: Optional[str] = None) -> Tuple[Backbone, BackboneSpec]:
+     """Reconstrói pelo spec (precisa deste pacote) e confere arch/state hash; strict=True."""
+-    ck = torch.load(path, map_location=map_location, weights_only=True)
++    ck = load_payload(path, map_location, expected_sha256)
+     if ck.get("format") != FORMAT:
+         raise ValueError(f"formato {ck.get('format')!r} != {FORMAT}")
+     spec = BackboneSpec.from_json(ck["spec_json"])
+@@ -87,5 +109,5 @@ def load_standalone(path: Union[str, Path]):
+     """Só torch: devolve o módulo TorchScript (eval) e o spec em dict JSON."""
+     import json
+     ck = torch.load(path, map_location="cpu", weights_only=True)
+-    ts = torch.jit.load(io.BytesIO(ck["torchscript"]), map_location="cpu")
++    ts = torch.jit.load(io.BytesIO(ts_bytes(ck["torchscript"])), map_location="cpu")
+     return ts.eval(), json.loads(ck["spec_json"])
+diff --git a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+index f5ff00b..d1e9fc9 100644
+--- a/ga_search/hmodehb/growth_chain.py
++++ b/ga_search/hmodehb/growth_chain.py
+@@ -732,7 +732,7 @@ class GrowthChain:
+         if dev.type == "cuda":
+             torch.cuda.empty_cache()
+             torch.cuda.reset_peak_memory_stats(dev)
+-        pmodel, _ = BB_load(parent["checkpoint"])
++        pmodel, _ = BB_load(parent["checkpoint"], parent["checkpoint_sha256"])
+         nfi = NewFilterInit(self.gev, self.g["init_method"], self.g.get("init_config") or {},
+                             int(self.g.get("spifil_images_per_class", 4)), seed)
+         res = realize_plan(pmodel, ops, nfi)
+@@ -802,7 +802,7 @@ class GrowthChain:
+             parent = parents[i % len(parents)]
+             theta = de_theta(pool, rng)
+             seed = _h({"tag": tag, "i": i, "parent": parent["checkpoint_sha256"]}) % (2 ** 31 - 1)
+-            pmodel, _ = BB_load(parent["checkpoint"])
++            pmodel, _ = BB_load(parent["checkpoint"], parent["checkpoint_sha256"])
+             ops = propose_plan(pmodel, target, theta, seed, self.g, int(self.g.get("hard_cap", HARD_CAP)))
+             node = f"{target}g{gen}c{i:02d}"
+             origin = {"kind": "inherit", "parent_sha256": parent["checkpoint_sha256"], "protect": self.g["protect"],
+@@ -888,15 +888,16 @@ def BB_save(model: BB.Backbone, path) -> dict:
+         return CK.save_backbone(model, path, torchscript=False)
+ 
+ 
+-def BB_load(path):
++def BB_load(path, expected_sha256=None):
+     from ga_search.backbones import checkpoint as CK
+-    return CK.load_backbone(path)
++    return CK.load_backbone(path, expected_sha256=expected_sha256)
+ 
+ 
+ def _is_backbone_ckpt(path) -> bool:
+     try:
+-        ck = torch.load(path, map_location="cpu", weights_only=True)
+-        return isinstance(ck, dict) and ck.get("format") == "backbone_ckpt/v1"
++        import zipfile
++        with zipfile.ZipFile(path) as z:      # sem desserializar: procura a string do formato no pickle
++            return any(n.endswith("data.pkl") and b"backbone_ckpt/v1" in z.read(n) for n in z.namelist())
+     except Exception:
+         return False
+ 
+diff --git a/ga_search/hmodehb/growth_test_channel.py b/ga_search/hmodehb/growth_test_channel.py
+index af2be69..5c5bba5 100644
+--- a/ga_search/hmodehb/growth_test_channel.py
++++ b/ga_search/hmodehb/growth_test_channel.py
+@@ -75,7 +75,7 @@ def main(argv=None) -> int:
+     for r in todo:
+         if file_sha256(r["checkpoint"]) != r["checkpoint_sha256"]:
+             continue
+-        model, spec = load_backbone(r["checkpoint"])
++        model, spec = load_backbone(r["checkpoint"], expected_sha256=r["checkpoint_sha256"])
+         model.to(ev.device)
+         enc = nn.Sequential(*model.blocks)
+         tr = ev._embed(enc, model.head, ev.svm_train_x, tta=1, readout="head").numpy()
+diff --git a/tests/backbones/test_checkpoint.py b/tests/backbones/test_checkpoint.py
+index d5558c5..8fc6f32 100644
+--- a/tests/backbones/test_checkpoint.py
++++ b/tests/backbones/test_checkpoint.py
+@@ -64,7 +64,7 @@ except ModuleNotFoundError:
+     pass
+ ck = torch.load("bk.pt", map_location="cpu", weights_only=True)
+ spec = json.loads(ck["spec_json"])
+-ts = torch.jit.load(io.BytesIO(ck["torchscript"])).eval()
++ts = torch.jit.load(io.BytesIO(ck["torchscript"].numpy().tobytes())).eval()
+ d = torch.load("io.pt", weights_only=True)
+ with torch.no_grad():
+     y = ts(d["x"])
+diff --git a/tests/hmodehb/test_growth_chain.py b/tests/hmodehb/test_growth_chain.py
+index 5459246..b44071d 100644
+--- a/tests/hmodehb/test_growth_chain.py
++++ b/tests/hmodehb/test_growth_chain.py
+@@ -317,3 +317,51 @@ def test_e2e_real_remote_sensing_b0_b1_b2(tmp_path):
+             assert m["kappa_val_orig"] >= par["kappa_val_orig"]
+     (Path(os.environ.get("GROWTH_E2E_DUMP", tmp_path)) / "e2e_lineage.jsonl").write_text(
+         "\n".join(json.dumps(r) for r in lin))
++
++
++# ───────────────────────────────────────────────────────────────── torch 2.2: weights_only sem bytes
++def _pickle_globals(path):
++    import zipfile
++    with zipfile.ZipFile(path) as z:
++        return b"".join(z.read(n) for n in z.namelist() if n.endswith("data.pkl"))
++
++
++def test_checkpoint_has_no_bytes_for_torch22(tmp_path):
++    """torch 2.2 (athena) com weights_only=True recusa ``_codecs.encode`` (bytes): o v2 grava o TorchScript como
++    tensor uint8; a simulação procura o global proibido no pickle."""
++    from ga_search.backbones import checkpoint as CK
++    m = _tiny()
++    info = G.BB_save(m, tmp_path / "v2.pt")
++    pk = _pickle_globals(info["path"])
++    assert b"_codecs" not in pk
++    ck = torch.load(info["path"], weights_only=True)
++    assert ck["torchscript"].dtype == torch.uint8
++    ts = torch.jit.load(__import__("io").BytesIO(CK.ts_bytes(ck["torchscript"])))
++    x = _x()
++    with torch.no_grad():
++        assert torch.allclose(ts(x), m(x), atol=1e-6)
++    assert G._is_backbone_ckpt(info["path"])
++
++
++def test_old_v1_checkpoint_fallback_requires_sha(tmp_path, monkeypatch):
++    from ga_search.backbones import checkpoint as CK
++    m = _tiny()
++    info = CK.save_backbone(m, tmp_path / "v1.pt", torchscript=False)
++    ck = torch.load(info["path"], weights_only=True)
++    ck["torchscript"] = b"\x00\x01legacy"                       # formato v1 (bytes)
++    torch.save(ck, tmp_path / "v1.pt")
++    sha = CK.file_sha256(tmp_path / "v1.pt")
++    real = torch.load
++
++    def load22(path, *a, **k):                                   # simula o torch 2.2
++        if k.get("weights_only") and b"_codecs" in _pickle_globals(path):
++            raise RuntimeError("Unsupported class _codecs.encode")
++        return real(path, *a, **k)
++    monkeypatch.setattr(torch, "load", load22)
++    with pytest.raises(ValueError):
++        CK.load_backbone(tmp_path / "v1.pt")
++    with pytest.raises(ValueError):
++        CK.load_backbone(tmp_path / "v1.pt", expected_sha256="0" * 64)
++    m2, _ = CK.load_backbone(tmp_path / "v1.pt", expected_sha256=sha)
++    with torch.no_grad():
++        assert torch.equal(m2(_x()), m(_x()))

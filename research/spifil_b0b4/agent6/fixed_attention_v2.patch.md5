@@ -1,0 +1,8 @@
+21774ff15b715668d68399c3b79ce456  fixed_attention_v2.patch
+f4bc107c0830791e555ca5ae4d8fce54  ga_search/modehb/fixed_attention.py
+2fa8c5a1c3ea0a4f480b26836d34810f  tests/modehb/test_fixed_attention.py
+c8d084273f6d4fb244b20f768d615d73  research/spifil_b0b4/agent6/tools/ckpt_compat_check.py
+f4fc9a2d5ad09242d13771d352f9ddd4  research/spifil_b0b4/agent6/tools/eval_fixed_attention.py
+388e0036d6eb2eeafaa106a4dfd793fe  research/spifil_b0b4/agent6/tools/freeze_E0_E8.py
+b8f52e3e87b42480abde189399c5f06c  research/spifil_b0b4/agent6/tools/paired_bootstrap.py
+60d1163197922d2a4c6fef39dab3a0ab  research/spifil_b0b4/agent6/tools/select_checkpoints.py

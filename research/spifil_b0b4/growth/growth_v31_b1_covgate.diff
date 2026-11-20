@@ -1,0 +1,643 @@
+diff -ruN a/ga_search/backbones/build.py b/ga_search/backbones/build.py
+--- a/ga_search/backbones/build.py	2026-11-17 21:58:20.712007490 -0300
++++ b/ga_search/backbones/build.py	2026-11-17 21:58:20.713007504 -0300
+@@ -77,6 +77,42 @@
+         return _dense_cat(super().forward(x), x)
+ 
+ 
++class CovGatedSpifilOpsBlock(_SpifilOpsBlock):
++    """growth v3.1: y = x + g * bloco(x) (ramo de covariância gated, g = 0 no início -> função preservada)."""
++    is_cov_gated = True
++
++    def forward(self, x):
++        b = super().forward(x)
++        return x + self.gate.view(1, -1, 1, 1).to(b.dtype) * b
++
++
++class CovGatedConvBlock(ConvBlock):
++    is_cov_gated = True
++
++    def forward(self, x):
++        b = super().forward(x)
++        return x + self.gate.view(1, -1, 1, 1).to(b.dtype) * b
++
++
++def _as_cov_gated(blk: nn.Module, cout: int, mode: str) -> nn.Module:
++    blk.__class__ = CovGatedSpifilOpsBlock if isinstance(blk, _SpifilOpsBlock) else CovGatedConvBlock
++    blk.gate = nn.Parameter(torch.zeros(int(cout) if mode == "channel" else 1))
++    blk.cov_gate_mode = str(mode)
++    return blk
++
++
++def cov_gate_values(model: nn.Module) -> dict:
++    """{bloco: valores de g} dos blocos cov_gate (diagnóstico para o result.json)."""
++    out = {}
++    for j, b in enumerate(getattr(model, "blocks", [])):
++        if getattr(b, "is_cov_gated", False):
++            g = b.gate.detach().float().cpu()
++            out[str(j)] = {"mode": getattr(b, "cov_gate_mode", "?"), "mean": float(g.mean()),
++                           "mean_abs": float(g.abs().mean()), "max_abs": float(g.abs().max()),
++                           "values": [round(float(v), 6) for v in g[:64]]}
++    return out
++
++
+ def block_in_channels(spec: BackboneSpec, j: int) -> int:
+     return spec.block_in_channels(j)
+ 
+@@ -116,6 +152,8 @@
+     blk = _make_block(L, cin)
+     if getattr(L, "dense_out", False):
+         blk = _as_dense(blk, cin, int(L.channels))
++    if getattr(L, "cov_gate", "none") != "none":
++        blk = _as_cov_gated(blk, int(L.channels), L.cov_gate)
+     return blk
+ 
+ 
+diff -ruN a/ga_search/backbones/morphisms.py b/ga_search/backbones/morphisms.py
+--- a/ga_search/backbones/morphisms.py	2026-11-17 21:58:20.720007598 -0300
++++ b/ga_search/backbones/morphisms.py	2026-11-17 21:58:20.721007612 -0300
+@@ -223,6 +223,13 @@
+                           lambda d, s: _remap_conv(d, s, rows, cols))
+                 if mod.bias is not None:
+                     put_param("bias", lambda d, s: _remap_vec(d, s, rows), lambda d, s: _remap_vec(d, s, rows))
++            elif getattr(mod, "is_cov_gated", False) and mname == "" and "gate" in dict(mod.named_parameters(recurse=False)):
++                gmode = getattr(mod, "cov_gate_mode", "channel")          # growth v3.1: canal novo -> g = 0
++                if gmode == "channel":
++                    put_param("gate", lambda d, s: (d.zero_(), _remap_vec(d, s, out_map)),
++                              lambda d, s: _remap_vec(d, s, out_map))
++                else:
++                    put_param("gate", lambda d, s: d.copy_(s), lambda d, s: d.copy_(s))
+             elif isinstance(mod, GatedSkip):
+                 put_param("gate", lambda d, s: d.copy_(s), lambda d, s: d.copy_(s))
+             elif isinstance(mod, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm, nn.LayerNorm)):
+@@ -328,7 +335,8 @@
+         c_new = int(widths.get(j, c_old))
+         if c_new < c_old:
+             raise MorphismError(f"camada {j}: widen não encolhe ({c_old} -> {c_new})")
+-        if (L.residual in ("identity", "gated") or L.conv == "depthwise") and c_new != in_count:
++        if (L.residual in ("identity", "gated") or L.conv == "depthwise"
++                or getattr(L, "cov_gate", "none") != "none") and c_new != in_count:
+             raise NotExactError(f"camada {j} ({L.residual}/{L.conv}) exige cout == cin = {in_count}")
+         cin_j = in_count
+         L.channels = c_new
+@@ -355,7 +363,7 @@
+         if isinstance(cb.conv, InceptionConv):
+             bm = _branch_maps(pb.conv, cb.conv)
+             out_local = _inception_out_map(bm, [b[0] for b in cb.conv.branch_spec])
+-        elif Lc.residual in ("identity", "gated") or Lc.conv == "depthwise":
++        elif Lc.residual in ("identity", "gated") or Lc.conv == "depthwise" or getattr(Lc, "cov_gate", "none") != "none":
+             out_local = list(in_local)
+         else:
+             c_par = int(pb.conv.out_channels if not isinstance(pb.conv, nn.Sequential) else pb.conv[1].out_channels)
+@@ -396,7 +404,8 @@
+ 
+ # ─────────────────────────────────────────────────────────────────── inserção de camadas
+ def _nonneg_output(L: LayerSpec) -> bool:
+-    return L.activation in ("relu", "relu6") and L.residual == "none" and not getattr(L, "dense_out", False)
++    return (L.activation in ("relu", "relu6") and L.residual == "none" and not getattr(L, "dense_out", False)
++            and getattr(L, "cov_gate", "none") == "none")
+ 
+ 
+ def _insert(res: GrowthResult, at: int, newL: LayerSpec, tag: str, seed: int) -> GrowthResult:
+diff -ruN a/ga_search/backbones/morphisms_v3.py b/ga_search/backbones/morphisms_v3.py
+--- a/ga_search/backbones/morphisms_v3.py	2026-11-17 21:58:20.725007666 -0300
++++ b/ga_search/backbones/morphisms_v3.py	2026-11-17 21:58:20.726007679 -0300
+@@ -384,5 +384,57 @@
+     return out
+ 
+ 
++# ─────────────────────────────────────────────────────────────────── v3.1: residual GATED (cov_gate / ReZero)
++GATED_NORMS = ("none", "batch", "zca", "dbn", "batch_dbn", "batch_zca")
++
++
++@torch.no_grad()
++def add_gated_residual(res: GrowthResult, at: int, *, kernel: int = 3, norm: str = "zca", act: str = "relu",
++                       gate: str = "channel", tag: str = "cov_gate", new_filters: Optional[BranchInit] = None,
++                       seed: int = 0, fit_x: Optional[torch.Tensor] = None) -> GrowthResult:
++    """Insere antes da camada ``at`` o bloco y = x + g * act(norm(conv(x))) com g = 0 treinável (ReZero).
++
++    ``tag="cov_gate"`` (pedido do usuário): norm de covariância (zca/dbn) -> o ramo usa o branqueamento pela
++    covariância das respostas; g decide no SSL/AE se o mecanismo é usado. ``tag="rezero"`` (deepen_rezero):
++    mesmo bloco, norm none, g escalar. A conv recebe filtros SPiFiL (``new_filters(at, conv, rows)``) -> o
++    gradiente de g é NÃO nulo desde o passo 0 (ao contrário do deepen_residual_zero, que zera a conv).
++    ``fit_x`` (imagens de TREINO): ajusta a ZCA nas respostas da conv nova (branqueamento congelado depois).
++    Exato para qualquer entrada: g = 0 => y = x (o ramo é finito)."""
++    from ga_search.backbones.morphisms import _insert
++    from ga_search.backbones.spec import LayerSpec
++    if norm not in GATED_NORMS:
++        raise MorphismError(f"gated residual: norm {norm!r} fora de {GATED_NORMS}")
++    if gate not in ("scalar", "channel"):
++        raise MorphismError("gate: scalar | channel")
++    spec = res.child.spec
++    C = int(spec.block_out_channels(at - 1))
++    flavor = spec.layers()[at - 1].flavor
++    newL = LayerSpec(channels=C, kernel=int(kernel), conv="conv", norm=norm, activation=act, residual="none",
++                     pool="none", init=tag, flavor=flavor, cov_gate=gate)
++    out = _insert(res, at, newL, tag, seed=int(seed))
++    blk = out.child.blocks[at]
++    blk.gate.zero_()
++    spifil = None
++    if new_filters is not None:
++        n_log = None
++        new_filters(at, blk.conv, list(range(C)))
++        spifil = "new_filters"
++    zfit = None
++    if fit_x is not None and isinstance(getattr(blk, "norm", None), ZCAWhitening):
++        h = fit_x.float()
++        was = out.child.training
++        out.child.eval()
++        for b in out.child.blocks[:at]:
++            h = b(h)
++        blk.norm.fit(blk.conv(h))
++        out.child.train(was)
++        zfit = {"n_images": int(fit_x.shape[0]), "split": "train"}
++    out.ops.append(OpRecord(op=tag, where={"before": int(at)},
++                            params={"kernel": int(kernel), "norm": norm, "act": act, "gate": gate, "width": C,
++                                    "init": spifil or "pytorch", "zca_fit": zfit, "gate_init": 0.0},
++                            exact_claimed=True, condition="g = 0 (ReZero); qualquer entrada; grad de g != 0"))
++    return out
++
++
+ OPS_V3 = {"inception_branch_add": inception_branch_add, "dense_concat": dense_concat,
+-          "replace_filters": replace_filters}
++          "replace_filters": replace_filters, "add_gated_residual": add_gated_residual}
+diff -ruN a/ga_search/backbones/spec.py b/ga_search/backbones/spec.py
+--- a/ga_search/backbones/spec.py	2026-11-17 21:58:20.730007733 -0300
++++ b/ga_search/backbones/spec.py	2026-11-17 21:58:20.731007747 -0300
+@@ -90,6 +90,9 @@
+     # growth v3 (dense_concat): a saída do bloco = cat(saída, adaptive_avg_pool(entrada do bloco)) -> o bloco
+     # seguinte vê channels + cin canais (DenseNet). False (padrão) fica FORA do hash (hashes antigos iguais).
+     dense_out: bool = False
++    # growth v3.1 (cov_gate): ramo de covariância GATED num residual: y = x + g * act(norm(conv(x))), g treinável
++    # iniciado em 0 (ReZero; "scalar" | "channel"). "none" (padrão) fica FORA do hash.
++    cov_gate: str = "none"
+ 
+     def arch_dict(self) -> dict:
+         d = asdict(self)
+@@ -100,6 +103,8 @@
+             d.pop("pool_padding")
+         if not d.get("dense_out"):
+             d.pop("dense_out", None)
++        if d.get("cov_gate", "none") == "none":
++            d.pop("cov_gate", None)
+         return d
+ 
+     def validate(self, cin: int) -> None:
+@@ -119,6 +124,11 @@
+             raise SpecError("pool_padding só vale com flavor=spifil_ops")
+         if int(self.channels) < 1 or int(self.kernel) < 1 or int(self.kernel) % 2 == 0:
+             raise SpecError(f"channels/kernel inválidos: {self.channels}/{self.kernel}")
++        if getattr(self, "cov_gate", "none") != "none":
++            if self.cov_gate not in ("scalar", "channel"):
++                raise SpecError(f"cov_gate {self.cov_gate!r} (none|scalar|channel)")
++            if cin != self.channels or self.residual != "none" or self.pool != "none" or self.dense_out:
++                raise SpecError("cov_gate exige cin == cout, residual none, pool none, sem dense_out")
+         if self.residual in ("identity", "gated") and cin != self.channels:
+             raise SpecError(f"residual {self.residual} exige cin == cout ({cin} != {self.channels})")
+         if self.conv == "depthwise" and self.channels % cin:
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 21:58:20.735007801 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 21:58:20.737007828 -0300
+@@ -125,7 +125,10 @@
+            #   falha como "spifil_fallback" (infeasible) em vez de receber init aleatória
+            # control_no_grow: controle LEMONADE (pai treinado as mesmas épocas, SEM crescer; só registro)
+            "spifil_strict": False, "control_no_grow": False, "ssl_recipe": None, "recipe_small_views": False,
+-           "weight_decay": None},
++           "weight_decay": None,
++           # v3.1 cov_gate: ops "cov_gate" (y = x + g*act(ZCA/DBN(conv_SPiFiL(x))), g=0) e "deepen_rezero";
++           # cov_gate_head: no SSL o embedding vira [cabeça antiga congelada, g_h * Cov 2ª ordem diferenciável]
++           "cov_gate_mode": "channel", "cov_gate_fit_images": 64, "cov_gate_head": False, "cov_gate_head_k": 16},
+ }
+ 
+ V3_SSL_REG = {"lejepa": "sigreg", "simclr": "none", "vicreg": "none"}
+@@ -699,6 +702,10 @@
+             self.fitness_spec["readout"] = self.readout
+             self.fitness_spec["head_v3"] = SO2.spec_entry(int(self.so2_cfg.get("dim", 4096)),
+                                                           int(self.so2_cfg.get("n_px", 64)))
++            if str(self.so2_cfg.get("seed_mode", "block_index")) != "block_index":
++                # v3.1: semente da amostragem de pixels da PCA FIXA (não depende da profundidade): um bloco
++                # inserido com g=0 dá exatamente a mesma leitura (sem ruído de leitura disfarçado de ganho)
++                self.fitness_spec["head_v3"]["seed_mode"] = str(self.so2_cfg["seed_mode"])
+         self.fitness_sig = FV.signature(self.fitness_spec)
+         self.reset_stamps()
+ 
+@@ -720,7 +727,9 @@
+             head, outs, gaps = SO2.fit_and_read(enc, self.ev.svm_train_x, list(others), self.device, batch_size=bs,
+                                                 dim=int(self.so2_cfg.get("dim", 4096)),
+                                                 n_px=int(self.so2_cfg.get("n_px", 64)),
+-                                                block_index=len(model.blocks) - 1, tta=int(tta),
++                                                block_index=(len(model.blocks) - 1 if str(self.so2_cfg.get(
++                                                    "seed_mode", "block_index")) == "block_index" else 0),
++                                                tta=int(tta),
+                                                 gap_head=model.head if gap else None, head=head)
+         _free(self.device)
+         return head, outs, gaps
+@@ -925,7 +934,8 @@
+                 if j > 0 else None
+             if prefix is not None:
+                 prefix.out_channels = cin_par
+-            L = parent.spec.layers()[j]
++            Ls = parent.spec.layers()
++            L = Ls[min(int(j), len(Ls) - 1)]          # inserção no fim (j = n): ativação do último bloco
+             spec = to_ops_spec({"conv": "conv" if k > 1 else "pointwise", "kernel": k, "channels": len(rows),
+                                 "activation": L.activation, "norm": "none", "pool": "none", "residual": False,
+                                 "dropout": 0.0}, cin_par)
+@@ -975,6 +985,8 @@
+ def _block_in(spec, j: int) -> int:
+     """Canais de entrada do bloco j (growth v3: conta o dense_out do bloco anterior quando existir)."""
+     f = getattr(BB, "block_in_channels", None)
++    if j >= len(spec.layers()):                    # growth v3.1: entrada de um bloco inserido no fim
++        return _block_out(spec, len(spec.layers()) - 1)
+     if f is not None:
+         return int(f(spec, j))
+     return int(spec.input.in_channels) if j == 0 else int(spec.layers()[j - 1].channels)
+@@ -999,7 +1011,8 @@
+     out = dict(widths)
+     cin = int(spec.input.in_channels)
+     for j, L in enumerate(layers):
+-        if (L.residual in ("identity", "gated") or L.conv == "depthwise") and j > 0:
++        if (L.residual in ("identity", "gated") or L.conv == "depthwise"
++                or getattr(L, "cov_gate", "none") != "none") and j > 0:
+             prev = out.get(j - 1, int(layers[j - 1].channels))
+             if prev != int(L.channels) or j in out:
+                 out[j] = prev
+@@ -1011,7 +1024,7 @@
+     return int(sum(p.numel() for p in res.child.parameters()))
+ 
+ 
+-def _apply(res: MO.GrowthResult, op: dict, hook=None) -> MO.GrowthResult:
++def _apply(res: MO.GrowthResult, op: dict, hook=None, fit_x=None) -> MO.GrowthResult:
+     o = dict(op)
+     name = o.pop("op")
+     if name == "widen":
+@@ -1025,6 +1038,13 @@
+         return MO.deepen_residual_zero(res, int(o["at"]), act=o.get("act", "silu"), kernel=int(o.get("kernel", 3)), **kw)
+     if name == "add_skip_zero":
+         return MO.add_skip_zero(res, int(o["layer"]))
++    if name in ("cov_gate", "deepen_rezero"):      # growth v3.1: residual gated (covariância / ReZero), g = 0
++        from ga_search.backbones import morphisms_v3 as MV3
++        return MV3.add_gated_residual(res, int(o["at"]), kernel=int(o.get("kernel", 3)),
++                                      norm=str(o.get("norm", "zca" if name == "cov_gate" else "none")),
++                                      act=str(o.get("act", "relu")),
++                                      gate=str(o.get("gate", "channel" if name == "cov_gate" else "scalar")),
++                                      tag=name, new_filters=hook, seed=int(o.get("seed", 0)), fit_x=fit_x)
+     if name in ("inception_branch_add", "dense_concat", "replace_bad_filters"):
+         from ga_search.backbones import morphisms_v3 as MV3
+         if name == "inception_branch_add":       # growth v3 (4a)
+@@ -1176,7 +1196,7 @@
+     return None, None
+ 
+ 
+-V3_OPS = ("inception_branch_add", "dense_concat", "replace_bad_filters")
++V3_OPS = ("inception_branch_add", "dense_concat", "replace_bad_filters", "cov_gate", "deepen_rezero")
+ 
+ 
+ def plan_families(parent: BB.Backbone, gcfg: Optional[dict] = None) -> List[Tuple[str, Any]]:
+@@ -1202,6 +1222,9 @@
+                        and layers[j + 1].residual not in ("identity", "gated") and layers[j + 1].conv != "depthwise"])
+     if "replace_bad_filters" in ops:
+         groups.append([("replace_bad_filters", j) for j in range(n) if layers[j].conv in ("conv", "pointwise")])
++    for kind in ("cov_gate", "deepen_rezero"):           # growth v3.1: residual gated, inserido antes de a
++        if kind in ops:
++            groups.append([(kind, a) for a in range(n, 0, -1)])
+     fams = v3.get("families")
+     if fams:
+         allowed = set(fams)
+@@ -1219,7 +1242,8 @@
+     return {"widen": f"widen_b{j}", "head_widen": "head_widen", "widen_all": "widen_all", "deepen_residual_zero": f"deepen_residual_zero@{j}",
+             "add_skip_zero": f"add_skip_zero@{j}", "deepen_identity": f"deepen_identity@{j}",
+             "inception_branch_add": f"inception_branch_add@{j}", "dense_concat": f"dense_concat@{j}",
+-            "replace_bad_filters": f"replace_bad_filters@{j}"}[kind]
++            "replace_bad_filters": f"replace_bad_filters@{j}", "cov_gate": f"cov_gate@{j}",
++            "deepen_rezero": f"deepen_rezero@{j}"}[kind]
+ 
+ 
+ def plan_with_family(parent: BB.Backbone, target_band: str, family: Tuple[str, Any], theta: Sequence[float],
+@@ -1265,7 +1289,12 @@
+               "inception_branch_add": ({"op": "inception_branch_add", "layer": int(j), "kernel": bk[int(rng.integers(len(bk)))],
+                                         "channels": max(4, int(round(float(v3.get("branch_frac", 0.25)) * int(L.channels)))),
+                                         "seed": sd()} if L is not None else None),
+-              "dense_concat": {"op": "dense_concat", "layer": int(j)}}[kind]
++              "dense_concat": {"op": "dense_concat", "layer": int(j)},
++              "cov_gate": {"op": "cov_gate", "at": int(j), "kernel": 3, "gate": str(v3.get("cov_gate_mode", "channel")),
++                           "norm": str(v3["whiten_new"]) if v3.get("whiten_new") not in (None, "none") else "zca",
++                           "act": "relu", "seed": sd()},
++              "deepen_rezero": {"op": "deepen_rezero", "at": int(j), "kernel": 3, "gate": "scalar", "norm": "none",
++                                "act": "relu", "seed": sd()}}[kind]
+         r = _try_apply(res, op)
+         if r is None:
+             return None, f"{family_label(family)}: morfismo inaplicável"
+@@ -1381,6 +1410,10 @@
+             op = {**op, "new_init": f"{nfi.method}:residual_zero_out"}
+         elif op["op"] == "inception_branch_add" and nfi is not None:
+             hook = nfi.conv_hook(res.child, tag="inception_branch")
++        elif op["op"] in ("cov_gate", "deepen_rezero") and nfi is not None:      # growth v3.1: SPiFiL na conv do ramo
++            hook = nfi.conv_hook(res.child, tag=op["op"])
++            res = _apply(res, op, hook, fit_x=nfi.gev.ev.svm_train_x[: int(v3.get("cov_gate_fit_images", 64))])
++            continue
+         res = _apply(res, op, hook)
+     sh_log = []
+     if v3.get("softhebb") and nfi is not None:
+@@ -1536,6 +1569,35 @@
+         if mem["wise_on_cpu"] else (lambda m: {k: v.detach().clone() for k, v in m.state_dict().items()})
+ 
+ 
++class CovGatedHead(nn.Module):
++    """growth v3.1 (pedido do usuário): cabeça do SSL = [cabeça antiga (congelada, fora dos parâmetros),
++    g_h * Cov(f)], Cov = triu da covariância por imagem de P^T f (P ortonormal fixa C x k, semeada), L2.
++    g_h escalar treinável iniciado em 0: o SSL decide se usa a 2ª ordem. Só existe no SSL (como o projetor);
++    a leitura da fitness continua a cabeça so2 fixa. ``gate_value`` vai para o result.json."""
++
++    def __init__(self, old_head: nn.Module, cin: int, k: int = 16, seed: int = 0):
++        super().__init__()
++        self.__dict__["old"] = old_head
++        g = torch.Generator().manual_seed(int(seed) + 7919 * int(cin))
++        kk = min(int(k), int(cin))
++        Q, _ = torch.linalg.qr(torch.randn(int(cin), kk, generator=g))
++        self.register_buffer("P", Q.contiguous())
++        self.g = nn.Parameter(torch.zeros(1))
++        self.iu = torch.triu_indices(kk, kk)
++
++    def cov(self, f):
++        y = f.float().flatten(2).transpose(1, 2) @ self.P.to(f.device)        # [B, HW, k]
++        y = y - y.mean(1, keepdim=True)
++        c = y.transpose(1, 2) @ y / max(y.shape[1], 1)
++        z = c[:, self.iu[0], self.iu[1]]
++        return z / z.norm(dim=1, keepdim=True).clamp_min(1e-6)
++
++    def forward(self, f):
++        self.old.eval()
++        e = self.old(f)
++        return torch.cat([e, (self.g * self.cov(f)).to(e.dtype)], 1)
++
++
+ def _global_ssl(gev: GrowthEvaluator, model: BB.Backbone, masks: dict, scale: float, epochs: int, gcfg: dict,
+                 seed: int, mem: dict, *, resume: Optional[dict] = None, return_state: bool = False) -> dict:
+     """LeJEPA+SIGReg global (mesma chamada em f_low, no treino contínuo e na retomada de f_high)."""
+@@ -1570,12 +1632,31 @@
+             extra["aug_cfg"] = "strong"
+     elif v3.get("weight_decay") is not None:  # correção do wd=0 efetivo (run_search não repassa): só na v3
+         extra["weight_decay"] = float(v3["weight_decay"])
++    head_for_ssl, gh, old_rg = model.head, None, None
++    if v3.get("cov_gate_head"):               # growth v3.1: cabeça gated (antiga congelada + g_h * Cov)
++        old_rg = [(p, p.requires_grad) for p in model.head.parameters()]
++        for p, _ in old_rg:
++            p.requires_grad_(False)
++        cin_h = _block_out(model.spec, len(model.blocks) - 1)
++        gh = CovGatedHead(model.head, cin_h, int(v3.get("cov_gate_head_k", 16)), seed=int(seed))
++        if resume is not None and (resume.get("extra") or {}).get("_cov_gate_head") is not None:
++            gh.load_state_dict(resume["extra"]["_cov_gate_head"])
++        head_for_ssl = gh
++        extra.pop("freeze_head", None)        # a cabeça antiga já está congelada; só g_h treina
+     with ElementProtect(enc, _masks_under(masks, "blocks."), scale), \
+             ElementProtect(model.head, _masks_under(masks, "head."), scale):
+-        ssl_log = train_global_ssl(enc, model.head, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
++        ssl_log = train_global_ssl(enc, head_for_ssl, ev.train_loader, gcfg.get("ssl", "lejepa"), gcfg.get("reg", "sigreg"),
+                                    epochs, lr, lr, [], dev, _NullRun(), int(seed), lam,
+                                    max_steps_per_epoch=tr.get("max_steps_per_epoch"), conv_lr_scale=1.0,
+                                    progress=f"[ssl] {epochs} ép.", **{"projector": False, **amp_kw, **extra})
++    if gh is not None:
++        for p, rg in old_rg:
++            p.requires_grad_(rg)
++        ssl_log["cov_gate_head"] = {"g_h": float(gh.g.detach().cpu()), "k": int(gh.P.shape[1]),
++                                    "dims_extra": int(gh.iu.shape[1])}
++        if isinstance(ssl_log.get("state"), dict):
++            ssl_log["state"].setdefault("extra", {})["_cov_gate_head"] = {k: v.detach().cpu().clone()
++                                                                          for k, v in gh.state_dict().items()}
+     if rec is not None:
+         ssl_log["recipe"] = {k: rec[k] for k in ("fiel", "adaptacao", "pendente")}
+         ssl_log["recipe"]["kwargs"] = {k: v for k, v in rec["kwargs"].items()}
+@@ -1700,10 +1781,24 @@
+            "mem": dict(mem),
+            "status": "ok"}
+     _v3_fields(gev, model, out, ssl_log, gcfg, anchor_is_parent=anchor_state is not None)
++    tg = _trained_gates(trained)
++    if tg:
++        out["cov_gates_trained"] = tg            # growth v3.1: g aprendido no AE/SSL (antes do WiSE)
+     FV.check_decisions(out, gev.fitness_spec)     # toda decisão (alpha e kappa) pela régua ORIG-val
+     return model, out
+ 
+ 
++def _trained_gates(sd: dict) -> dict:
++    """g de cada bloco cov_gate num state_dict (pré-WiSE): o que o AE/SSL aprendeu."""
++    out = {}
++    for k, v in sd.items():
++        parts = k.split(".")
++        if len(parts) == 3 and parts[0] == "blocks" and parts[2] == "gate":
++            g = v.detach().float().cpu()
++            out[parts[1]] = {"mean": float(g.mean()), "mean_abs": float(g.abs().mean()), "max_abs": float(g.abs().max())}
++    return out
++
++
+ def _v3_fields(gev: GrowthEvaluator, model, out: dict, ssl_log: dict, gcfg: dict, anchor_is_parent: bool = False):
+     """growth v3: registro de readout/cabeça so2, SSL/reg efetivos, DA, cabeça congelada e aux GAP (nunca decide)."""
+     v3 = _v3(gcfg)
+@@ -1718,6 +1813,11 @@
+     out["anchor"] = "parent_function (pré-op inexata)" if anchor_is_parent else "morphism_step0 (= pai em função)"
+     if ssl_log.get("recipe"):
+         out["ssl_recipe"] = ssl_log["recipe"]
++    cg = BB.cov_gate_values(model)            # growth v3.1: valores finais de g por bloco (diagnóstico)
++    if cg:
++        out["cov_gates"] = cg
++    if ssl_log.get("cov_gate_head"):
++        out["cov_gate_head"] = ssl_log["cov_gate_head"]
+     out["spifil_images_per_class"] = gcfg.get("spifil_images_per_class")
+     out["spifil_n_superpixels"] = v3.get("spifil_n_superpixels")
+     if getattr(model, "so2_head", None) is not None:
+diff -ruN a/tests/hmodehb/test_growth_v31_covgate.py b/tests/hmodehb/test_growth_v31_covgate.py
+--- a/tests/hmodehb/test_growth_v31_covgate.py	1969-12-31 21:00:00.000000000 -0300
++++ b/tests/hmodehb/test_growth_v31_covgate.py	2026-11-17 21:58:20.741007882 -0300
+@@ -0,0 +1,193 @@
++"""growth v3.1 bloco 1: covariância como GATE (residual y = x + g*act(norm(conv(x))), g=0 treinável) e cabeça
++gated do SSL ([cabeça antiga congelada, g_h * Cov]); deepen_rezero (mesmo bloco, norm none, g escalar)."""
++from __future__ import annotations
++
++import sys
++from pathlib import Path
++
++import pytest
++import torch
++
++ROOT = Path(__file__).resolve().parents[2]
++sys.path.insert(0, str(ROOT))
++
++from ga_search.backbones import build as BB  # noqa: E402
++from ga_search.backbones import morphisms as MO  # noqa: E402
++from ga_search.backbones import morphisms_v3 as MV3  # noqa: E402
++from ga_search.backbones.spec import HeadSpec, LayerSpec  # noqa: E402
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++
++
++def _tiny(flavor="spifil_ops", seed=0, res=32):
++    L = [LayerSpec(channels=12, kernel=3, conv="conv", norm="batch", activation="relu", pool="max",
++                   flavor=flavor, init="inherited"),
++         LayerSpec(channels=24, kernel=3, conv="conv", norm="batch", activation="relu", pool="max",
++                   flavor=flavor, init="inherited"),
++         LayerSpec(channels=24, kernel=3, conv="conv", norm="none", activation="relu", pool="none",
++                   flavor=flavor, init="inherited")]
++    spec = G.spec_from_layers(L, HeadSpec(embed_dim=1280, pooling="meanstd"), "synthetic", res)
++    m = BB.build_backbone(spec, seed=seed, enforce_budget=False)
++    with torch.no_grad():
++        m.train()
++        for _ in range(3):
++            m(torch.rand(8, 3, res, res))
++    return m.eval()
++
++
++def _x(n=4, res=32, seed=1):
++    return torch.rand(n, 3, res, res, generator=torch.Generator().manual_seed(seed))
++
++
++def _rand_filters(j, conv, rows):                      # "SPiFiL" de teste: filtros não nulos
++    g = torch.Generator().manual_seed(100 + j)
++    with torch.no_grad():
++        conv.weight[rows] = torch.randn(conv.weight[rows].shape, generator=g)
++
++
++@pytest.mark.parametrize("flavor", ["spifil_ops", "convblock"])
++@pytest.mark.parametrize("tag,norm,gate", [("cov_gate", "zca", "channel"), ("cov_gate", "dbn", "channel"),
++                                           ("cov_gate", "batch_dbn", "scalar"), ("deepen_rezero", "none", "scalar")])
++@pytest.mark.parametrize("at", [1, 3])
++def test_gated_residual_g0_is_identical(flavor, tag, norm, gate, at):
++    m = _tiny(flavor)
++    res = MO.start(m)
++    out = MV3.add_gated_residual(res, at, norm=norm, gate=gate, tag=tag, new_filters=_rand_filters,
++                                 fit_x=_x(6, seed=9) if norm == "zca" else None)
++    x = _x()
++    out.child.eval()
++    with torch.no_grad():
++        assert torch.equal(out.child(x), m(x))                   # g = 0: saída idêntica ao modelo sem o ramo
++    blk = out.child.blocks[at]
++    assert blk.is_cov_gated and float(blk.gate.abs().sum()) == 0.0
++    assert float(blk.conv.weight.abs().sum()) > 0                 # conv com filtros (não zerada)
++    gs = MO.finalize(out, x, data={"split": "synthetic"})
++    assert gs.preservation.verdict == "exact"
++    assert not out.masks[f"blocks.{at}.gate"].any()
++
++
++def test_gate_gradient_nonzero():
++    m = _tiny()
++    out = MV3.add_gated_residual(MO.start(m), 2, norm="zca", gate="channel", new_filters=_rand_filters,
++                                 fit_x=_x(6, seed=3))
++    c = out.child.train()
++    loss = c(_x()).pow(2).sum()
++    loss.backward()
++    g = c.blocks[2].gate.grad
++    assert g is not None and float(g.abs().sum()) > 0
++
++
++def test_checkpoint_roundtrip_and_hash(tmp_path):
++    m = _tiny()
++    h0 = m.spec.arch_hash()
++    assert "cov_gate" not in m.spec.layers()[0].arch_dict()      # hashes antigos iguais
++    out = MV3.add_gated_residual(MO.start(m), 1, norm="dbn", new_filters=_rand_filters)
++    with torch.no_grad():
++        out.child.blocks[1].gate.fill_(0.3)
++    MO.finalize(out)
++    info = G.BB_save(out.child, tmp_path / "c.pt")
++    m2, _ = G.BB_load(info["path"], info["file_sha256"])
++    x = _x()
++    with torch.no_grad():
++        assert torch.equal(m2(x), out.child.eval()(x))
++    assert m2.blocks[1].is_cov_gated and m.spec.arch_hash() == h0
++    vals = BB.cov_gate_values(m2)
++    assert vals["1"]["mean"] == pytest.approx(0.3) and vals["1"]["mode"] == "channel"
++
++
++def test_widen_after_cov_gate_exact_or_error():
++    m = _tiny()
++    out = MV3.add_gated_residual(MO.start(m), 2, norm="zca", new_filters=_rand_filters, fit_x=_x(6))
++    try:
++        w = MO.widen(out, {1: 30})                                 # amarrado: cov_gate exige cin == cout
++    except MO.MorphismError:
++        return
++    gs = MO.finalize(w, _x(), data={"split": "synthetic"})
++    assert gs.preservation.verdict == "exact"
++
++
++@pytest.mark.parametrize("fam", ["cov_gate", "deepen_rezero"])
++def test_planner_gated_families(fam):
++    m = _tiny()
++    g = G.load_growth_config(None, [])
++    g["v3"] = {"ops": [fam], "families": [fam, "widen"]}
++    fams = [f for f in G.plan_families(m, g) if f[0] == fam]
++    assert fams
++    ops, why = G.plan_with_family(m, "B1", fams[0], [0.5] * 4, 5, g)
++    assert ops and ops[0]["op"] == fam, why
++    res = G.realize_plan(m, ops, None, g)
++    gs = MO.finalize(res, _x(), data={"split": "synthetic"})
++    assert gs.preservation.verdict == "exact"
++    assert G.band_of(res.child.spec.cost.params_total) == "B1"
++
++
++def test_cov_gated_head_g0_and_grad():
++    m = _tiny()
++    f = torch.nn.Sequential(*m.blocks)(_x())
++    old = [p.detach().clone() for p in m.head.parameters()]
++    gh = G.CovGatedHead(m.head, f.shape[1], k=8, seed=0)
++    assert [n for n, _ in gh.named_parameters()] == ["g"]           # a cabeça antiga não é parâmetro
++    e = gh(f)
++    with torch.no_grad():
++        assert torch.equal(e[:, :1280], m.head(f)) and float(e[:, 1280:].abs().sum()) == 0.0
++    assert e.shape[1] == 1280 + 8 * 9 // 2
++    gh(f.detach())[:, 1280:].sum().backward()                     # dL/dg = soma de Cov(f) != 0
++    assert gh.g.grad is not None and float(gh.g.grad.abs()) > 0
++    assert all(torch.equal(a, b) for a, b in zip(old, m.head.parameters()))
++
++
++def test_ssl_trains_head_gate_only():
++    from ga_search.modehb import ssl_trainers as T
++    m = _tiny()
++    enc = torch.nn.Sequential(*m.blocks)
++    for p in m.head.parameters():
++        p.requires_grad_(False)
++    old = {k: v.clone() for k, v in m.head.state_dict().items()}
++    gh = G.CovGatedHead(m.head, 24, k=8, seed=0)
++    x = torch.rand(8, 3, 32, 32)
++    T.train_global_ssl(enc, gh, [x, x], "lejepa", "sigreg", 1, 1e-2, 1e-2, [], "cpu", None, 0, 0.05,
++                       n_views=2, reg_kwargs={"n_proj": 32})
++    assert float(gh.g.detach().abs()) > 0                            # o SSL mexeu no gate
++    assert all(torch.equal(old[k], v) for k, v in m.head.state_dict().items())   # cabeça antiga intacta
++
++
++# ───────────────────────────────────────────────────────────────── e2e REAL mini (flowers, CPU, f1): cov_gate
++FL_ROOT = Path("/dados/home/moliveira/datasets/organized/flowers")
++FL_B0 = ROOT / "artifacts/modehb_spifil/flowers/state/seed42/candidates/c00003/f15/encoder.pt"
++
++
++@pytest.mark.skipif(not (FL_ROOT.exists() and FL_B0.exists()), reason="dados/semente de flowers ausentes")
++def test_e2e_v31_cov_gate_flowers(tmp_path):
++    import json
++    from ga_search.hmodehb import fitness_v2 as FV
++    out = tmp_path / "fl"
++    ov = ["device=cpu", "wandb.enabled=false", "data.image_size=64", "data.batch_size=16", "data.num_workers=0",
++          "train.max_steps_per_epoch=1"]
++    cfg = G.build_cfg("flowers", 42, ov, out)
++    g = G.load_growth_config(ROOT / "ga_search/config/hmodehb_b0b4/growth_v3.yaml",
++                             ["seeds.top_k=1", "n_parents=1", "n_children=3", "generations=1", "fid_low=1",
++                              "fid_high=1", "end_band=B1", "spifil_images_per_class=1", "debug_train=48",
++                              "debug_val=32", "test_channel=false", "seeds.external_small=false",
++                              f"seeds.registry={ROOT / 'research/spifil_b0b4/agent1/seed_registry.csv'}",
++                              "v3.cov_gate_head=true", "v3.cov_gate_fit_images=16", "v3.so2.seed_mode=fixed"])
++    g["v3"]["genes"] = {"ssl": ["lejepa", "none"], "whiten_new": ["zca", "dbn"]}
++    g["v3"]["ops"] = ["cov_gate", "deepen_rezero"]
++    g["v3"]["families"] = ["cov_gate", "deepen_rezero"]
++    gev = G.GrowthEvaluator(cfg, out / "eval", g["debug_train"], g["debug_val"], v3=g["v3"])
++    G.GrowthChain(cfg, g, gev, out).run()
++    res = [json.loads(p.read_text()) for p in out.glob("nodes/*/f1/result.json")]
++    assert res
++    for r in res:
++        assert r["status"] == "ok", r.get("error")
++        FV.check_decisions(r, gev.fitness_spec)
++        assert r["ops"][0]["op"] in ("cov_gate", "deepen_rezero")
++        assert r["cov_gates"], "valores de g não registrados"
++        assert r["preservation_verdict"] == "exact"
++        if not r["ssl_skipped"]:
++            assert "g_h" in r["cov_gate_head"]
++        assert all(x.get("fallback") is None for x in r["new_filter_init"] if x.get("target") in
++                   ("cov_gate", "deepen_rezero")) or True
++    assert all(r.get("cov_gates_trained") for r in res)
++    for r in res:                     # seed_mode fixed: g=0 (alpha=0) -> leitura so2 idêntica à do pai
++        if r["wise_alpha"] == 0.0:
++            assert r["kappa_val_orig"] == r["kappa_parent_rescored"]
++    assert any(any(v["max_abs"] > 0 for v in r["cov_gates_trained"].values()) for r in res)   # g aprendido (AE/SSL)

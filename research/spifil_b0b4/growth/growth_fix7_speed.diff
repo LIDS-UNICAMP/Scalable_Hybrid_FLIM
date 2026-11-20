@@ -1,0 +1,285 @@
+diff --git a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+index f3f3516..e99342a 100644
+--- a/ga_search/hmodehb/growth_chain.py
++++ b/ga_search/hmodehb/growth_chain.py
+@@ -561,8 +561,8 @@ class GrowthEvaluator:
+         return sorted({FV.ruler_sig({"readout": r, "tta": 1, "solver": "libsvm", **st})
+                        for r in set(self.ev._readouts) for st in self.ev._svm_stamps})
+ 
+-    def score(self, model: BB.Backbone, embed_batch_size: Optional[int] = None) -> dict:
+-        from ga_search.modehb.run_search import _blas_threads
++    def features(self, model: BB.Backbone, embed_batch_size: Optional[int] = None):
++        """growth_fix7: parte GPU do ``score`` (leitura fp32 determinística) -> (train, val)."""
+         model.to(self.device)
+         enc = nn.Sequential(*model.blocks)
+         data = self.ev.cfg["data"]
+@@ -579,13 +579,58 @@ class GrowthEvaluator:
+                 else:
+                     data["batch_size"] = old_bs
+         _free(self.device)
+-        with _blas_threads(self.ev._fitness_speed()["svm_blas_threads"]):
+-            sv = self.ev._svm_score(*feats)
++        return feats
++
++    def svm(self, feats) -> dict:
++        """growth_fix7: parte CPU do ``score`` (a SVM do repo, inalterada: libsvm linear, C=100, sem scaler).
++        Sem o contexto de threads BLAS: quem chama abre ``_blas_threads`` (sequencial ou em lote)."""
++        sv = self.ev._svm_score(*feats)
+         if sv.get("nonfinite"):
+             raise FV.NonFiniteFitness("embedding não finito")
+         sv["embed_precision"] = self.embed_precision
+         return sv
+ 
++    def score(self, model: BB.Backbone, embed_batch_size: Optional[int] = None) -> dict:
++        from ga_search.modehb.run_search import _blas_threads
++        feats = self.features(model, embed_batch_size)
++        with _blas_threads(self.ev._fitness_speed()["svm_blas_threads"]):
++            return self.svm(feats)
++
++    def score_many(self, feats_list: Sequence) -> List[dict]:
++        """growth_fix7: as SVMs de várias leituras em PARALELO (threads; o fit do libsvm roda sem o GIL).
++        Cada fit é a mesma conta determinística do ``score`` sequencial (mesmos dados, mesma SVM, mesma
++        thread BLAS), então o resultado é idêntico; a ordem da saída é a da entrada.
++        Workers = ``eval.svm_fitness.svm_workers`` (padrão min(#leituras, threads do torch)), limitado pela RAM
++        (``svm_ram_gb``, como no ``run_search``)."""
++        from concurrent.futures import ThreadPoolExecutor
++        from ga_search.modehb.run_search import _blas_threads
++        feats_list = list(feats_list)
++        if not feats_list:
++            return []
++        sp = self.ev._fitness_speed(len(feats_list))
++        workers = self.ev._svm_workers_for(sp["svm_workers"], np.asarray(feats_list[0][0]))
++        with _blas_threads(sp["svm_blas_threads"]):
++            if workers <= 1 or len(feats_list) == 1:
++                return [self.svm(f) for f in feats_list]
++            with ThreadPoolExecutor(min(workers, len(feats_list)), thread_name_prefix="growth_svm") as ex:
++                return list(ex.map(self.svm, feats_list))
++
++    def score_parent(self, model: BB.Backbone, key: str) -> Tuple[dict, List[str]]:
++        """growth_fix7: re-score do pai com cache no processo por (sha256 do checkpoint, leitura, régua, split).
++        A leitura é determinística (fix4 a), então a 2ª vez daria o mesmo κ; aqui ela não é refeita.
++        Devolve (sv, decision_rulers) e deixa os carimbos como se o score tivesse rodado."""
++        ck = (str(key), self.embed_precision, self.fitness_sig, len(self.ev.val_y), len(self.ev.svm_train_y))
++        cache = self.__dict__.setdefault("_parent_cache", {})
++        self.reset_stamps()
++        if ck in cache:
++            sv, stamps, readouts = cache[ck]
++            self.ev._svm_stamps = [dict(x) for x in stamps]
++            self.ev._readouts = list(readouts)
++            return dict(sv, parent_rescore_cached=True), self.decision_rulers()
++        sv = self.score(model)
++        cache[ck] = (dict(sv), [dict(x) for x in self.ev._svm_stamps], list(self.ev._readouts))
++        return dict(sv, parent_rescore_cached=False), self.decision_rulers()
++
+     def spifil_cfg(self, seed: int) -> dict:
+         c = {**(self.cfg.get("spifil") or {}), "device": str(self.device), "seed": int(seed),
+              "image_size": int(self.cfg["data"].get("image_size", 224))}
+@@ -1072,11 +1117,17 @@ def _wise_select(gev: GrowthEvaluator, model: BB.Backbone, anchor: dict, trained
+     if not ssl_finite:                     # SSL não finito: só alpha=0 (= pai) é avaliado
+         alphas = [0.0]
+     gev.reset_stamps()
+-    best, kappas = None, {}
++    # growth_fix7: leituras (GPU) em sequência, depois as SVMs em paralelo (score_many); mesma ordem e mesma
++    # regra de desempate do laço sequencial -> mesmo alpha, mesmos kappas.
++    feats = []
+     for a in alphas:
+         _blend_into(model, anchor, trained, a)
+-        sv = gev.score(model, embed_batch_size=mem["embed_batch_size"])
++        feats.append(gev.features(model, embed_batch_size=mem["embed_batch_size"]))
+         _free(dev, mem["empty_cache"])
++    svs = gev.score_many(feats)
++    del feats
++    best, kappas = None, {}
++    for a, sv in zip(alphas, svs):
+         kappas[str(a)] = float(sv["kappa"])
+         if best is None or sv["quality"] > best[1]["quality"]:
+             best = (a, sv)
+@@ -1539,10 +1590,8 @@ class GrowthChain:
+             torch.cuda.reset_peak_memory_stats(dev)
+         pmodel, _ = BB_load(parent["checkpoint"], parent["checkpoint_sha256"])
+         # growth_fix4 (b): o pai é re-pontuado AQUI, na mesma leitura (fp32) e no mesmo processo do filho
+-        self.gev.reset_stamps()
+-        psv = self.gev.score(pmodel)
++        psv, parent_rulers = self.gev.score_parent(pmodel, parent["checkpoint_sha256"])   # growth_fix7: cache
+         parent_rescored = float(psv["kappa"])
+-        parent_rulers = self.gev.decision_rulers()
+         pmodel.cpu()                       # o score move para a GPU; realize_plan monta o filho na CPU
+         nfi = NewFilterInit(self.gev, self.g["init_method"], self.g.get("init_config") or {},
+                             int(self.g.get("spifil_images_per_class", 4)), seed)
+@@ -1895,6 +1944,11 @@ def parse_args(argv=None):
+ 
+ def main(argv=None):
+     from ga_search.modehb.run_search import _cap_cpu_threads
++    import faulthandler
++    import signal
++    # growth_fix7: `kill -USR1 <pid>` despeja a pilha Python de TODAS as threads no log (stderr) sem parar o
++    # processo -> diagnóstico de fase "parada" sem py-spy/ptrace (athena).
++    faulthandler.register(signal.SIGUSR1, all_threads=True, chain=False)
+     a = parse_args(argv)
+     ov = list(a.set) + ["wandb.enabled=false"]
+     if a.device:
+diff --git a/tests/hmodehb/test_growth_fix7.py b/tests/hmodehb/test_growth_fix7.py
+new file mode 100644
+index 0000000..fdea1f6
+--- /dev/null
++++ b/tests/hmodehb/test_growth_fix7.py
+@@ -0,0 +1,159 @@
++"""growth_fix7: SVMs do WiSE em paralelo (score_many) == sequencial; cache do re-score do pai; SIGUSR1."""
++from __future__ import annotations
++
++import sys
++import threading
++import time
++from pathlib import Path
++
++import numpy as np
++import pytest
++
++ROOT = Path(__file__).resolve().parents[2]
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
++from ga_search.hmodehb import growth_chain as G  # noqa: E402
++from ga_search.modehb.supervised_fitness import svm_fitness  # noqa: E402
++
++
++class _FakeEv:
++    """Só o que score/score_many/score_parent usam do HEvaluator; a SVM é a do repo (libsvm, C=100)."""
++
++    def __init__(self, ytr, yva, workers=5):
++        self.svm_train_y, self.val_y = ytr, yva
++        self._readouts, self._svm_stamps = [], []
++        self.workers = workers
++        self.n_features = 0
++        self.cfg = {"data": {}}
++
++    def _fitness_speed(self, n_alphas=1):
++        return {"svm_workers": max(1, min(n_alphas, self.workers)), "svm_blas_threads": 1}
++
++    def _svm_workers_for(self, workers, tr):
++        return workers
++
++    def _svm_features(self, enc, head):
++        self.n_features += 1
++        self._readouts.append("head")
++        return self._feats
++
++    def _svm_score(self, tr, va):
++        self._svm_stamps.append({"C": 100.0, "scaler": "none", "whiten": "none", "kappa_weight": 1.0,
++                                 "max_train": 4000})
++        return svm_fitness(tr, self.svm_train_y, va, self.val_y, C=100.0, scaler="none", whiten="none",
++                           kappa_weight=1.0, max_train=4000, seed=42)
++
++
++def _gev(ev):
++    g = G.GrowthEvaluator.__new__(G.GrowthEvaluator)
++    g.ev, g.embed_precision, g.fitness_sig = ev, "fp32_noautocast_notf32", "sig"
++    import torch
++    g.device = torch.device("cpu")
++    return g
++
++
++def _data(seed, n=600, nv=200, d=256, k=8):
++    rng = np.random.default_rng(seed)
++    mu = rng.normal(size=(k, d)) * 0.6
++    ytr, yva = rng.integers(0, k, n), rng.integers(0, k, nv)
++    tr = (mu[ytr] + rng.normal(size=(n, d))).astype(np.float32)
++    va = (mu[yva] + rng.normal(size=(nv, d))).astype(np.float32)
++    return tr, va, ytr, yva
++
++
++def _strip(sv):
++    return {k: v for k, v in sv.items() if k != "fit_s"}
++
++
++def test_score_many_equals_sequential():
++    tr, va, ytr, yva = _data(0)
++    ev = _FakeEv(ytr, yva)
++    g = _gev(ev)
++    feats = [(tr * (1 + 0.05 * i) + 0.01 * i, va * (1 + 0.05 * i) + 0.01 * i) for i in range(5)]
++    seq = [g.svm(f) for f in feats]
++    par = g.score_many(feats)
++    assert [_strip(a) for a in seq] == [_strip(b) for b in par]       # kappa/f1/quality bit a bit
++    assert len(ev._svm_stamps) == 10
++
++
++def test_score_many_runs_concurrently():
++    """libsvm solta o GIL: 5 fits em threads levam bem menos que 5x um fit."""
++    tr, va, ytr, yva = _data(1, n=1500, nv=300, d=512, k=20)
++    ev = _FakeEv(ytr, yva)
++    g = _gev(ev)
++    feats = [(tr + 0.001 * i, va + 0.001 * i) for i in range(5)]
++    t0 = time.perf_counter()
++    [g.svm(f) for f in feats]
++    t_seq = time.perf_counter() - t0
++    t0 = time.perf_counter()
++    g.score_many(feats)
++    t_par = time.perf_counter() - t0
++    assert t_par < 0.75 * t_seq, (t_seq, t_par)
++
++
++def test_workers_one_is_sequential():
++    tr, va, ytr, yva = _data(2)
++    ev = _FakeEv(ytr, yva, workers=1)
++    g = _gev(ev)
++    feats = [(tr, va), (tr * 1.1, va * 1.1)]
++    assert [_strip(a) for a in g.score_many(feats)] == [_strip(g.svm(f)) for f in feats]
++
++
++def test_wise_select_parallel_matches_sequential(monkeypatch):
++    """_wise_select (fix7) dá o mesmo alpha/kappas que o laço sequencial antigo (score por alpha)."""
++    import torch
++    tr, va, ytr, yva = _data(3)
++    ev = _FakeEv(ytr, yva)
++    g = _gev(ev)
++    blend = {"a": 0.0}
++
++    def fake_blend(model, anchor, trained, a):
++        blend["a"] = a
++
++    def fake_features(model, embed_batch_size=None):
++        a = blend["a"]
++        return (tr * (1 + a) + a * np.sin(np.arange(tr.shape[1], dtype=np.float32)), va * (1 + a)
++                + a * np.sin(np.arange(va.shape[1], dtype=np.float32)))
++
++    monkeypatch.setattr(G, "_blend_into", fake_blend)
++    monkeypatch.setattr(g, "features", fake_features)
++    model = torch.nn.Linear(1, 1)
++    alphas = [0.0, 0.25, 0.5, 0.75, 1.0]
++    best, kappas = G._wise_select(g, model, {}, {}, True, {"wise_alphas": alphas},
++                                  {"embed_batch_size": None, "empty_cache": False})
++    ref_best, ref = None, {}
++    for a in alphas:                                   # laço sequencial pré-fix7
++        blend["a"] = a
++        sv = g.svm(fake_features(model))
++        ref[str(a)] = float(sv["kappa"])
++        if ref_best is None or sv["quality"] > ref_best[1]["quality"]:
++            ref_best = (a, sv)
++    assert kappas == ref and best[0] == ref_best[0] and _strip(best[1]) == _strip(ref_best[1])
++
++
++def test_parent_rescore_cached():
++    import torch
++    tr, va, ytr, yva = _data(4)
++    ev = _FakeEv(ytr, yva)
++    ev._feats = (tr, va)
++    g = _gev(ev)
++    model = type("M", (), {})()
++    model.blocks = [torch.nn.Identity()]
++    model.head = torch.nn.Identity()
++    model.to = lambda dev: model
++    sv1, r1 = g.score_parent(model, "sha-A")
++    sv2, r2 = g.score_parent(model, "sha-A")
++    assert ev.n_features == 1                          # 2ª chamada não re-extrai nem re-ajusta
++    assert _strip({k: v for k, v in sv1.items() if k != "parent_rescore_cached"}) == \
++        _strip({k: v for k, v in sv2.items() if k != "parent_rescore_cached"})
++    assert r1 == r2 and sv2["parent_rescore_cached"] and not sv1["parent_rescore_cached"]
++    g.score_parent(model, "sha-B")                     # outro pai -> re-pontua
++    assert ev.n_features == 2
++
++
++def test_sigusr1_dumps_stacks():
++    import faulthandler
++    import signal
++    src = Path(G.__file__).read_text()
++    assert "faulthandler.register(signal.SIGUSR1, all_threads=True" in src

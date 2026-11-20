@@ -1,0 +1,15 @@
+diff -ruN a/ga_search/hmodehb/growth_chain.py b/ga_search/hmodehb/growth_chain.py
+--- a/ga_search/hmodehb/growth_chain.py	2026-11-17 11:31:09.295076905 -0300
++++ b/ga_search/hmodehb/growth_chain.py	2026-11-17 11:31:09.296076917 -0300
+@@ -554,8 +554,10 @@
+         prefix = nn.Sequential(*model.blocks[:j]).to(dev).eval()
+         prefix.out_channels = int(model.spec.input.in_channels) if j == 0 else int(model.spec.layers()[j - 1].channels)
+         blk = model.blocks[j]
++        # growth_mem2: checkpoint do bloco novo no AE local (mesmos parâmetros/ordem; BN/DBN 1x; bit a bit)
++        ae_blk = _CkptSequential(blk) if mem["grad_checkpoint"] else blk
+         with ElementProtect(blk, _masks_under(masks, f"blocks.{j}."), scale):
+-            ae = train_local_ae(prefix, blk, ev.train_loader, gcfg.get("ae_target", "pixel"), ae_ep,
++            ae = train_local_ae(prefix, ae_blk, ev.train_loader, gcfg.get("ae_target", "pixel"), ae_ep,
+                                 float(gcfg.get("lr_ae", tr.get("lr_ae", 1e-3))), dev, run, int(seed) + j,
+                                 conv_lr_scale=1.0, decoder_warmup_frac=M.AE_WARMUP_FRAC[gcfg.get("ae_schedule", "joint")],
+                                 **_amp_kw(ev))
