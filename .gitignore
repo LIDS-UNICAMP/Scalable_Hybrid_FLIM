@@ -180,3 +180,12 @@ ga_search/modehb/reports/watchdog_status.json
 ga_search/modehb/reports/all_results_today.md
 ga_search/modehb/reports/results_from_mds.md
 ga_search/modehb/reports/parts/sec_resultados_mds.md
+
+# higiene 20/11 (organizacao do git): caches, logs, travas e backups locais tambem ficam fora
+*.npz
+cache/
+data_cache/
+mlruns/
+*.bak*
+*.stash_*
+*.jaci_ff_*
