@@ -66,7 +66,7 @@ from __future__ import annotations
 # Alias privado de proposito: PROJECT_ROOT e nome do global e nao pode ser
 # reexportado daqui (nao pode existir `experiments.constants.PROJECT_ROOT`,
 # senao ha duas moradas para o mesmo nome).
-from core.constants import PROJECT_ROOT as _PROJECT_ROOT
+from core.constants import ORGANIZED, PROJECT_ROOT as _PROJECT_ROOT
 
 # ─── Datasets ─────────────────────────────────────────────────────────────────
 
@@ -75,6 +75,7 @@ PARASITE_DIR: dict[str, str] = {
     "eggs":      "helminth-eggs",
     "larvae":    "helminth-larvae",
     "protozoan": "protozoan-cysts",
+    **{name: name for name in ORGANIZED},
 }
 
 # Longo -> curto: o inverso de PARASITE_DIR, escrito por extenso porque este
@@ -85,6 +86,7 @@ DATASET_LONG_TO_SHORT: dict[str, str] = {
     "helminth-eggs":   "eggs",
     "helminth-larvae": "larvae",
     "protozoan-cysts": "protozoan",
+    **{name: name for name in ORGANIZED},
 }
 
 # Toda grafia que aparece em nome de arquivo -> curto. E a uniao de

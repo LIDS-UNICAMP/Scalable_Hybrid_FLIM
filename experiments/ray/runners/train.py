@@ -41,7 +41,8 @@ import sys
 
 import ray
 
-from core.constants import DEFAULT_CONFIG_YAML, OMP_ENV_VAR, PROJECT_ROOT
+from core.constants import (DEFAULT_CONFIG_YAML, NUM_CLASSES, OMP_ENV_VAR, ORGANIZED,
+                            PROJECT_ROOT)
 from experiments.constants import (
     CUDA_ENV_VAR,
     STDERR_TRUNCATE_HEAD,
@@ -81,6 +82,11 @@ def build_cmd(exp: Experiment, point: dict) -> list[str]:
     Os tres `--config` vao na ordem global -> dataset -> modelo porque o
     LightningCLI resolve chave a chave e o ultimo vence.
     """
+    dataset = point["dataset"]
+    # dataset de organized/ vem nos configs de helminth-eggs (paths._config_dataset)
+    organized = [f"--data.init_args.parasite_name={dataset}",
+                 f"--model.init_args.dataset={dataset}",
+                 f"--model.init_args.num_classes={NUM_CLASSES[dataset]}"] if dataset in ORGANIZED else []
     return [
         sys.executable, ENTRYPOINT, "fit",
         "--config", DEFAULT_CONFIG_YAML,
@@ -93,6 +99,7 @@ def build_cmd(exp: Experiment, point: dict) -> list[str]:
         # 1 = a UNICA GPU visivel, que e a gpu_id do CUDA_VISIBLE_DEVICES do env
         # do filho. Nunca "a GPU 1".
         "--trainer.devices=1",
+        *organized,
         *[f"--{key}={value}" for key, value in exp.overrides.items()],
         *([] if exp.evaluate.SVM else ["--model.init_args.svm_probe=false"]),
     ]

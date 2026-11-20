@@ -116,9 +116,9 @@ import os
 import ray
 
 from core.constants import (ARCH_JSON_FILENAME, CHECKPOINTS_SUBDIR,
-                            DEFAULT_CPUS_PER_EXPERIMENT, FLIM_ARCH_BASE,
-                            FLIM_WEIGHTS_BASE, KAPPA_TOLERANCE, MODELS_SUBDIR,
-                            OMP_ENV_VAR, RUN_METADATA_FILENAME)
+                            DEFAULT_CPUS_PER_EXPERIMENT, EPOCH_METRICS_FILENAME,
+                            FLIM_ARCH_BASE, FLIM_WEIGHTS_BASE, KAPPA_TOLERANCE,
+                            MODELS_SUBDIR, OMP_ENV_VAR, RUN_METADATA_FILENAME)
 from experiments.constants import CUDA_ENV_VAR, DATASET_LONG_TO_SHORT
 from experiments.ray.runners.train import _run, build_cmd
 from experiments.ray.schema import Experiment
@@ -153,7 +153,9 @@ GROW_KNOBS: tuple[str, ...] = (
     "image_size", "imagenet_norm", "spifil_in_image", "spifil_in_feature",
     "impurities", "one_per_class", "random_layer", "random_layer_classic",
     "seed", "paper_classes", "superpixels", "budget_check", "whiten",
-    "patch_norm", "select_diverse", "knn_smooth", "images_per_class",
+    "patch_norm", "select_diverse", "knn_smooth", "images_per_class", "no_crop",
+    "seed_point", "redundancy_cos", "redundancy_corr", "redundancy_replace",
+    "redundancy_merge_seeds",
 )
 
 
@@ -253,6 +255,23 @@ def stage_cmd(exp: Experiment, point: dict, name: str, arch: str, weights: str,
         f"--trainer.logger.init_args.save_dir={stage_dir}",
         f"--trainer.default_root_dir={stage_dir}",
     ]
+    # `image_size` e `no_crop` valem para o grow, os dados e o decoder ao mesmo tempo
+    if "image_size" in exp.runner_args:
+        cmd += [f"--data.init_args.image_size={exp.runner_args['image_size']}",
+                f"--model.init_args.image_size={exp.runner_args['image_size']}"]
+    if exp.runner_args.get("no_crop"):
+        cmd.append("--data.init_args.no_crop=true")
+    if "image_cache_dir" in exp.runner_args:
+        cmd.append(f"--data.init_args.image_cache_dir={exp.runner_args['image_cache_dir']}")
+    # blocos do YAML, que `overrides` nao aceita: viajam como JSON para o hparam dict;
+    # `aug_by_dataset: {base: {...}}` substitui o parasite_aug daquela base
+    blocks = exp.runner_args | ({"parasite_aug": exp.runner_args["aug_by_dataset"][point["dataset"]]}
+                                if point["dataset"] in exp.runner_args.get("aug_by_dataset", {}) else {})
+    for key in ("train_aug", "reg_loss", "lejepa", "parasite_aug"):
+        if key in blocks:
+            cmd.append(f"--model.init_args.{key}={json.dumps(blocks[key])}")
+    if "probe_max_dim" in exp.runner_args:
+        cmd.append(f"--model.init_args.probe_max_dim={exp.runner_args['probe_max_dim']}")
     if exp.method == IJEPA_GROW_METHOD:
         # conv1..conv{old_layers} treinam com lr * old_layer_lr_scale; nada congela
         cmd += ["--model.init_args.freeze_encoder_flag=false",
@@ -272,6 +291,28 @@ def stage_cmd(exp: Experiment, point: dict, name: str, arch: str, weights: str,
         cmd.append(f"--model.init_args.init_ckpt={init_ckpt}")
     if fresh_decoder:
         cmd.append("--model.init_args.fresh_decoder=true")
+    # `ckpt_by: val_kappa`: best_kappa.ckpt = melhor kappa da sonda de validacao (best_by_probe)
+    if exp.runner_args.get("ckpt_by") == "val_kappa":
+        cmd.append("--model.init_args.best_by_probe=true")
+        if "model.init_args.epoch_probe" not in exp.overrides:
+            cmd.append(f"--model.init_args.epoch_probe={exp.runner_args.get('embed_mode', 'gem')}")
+    # `early_stop_patience`: a lista de callbacks do ultimo --config que a tem, so com a
+    # patience do EarlyStopping trocada (o modulo reaproveita essa patience no seu monitor)
+    if "early_stop_patience" in exp.runner_args:
+        import yaml
+        configs = [cmd[i + 1] for i, a in enumerate(cmd) if a == "--config"]
+        callbacks = []
+        for path in configs:
+            with open(path, encoding="utf-8") as f:
+                callbacks = (yaml.safe_load(f).get("trainer") or {}).get("callbacks") or callbacks
+        for cb in callbacks:
+            if cb["class_path"].endswith("EarlyStopping"):
+                cb["init_args"]["patience"] = exp.runner_args["early_stop_patience"]
+        cmd.append(f"--trainer.callbacks={json.dumps(callbacks)}")
+    # `epochs_by_dataset`: orcamento de passos por base; o L0 (1 epoca) vem depois e vence
+    epochs = exp.runner_args.get("epochs_by_dataset", {}).get(point["dataset"])
+    if epochs:
+        cmd += [f"--trainer.max_epochs={epochs}", f"--model.init_args.max_epochs={epochs}"]
     return cmd
 
 
@@ -302,6 +343,38 @@ def _grow_once(exp: Experiment, point: dict, gpu_id: int, ckpt: str, arch: str,
                 device=device, **knobs)
 
 
+def _export_flim(ckpt: str, arch: str, out: str) -> str:
+    """Encoder treinado do `ckpt` em formato FLIM (convN-kernels.npy/bias.txt + architecture.json)."""
+    import shutil
+    import numpy as np
+    import torch
+    from flim.spifil import flim_kernels
+    sd = torch.load(ckpt, map_location="cpu", weights_only=False)["state_dict"]
+    os.makedirs(out, exist_ok=True)
+    shutil.copy2(arch, os.path.join(out, ARCH_JSON_FILENAME))
+    with open(arch, encoding="utf-8") as f:
+        layers = json.load(f)
+    for n in range(1, layers["nlayers"] + 1):
+        pre = f"model.encoder.blocks.conv{n}.0."  # o conv e o [0] do bloco (BN entra em [1])
+        ramos = layers[f"layer{n}"]["conv"].get("branches")
+        weight, bias = (None, None) if ramos else (sd[pre + "weight"], sd[pre + "bias"])
+        if ramos:  # Inception (flim.arch.Branches): volta ao KxK do maior kernel, zeros em volta
+            big = max(r["kernel_size"] for r in ramos)
+            weight = torch.cat([torch.nn.functional.pad(sd[f"{pre}{i}.weight"], [(big - r["kernel_size"]) // 2] * 4)
+                                for i, r in enumerate(ramos)])
+            bias = torch.cat([sd[f"{pre}{i}.bias"] for i in range(len(ramos))])
+        np.save(os.path.join(out, f"conv{n}-kernels.npy"), flim_kernels(weight))
+        bias = bias.numpy()
+        with open(os.path.join(out, f"conv{n}-bias.txt"), "w", encoding="utf-8") as f:
+            f.write(f"{len(bias)}\n" + " ".join(f"{b:.8f}" for b in bias) + "\n")
+        # `layerwise_spf.whiten_between`: o flim.arch.Whiten do fim do bloco n-1 volta como conv{n}-whiten.npz
+        shift = [k for k in sd if k.startswith(f"model.encoder.blocks.conv{n - 1}.") and k.endswith(".shift")]
+        if shift:
+            np.savez(os.path.join(out, f"conv{n}-whiten.npz"), shift=sd[shift[0]].numpy(),
+                     gain=sd[shift[0].removesuffix("shift") + "gain"].numpy())
+    return out
+
+
 def run_arm(exp: Experiment, point: dict, gpu_id: int,
             cpus: int = DEFAULT_CPUS_PER_EXPERIMENT, dry_run: bool = False) -> dict:
     """A cadeia sequencial inteira de UM braco, presa a `gpu_id` do inicio ao fim."""
@@ -322,9 +395,9 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
 
     def train(name: str, arch: str, weights: str, freeze: bool = False,
               init_ckpt: str = "", head: bool = False, fresh_decoder: bool = False,
-              old_layers: int = 0) -> str:
+              old_layers: int = 0, extra: tuple = ()) -> str:
         cmd = stage_cmd(exp, point, name, arch, weights, freeze, init_ckpt, head,
-                        fresh_decoder, old_layers)
+                        fresh_decoder, old_layers) + list(extra)
         if dry_run:
             plan.append(cmd)
         else:
@@ -341,16 +414,27 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                           key=os.path.getmtime)
             if not runs:
                 _die(f"{name}: nenhum {RUN_METADATA_FILENAME} em {stage_dir}")
-            for item in (CHECKPOINTS_SUBDIR, RUN_METADATA_FILENAME):
+            for item in (CHECKPOINTS_SUBDIR, RUN_METADATA_FILENAME, EPOCH_METRICS_FILENAME):
                 link = os.path.join(stage_dir, item)
                 if os.path.islink(link):
                     os.remove(link)
-                os.symlink(os.path.join(os.path.dirname(runs[-1]), item), link)
+                target = os.path.join(os.path.dirname(runs[-1]), item)
+                if os.path.exists(target):
+                    os.symlink(target, link)
         return os.path.join(_stage_dir(exp, point, name), CHECKPOINTS_SUBDIR,
                             BEST_CKPT_FILENAME)
 
     arch, weights = _paths(point)
+    init_dir = exp.runner_args.get("init_flim_dir")
+    if isinstance(init_dir, dict):  # um diretorio por base: {dataset: dir}
+        init_dir = init_dir[point["dataset"]]
+    if init_dir:  # encoder montado fora (ex.: receita do spf_grade, `amostra.salvar_encoder`)
+        weights = os.path.join(init_dir, f"{point['dataset']}_split{point['split']}_pct{point['percentage']}")
+        arch = os.path.join(weights, ARCH_JSON_FILENAME)
     layerwise = exp.runner_args.get("layerwise", 0)
+    if layerwise == "auto" and init_dir:  # profundidade do encoder pronto: nlayers do architecture.json dele
+        with open(arch, encoding="utf-8") as f:
+            layerwise = json.load(f)["nlayers"]
     if layerwise:
         # Camada por camada: L1 nasce da imagem, cada Lk das features de L1..L(k-1) ja
         # treinadas; so Lk aprende, contra um decoder novo. O arch FLIM e so o molde.
@@ -359,20 +443,30 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
         try:
             # `layer_channels` e `kernel_size` do YAML trocam a config do artigo (16/32/48, k3)
             # pela de outro encoder, ex. o FLIM de data/ (24/32/48/48/48, k5).
-            widths = exp.runner_args.get("layer_channels", [w for w, _ in LAYERWISE_SPECS])
+            # alem das 5 de LAYERWISE_SPECS, cada camada repete a ultima
+            default = (LAYERWISE_SPECS + LAYERWISE_SPECS[-1:] * layerwise)[:layerwise]
+            widths = exp.runner_args.get("layer_channels", [w for w, _ in default])
             # `layer_kernels` da o kernel de cada camada (ex. 5,5,5,1,1); sem ela, `kernel_size` em todas
             kernels = exp.runner_args.get(
-                "layer_kernels", [exp.runner_args.get("kernel_size", 3)] * len(LAYERWISE_SPECS))
+                "layer_kernels", [exp.runner_args.get("kernel_size", 3)] * layerwise)
             # `layer_pools` da o stride do max-pool de cada camada (1 = sem pooling);
             # `layer_dilations` a dilation da conv. Sem elas, LAYERWISE_SPECS e dilation 1
-            pools = exp.runner_args.get("layer_pools", [s for _, s in LAYERWISE_SPECS])
-            dilations = exp.runner_args.get("layer_dilations", [1] * len(LAYERWISE_SPECS))
-            specs = list(zip(widths, pools))
+            pools = exp.runner_args.get("layer_pools", [s for _, s in default])
+            dilations = exp.runner_args.get("layer_dilations", [1] * layerwise)
+            # `layer_branches` [null | [kernels]] por camada: Inception, um SPiFiL por ramo (so com layerwise_spf),
+            # largura de cada ramo = layer_channels / n de ramos; o kernel dessa camada em layer_kernels e 0
+            branches = exp.runner_args.get("layer_branches", [None] * layerwise)
+            specs = list(zip(widths, pools, strict=True))
             # `layerwise_from_flim: n`: L1..Ln sao o FLIM de partida (_paths), sem grow;
             # o primeiro estagio `L{n}` treina essas n e o grow recomeca em L{n+1}
             start = exp.runner_args.get("layerwise_from_flim", 0)
+            start = layerwise if start == "auto" else start
             ijepa = exp.method == IJEPA_GROW_METHOD
             if start:
+                if init_dir:  # L0: o encoder de partida intacto (lr 0, 1 epoca), para a leitura da epoca 0
+                    train("L0", arch, weights, extra=["--trainer.max_epochs=1", "--model.init_args.max_epochs=1",
+                                                      "--model.init_args.lr=0.0",
+                                                      "--model.init_args.best_by_probe=false"])
                 ckpt = train(f"L{start}", arch, weights)
                 if not dry_run and exp.evaluate.SVM:
                     rows.append((str(start), f"L{start}",
@@ -381,7 +475,22 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                 if k <= start:
                     continue
                 grow_dir = _stage_dir(exp, point, f"L{k}_grow")
-                if dry_run:
+                # soma pede largura exata: 0 = a da entrada (grow), o que faltar vem aleatorio
+                same = (bool(exp.overrides.get("model.init_args.residual_gain"))
+                        and k > 1 and width == widths[k - 2] and stride == 1)
+                spf = exp.runner_args.get("layerwise_spf")
+                if spf and not exp.runner_args.get("random_layer_classic") and not dry_run:
+                    # SPiFiL so da camada k sobre o encoder 1..k-1 ja treinado, no lugar do grow
+                    from eval.spf_grade import montar_camada
+                    enc = _export_flim(ckpt, arch, _stage_dir(exp, point, f"L{k - 1}_flim")) if ckpt else weights
+                    montar_camada(enc, k, {**spf, "dataset": point["dataset"], "split": point["split"],
+                                           "percentage": point["percentage"], "out_channels": width,
+                                           "kernel_size": kernels[k - 1], "pool_stride": stride}
+                                 | ({"branches": [[kb, width // len(branches[k - 1])] for kb in branches[k - 1]]}
+                                    if branches[k - 1] else {}), grow_dir)
+                    import torch
+                    torch.cuda.empty_cache()  # sem isso o cache do montar_camada (~22 GB no Q1) fica no worker Ray durante o treino
+                elif dry_run:
                     plan.append(["<in-process>", "flim.spifil.grow", f"--out={grow_dir}",
                                  f"--out_channels={width}", f"--pool_stride={stride}",
                                  f"--ckpt={ckpt}"]
@@ -390,10 +499,10 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                                 + ([f"--dilation={dilations[k - 1]}"]
                                    if "layer_dilations" in exp.runner_args else []))
                 elif _grow_once(exp, point, gpu_id, ckpt, arch, weights, grow_dir,
-                                out_channels=width, kernel_size=kernels[k - 1],
+                                out_channels=0 if same else width, kernel_size=kernels[k - 1],
                                 pool_stride=stride, dilation=dilations[k - 1],
-                                fill_random=k == layerwise
-                                and exp.runner_args.get("fill_random_last", False)) == GROW_EXHAUSTED:
+                                fill_random=same or (k == layerwise
+                                and exp.runner_args.get("fill_random_last", False))) == GROW_EXHAUSTED:
                     result["reason"] = f"spifil grow recusou L{k}: N <= D"
                     break
                 arch, weights = os.path.join(grow_dir, ARCH_JSON_FILENAME), grow_dir
@@ -404,6 +513,9 @@ def run_arm(exp: Experiment, point: dict, gpu_id: int,
                     continue
                 if prev and not ijepa and "layerwise_backprop" not in exp.runner_args:
                     _assert_frozen(prev, ckpt, k - 1)
+                # `unfreeze_phase`: L{k}_ft solta tudo a partir de L{k} (mesmo decoder) e vira a base de k+1
+                if exp.runner_args.get("unfreeze_phase"):
+                    ckpt = train(f"L{k}_ft", arch, weights, init_ckpt=ckpt)
                 if exp.evaluate.SVM:
                     rows.append((str(k), f"L{k}", _kappa(_stage_dir(exp, point, f"L{k}"))))
         except RuntimeError as exc:

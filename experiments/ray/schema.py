@@ -32,6 +32,8 @@ from typing import Any
 
 import yaml
 
+from core.constants import ORGANIZED
+
 # experiments/ray/schema.py -> parents[2] e a raiz do repo
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # pasta consultada por os.path.isdir para validar `method`
@@ -44,7 +46,7 @@ PERCENTAGES = (1, 5, 25, 50, 75, 100)
 RUNNERS = ("train", "growth", "eval")
 SKIP_MODES = ("none", "state", "wandb")
 # de onde o runner `eval` tira os checkpoints que vai avaliar
-EVAL_SOURCES = ("mlp_configs", "distillation", "growth_stages")
+EVAL_SOURCES = ("mlp_configs", "distillation", "growth_stages", "l1_fast", "l1_amostras", "l1_sem_rotulo", "spf_grade", "alt_encoders")
 
 # chaves aceitas em runner_args, por runner; qualquer outra e erro
 RUNNER_ARGS: dict[str, tuple[str, ...]] = {
@@ -85,6 +87,33 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         "grow_impl",
         # so na ULTIMA camada do layerwise: o SPiFiL da o que conseguir, o resto ate a largura e aleatorio
         "fill_random_last",
+        # letterbox no lugar de Resize + CenterCrop, no grow e nos dados
+        "no_crop",
+        # raiz do cache de tools/build_image_cache.py, so para o treino: o grow le o original
+        "image_cache_dir",
+        # ponto representativo do superpixel e poda de kernels redundantes (flim/spifil.py grow)
+        "seed_point", "redundancy_cos", "redundancy_corr", "redundancy_replace",
+        "redundancy_merge_seeds",
+        # blocos: augmentation de treino (core/data/train_aug.py) e regularizador em z
+        "train_aug", "reg_loss",
+        # perda LeJEPA no lugar da reconstrucao (AutoEncoderFlimModule.lejepa); vistas do train_aug
+        "lejepa",
+        # epocas por base ({dataset: n}), por cima de overrides; o estagio L0 continua 1 epoca
+        "epochs_by_dataset",
+        # encoder pronto em formato FLIM (<dir>/<dataset>_split<s>_pct<p>/), no lugar do FLIM de data/;
+        # com layerwise_from_flim treina todas as camadas juntas e guarda o estagio L0 (lr 0, 1 epoca)
+        "init_flim_dir",
+        # layerwise: fase L{k}_ft sem congelar, ckpt por kappa de validacao, camada k via spf_grade.montar_camada
+        "unfreeze_phase", "ckpt_by", "layerwise_spf",
+        # patience do EarlyStopping de cada estagio (monitor = o do modulo; com ckpt_by, o kappa)
+        "early_stop_patience",
+        # augmentation de parasito (flip|hflip/vflip, rot90, bc) do AutoEncoderFlimModule;
+        # aug_by_dataset {base: {...}} troca o parasite_aug daquela base
+        "parasite_aug", "aug_by_dataset",
+        # teto inclusivo de dimensoes da sonda por epoca (modulo: padrao 1999)
+        "probe_max_dim",
+        # layerwise_spf: [null | [kernels dos ramos]] por camada = camada Inception (flim.arch.Branches)
+        "layer_branches",
     ),
     # `source` escolhe a varredura; as 4 seguintes so fazem sentido nas fontes
     # que varrem artifacts/ (distillation, growth_stages)
@@ -92,8 +121,73 @@ RUNNER_ARGS: dict[str, tuple[str, ...]] = {
         "probe", "freeze", "ckpt_selection",
         "source", "artifacts_dir", "run_filter", "family", "stages",
         "require_status_ok", "results_csv", "embed_mode", "eval_set", "svm_train_pct",
+        # os mesmos do treino: a leitura tem que ver a geometria que o encoder viu
+        "image_size", "no_crop", "image_cache_dir",
+        # source l1_fast (eval/l1_fast.py): so a L1 SPiFiL, sem treino; um job por tamanho.
+        # `l1_random`: n_superpixels em que tambem roda o controle de filtros aleatorios
+        # `l1_readouts`: gem_tta_pw (oficial) e gem_pw; onde o SVM e caro, so a oficial
+        "l1_sizes", "l1_superpixels", "l1_grow", "l1_random", "l1_readouts",
+        # source l1_amostras (eval/l1_amostras.py): k imagens por classe x largura, sem backprop
+        "amostra",
     ),
 }
+
+
+# runner_args.amostra.encdeep (eval/encdeep.py, A_reports/november/encdeep): L4/L5 sem rotulo e sem backprop.
+# Cada mecanismo vira tag do braco; `~nw` tira o whitening das camadas encdeep. None = valor simples.
+ENCDEEP_MECHS = ("z0", "hebb", "clapp", "clapp2", "sfa", "sfa0", "fu")
+ENCDEEP_KEYS = {
+    "kernels": None, "dilacao": None, "camadas": None, "geometrias": None, "mecanismos": None,
+    "salvar": None, "erros": None, "dim_eq": None,
+    "vistas": ("l_jitter", "ab_jitter"),
+    "hebb": ("steps", "batch", "images", "lr", "inv_temp", "delta_norm", "init_radius"),
+    "clapp": ("steps", "batch", "images", "lr", "lr_p", "p_init"),
+    "sfa": ("steps", "batch", "images", "lentos", "residuo", "tol", "piso_rms"),
+    "fu": ("steps", "batch", "images", "lam_frac", "dead_frac"),
+}
+ENCDEEP_NEEDS = {"hebb": ("lr", "inv_temp"), "clapp": ("lr", "lr_p"), "sfa": ("lentos",), "fu": ()}
+
+
+def check_encdeep(amostra: dict) -> None:
+    """Chave ou mecanismo desconhecido falha aqui, nao em silencio no `spf_grade`."""
+    section, deep, depth = "runner_args.amostra.encdeep", amostra["encdeep"], amostra.get("depth")
+    if not isinstance(deep, dict):
+        raise ValueError(f"{section}: esperava mapeamento, veio {deep!r}")
+    _check_keys(section, deep, ENCDEEP_KEYS)
+    for name in ("kernels", "dilacao"):
+        if name in deep and (not isinstance(deep[name], list) or len(deep[name]) != depth):
+            raise ValueError(f"{section}.{name}: esperava lista de {depth} (amostra.depth), veio {deep[name]!r}")
+    if "kernels" not in deep or not isinstance(deep.get("mecanismos"), list) or not deep["mecanismos"]:
+        raise ValueError(f"{section}: exige kernels e mecanismos (lista nao vazia)")
+    for entry in deep["mecanismos"]:
+        mech, *rest = str(entry).split("~")
+        if mech not in ENCDEEP_MECHS or set(rest) - {"nw"}:
+            raise ValueError(f"{section}.mecanismos: {entry!r} invalido; mecanismos {list(ENCDEEP_MECHS)}, sufixo so ~nw")
+        sub = mech.rstrip("02")
+        if sub in ENCDEEP_NEEDS:
+            need = ("steps", "batch", "images", *ENCDEEP_NEEDS[sub])
+            missing = [k for k in need if k not in deep.get(sub, {})]
+            if missing:
+                raise ValueError(f"{section}.{sub}: {entry!r} exige {missing}")
+    for name, keys in ENCDEEP_KEYS.items():
+        if keys and name in deep:
+            _check_keys(f"{section}.{name}", deep[name], keys)
+    if deep.get("clapp", {}).get("batch", 2) < 2:
+        raise ValueError(f"{section}.clapp.batch: o negativo e a imagem vizinha do lote, precisa >= 2")
+    geos = deep.get("geometrias", ["g0"])
+    if not isinstance(geos, list) or set(geos) - {"g0", "g1", "g2"} or (set(geos) - {"g0"} and (depth or 0) < 5):
+        raise ValueError(f"{section}.geometrias: {geos!r}; validas g0, g1, g2 (g1/g2 exigem depth >= 5)")
+    layers = deep.get("camadas", [4, 5])
+    if not isinstance(layers, list) or any(not isinstance(n, int) or not 2 <= n <= (depth or 0) for n in layers):
+        raise ValueError(f"{section}.camadas: {layers!r}; esperava camadas entre 2 e depth")
+    dim = deep.get("dim_eq")
+    if dim is not None and (not isinstance(dim, int) or not 1 <= dim <= 256):
+        raise ValueError(f"{section}.dim_eq: {dim!r}; esperava int entre 1 e 256")
+    for name in ("salvar", "erros"):
+        if not isinstance(deep.get(name, False), bool):
+            raise ValueError(f"{section}.{name}: esperava bool, veio {deep[name]!r}")
+    if "agrupamento" in amostra or any(str(m).startswith("spifil") for m in amostra.get("methods", [])):
+        raise ValueError(f"{section}: nao combina com agrupamento nem com metodos spifil*")
 
 
 def _check_keys(section: str, data: dict, allowed) -> None:
@@ -145,10 +239,34 @@ def _check_eval_args(args: dict) -> None:
     exigidas = {
         "distillation": ("artifacts_dir", "run_filter"),
         "growth_stages": ("family",),
+        "l1_fast": ("artifacts_dir", "results_csv", "l1_sizes", "l1_superpixels", "l1_grow"),
+        "l1_amostras": ("artifacts_dir", "results_csv", "l1_sizes", "l1_superpixels", "l1_grow", "amostra"),
+        "l1_sem_rotulo": ("artifacts_dir", "results_csv", "l1_sizes", "l1_superpixels", "l1_grow", "amostra"),
+        "spf_grade": ("artifacts_dir", "results_csv", "l1_sizes", "l1_superpixels", "l1_grow", "amostra"),
+        "alt_encoders": ("artifacts_dir", "results_csv", "l1_sizes", "amostra"),
     }.get(source, ())
     missing = [name for name in exigidas if args.get(name) is None]
     if missing:
         raise ValueError(f"{section}: source {source!r} exige {missing}")
+    if source == "spf_grade" and "encdeep" in (args.get("amostra") or {}):
+        check_encdeep(args["amostra"])
+    att = (args.get("amostra") or {}).get("atencao")
+    if source == "spf_grade" and att is not None:  # A_reports/november/atencao/auditoria.md: modo (a) so em L5, L6 ou final
+        depth = args["amostra"].get("depth", 0)
+        _check_keys(f"{section}.amostra.atencao", att, ("mecanismos", "camadas", "modo", "alpha", "janela"))
+        b = att.get("modo", "a") == "b"  # modo (b): um braco por mecanismo x camada, a camada seguinte recorta do mapa atendido
+        low, extra = (1, {"fourier", "gc", "dilat", "ss"}) if b else (max(2, depth - 1), set())
+        if (not att.get("mecanismos") or set(att["mecanismos"]) - {"sa", "espacial", "simam", "nonlocal_g", "multiescala"} - extra
+                or att.get("modo", "a") not in ("a", "b") or att.get("janela") is not None or not att.get("camadas")
+                or any(p != "final" and (not isinstance(p, int) or not low <= p <= depth) for p in att["camadas"])):
+            raise ValueError(f"{section}.amostra.atencao: {att!r}; mecanismos sa/espacial/simam/nonlocal_g/multiescala "
+                             "(+ fourier/gc/dilat/ss no modo 'b'), modo 'a' com camadas em [depth-1, depth] ou 'final', "
+                             "modo 'b' com camadas em [1, depth] ou 'final', janela nula")
+    tol =(args.get("amostra") or {}).get("plano_tol")
+    if source == "spf_grade" and tol is not None and (
+            not isinstance(tol, list) or not tol or any(isinstance(x, bool) or not isinstance(x, (int, float)) or x < 0 for x in tol)
+            or "agrupamento" in args["amostra"]):
+        raise ValueError(f"{section}.amostra.plano_tol: lista de numeros >= 0, sem agrupamento; veio {tol!r}")
     if source == "mlp_configs":
         # sem isso a chave entraria no YAML e seria silenciosamente ignorada
         extra = sorted(
@@ -236,7 +354,7 @@ class Grid:
     def __post_init__(self) -> None:
         for axis, allowed in (
             ("init", INITS),
-            ("datasets", DATASETS),
+            ("datasets", (*DATASETS, *ORGANIZED)),
             ("splits", SPLITS),
             ("percentages", PERCENTAGES),
         ):
@@ -427,16 +545,31 @@ class Experiment:
             raise ValueError("evaluate.SVM false no runner growth exige runner_args.layerwise "
                              "ou max_rounds 0")
         layerwise = self.runner_args.get("layerwise", 0)
+        branches = self.runner_args.get("layer_branches")
+        widths = self.runner_args.get("layer_channels") or [0] * len(branches or [])
+        if branches is not None and not (
+            isinstance(branches, list) and len(branches) == layerwise == len(widths)
+            and self.runner_args.get("layerwise_spf")
+            and all(b is None or (isinstance(b, list) and b and w % len(b) == 0
+                                  and all(isinstance(x, int) and x % 2 for x in b))
+                    for b, w in zip(branches, widths))
+        ):
+            raise ValueError(f"runner_args.layer_branches: esperava lista de {layerwise} (layerwise) com null "
+                             f"ou kernels impares que dividem layer_channels, e layerwise_spf; veio {branches!r}")
         for key in ("layer_channels", "layer_kernels", "layer_dilations", "layer_pools"):
             value = self.runner_args.get(key)
             if value is not None and (
                 not isinstance(value, list) or len(value) != layerwise
-                or not all(isinstance(v, int) and v > 0 for v in value)
+                or not all(isinstance(v, int) and (v > 0 or (key == "layer_kernels" and v == 0
+                                                             and branches and branches[i]))
+                           for i, v in enumerate(value))
             ):
                 raise ValueError(f"runner_args.{key}: esperava lista de {layerwise} "
                                  f"inteiros > 0 (layerwise), veio {value!r}")
         start = self.runner_args.get("layerwise_from_flim")
-        if start is not None and not (isinstance(start, int) and 0 < start < layerwise):
+        if start == "auto" and layerwise == "auto" and self.runner_args.get("init_flim_dir"):
+            start = None  # profundidade lida do architecture.json de cada encoder (runners/growth.py)
+        if start is not None and not (isinstance(start, int) and 0 < start < layerwise + bool(self.runner_args.get("init_flim_dir"))):
             raise ValueError(f"runner_args.layerwise_from_flim: esperava inteiro em "
                              f"1..{layerwise - 1} (layerwise), veio {start!r}")
         if self.runner_args.get("head_finetune") and self.runner_args.get(

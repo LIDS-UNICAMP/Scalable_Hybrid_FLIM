@@ -158,3 +158,40 @@ def _cell(
         arch_json=arch_json,
         flim_weights_path=weights,
     )
+
+
+if __name__ == "__main__":
+    # Check em CPU, em memoria: python -m experiments.ray.grid <yaml>
+    import sys
+    from collections import Counter
+
+    import torch
+
+    from core.constants import PARASITE_NAME
+    from core.data import ParasiteDataModule
+    from experiments.ray.schema import load
+    from flim.spifil import train_samples
+
+    exp = load(sys.argv[1])
+    no_crop = exp.runner_args.get("no_crop", False)
+    size = exp.runner_args.get("image_size", 200)
+    cells, skipped = build(exp)
+    print(f"{len(cells)} celulas, {len(skipped)} puladas", *{s["reason"] for s in skipped})
+    for dataset in exp.grid.datasets:
+        short = DATASET_LONG_TO_SHORT[dataset]
+        assert any(c.dataset == dataset for c in cells), dataset
+        dm = ParasiteDataModule(parasite_name=PARASITE_NAME[short], split=1, percentage=50,
+                                V_train=1, imagenet_norm=False, batch_size=4, num_workers=0,
+                                image_size=size, no_crop=no_crop)
+        dm.setup()
+        views, _ = next(iter(dm.train_dataloader()))
+        assert views.shape == (4, 1, 3, size, size) and torch.isfinite(views).all(), views.shape
+        picked = train_samples(short, 1, 50, 200, one_per_class=True, seed=42)
+        assert not any(s.mask_path for s in picked), "mascara no grow"
+        print(f"\n{dataset}: lote {tuple(views.shape)}, grow {len(picked)} imagens, sem mascara")
+        for name, ds in (("train", dm.ds_train), ("val", dm.ds_val), ("test", dm.ds_test)):
+            base = ds.base
+            y = Counter(base.labels.get(os.path.basename(p), int(os.path.basename(p).split("_")[0]) - 1)
+                        for p in base.samples)
+            assert sorted(y) == list(range(max(y) + 1)) and max(y) < NUM_CLASSES[short], sorted(y)
+            print(f"  {name:5} {len(base):6} {[y[k] for k in sorted(y)]}")

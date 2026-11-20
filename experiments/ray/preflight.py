@@ -112,13 +112,13 @@ from experiments.ray.schema import (
 # Privado de proposito: e a MESMA listagem que a mensagem de erro do schema usa
 # (schema.py:129-137). Reescrever o `os.listdir` aqui daria duas listas de
 # metodos existentes que podem discordar.
-from experiments.ray.schema import _existing_methods
+from experiments.ray.schema import ORGANIZED, _existing_methods
 
 # Nome de cada eixo do YAML e o conjunto de valores validos. Vem do `Grid` do
 # schema (schema.py:176-190); a chave do YAML e plural, a do ponto e singular.
 _AXIS_VALUES: dict[str, tuple] = {
     "init": INITS,
-    "datasets": DATASETS,
+    "datasets": (*DATASETS, *ORGANIZED),
     "splits": SPLITS,
     "percentages": PERCENTAGES,
 }
@@ -475,6 +475,7 @@ def check_10_dead_axis(exp: dict, points: list[dict]) -> list[dict]:
     def identity(point: dict) -> tuple:
         return (
             point["dataset_config"],
+            point["dataset"] if point["dataset"] in ORGANIZED else None,  # organized: growth recebe o nome, nao um dataset_config
             point["model_config"],
             str(sorted(point["overrides"].items(), key=lambda kv: str(kv[0]))),
         )

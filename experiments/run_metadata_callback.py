@@ -178,7 +178,7 @@ class RunMetadataCallback(pl.Callback):
             "imagenet_norm": hparams.imagenet_norm,
             "svm_multiclass": "ovo",
             "svm_max_iter": -1,
-            "train_augmentation": "none",
+            "train_augmentation": hparams.get("train_aug") or "none",
             "arch_json": hparams.arch_json,
             "flim_weights_path": hparams.flim_weights_path,
             "ckpt_dir": ckpt_dir,

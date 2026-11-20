@@ -24,8 +24,9 @@ f-strings de config no pacote e as duas moram neste arquivo::
     configs/dataset/{dataset}/split_{split}.yaml
     configs/model/{method}/{init}/{dataset}/split_{split}.yaml
 
-Nao ha dict de excecao, nao ha config generico de fallback: se o arquivo nao
-existe, a resolucao FALHA com o caminho absoluto esperado impresso. O caso
+Nao ha config generico de fallback: se o arquivo nao existe, a resolucao FALHA
+com o caminho absoluto esperado impresso. A excecao sao os datasets de organized/,
+que usam os configs de helminth-eggs (`_config_dataset`). O caso
 especial de protozoan de `scripts/run_ssl_ray.py:113-121` — que caia num
 `lejepa_line_{init}.yaml` generico para eggs/larvae e num per-split para
 protozoan — morre aqui: cada celula tem o proprio arquivo, ou nao roda.
@@ -51,6 +52,8 @@ from core.constants import (
     FLIM_ARCH_BASE,
     FLIM_WEIGHTS_BASE,
     MODELS_SUBDIR,
+    ORGANIZED,
+    ORGANIZED_ROOT,
     PROJECT_ROOT,
 )
 from experiments.constants import (
@@ -82,14 +85,19 @@ def data_descriptor_filename(pct: int) -> str:
 # ── As duas f-strings de config ───────────────────────────────────────────────
 
 
+def _config_dataset(dataset: str) -> str:
+    """Dataset de organized/ usa os configs de helminth-eggs; `train.build_cmd` troca o dataset."""
+    return "helminth-eggs" if dataset in ORGANIZED else dataset
+
+
 def dataset_config(dataset: str, split: int) -> str:
     """Config de dataset da celula, relativa a raiz do repo."""
-    return _require(f"configs/dataset/{dataset}/split_{split}.yaml")
+    return _require(f"configs/dataset/{_config_dataset(dataset)}/split_{split}.yaml")
 
 
 def model_config(method: str, init: str, dataset: str, split: int) -> str:
     """Config de modelo da celula, relativa a raiz do repo."""
-    return _require(f"configs/model/{method}/{init}/{dataset}/split_{split}.yaml")
+    return _require(f"configs/model/{method}/{init}/{_config_dataset(dataset)}/split_{split}.yaml")
 
 
 def _require(relative: str) -> str:
@@ -124,7 +132,7 @@ def flim_weights_path(dataset: str, split: int) -> str:
 def split_json(dataset: str, split: int, pct: int) -> str:
     """Descritor incremental de dados do par (split, percentual)."""
     return os.path.join(
-        DATASET_SPLITS_ROOT,
+        ORGANIZED_ROOT if dataset in ORGANIZED else DATASET_SPLITS_ROOT,
         PARASITE_DIR[_short(dataset)],
         SPLITS_INCREMENTAL_SUBDIR,
         split_dir(split),

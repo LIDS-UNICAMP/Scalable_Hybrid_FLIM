@@ -55,6 +55,7 @@ CUDA e so do subprocesso.
 from __future__ import annotations
 
 import glob
+import itertools
 import json
 import os
 import re
@@ -174,7 +175,7 @@ _DISTILL_RUN_RE = re.compile(
 # Braco de uma grade de crescimento: `<dataset>_split<N>_pct<P>`. Mesmo padrao de
 # eval/growth_stages.py:130, reescrito aqui porque aquele modulo importa torch no
 # topo e este arquivo e livre de torch de proposito.
-_GROWTH_ARM_RE = re.compile(r"^(eggs|larvae|protozoan)_split(\d+)_pct(\d+)$")
+_GROWTH_ARM_RE = re.compile(rf"^({'|'.join(PARASITE_DIR)})_split(\d+)_pct(\d+)$")
 
 GROWTH_ARTIFACTS_DIR: str = os.path.join(PROJECT_ROOT, "artifacts", "spifil_growth")
 
@@ -228,7 +229,7 @@ def _artifact_job(
     )
     # Embedding do SVM nas grades SPiFiL: flatten (default) ou avgpool2d.
     cfg["embed_mode"] = exp.runner_args.get("embed_mode", "flatten")
-    for k in ("eval_set", "svm_train_pct"):
+    for k in ("eval_set", "svm_train_pct", "image_size", "no_crop", "image_cache_dir"):
         if k in exp.runner_args:
             cfg[k] = exp.runner_args[k]
 
@@ -467,6 +468,49 @@ def _plan_growth_stages(
     return jobs, funnel
 
 
+def _plan_l1_fast(
+    exp: Experiment, probe: str, ckpt_selection: str
+) -> tuple[list[dict], list[str]]:
+    """Um job por (split, tamanho, dataset), nessa ordem: split 1 inteiro sai primeiro.
+
+    `results_csv` e prefixo: cada job tem o seu CSV, porque rodam em paralelo.
+    """
+    args = exp.runner_args
+    jobs = []
+    shards = (args.get("amostra") or {}).get("shards", 1)
+    for split in exp.grid.splits:
+        for size in args["l1_sizes"]:
+            for dataset in exp.grid.datasets:
+                for pct, shard in itertools.product(exp.grid.percentages, range(shards)):
+                    stem = f"{dataset}_s{size:04d}_split{split}_pct{pct}" + (f"_sh{shard}" if shards > 1 else "")
+                    cfg = {
+                        "stem": stem, "dataset_name": dataset, "split": split, "percentage": pct,
+                        "shard": [shard, shards],
+                        "image_size": size, "no_crop": args.get("no_crop", False),
+                        "image_cache_dir": args.get("image_cache_dir"),
+                        "superpixels": args.get("l1_superpixels"),
+                        "random": args.get("l1_random", []), "grow": args.get("l1_grow"),
+                        "amostra": args.get("amostra"),
+                        "readouts": args.get("l1_readouts", ["gem_tta_pw", "gem_pw"]),
+                        "work_dir": os.path.join(args["artifacts_dir"],
+                                                 f"{dataset}_split{split}_pct{pct}"),
+                        "results_csv": os.path.join(PROJECT_ROOT, f"{args['results_csv']}_{stem}.csv"),
+                    }
+                    jobs_dir = os.path.join(exp.output.work_dir, "jobs")
+                    os.makedirs(jobs_dir, exist_ok=True)
+                    config_path = os.path.join(jobs_dir, f"{stem}.yaml")
+                    with open(config_path, "w", encoding="utf-8") as handle:
+                        yaml.safe_dump(cfg, handle, sort_keys=False)
+                    jobs.append({
+                        "key": f"{exp.name}_{stem}", "probe": probe, "mode": "l1_fast",
+                        "ckpt_selection": ckpt_selection, "config_path": config_path,
+                        "run_id": stem, "experiment_name": stem, "dataset_name": dataset,
+                        "split": split, "percentage": pct, "initialization_type": "",
+                        "source": args["source"],
+                    })
+    return jobs, [f"grade vazia em {exp.name}"]
+
+
 def plan(exp: Experiment) -> list[dict]:
     """Enumera um job por checkpoint que casa com a grade.
 
@@ -491,7 +535,12 @@ def plan(exp: Experiment) -> list[dict]:
             raise ValueError(
                 f"runner_args.probe: source={source} so aceita 'svm', veio {probe!r}"
             )
-        planner = _plan_distillation if source == "distillation" else _plan_growth_stages
+        planner = {"distillation": _plan_distillation,
+                   "l1_fast": _plan_l1_fast,
+                   "l1_amostras": _plan_l1_fast,
+                   "l1_sem_rotulo": _plan_l1_fast,
+                   "spf_grade": _plan_l1_fast,
+                   "alt_encoders": _plan_l1_fast}.get(source, _plan_growth_stages)
         jobs, funnel = planner(exp, probe, ckpt_selection)
 
     if not jobs:
@@ -517,7 +566,7 @@ def build_cmd(exp: Experiment, job: dict) -> list[str]:
     o caminho normal executa.
     """
     cmd = [
-        sys.executable, "-m", f"eval.{job['probe']}",
+        sys.executable, "-m", f"eval.{job['source'] if job.get('source') in ('l1_fast', 'l1_amostras', 'l1_sem_rotulo', 'spf_grade', 'alt_encoders') else job['probe']}",
         "--config", job["config_path"],
         f"--ckpt-selection={job['ckpt_selection']}",
     ]
