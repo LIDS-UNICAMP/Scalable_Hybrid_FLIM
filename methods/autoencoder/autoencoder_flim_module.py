@@ -87,33 +87,51 @@ curves start at the same origin instead of a later stage resuming the earlier on
 
 from __future__ import annotations
 
+import csv
 import logging
+import os
 import time
+from functools import partial
 from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import lightning.pytorch as pl
 import torch
+import torch.utils.checkpoint
 import torch.nn as nn
 from lightning.pytorch.loggers import WandbLogger
 from sklearn.svm import SVC
 from torch import Tensor
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, ReduceLROnPlateau, SequentialLR
 from timm.layers.grn import GlobalResponseNorm
 from torchvision.ops import SqueezeExcitation
+from torchvision.transforms import v2
 
 # core/blocks/init.py:44 — copia byte-a-byte de src/models/models.py:672, conferida
 # pelo MA-06. As funcoes de init nao sao re-exportadas por core.blocks de proposito,
 # entao o caminho e explicito.
 from core.blocks.init import freeze_encoder
+from core.constants import EPOCH_METRICS_FILENAME
+from core.data.train_aug import AB_NEUTRAL, TrainAug
+from core.losses import RealSIGReg, SimpleSIGReg, invariance_loss
 # core/metrics.py:46 — mesma `compute_metrics` de src/metrics/classification.py:31, com
 # a unica diferenca de `average` ter virado literal "macro" em vez de argumento com esse
 # mesmo default. Os dois call sites deste modulo nunca passam `average`, entao kappa, acc
 # e f1 saem bit-a-bit iguais aos do W&B de hoje. `acc` continua sendo a acuracia
 # BALANCEADA do torchmetrics (media por classe), a convencao que este modulo sempre usou.
 from core.metrics import compute_metrics
+from losses.barlow_twins import barlow_twins, barlow_twins_meta
+from losses.corinfomax import corinfomax
+from losses.dino import DINOHead, DINOLoss, EMATeacher, ema_momentum, koleo_loss
+from losses.nt_xent import NTXentLoss
+from losses.strong_sigreg import StrongSIGReg
+from losses.ur_jepa import ur_jepa_reg
+from losses.vicreg import vicreg
+from losses.vicregl import vicregl_loss
+from losses.weak_sigreg import weak_sigreg
 from methods.autoencoder.autoencoder_flim import AutoEncoderFLIM
+from methods.autoencoder.mechanisms import apply_mechanisms
 # The probe embeds with the official evaluator's own function, not with a look-alike:
 # `AutoEncoderFLIM.embed` was mathematically identical to it (conv1→conv2→conv3, global
 # average pool, flatten), and two identical implementations are one drift away from
@@ -144,6 +162,50 @@ LAB_AB_OFFSET = 128.0
 # core/constants.py:181. Mantido local aqui de proposito — o agente de constantes e
 # quem religa os consumidores; mexer nisso agora seria pisar no corte dele.
 KAPPA_TOLERANCE = 0.01
+
+# `reg_loss`: nome -> perda em z = GeM do topo; barlow_twins e vicregl pedem a vista por flip.
+REG_LOSSES = {"weak_sigreg": weak_sigreg, "strong_sigreg": StrongSIGReg, "vicreg": vicreg,
+              "barlow_twins": barlow_twins, "vicregl": vicregl_loss, "corinfomax": corinfomax,
+              "ur_jepa": ur_jepa_reg}
+# Lote final pequeno nao tem estatistica: com 1 imagem a variancia ja da NaN.
+REG_MIN_BATCH = 8
+
+# `epoch_probe`: leituras permitidas, sempre abaixo de 2000 dimensoes.
+PROBE_MODES = {"gem": 1, "avgpool2d": 1, "spp": 21}  # dimensoes = canais * valor
+PROBE_MAX_DIM = 2000
+PROBE_L2 = 1e-4
+
+
+def _gem(fmap: Tensor) -> Tensor:
+    """GeM p=3 de eval.svm._encode_pooled, mas com gradiente: mapa [B,C,H,W] -> [B,C]."""
+    return nn.functional.adaptive_avg_pool2d(fmap.clamp(min=1e-6).pow(3), 1).pow(1 / 3).flatten(1)
+
+
+def _probe_logits(x_tr: Tensor, y_tr: Tensor, x_val: Tensor,
+                  num_classes: int) -> Tuple[Tensor, Tensor]:
+    """Sonda linear: regressao logistica por L-BFGS, partindo do zero, sem sorteio.
+
+    Colunas padronizadas pelo treino; canal morto (desvio ~ 0) fica zerado nos dois lados.
+    Roda dentro da validacao, que e inference_mode: as copias abaixo saem normais.
+    """
+    with torch.inference_mode(False), torch.enable_grad():
+        x_tr, y_tr, x_val = x_tr.double(), y_tr.clone(), x_val.double()
+        mu, sd = x_tr.mean(0), x_tr.std(0)
+        sd = torch.where(sd > 1e-5, sd, torch.full_like(sd, float("inf")))
+        a, b = (x_tr - mu) / sd, (x_val - mu) / sd
+        w = a.new_zeros(a.shape[1], num_classes, requires_grad=True)
+        c = a.new_zeros(num_classes, requires_grad=True)
+        opt = torch.optim.LBFGS([w, c], max_iter=100, history_size=10,
+                                line_search_fn="strong_wolfe")
+
+        def closure() -> Tensor:
+            opt.zero_grad()
+            loss = nn.functional.cross_entropy(a @ w + c, y_tr) + PROBE_L2 * w.pow(2).sum()
+            loss.backward()
+            return loss
+
+        opt.step(closure)
+        return (a @ w + c).detach(), (b @ w + c).detach()
 
 
 def _decoder_block_delta(state: dict, n_layers: int) -> int:
@@ -297,6 +359,38 @@ class AutoEncoderFlimModule(pl.LightningModule):
         recon_bg_weight:    peso da BCE nos pixels de fundo (1 = todos iguais, default). O
                             objeto sai da propria entrada, sem rotulo: distancia LAB > 0.04 da
                             mediana da borda (as imagens ja vem com fundo constante).
+        dropout, spatial_dropout, dropblock, dropblock_size, drop_path, residual_gain:
+                            mecanismos do encoder, ver ``methods/autoencoder/mechanisms.py``.
+        ema_decay:          media movel dos pesos (callback do Lightning). 0 = off.
+        train_aug:          chaves de ``core/data/train_aug.py``. Entrada suja, alvo limpo, so
+                            no ``training_step``. ``None`` = off.
+        reg_loss:           ``{"name": <REG_LOSSES>, "lambda": 0.01, ...kwargs da perda}``:
+                            ``loss = recon + lambda * reg(z)``, z = GeM p=3 do topo do estagio.
+                            Ausente ou lambda 0 = off.
+        epoch_probe:        leitura (``PROBE_MODES``) da sonda linear por epoca e do CSV
+                            ``epoch_metrics.csv``, ao lado do checkpoint. ``None`` = off.
+        epoch_probe_images: quantas imagens de treino (sorteadas uma vez) a sonda ve.
+        probe_max_dim:      teto inclusivo de dimensoes da sonda; padrao 1999 (< PROBE_MAX_DIM).
+        best_by_probe:      best e parada pelo kappa de validacao da sonda, so depois do warmup.
+                            Exige ``epoch_probe``.
+        ckpt_last:          o checkpoint e a ULTIMA epoca (nome continua ``best_kappa``), sem
+                            rotulo; a parada fica na val/loss de reconstrucao. Exige svm_probe e
+                            best_by_probe desligados; a sonda por epoca so e gravada.
+        lejepa:             troca a reconstrucao pela perda LeJEPA da linha lejepa_line
+                            (``lam * SIGReg + (1 - lam) * invariance``, core/losses) sobre o
+                            ``ProjectionHead`` do LeJEPA em cima do GeM da ultima camada.
+                            ``{"lam", "sigreg_type", "proj_hidden", "proj_dim", "views"}``; as
+                            ``views`` vistas saem do ``train_aug`` (sorteio por imagem). O
+                            projetor e descartado na avaliacao. ``None`` = off.
+                            ``objective`` (default "lejepa"): "simclr" / "cosface" (NT-Xent em
+                            todas as vistas, ``tau``, ``margin``), "dino" (DINOHead + professor
+                            EMA nas globais, Sinkhorn, KoLeo ``koleo``). ``reg``: no "lejepa",
+                            um nome de ``REG_LOSSES`` no lugar do SIGReg (``reg_kwargs``).
+                            "barlow": Barlow Twins oficial (facebookresearch/barlowtwins), puro,
+                            2 globais, GAP, ``projector`` "8192-8192-8192", ``lambd`` 0,0051.
+                            ``chunk`` (so barlow, off por default): GradCache — encoder em
+                            fatias de ``chunk`` com checkpoint, projetor + BN + c no lote
+                            inteiro; gradiente identico ao do lote cheio (encoder sem BN).
     """
 
     def __init__(
@@ -333,6 +427,22 @@ class AutoEncoderFlimModule(pl.LightningModule):
         old_layers: int = 0,
         old_layer_lr_scale: float = 0.1,
         new_layer_lr_scale: float = 1.0,
+        dropout: float = 0.0,
+        spatial_dropout: float = 0.0,
+        dropblock: float = 0.0,
+        dropblock_size: int = 5,
+        drop_path: float = 0.0,
+        residual_gain: float = 0.0,
+        ema_decay: float = 0.0,
+        train_aug: Optional[dict] = None,
+        reg_loss: Optional[dict] = None,
+        epoch_probe: Optional[str] = None,
+        epoch_probe_images: int = 2048,
+        probe_max_dim: int = PROBE_MAX_DIM - 1,
+        best_by_probe: bool = False,
+        ckpt_last: bool = False,
+        lejepa: Optional[dict] = None,
+        parasite_aug: Optional[dict] = None,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -347,6 +457,24 @@ class AutoEncoderFlimModule(pl.LightningModule):
                 f"embed_mode invalido: {embed_mode!r}; use um de {list(EMBED_MODES)}, "
                 f"ou None para herdar o default do avaliador (src.utils.evaluate.EMBED_MODE)."
             )
+
+        if train_aug and imagenet_norm:
+            raise ValueError("train_aug assume LAB em [0, 1]: use imagenet_norm false")
+        if epoch_probe is not None and epoch_probe not in PROBE_MODES:
+            raise ValueError(f"epoch_probe {epoch_probe!r}: use um de {list(PROBE_MODES)}")
+        if ckpt_last and (best_by_probe or svm_probe):
+            raise ValueError("ckpt_last escolhe sem rotulo: desligue best_by_probe e svm_probe")
+        if best_by_probe and not epoch_probe:
+            raise ValueError("best_by_probe le o kappa da sonda: precisa de epoch_probe")
+        reg = dict(reg_loss or {})
+        self._reg_name, self._reg_lambda = reg.pop("name", None), reg.pop("lambda", 0.0)
+        if self._reg_lambda:
+            if self._reg_name not in REG_LOSSES:
+                raise ValueError(f"reg_loss {self._reg_name!r}: use um de {list(REG_LOSSES)}")
+            if head_finetune:
+                raise ValueError("reg_loss soma na reconstrucao, nao na Head")
+            fn = REG_LOSSES[self._reg_name]
+            self._reg_fn = fn(**reg) if isinstance(fn, type) else partial(fn, **reg)
 
         if flim_weights_path is None:
             raise ValueError(
@@ -385,6 +513,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
         ]
         self.encoder_out_channels: int = self.channels[-1]
         channels = self.channels
+        if epoch_probe and channels[-1] * PROBE_MODES[epoch_probe] > probe_max_dim:
+            raise ValueError(f"epoch_probe {epoch_probe}: {channels[-1]} canais passam de "
+                             f"{probe_max_dim} dimensoes")
         if batch_norm:
             # conv -> BN -> ReLU -> pool; o loader FLIM ja leu o conv em `[0]`
             for n in range(1, _arch["nlayers"] + 1):
@@ -424,6 +555,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
             # (LAB) NAO e branqueada: no layerwise o grow da conv1 recorta o LAB cru.
             for n in range(1, _arch["nlayers"] + 1):
                 self.model.encoder.blocks[f"conv{n}"].append(_ChannelZCA(channels[n]))
+        # Depois do _flim_ref e antes do congelamento e do init_ckpt: senao o gain nao
+        # congela nem carrega.
+        apply_mechanisms(self.model.encoder, dropout, spatial_dropout, dropblock, dropblock_size,
+                         drop_path, residual_gain)
         if fresh_decoder:
             # `old_layers` > 0: conv1..conv{old_layers} treinam com lr * old_layer_lr_scale
             if not old_layers:
@@ -489,6 +624,42 @@ class AutoEncoderFlimModule(pl.LightningModule):
             )
 
         self.criterion = nn.BCEWithLogitsLoss()
+        self.train_aug = TrainAug(**(train_aug or {}))
+        if lejepa:
+            if not self.train_aug.on and not parasite_aug:
+                raise ValueError("lejepa precisa de train_aug: as vistas saem dele")
+            hidden, dim = lejepa.get("proj_hidden", 2048), lejepa.get("proj_dim", 256)
+            obj = lejepa.get("objective", "lejepa")
+            if obj not in ("lejepa", "simclr", "cosface", "dino", "barlow", "vicreg"):
+                raise ValueError(f"lejepa.objective {obj!r}: use lejepa, simclr, cosface, dino, barlow ou vicreg")
+            if obj in ("barlow", "vicreg"):  # projetor do main.py oficial: Linear sem bias + BN + ReLU, ultima Linear sem bias
+                key = "projector" if obj == "barlow" else "expander"
+                sizes = [channels[-1]] + [int(s) for s in str(lejepa.get(key, "8192-8192-8192")).split("-")]
+                layers = []
+                for i in range(len(sizes) - 2):
+                    layers += [nn.Linear(sizes[i], sizes[i + 1], bias=False), nn.BatchNorm1d(sizes[i + 1]), nn.ReLU(inplace=True)]
+                self.ssl_head = nn.Sequential(*layers, nn.Linear(sizes[-2], sizes[-1], bias=False))
+                self.ssl_bn = nn.BatchNorm1d(sizes[-1], affine=False)
+            elif obj == "dino":  # professor EMA criado depois do init_ckpt, mais abaixo
+                self.ssl_head = DINOHead(channels[-1], lejepa.get("dino_hidden", 512),
+                                         lejepa.get("dino_bottleneck", 128), lejepa.get("n_prototypes", 2048))
+                self.dino_loss = DINOLoss(lejepa.get("n_prototypes", 2048), use_sinkhorn=lejepa.get("sinkhorn", True))
+            elif lejepa.get("head") == "mlp":  # o do artigo (MINIMAL.md): torchvision MLP, BN so nas ocultas
+                from torchvision.ops import MLP
+                self.ssl_head = MLP(channels[-1], [hidden, hidden, dim], norm_layer=nn.BatchNorm1d)
+            else:
+                from methods.lejepa.projection_head import ProjectionHead
+                self.ssl_head = ProjectionHead(channels[-1], hidden, dim)
+            self.sigreg = {"simple": SimpleSIGReg, "real": RealSIGReg}[lejepa.get("sigreg_type", "real")](
+                n_proj=lejepa.get("num_slices", 256))
+            if obj in ("simclr", "cosface"):
+                self.ntxent = NTXentLoss(lejepa.get("tau", 0.1), lejepa.get("margin", 0.0) if obj == "cosface" else 0.0)
+            if lejepa.get("reg"):
+                if lejepa["reg"] not in REG_LOSSES or lejepa["reg"] == "vicregl":
+                    raise ValueError(f"lejepa.reg {lejepa['reg']!r}: use um de {list(REG_LOSSES)} (menos vicregl)")
+                fn = REG_LOSSES[lejepa["reg"]]
+                kw = lejepa.get("reg_kwargs", {})
+                self.ssl_reg = fn(**kw) if isinstance(fn, type) else partial(fn, **kw)
 
         mean = torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1)
         std = torch.tensor(IMAGENET_STD).view(1, 3, 1, 1)
@@ -516,6 +687,11 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self._val_emb: List[Tensor] = []
         self._val_labels: List[Tensor] = []
         self._val_head_logits: List[Tensor] = []
+        self._val_probe: List[Tensor] = []
+        self._probe_cache: Optional[Tuple[Tensor, Tensor]] = None
+        self._probe_train: Optional[Tuple[Tensor, Tensor]] = None
+        self._probe_s = 0.0
+        self._epoch_t0 = 0.0
         self._sample_batch: Optional[Tensor] = None
         self._train_loader_cache = None
         self.baseline_metrics: Optional[dict] = None
@@ -526,6 +702,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self._best_delta: Optional[float] = None
 
         self._load_init_ckpt(init_ckpt)
+        if lejepa and lejepa.get("objective") == "dino":
+            self.teacher = EMATeacher(self.model.encoder, self.ssl_head)  # fora do otimizador: requires_grad False
         if spifil_anchor:
             # L2-SP: ancora = encoder DEPOIS do init_ckpt (o _flim_ref e de antes dele).
             # Buffer nao persistente: segue o device e nao entra no state_dict.
@@ -561,6 +739,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
         # `delta`. A name-based strict=False load would hit a shape mismatch on each of them
         # and silently throw the whole trained decoder away. `to_image` keeps its name — its
         # width is channels[1], which growth does not touch.
+        # ssl_head/ssl_bn de largura diferente (expansor recriado por camada) ficam na init nova.
+        own = self.state_dict()
+        state = {k: v for k, v in state.items()
+                 if not (k.startswith(("ssl_head.", "ssl_bn.")) and k in own and own[k].shape != v.shape)}
         if self.hparams.fresh_decoder:
             # Decoder novo a cada camada: do checkpoint anterior so viaja o encoder.
             state = {k: v for k, v in state.items() if k.startswith("model.encoder.")}
@@ -627,6 +809,10 @@ class AutoEncoderFlimModule(pl.LightningModule):
         # arquivo continua `best_kappa` — o laco de crescimento monta o caminho por convencao.
         if self.hparams.head_finetune:
             return f"{self._stage_prefix}/head_kappa", "max", "best_kappa"
+        if self.hparams.best_by_probe:
+            return f"{self._stage_prefix}/lin_select_kappa", "max", "best_kappa"
+        if self.hparams.get("lejepa"):
+            return f"{self._stage_prefix}/val_ssl_loss", "min", "best_kappa"
         # Sem SVM: a perda de reconstrucao escolhe. O arquivo continua `best_kappa`
         # porque runner growth e eval montam o caminho por esse nome.
         if not self.hparams.svm_probe:
@@ -639,18 +825,20 @@ class AutoEncoderFlimModule(pl.LightningModule):
         O Lightning substitui os callbacks do trainer pelos de mesmo tipo devolvidos aqui;
         a patience e o resto vem dos callbacks do yaml, so monitor e mode mudam.
         """
-        if self.hparams.svm_probe:
-            return []
+        ema = ([pl.callbacks.EMAWeightAveraging(decay=self.hparams.ema_decay)]
+               if self.hparams.ema_decay else [])
+        if self.hparams.svm_probe and not self.hparams.best_by_probe:
+            return ema
         monitor, mode, filename = self.monitor_spec
-        out = []
+        out = ema
         for cb in self.trainer.callbacks:
             if isinstance(cb, pl.callbacks.EarlyStopping):
                 out.append(pl.callbacks.EarlyStopping(
                     monitor=monitor, mode=mode, patience=cb.patience, strict=False))
             elif isinstance(cb, pl.callbacks.ModelCheckpoint):
                 out.append(pl.callbacks.ModelCheckpoint(
-                    monitor=monitor, mode=mode, filename=filename, save_top_k=1,
-                    save_last=False))
+                    monitor=None if self.hparams.get("ckpt_last") else monitor, mode=mode, filename=filename, save_top_k=1,
+                    save_last=bool((self.hparams.get("lejepa") or {}).get("save_last"))))
         return out
 
     @property
@@ -669,6 +857,8 @@ class AutoEncoderFlimModule(pl.LightningModule):
             f"{p}/svm_n_sv",
             f"{p}/head_kappa", f"{p}/head_acc",
             f"{p}/flim_drift", "stage_epoch",
+            f"{p}/train_reg_loss", f"{p}/val_reg_loss", f"{p}/reg_ratio",
+            f"{p}/lin_train_kappa", f"{p}/lin_val_kappa", f"{p}/lin_select_kappa", f"{p}/lin_probe_s",
         )
 
     # ── Helpers ────────────────────────────────────────────────────────────
@@ -697,13 +887,16 @@ class AutoEncoderFlimModule(pl.LightningModule):
     def forward(self, x: Tensor) -> Tensor:
         return self.model(x)
 
-    def _recon_loss(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-        target = self._target_from_input(x)
+    def _recon_loss(self, x: Tensor, target: Optional[Tensor] = None
+                    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        """Devolve perda, logits, alvo e a saida do encoder. ``target`` separa alvo e entrada."""
+        target = self._target_from_input(x) if target is None else target
         r, k = self.hparams.mask_ratio, self.hparams.mask_patch
         bg = self.hparams.recon_bg_weight
         if r <= 0 and bg >= 1:
-            logits = self(x)
-            return self.criterion(logits, target), logits, target
+            fmap = self.model.encoder(x)
+            logits = self.model.decoder(fmap)
+            return self.criterion(logits, target), logits, target, fmap
         b, _, h, w = x.shape
         m = torch.ones(b, 1, h, w, device=x.device, dtype=x.dtype)
         if r > 0:
@@ -716,19 +909,176 @@ class AutoEncoderFlimModule(pl.LightningModule):
             fg = ((target - edge.median(2).values[..., None, None]).norm(dim=1, keepdim=True)
                   > 0.04).to(x.dtype)
             m = m * (bg + (1 - bg) * fg)
-        logits = self(x)
+        fmap = self.model.encoder(x)
+        logits = self.model.decoder(fmap)
         per_px = nn.functional.binary_cross_entropy_with_logits(logits, target, reduction="none")
-        return (per_px * m).sum() / (m.sum() * target.shape[1]).clamp_min(1), logits, target
+        return (per_px * m).sum() / (m.sum() * target.shape[1]).clamp_min(1), logits, target, fmap
+
+    def _reg_term(self, x: Tensor, fmap: Tensor, split: str) -> Tensor:
+        """``reg(z)``, sem o lambda. A segunda vista e o flip horizontal de ``x``."""
+        if self._reg_name == "vicregl":
+            return self._reg_fn(fmap, self.model.encoder(x.flip(-1)).flip(-1))
+        z = _gem(fmap)
+        if self._reg_name == "barlow_twins":
+            return self._reg_fn(z, _gem(self.model.encoder(x.flip(-1))))
+        out = self._reg_fn(z)
+        if self._reg_name != "vicreg":
+            return out
+        self.log_dict({f"{self._stage_prefix}/{split}_reg_{k}": out[k] for k in ("var", "cov")},
+                      on_step=False, on_epoch=True)
+        return out["loss"]
+
+    def _lejepa_loss(self, x: Tensor) -> Tensor:
+        """Perda da lejepa_line (methods/lejepa/lejepa_line_module.py:215-217) no projetor: V vistas de ``x``."""
+        cfg, aug = self.hparams.lejepa, self.train_aug
+        if cfg.get("objective") == "barlow":  # Transform oficial: blur 1,0/0,1, solarize 0,0/0,2; GAP
+            size, scale = cfg.get("global_size", 200), cfg.get("global_scale", [0.08, 1.0])
+            k = cfg.get("chunk") or len(x)
+            gap = lambda v: self.model.encoder(v).mean((2, 3))  # noqa: E731
+            enc = gap if k >= len(x) else lambda v: torch.cat([  # noqa: E731
+                torch.utils.checkpoint.checkpoint(gap, c, use_reentrant=False) for c in v.split(k)])
+            z1, z2 = (self.ssl_head(enc(self._ssl_view(x, size, scale, blur, sol)))
+                      for blur, sol in ((1.0, 0.0), (0.1, 0.2)))
+            loss, on, off = barlow_twins_meta(z1, z2, self.ssl_bn, cfg.get("lambd", 0.0051))
+            self._ssl_parts = {"on_diag": on.detach(), "off_diag": off.detach()}
+            return loss
+        if cfg.get("objective") == "vicreg":
+            # 2 vistas -> GeM -> expansor -> VICReg. losses/vicreg.py faz cov = media dos D(D-1)
+            # termos e media entre vistas; o artigo/codigo oficial faz soma/D e SOMA nas 2 vistas.
+            # nu * 2(D-1) desfaz as duas diferencas: cov fica fiel ao artigo (inv e var ja sao).
+            v = [self._paug(x) if self.hparams.get("parasite_aug") else aug.corrupt(aug.geo(x)) for _ in range(2)]
+            z1, z2 = self.ssl_head(_gem(self.model.encoder(torch.cat(v)))).float().chunk(2)
+            w = cfg.get("vicreg", {})
+            out = vicreg(z1, z2, lam=w.get("inv", 25.0), mu=w.get("var", 25.0),
+                         nu=w.get("cov", 1.0) * 2 * (z1.shape[1] - 1))
+            self._ssl_parts = {k: out[k].detach() for k in ("inv", "var", "cov")}
+            return out["loss"]
+        if cfg.get("objective", "lejepa") != "lejepa":
+            return self._ssl_objective_loss(x)
+        lam = cfg.get("lam", 0.05)
+        if "global_views" in cfg:  # multi-crop do artigo: centro = media das globais (LeJEPA, Alg. 1)
+            proj = torch.cat([
+                self.ssl_head(_gem(self.model.encoder(torch.cat(
+                    [self._ssl_view(x, size, scale) for _ in range(n)])))).view(n, x.shape[0], -1)
+                for n, size, scale in ((cfg["global_views"], cfg["global_size"], cfg["global_scale"]),
+                                       (cfg["local_views"], cfg["local_size"], cfg["local_scale"])) if n])
+            center = proj[:cfg["global_views"]].mean(0)
+            sig, inv = self._ssl_regularizer(proj), (center - proj).square().mean()
+        else:
+            v = torch.cat([aug.corrupt(aug.geo(x)) for _ in range(cfg.get("views", 4))])
+            proj = self.ssl_head(_gem(self.model.encoder(v))).view(-1, x.shape[0], cfg.get("proj_dim", 256))
+            sig, inv = self._ssl_regularizer(proj), invariance_loss(proj)
+        self._ssl_parts = {cfg.get("reg") or "sigreg": sig.detach(), "invariance": inv.detach()}  # registro por epoca
+        return lam * sig + (1 - lam) * inv
+
+    def _ssl_regularizer(self, proj: Tensor) -> Tensor:
+        """SIGReg em [V,B,D], ou ``lejepa.reg``: barlow_twins nas 2 primeiras vistas, os outros media por vista."""
+        name = self.hparams.lejepa.get("reg")
+        if not name:
+            return self.sigreg(proj)
+        if name == "barlow_twins":
+            return self.ssl_reg(proj[0], proj[1])
+        outs = [self.ssl_reg(p) for p in proj]
+        return torch.stack([o["loss"] if isinstance(o, dict) else o for o in outs]).mean()
+
+    def _ssl_objective_loss(self, x: Tensor) -> Tensor:
+        """simclr / cosface / dino nas mesmas vistas do LeJEPA (multi-crop, ou ``views`` do train_aug)."""
+        cfg, aug, b = self.hparams.lejepa, self.train_aug, x.shape[0]
+        if self.hparams.get("parasite_aug"):
+            groups = [torch.cat([self._paug(x) for _ in range(cfg.get("views", 2))])]
+        elif "global_views" in cfg:
+            groups = [torch.cat([self._ssl_view(x, size, scale) for _ in range(n)])
+                      for n, size, scale in ((cfg["global_views"], cfg["global_size"], cfg["global_scale"]),
+                                             (cfg["local_views"], cfg["local_size"], cfg["local_scale"])) if n]
+        else:
+            groups = [torch.cat([aug.corrupt(aug.geo(x)) for _ in range(cfg.get("views", 4))])]
+        feats = [_gem(self.model.encoder(g)) for g in groups]
+        out = torch.cat([self.ssl_head(f).unflatten(0, (-1, b)) for f in feats])
+        if cfg["objective"] != "dino":
+            loss, stats = self.ntxent(out.float(), return_stats=True)
+            self._ssl_parts = {"nt_xent": loss.detach(), **stats}
+            return loss
+        n_glob = cfg.get("global_views", 2)  # sem multi-crop: as 2 primeiras vistas fazem de globais
+        with torch.no_grad():
+            t_out = self.teacher.head(_gem(self.teacher.encoder(groups[0][:n_glob * b]))).view(n_glob, b, -1)
+        step, total = self.current_epoch, max(1, self.trainer.max_epochs or 1)
+        dino = self.dino_loss(out, t_out, step, total)
+        koleo = torch.stack([koleo_loss(f) for f in feats[0][:n_glob * b].unflatten(0, (n_glob, b))]).mean()
+        temp = self.dino_loss.teacher_temp(step, total)
+        p = (t_out.float() / temp).softmax(-1)
+        pm = p.mean((0, 1))
+        self._ssl_parts = {"dino": dino.detach(), "koleo": koleo.detach(), "teacher_temp": torch.tensor(temp),
+                           "teacher_entropy": -(p * p.clamp_min(1e-12).log()).sum(-1).mean(),
+                           "teacher_marg_entropy": -(pm * pm.clamp_min(1e-12).log()).sum()}
+        return dino + cfg.get("koleo", 0.1) * koleo
+
+    def _ssl_view(self, x: Tensor, size: int, scale: List[float], blur: Optional[float] = None,
+                  solarize: Optional[float] = None) -> Tensor:
+        """Uma vista do artigo em lote, sorteio por imagem: RandomResizedCrop (razao 3/4-4/3) + flip,
+        jitter LAB do ``train_aug`` (p dele), cinza (ab neutro), blur sigma 0,1-2 e solarize no L."""
+        cfg, b, dev = self.hparams.lejepa, x.shape[0], x.device
+        area = torch.empty(b, device=dev).uniform_(*scale)
+        ratio = torch.empty(b, device=dev).uniform_(np.log(3 / 4), np.log(4 / 3)).exp()
+        sw, sh = (area * ratio).sqrt().clamp(max=1), (area / ratio).sqrt().clamp(max=1)
+        flip = torch.where(torch.rand(b, device=dev) < 0.5, -1.0, 1.0)
+        zero = torch.zeros_like(sw)
+        theta = torch.stack([sw * flip, zero, (1 - sw) * (2 * torch.rand(b, device=dev) - 1),
+                             zero, sh, (1 - sh) * (2 * torch.rand(b, device=dev) - 1)], 1).view(b, 2, 3)
+        grid = nn.functional.affine_grid(theta, [b, x.shape[1], size, size], align_corners=False)
+        v = self.train_aug.corrupt(nn.functional.grid_sample(x, grid, align_corners=False))
+
+        def hit(p: float) -> Tensor:
+            return torch.rand(b, 1, 1, 1, device=dev) < p
+        gray = hit(cfg.get("gray", 0.0))
+        v = torch.cat([v[:, :1], torch.where(gray, v.new_tensor(AB_NEUTRAL)[:, None, None].expand_as(v[:, 1:]),
+                                             v[:, 1:])], 1)
+        sigma = float(torch.empty(()).uniform_(0.1, 2.0))
+        k = 2 * int(np.ceil(3 * sigma)) + 1
+        v = torch.where(hit(cfg.get("blur", 0.0) if blur is None else blur), v2.functional.gaussian_blur(v, [k, k], [sigma, sigma]), v)
+        lum = v[:, :1]
+        return torch.cat([torch.where(hit(cfg.get("solarize", 0.0) if solarize is None else solarize) & (lum > 0.5), 1 - lum, lum), v[:, 1:]], 1)
+
+    def _paug(self, x: Tensor) -> Tensor:
+        """parasite_aug por imagem: flip H/V, rot90 (sem interpolacao) e brilho/contraste leve
+        so no L dentro da mascara (pixel nao preto). Sem recorte, cinza, blur, solarize ou matiz."""
+        cfg, b, dev = self.hparams.parasite_aug, x.shape[0], x.device
+        v = self._target_from_input(x)  # LAB em [0, 1]
+        hit = lambda: torch.rand(b, 1, 1, 1, device=dev) < 0.5  # noqa: E731
+        # `hflip`/`vflip` separados; `flip` e o atalho antigo para os dois
+        if cfg.get("hflip", cfg.get("flip", True)):
+            v = torch.where(hit(), v.flip(-1), v)
+        if cfg.get("vflip", cfg.get("flip", True)):
+            v = torch.where(hit(), v.flip(-2), v)
+        if cfg.get("rot90", True) and v.shape[-1] == v.shape[-2]:
+            k = torch.randint(0, 4, (b, 1, 1, 1), device=dev)
+            v = sum(torch.where(k == i, v.rot90(i, (-2, -1)), 0) for i in range(4))
+        bc = cfg.get("bc", 0.0)
+        if bc:
+            m = (v[:, :1] > 0.02).to(v.dtype)
+            lum = v[:, :1]
+            mean = (lum * m).sum((2, 3), keepdim=True) / m.sum((2, 3), keepdim=True).clamp_min(1)
+            c = torch.empty(b, 1, 1, 1, device=dev).uniform_(1 - bc, 1 + bc)
+            d = torch.empty(b, 1, 1, 1, device=dev).uniform_(-bc, bc)
+            v = torch.cat([torch.where(m.bool(), ((lum - mean) * c + mean + d).clamp(0, 1), lum), v[:, 1:]], 1)
+        return (v - self._norm_mean) / self._norm_std if self.hparams.imagenet_norm else v
 
     def training_step(self, batch: Any, batch_idx: int) -> Tensor:
         views, y = batch  # y so entra na perda no braco head_finetune
-        x = self._first_view(views)
+        if self.hparams.get("lejepa"):
+            loss = self._lejepa_loss(self._first_view(views))
+            self.log("train/lr", self.optimizers().param_groups[0]["lr"], on_step=True, on_epoch=False)
+            self.log(f"{self._stage_prefix}/train_ssl_loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+            self.log_dict({f"{self._stage_prefix}/train_{k}": v for k, v in self._ssl_parts.items()},
+                          on_step=False, on_epoch=True)
+            return loss
+        x0 = self._first_view(views)
+        x, clean = self.train_aug(self._paug(x0) if self.hparams.get("parasite_aug") else x0)
         if self.head is not None:
             # `y` ja e 0-based (datasets/dataset.py:173), entao entra direto. O `-1` do
             # caminho do SVM desfaz um `+1` do proprio evaluate.py:472 e nao vale aqui.
             loss = nn.functional.cross_entropy(self.head(self.model.encoder(x)), y)
         else:
-            loss, _, _ = self._recon_loss(x)
+            loss, _, _, fmap = self._recon_loss(x, self._target_from_input(clean))
 
         opt = self.optimizers()
         # lr is the schedule, not a result: it stays outside the stage namespace.
@@ -736,6 +1086,13 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self.log(f"{self._stage_prefix}/"
                  f"{'train_ce_loss' if self.head is not None else 'train_recon_loss'}",
                  loss, prog_bar=True, on_step=True, on_epoch=True)
+        if self._reg_lambda and x.shape[0] >= REG_MIN_BATCH:
+            reg = self._reg_term(x, fmap, "train")
+            weighted = self._reg_lambda * reg
+            self.log(f"{self._stage_prefix}/train_reg_loss", reg, on_step=False, on_epoch=True)
+            self.log(f"{self._stage_prefix}/reg_ratio", weighted.detach() / loss.detach(),
+                     on_step=False, on_epoch=True)
+            loss = loss + weighted
         if self.hparams.spifil_anchor:
             anchor = self._anchor_loss()
             self.log(f"{self._stage_prefix}/spifil_anchor_loss", anchor,
@@ -753,12 +1110,44 @@ class AutoEncoderFlimModule(pl.LightningModule):
         self._val_emb = []
         self._val_labels = []
         self._val_head_logits = []
+        self._val_probe = []
         self._sample_batch = None
+        # Aqui e nao no epoch_end: o callback de EMA ja trocou os pesos neste ponto e so os
+        # destroca antes do on_validation_epoch_end do modulo, e a sonda precisa dos mesmos
+        # pesos no treino e na validacao.
+        if self.hparams.epoch_probe and not self.trainer.sanity_checking:
+            t0 = time.time()
+            images, labels = self._probe_images()
+            self._probe_train = torch.cat([
+                _encode_pooled(self.model.encoder, b.float(), self.hparams.epoch_probe)
+                for b in images.split(64)]), labels
+            self._probe_s = time.time() - t0
 
-    def validation_step(self, batch: Any, batch_idx: int) -> Tensor:
+    def validation_step(self, batch: Any, batch_idx: int, ssl: bool = True) -> Tensor:
         views, y = batch
         x = self._first_view(views)
-        loss, logits, _ = self._recon_loss(x)
+        if self.hparams.get("lejepa") and ssl:
+            seed = self.hparams.lejepa.get("val_seed")
+            if seed is None:
+                ssl = self._lejepa_loss(x)
+            else:  # vistas de validacao fixas: mesma semente por lote em toda epoca (val sem shuffle)
+                with torch.random.fork_rng(devices=[self.device] if self.device.type == "cuda" else []):
+                    torch.manual_seed(seed + batch_idx)
+                    ssl = self._lejepa_loss(x)
+            self.log(f"{self._stage_prefix}/val_ssl_loss", ssl, on_step=False, on_epoch=True)
+            self.log_dict({f"{self._stage_prefix}/val_{k}": v for k, v in self._ssl_parts.items()},
+                          on_step=False, on_epoch=True)
+        k = (self.hparams.get("lejepa") or {}).get("chunk")
+        if ssl and k and len(x) > k:  # GradCache: val_ssl_loss no lote inteiro, recon/sondas em fatias
+            return torch.stack([self.validation_step((xc, yc), batch_idx + i, ssl=False)
+                                for i, (xc, yc) in enumerate(zip(x.split(k), y.split(k)))]).mean()
+        loss, logits, _, fmap = self._recon_loss(x)
+        if self._reg_lambda and x.shape[0] >= REG_MIN_BATCH:
+            self.log(f"{self._stage_prefix}/val_reg_loss", self._reg_term(x, fmap, "val"),
+                     on_step=False, on_epoch=True)
+        if self.hparams.epoch_probe:
+            # treino da sonda guarda float16: mesma entrada na validacao
+            self._val_probe.append(_encode_pooled(self.model.encoder, x.half().float(), self.hparams.epoch_probe))
 
         # _encode_pooled already returns a detached CPU tensor — no second .detach().cpu().
         self._val_emb.append(
@@ -808,7 +1197,27 @@ class AutoEncoderFlimModule(pl.LightningModule):
             self._train_loader_cache = self.trainer.datamodule.train_dataloader()
         return self._embeddings(self._train_loader_cache)
 
+    def on_train_start(self) -> None:
+        steps = (self.hparams.get("lejepa") or {}).get("patience_steps")
+        if not steps:
+            return
+        # paciencia em passos de otimizacao -> epocas desta base (passos/epoca = lotes de treino)
+        patience = min(1000, int(np.ceil(steps / max(1, self.trainer.num_training_batches))))
+        for cb in self.trainer.callbacks:
+            if isinstance(cb, pl.callbacks.EarlyStopping):
+                cb.patience = patience
+        self._plateau.patience = max(1, patience // 3)
+        _log.info("[lejepa] %d passos/epoca -> paciencia %d epocas, plateau %d",
+                  self.trainer.num_training_batches, patience, self._plateau.patience)
+
+    def on_train_batch_end(self, outputs: Any, batch: Any, batch_idx: int) -> None:
+        if (self.hparams.get("lejepa") or {}).get("objective") == "dino":  # EMA do professor, momento cosseno 0,996 -> 1
+            m = ema_momentum(self.global_step, self.trainer.estimated_stepping_batches)
+            self.teacher.update((self.model.encoder, self.ssl_head), m)
+            self.log(f"{self._stage_prefix}/ema_momentum", m, on_step=False, on_epoch=True)
+
     def on_train_epoch_start(self) -> None:
+        self._epoch_t0 = time.time()
         # Lightning 2.6 nao chama .train(); e o Encoder.train que poe BN congelado em eval
         if self.hparams.batch_norm:
             self.model.encoder.train()
@@ -953,6 +1362,11 @@ class AutoEncoderFlimModule(pl.LightningModule):
     def on_validation_epoch_end(self) -> None:
         if not self._val_emb or self.trainer.sanity_checking:
             return
+        rel = (self.hparams.get("lejepa") or {}).get("min_delta_rel")
+        if rel:  # melhora minima relativa ao melhor valor ate aqui (EarlyStopping so tem absoluta)
+            for cb in self.trainer.callbacks:
+                if isinstance(cb, pl.callbacks.EarlyStopping) and torch.isfinite(cb.best_score):
+                    cb.min_delta = -rel * abs(float(cb.best_score))
 
         p = self._stage_prefix
         # 0-based x for THIS stage, logged every validation epoch. On a crash resume from
@@ -975,6 +1389,9 @@ class AutoEncoderFlimModule(pl.LightningModule):
             )
             self.log(f"{p}/head_kappa", head_metrics["kappa"], prog_bar=True, on_epoch=True)
             self.log(f"{p}/head_acc", head_metrics["acc"], on_epoch=True)
+
+        if self.hparams.epoch_probe:
+            self._log_linear_probe()
 
         if not self.hparams.svm_probe:
             return
@@ -1023,6 +1440,80 @@ class AutoEncoderFlimModule(pl.LightningModule):
             self._best_delta = delta if self._best_delta is None else max(self._best_delta, delta)
 
         self._log_reconstruction()
+
+    # ── Sonda linear e CSV por epoca ───────────────────────────────────────
+
+    def _probe_images(self) -> Tuple[Tensor, Tensor]:
+        """Amostra fixa do treino, lida uma vez por estagio e guardada no device em float16.
+
+        Reler o treino inteiro custaria uma epoca a mais de leitura de imagem, a cada epoca.
+        O sorteio dessa leitura nao toca no do treino.
+        """
+        if self._probe_cache is None:
+            images, labels, left = [], [], self.hparams.epoch_probe_images
+            with torch.random.fork_rng(devices=[self.device] if self.device.type == "cuda" else []):
+                for views, y in self.trainer.datamodule.train_dataloader():
+                    images.append(self._first_view(views)[:left].to(self.device, torch.float16))
+                    labels.append(y[:left])
+                    left -= len(labels[-1])
+                    if not left:
+                        break
+            self._probe_cache = torch.cat(images), torch.cat(labels)
+        return self._probe_cache
+
+    def _log_linear_probe(self) -> None:
+        """Kappa de treino e de validacao da sonda linear; so treino e validacao entram."""
+        t0, p, n = time.time(), self._stage_prefix, self.hparams.num_classes
+        x_tr, y_tr = self._probe_train
+        y_val = torch.cat(self._val_labels)
+        fit, val = _probe_logits(x_tr.to(self.device), y_tr.to(self.device).long(),
+                                 torch.cat(self._val_probe).to(self.device), n)
+        kappa_tr = compute_metrics(y_tr, fit.cpu(), num_classes=n)["kappa"]
+        kappa_val = compute_metrics(y_val, val.cpu(), num_classes=n)["kappa"]
+        self._probe_s += time.time() - t0
+        self.log(f"{p}/lin_train_kappa", kappa_tr, on_epoch=True)
+        self.log(f"{p}/lin_val_kappa", kappa_val, prog_bar=True, on_epoch=True)
+        # No warmup a selecao nao conta: 23 de 82 jobs antigos elegeram a epoca 0, antes de o
+        # treino fazer qualquer coisa. O CSV guarda todas as epocas do mesmo jeito.
+        warm = self.current_epoch < (self.hparams.warmup_epochs or 10)
+        self.log(f"{p}/lin_select_kappa", -1.0 if warm else kappa_val, on_epoch=True)
+        self.log(f"{p}/lin_probe_s", self._probe_s, on_epoch=True)
+
+    def on_train_epoch_end(self) -> None:
+        """Uma linha por epoca. Aqui porque a media da perda de treino so fecha depois da validacao."""
+        if not self.hparams.epoch_probe:
+            return
+        p, lam, dm = self._stage_prefix, self._reg_lambda, self.trainer.datamodule
+        metrics = self.trainer.callback_metrics
+
+        def got(key: str) -> float:
+            return float(metrics.get(f"{p}/{key}", float("nan")))
+
+        def total(recon: float, reg: float) -> float:
+            return recon + lam * reg if lam else recon
+
+        recon_tr, reg_tr = got("train_recon_loss_epoch"), got("train_reg_loss")
+        recon_val, reg_val = got("val_recon_loss"), got("val_reg_loss")
+        row = {"epoch": self.current_epoch, "dataset": self.hparams.dataset, "split": dm.split,
+               "percentage": dm.percentage,
+               "train_loss": total(recon_tr, reg_tr), "val_loss": total(recon_val, reg_val),
+               "train_recon_loss": recon_tr, "val_recon_loss": recon_val,
+               "train_reg_loss": reg_tr, "val_reg_loss": reg_val, "reg_ratio": got("reg_ratio"),
+               "train_kappa": got("lin_train_kappa"), "val_kappa": got("lin_val_kappa"),
+               "probe_s": got("lin_probe_s"), "epoch_s": time.time() - self._epoch_t0}
+        if self.hparams.get("lejepa"):
+            row["train_loss"], row["val_loss"] = got("train_ssl_loss_epoch"), got("val_ssl_loss")
+            row.update({f"{s}_{k}": got(f"{s}_{k}") for s in ("train", "val") for k in self._ssl_parts})
+            row["lr"] = self.optimizers().param_groups[0]["lr"]
+        run_dir = os.path.dirname(self.trainer.checkpoint_callback.dirpath)
+        os.makedirs(run_dir, exist_ok=True)  # o best da epoca so grava depois deste hook
+        path = os.path.join(run_dir, EPOCH_METRICS_FILENAME)
+        new = not os.path.exists(path)
+        with open(path, "a", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(row))
+            if new:
+                writer.writeheader()
+            writer.writerow(row)
 
     # ── Verdict ────────────────────────────────────────────────────────────
 
@@ -1146,6 +1637,15 @@ class AutoEncoderFlimModule(pl.LightningModule):
             lr=hp.lr, weight_decay=hp.weight_decay,
         )
         sched_warmup = LinearLR(optimizer, start_factor=0.01, total_iters=warmup)
+        cfg = self.hparams.get("lejepa") or {}
+        if cfg.get("patience_steps"):  # warmup curto, lr constante e ReduceLROnPlateau na val_ssl_loss
+            # patience real sai em on_train_start, quando os passos por epoca sao conhecidos
+            self._plateau = ReduceLROnPlateau(optimizer, mode="min", factor=cfg.get("plateau_factor", 0.5),
+                                              patience=1, threshold=cfg.get("min_delta_rel", 1e-4),
+                                              min_lr=cfg.get("min_lr", 1e-6))
+            return [optimizer], [{"scheduler": sched_warmup, "interval": "epoch"},
+                                 {"scheduler": self._plateau, "interval": "epoch",
+                                  "monitor": f"{self._stage_prefix}/val_ssl_loss", "strict": False}]
         sched_cosine = CosineAnnealingLR(optimizer, T_max=max(1, total - warmup), eta_min=1e-5)
         scheduler = SequentialLR(
             optimizer, schedulers=[sched_warmup, sched_cosine], milestones=[warmup]
