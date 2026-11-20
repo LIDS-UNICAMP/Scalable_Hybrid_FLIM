@@ -1,0 +1,76 @@
+# universal_model_ga -- configuração padrão (Cross-Dataset NAS sobre as CNNs do GA / MO-DEHB / crescimento SPiFiL)
+# Cada técnica roda sozinha (python -m universal_model_ga.run_pipeline --stage <nome>) ou o pipeline inteiro (--stage all).
+run_name: v1
+seed: 42
+repo_root: /dados/home/moliveira/Scalable_Hybrid_FLIM
+growth_code_root: /dados/home/moliveira/exps/growth/code     # código das cadeias B0-B4 (ga_search.backbones)
+python: /dados/home/moliveira/miniforge3/envs/scalable_FLIM/bin/python
+out_dir: universal_model_ga/runs/{run_name}                   # cache, jsonl, modelos; relativo ao repo
+report_dir: universal_model_ga/reports/{run_name}             # md + png/svg
+
+# bases-alvo da rede universal (treino só nas 5 naturais; parasitas só como referência de inventário)
+datasets: [flowers, remote_sensing, ham10000, aid, coconut_trees]
+inventory_datasets: [flowers, remote_sensing, ham10000, aid, coconut_trees, eggs, larvae, protozoan, eggs_raw, larvae_raw, protozoan_raw]
+
+inventory:
+  modehb_glob: artifacts/modehb_*/*/state/seed42/candidates/*/f*/result.json
+  growth_glob: artifacts/hmodehb_b0b4/growth*/**/nodes/*/f*/result.json
+  test_jsonl:                                                  # resultados de TESTE (nunca usados para selecionar)
+    - ga_search/modehb/reports/test_svm_C100.jsonl
+    - research/spifil_b0b4/readout_x/results/*.jsonl
+  focus_list: universal_model_ga/inputs/focus_models.txt       # fase A: modelos do draw_io (o usuário pediu começar por eles)
+  top_fractions: [0.10, 0.20, 0.30]                           # melhores por κ de VALIDAÇÃO, por base
+  background_per_dataset: 60                                   # amostra das "demais" (contraste do gSpan/cluster); semeada
+
+graph:
+  input_shape: [1, 3, 224, 224]
+  label_level: coarse          # coarse = tipo de op + kernel/stride (mineração); fine guarda canais no atributo
+  workers: 24
+  torch_threads: 2
+
+gspan:
+  min_support_frac: 0.30       # fração das arquiteturas do grupo (top-k de cada base)
+  min_vertices: 2
+  max_vertices: 8
+  balance: per_dataset         # frequência global = média das frequências por base
+
+clustering:
+  wl_iterations: 3
+  k_range: [2, 12]
+  k_report: 6                  # k usado na descrição das famílias (a silhueta escolhe 2, grosso demais)
+  hdbscan_min_cluster_size: 5
+  ged_sample: 40               # pares p/ GED aproximada (validação da distância WL)
+  ged_timeout_s: 2.0
+
+pareto:
+  objectives: [mean_kappa, max_regret, params, flops]
+  readouts: [gap1280, so2_4096_pca]    # rankings SEPARADOS por leitura (nunca misturar)
+
+predictor:
+  ensemble: 5
+  mlp_hidden: [128, 64]
+  mlp_epochs: 400
+  folds: 5
+  near_dup_wl_sim: 0.95        # grafos com similaridade WL >= isso ficam no MESMO fold (sem vazamento)
+  min_spearman_to_use: 0.30    # abaixo disso o preditor NÃO dirige a busca
+
+naswot:
+  batch: 64                    # imagens de calibração (só do TREINO), fixas por seed
+  conditions: [random, spifil, checkpoint]
+  jitter: 1.0e-6
+  min_spearman_to_use: 0.30
+
+generator:
+  n_proposals: 400
+  max_params: 5500000          # teto do projeto (5,5M)
+  max_flops: 20.0e+9
+  max_act_mb: 2048
+  depth_range: [2, 6]
+  mutation_rate: 0.35
+
+cross_eval:
+  protocol: spifil_only        # rede universal = mesma topologia; SPiFiL por base (só treino); SVM por base
+  heads: [gap1280, so2_4096_pca]
+  tta8: true                   # regra do projeto: todo teste com TTA8 (leitura escolhida pela validação)
+  device: cuda                 # roda no athena GPU 2/3 (fila); NUNCA GPU 0/1
+  queue_file: universal_model_ga/runs/{run_name}/cross_eval_queue.jsonl

@@ -1,0 +1,12 @@
+# Fase A: modelos dos desenhos draw_io (athena: presentation_results_cluster_november/draw_io), lista enviada pela sessão de apresentação
+modehb_hybrid/aid/c00091/f45
+hmodehb_b0b4/growth_v3_jaci/ae_so2/aid/seed42/nodes/B1g0c01/f15
+modehb_hybrid/coconut_trees/c00015/f5
+modehb_lemonade/eggs/c00032/f15
+modehb_hybrid/eggs_raw/c00027/f5
+modehb_hybrid/flowers/c00064/f5
+modehb_lemonade/larvae/c00078/f15
+modehb_hybrid/larvae_raw/c00023/f15
+modehb_lemonade_seeded/remote_sensing/c00002/f200
+modehb_hybrid_C01_final/remote_sensing/c00015/f15
+hmodehb_b0b4/growth/athena_gpu3/ham10000_fix5_nossl/seed42/nodes/B1g0c06/f15
