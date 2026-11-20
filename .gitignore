@@ -171,3 +171,12 @@ readout_x_cache/
 *.jsonl
 *.tmp
 *.antes_*
+
+# organização jaci/athena 20/11: backups locais, locks e estado vivo
+*.lock
+*.py.v[0-9]
+*.preview_v[0-9]
+ga_search/modehb/reports/watchdog_status.json
+ga_search/modehb/reports/all_results_today.md
+ga_search/modehb/reports/results_from_mds.md
+ga_search/modehb/reports/parts/sec_resultados_mds.md
