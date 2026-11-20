@@ -113,13 +113,18 @@ def _measured(v, default):
 def from_search_yaml(raw: dict, dataset: str, seed=None) -> dict:
     """Translate the I11 schema (``search.yaml`` + ``datasets/<name>.yaml``) into this
     module's schema. Selected by the presence of ``dataset_config_dir`` in the YAML."""
+
     if dataset is None:
         raise ValueError("search.yaml schema needs --dataset (one of %s)" % raw.get("datasets"))
+    
     seed = int(raw.get("seed", 42) if seed is None else seed)
     ds_cfg = yaml.safe_load((Path(raw["dataset_config_dir"]) / f"{dataset}.yaml").read_text())
     tr, pop, res = raw.get("training", {}), raw.get("population", {}), raw.get("resources", {})
+
     size = int(raw.get("image_size", ds_cfg.get("image_size", 224)))
+
     n_train = int(ds_cfg.get("expected_counts", {}).get("train", 0))
+
     cache_gb = _measured(res.get("ram_cache_gb"), 0)
     est_gb = n_train * 3 * size * size * 4 / 1e9          # float32 IFT-LAB tensors
     col = raw.get("collapse", {})
@@ -135,6 +140,7 @@ def from_search_yaml(raw: dict, dataset: str, seed=None) -> dict:
                  # whole validation split: val is name-sorted (= class-sorted), so the 512 default
                  # keeps only the first classes (coconut_trees: class 1 only -> kappa 0 for all)
                  "val_max_samples": raw.get("val_max_samples")},
+
         "search": {"fidelities": raw["fidelities"], "eta": raw.get("eta", 3),
                    "n_classes": int(ds_cfg.get("n_classes") or 0),
                    "max_brackets": int(raw.get("max_brackets", 6)),
@@ -158,6 +164,7 @@ def from_search_yaml(raw: dict, dataset: str, seed=None) -> dict:
                    # opt-in external pretrained seed (external_seed.py); per-dataset paths resolved here
                    **({"external_seed": _external_seed_cfg(raw, dataset, ds_cfg)}
                       if (raw.get("external_seed") or {}).get("enabled") else {})},
+
         "train": {"ae_ssl_split": [split.get("ae", 1), split.get("ssl", 2)],
                   **({"max_images_per_epoch": int(tr["max_images_per_epoch"])} if tr.get("max_images_per_epoch") else {}),
                   # opt-in mixed precision of the training phases (pnas_cs.yaml: bf16); absent -> fp32
@@ -231,21 +238,30 @@ def _set_dotted(cfg, item):
 
 
 def load_config(path, dataset=None, seed=None, overrides=()) -> dict:
+
     raw = yaml.safe_load(Path(path).read_text()) or {}
+
     if not isinstance(raw, dict):
         raise ValueError("MO-DEHB config must be a YAML mapping")
+    
     if "dataset_config_dir" in raw:
         raw = from_search_yaml(raw, dataset, seed)
         raw["eval"] = {**raw.get("eval", {}), **raw.pop("eval_fitness", {})}
+
     elif seed is not None:
         raw["seed"] = int(seed)
+
     for item in overrides or ():
         _set_dotted(raw, item)
+
     cfg = copy.deepcopy(DEFAULTS)
+
     for k, v in raw.items():
         cfg[k] = {**cfg[k], **v} if isinstance(cfg.get(k), dict) and isinstance(v, dict) else v
+
     if cfg["device"] == "auto":
         cfg["device"] = "cuda" if torch.cuda.is_available() else "cpu"
+
     cfg["search"] = {**cfg["search"], "seed": int(cfg["seed"]),
                      "image_size": int(cfg["data"].get("image_size", 200))}
     return cfg
