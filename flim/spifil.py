@@ -222,6 +222,7 @@ import dataclasses
 import json
 import random
 import shutil
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -245,9 +246,11 @@ from spifil.types import Seeds
 
 from config import get_single_parasite_paths
 from core.data.loaders import ift_lab_loader
-from core.data.transforms import build_test
+from core.data.transforms import build_test, letterbox
 
 from .arch import get_actual_channels_from_weights, parse_architecture
+from .kernel_redundancy import attach
+from .seed_points import SeedPoints, mean_rows
 # Mesmo valor que o laco le como GROW_EXHAUSTED: um contrato de codigo de saida
 # nao pode ter duas fontes. Aliasado para o nome de quem PRODUZ o codigo.
 from .constants import GROW_EXHAUSTED as EXIT_BUDGET
@@ -301,19 +304,24 @@ class GrowOneLayer:
 
     def __init__(self, budget_check: bool = True, whiten: bool = False,
                  patch_norm: bool = False, select_diverse: float = 0.0,
-                 knn_smooth: int = 0) -> None:
+                 knn_smooth: int = 0, seed_mean: bool = False) -> None:
         # False = como o SPiFiL original, que fita mesmo com N <= D (shrinkage).
         self.budget_check = budget_check
         self.whiten = whiten
         self.patch_norm = patch_norm
         self.select_diverse = select_diverse
         self.knn_smooth = knn_smooth
+        self.seed_mean = seed_mean
         self.zca = None
         self.scale = None
 
     def run(self, learn: Learner) -> None:
         layer = learn.n_layers
         patches = learn.state[layer - 1].patches
+        x = patches.feats
+        if self.seed_mean:
+            # `x` segue sendo outro objeto: e isso que refaz scores e ranks la embaixo
+            x, patches = mean_rows(x), patches.select(slice(None, None, 3))
         n, d = len(patches), int(patches.feats.shape[1])
         print(f"[grow] N={n} D={d}")
         if self.budget_check and n <= d:
@@ -323,7 +331,6 @@ class GrowOneLayer:
                 f"imagens (n_images) ou pare de crescer."
             )
         state = learn.state[layer - 1]
-        x = patches.feats
         if self.patch_norm:
             # Coates & Ng 2011: cada patch menos a sua media (nas D dims), dividido pelo seu
             # desvio (eps relativo, como no ZCA), ANTES do ZCA. Na conv so cabe a parte
@@ -381,12 +388,14 @@ class Cropped(SpifilDataset):
     cima de pixels que o encoder nunca viu.
     """
 
-    def __init__(self, samples, size: int, *, use_mask: bool = True) -> None:
+    def __init__(self, samples, size: int, *, use_mask: bool = True,
+                 no_crop: bool = False) -> None:
         super().__init__(samples)
         self.use_mask = use_mask
         self._image = v2.Compose([
             v2.ToImage(), v2.ToDtype(torch.uint8, scale=True),
-            v2.Resize(size), v2.CenterCrop(size),
+            *([v2.Lambda(partial(letterbox, size=size, fill=(0, 0, 0)))] if no_crop
+              else [v2.Resize(size), v2.CenterCrop(size)]),
         ])
         # Mascara e rotulo, nao intensidade: interpolar inventaria rotulo.
         self._mask = v2.Compose([
@@ -508,6 +517,9 @@ def train_samples(dataset: str, split: int, percentage: int, n_images: int,
     chosen = [s for s in everything if s.image_path.name in names]
     if not chosen:
         raise ValueError(f"nenhuma imagem de treino em {info['images_dir']}")
+    # `Sample.label` sai do prefixo do nome; o manifest, quando ha, e quem tem a classe
+    if info["labels"]:
+        chosen = [dataclasses.replace(s, label=info["labels"][s.image_path.name] + 1) for s in chosen]
     if not one_per_class:
         return chosen[:: max(1, len(chosen) // n_images)][:n_images]
 
@@ -516,13 +528,14 @@ def train_samples(dataset: str, split: int, percentage: int, n_images: int,
     # tem que reproduzir a partir de `seed` sozinho, sem depender de quantas
     # vezes o RNG global foi consumido antes dele.
     rng = random.Random(seed)
-    paper = json.loads(PAPER_SEEDS_JSON.read_text(encoding="utf-8"))[dataset]
+    paper = json.loads(PAPER_SEEDS_JSON.read_text(encoding="utf-8")).get(dataset, {})
     paper = paper.get(str(split), {})
     picked = []
     labels = sorted({s.label for s in chosen})
     # `paper_classes`: so as classes que o artigo (e os pesos FLIM de data/) marcaram —
-    # sem a impureza no eggs (9) e no protozoan (7); o larvae mantem as duas.
-    if paper_classes:
+    # sem a impureza no eggs (9) e no protozoan (7); o larvae mantem as duas. Dataset fora
+    # do artigo nao tem essa lista: entram todas as classes.
+    if paper_classes and paper:
         labels = [l for l in labels if str(l) in paper]
     for label in labels:
         same = [s for s in chosen if s.label == label]
@@ -541,9 +554,9 @@ def train_samples(dataset: str, split: int, percentage: int, n_images: int,
     return picked
 
 
-def encoder_features(samples, encoder, size, imagenet_norm, device):
+def encoder_features(samples, encoder, size, imagenet_norm, device, no_crop=False):
     """As features exatamente como o treino as ve: ift_lab + o transform de teste."""
-    transform = build_test(size, imagenet_norm=imagenet_norm)
+    transform = build_test(size, imagenet_norm=imagenet_norm, no_crop=no_crop)
     out = []
     with torch.no_grad():
         for sample in samples:
@@ -633,7 +646,8 @@ def seeds_in_features(features, data, n_superpixels, grid):
 
 
 def build_layer0(data, trunk, samples, n_superpixels, image_size, imagenet_norm,
-                 device, in_feature, superpixels="slic"):
+                 device, in_feature, superpixels="slic", no_crop=False, seed_point="medoid",
+                 seed=42):
     """Superpixel no LAB, features no encoder treinado, sementes entre os dois.
 
     E a unica parte do `grow` que existe porque o metodo exige. O `prepare()`
@@ -645,13 +659,13 @@ def build_layer0(data, trunk, samples, n_superpixels, image_size, imagenet_norm,
     exige. Veja `seeds_in_features`.
     """
     grid = (trunk.grid, trunk.grid)
-    features = encoder_features(samples, trunk.encoder, image_size, imagenet_norm, device)
+    features = encoder_features(samples, trunk.encoder, image_size, imagenet_norm, device, no_crop)
     if in_feature:
         seeds, regions = seeds_in_features(features, data, n_superpixels, grid)
     else:
         prepared = list(preparation.prepare(
             data, superpixels=DISF() if superpixels == "disf" else SLIC(),
-            seed_extractor=Medoids(),
+            seed_extractor=SeedPoints(seed_point, seed),
             n_superpixels=n_superpixels, color=LabNorm(),
         ))
         seeds = [rescale(image.seeds, grid) for image in prepared]
@@ -675,6 +689,9 @@ def write_weights(out: Path, source: Path, arch: dict, layer: int, block) -> Non
     for n in range(1, layer):
         for name in (f"conv{n}-kernels.npy", f"conv{n}-bias.txt"):
             shutil.copy2(source / name, out / name)
+    for n in range(2, layer + 1):  # `whiten_between`: o whitening fixo da entrada da conv n, se a fonte o tem
+        if (source / f"conv{n}-whiten.npz").exists():
+            shutil.copy2(source / f"conv{n}-whiten.npz", out / f"conv{n}-whiten.npz")
 
     np.save(out / f"conv{layer}-kernels.npy", flim_kernels(block.conv.weight))
     bias = block.conv.bias.detach().cpu().numpy()
@@ -794,6 +811,12 @@ def grow(
     select_diverse: float = 0.0,
     knn_smooth: int = 0,
     images_per_class: int = 1,
+    no_crop: bool = False,
+    seed_point: str = "medoid",
+    redundancy_cos: float = 0.0,
+    redundancy_corr: float = 0.0,
+    redundancy_replace: bool = False,
+    redundancy_merge_seeds: bool = False,
     device: str | None = None,
     seed: int = 42,
 ) -> int:
@@ -833,6 +856,8 @@ def grow(
         raise ValueError("spifil_in_image e spifil_in_feature sao exclusivos")
     if random_layer and random_layer_classic:
         raise ValueError("random_layer e random_layer_classic sao exclusivos")
+    if spifil_in_feature and seed_point != "medoid":
+        raise ValueError("seed_point so existe no caminho do LAB")
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.manual_seed(seed)
@@ -877,7 +902,8 @@ def grow(
                             one_per_class=one_per_class, seed=seed,
                             paper_classes=paper_classes, images_per_class=images_per_class)
 
-    data = Cropped(samples, image_size, use_mask=not impurities)
+    # `no_crop` nao tem geometria de mascara: sem corte a mascara fica de fora
+    data = Cropped(samples, image_size, use_mask=not (impurities or no_crop), no_crop=no_crop)
 
     learn = Learner(
         data,
@@ -887,12 +913,14 @@ def grow(
             pool_stride=pool_stride,
         )]),
         color=trunk, device=device, strategy=(strategy := GrowOneLayer(
-            budget_check, whiten, patch_norm, select_diverse, knn_smooth)),
+            budget_check, whiten, patch_norm, select_diverse, knn_smooth, seed_point == "mean")),
     )
     learn.state[0] = build_layer0(
         data, trunk, samples, n_superpixels, image_size,
-        imagenet_norm, device, spifil_in_feature, superpixels,
+        imagenet_norm, device, spifil_in_feature, superpixels, no_crop, seed_point, seed,
     )
+    attach(learn, layer, out.parent / "kernel_redundancy.json", redundancy_cos,
+           redundancy_corr, redundancy_replace, redundancy_merge_seeds)
     try:
         learn.fit()  # prepare() ve a state[0] pronta, so pontua; a estrategia fita
     except BudgetExhausted as exhausted:

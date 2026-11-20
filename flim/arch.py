@@ -32,6 +32,7 @@ import json
 from pathlib import Path
 from typing import List
 
+import torch
 import torch.nn as nn
 
 
@@ -76,6 +77,42 @@ def override_arch_channels(arch: dict, channels: List[int]) -> dict:
     return arch
 
 
+class Branches(nn.ModuleList):
+    """Camada Inception (`conv.branches` no arch): um conv por ramo sobre a mesma entrada, padding same, cat nos canais.
+
+    No formato FLIM os ramos sao UM conv KxK (K = maior kernel; os menores com zeros em volta, a mesma conta);
+    `load_full` recorta cada ramo desse KxK.
+    """
+
+    def forward(self, x):
+        return torch.cat([conv(x) for conv in self], 1)
+
+    def load_full(self, weight, bias) -> None:
+        start = 0
+        for conv in self:
+            n, m = conv.out_channels, (weight.shape[-1] - conv.kernel_size[0]) // 2
+            conv.weight.data = weight[start:start + n, :, m:weight.shape[-1] - m, m:weight.shape[-1] - m].contiguous()
+            conv.bias.data = bias[start:start + n]
+            start += n
+
+
+class Whiten(nn.Module):
+    """`layerwise_spf.whiten_between`: whitening FIXO da entrada da conv n, x -> G (x - mu), no fim do bloco n-1.
+
+    mu e G sao os do `eval.spf_grade.map_whitener` (ZCA dos canais com shrinkage, sem rotulo, imagens de treino)
+    medidos quando a conv n foi montada. Buffers, nao parametros: nao treinam (nem com tudo solto no _ft) e viajam
+    no ckpt e no FLIM (`conv{n}-whiten.npz`). No fim do bloco anterior, o conv segue no `[0]` de todo bloco.
+    """
+
+    def __init__(self, shift: torch.Tensor, gain: torch.Tensor) -> None:
+        super().__init__()
+        self.register_buffer("shift", shift)
+        self.register_buffer("gain", gain)
+
+    def forward(self, x):
+        return torch.einsum("dc,bchw->bdhw", self.gain, x - self.shift.view(1, -1, 1, 1))
+
+
 def build_encoder_from_arch(arch: dict, in_channels: int = 3) -> nn.ModuleDict:
     """
     Build encoder blocks from architecture JSON.
@@ -102,6 +139,8 @@ def build_encoder_from_arch(arch: dict, in_channels: int = 3) -> nn.ModuleDict:
         pool_stride = pool_desc["stride"]
 
         layers = [
+            Branches(nn.Conv2d(ch_in, b["noutput_channels"], b["kernel_size"], padding=b["kernel_size"] // 2)
+                     for b in conv_desc["branches"]) if "branches" in conv_desc else
             nn.Conv2d(ch_in, ch_out, kernel_size, padding=padding, dilation=dilation_rate),
         ]
         if layer_desc.get("relu", False):

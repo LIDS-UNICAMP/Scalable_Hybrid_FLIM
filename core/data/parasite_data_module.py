@@ -50,7 +50,7 @@ from torch.utils.data import DataLoader, Dataset
 from core.data.multi_crop_dataset import MultiCropDataset
 from core.data.multi_crop_transform import MultiCropTransform
 from core.data.multi_view_dataset import MultiViewDataset
-from core.data.parasite_dataset import ParasiteDataset
+from core.data.parasite_dataset import ParasiteDataset, image_cache_path
 from core.data.transforms import build_aug, build_test
 
 logger = logging.getLogger(__name__)
@@ -73,12 +73,16 @@ class ParasiteDataModule(pl.LightningDataModule):
             quando ``multi_view=False``; no modo multiview o wrapper controla
             o pipeline e o dataset base recebe ``transform=None``.
         image_size: Resolucao espacial dos crops (pixels), modo multiview.
+        no_crop: ``build_test`` sem corte: letterbox no lugar de Resize + CenterCrop.
+        image_cache_dir: Raiz do cache de ``tools/build_image_cache.py``; ``None`` desliga.
+            So com ``build_test`` em todos os conjuntos: multiview, uma view, ``ift_lab``.
         V_train: Numero de views por amostra no treino (ignorado com multicrop).
         V_eval: Numero de views por amostra em validacao/teste.
         batch_size: Amostras por batch.
         num_workers: Processos worker do DataLoader.
         pin_memory: Fixa a memoria do DataLoader.
         persistent_workers: Mantem os workers vivos entre epocas.
+        prefetch_factor: Batches pre-carregados por worker; ``None`` = padrao do torch (2).
         drop_last: Descarta o ultimo batch incompleto do treino.
         loader: Backend de leitura de imagem: ``"ift_lab"`` ou ``"pil"``.
         use_mask: Reservado para suporte a mascara (ainda inativo).
@@ -114,6 +118,7 @@ class ParasiteDataModule(pl.LightningDataModule):
         num_workers: int = 4,
         pin_memory: bool = True,
         persistent_workers: bool = True,
+        prefetch_factor: Optional[int] = None,
         drop_last: bool = False,
         loader: str = "ift_lab",
         use_mask: bool = False,
@@ -127,8 +132,14 @@ class ParasiteDataModule(pl.LightningDataModule):
         local_scale: tuple[float, float] = (0.05, 0.3),
         geo_aug: bool = False,
         strong_aug: bool = False,
+        no_crop: bool = False,
+        image_cache_dir: Optional[str] = None,
     ) -> None:
         super().__init__()
+        if image_cache_dir and not (multi_view and V_train == V_eval == 1 and not multicrop
+                                    and loader == "ift_lab" and parasite_name):
+            raise ValueError("image_cache_dir guarda a saida do build_test: exige multi_view, "
+                             "V_train = V_eval = 1, sem multicrop, loader ift_lab e parasite_name")
         self.split = split
         self.percentage = percentage
         self.parasite_name = parasite_name
@@ -141,12 +152,16 @@ class ParasiteDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.persistent_workers = persistent_workers
+        self.prefetch_factor = prefetch_factor
         self.drop_last = drop_last
         self.loader = loader
         self.use_mask = use_mask
         self.imagenet_norm = imagenet_norm
         self.geo_aug = geo_aug
         self.strong_aug = strong_aug
+        self.no_crop = no_crop
+        self.cache_dir = image_cache_dir and image_cache_path(
+            image_cache_dir, parasite_name, image_size, no_crop)
 
         # Multi-crop (global/local). Com multicrop=True o treino usa
         # n_global + n_local views (escalas distintas, mesmo tamanho de saida)
@@ -175,6 +190,7 @@ class ParasiteDataModule(pl.LightningDataModule):
             transform=transform,
             loader=self.loader,
             path_dataset=self.parasite_name,
+            cache_dir=self.cache_dir,
         )
 
     def setup(self, stage: Optional[str] = None) -> None:
@@ -205,7 +221,7 @@ class ParasiteDataModule(pl.LightningDataModule):
             return
 
         aug = build_aug(self.image_size, imagenet_norm=self.imagenet_norm)
-        test = build_test(self.image_size, imagenet_norm=self.imagenet_norm)
+        test = build_test(self.image_size, imagenet_norm=self.imagenet_norm, no_crop=self.no_crop)
 
         multicrop_tf = None
         v_train = self.V_train
@@ -235,7 +251,7 @@ class ParasiteDataModule(pl.LightningDataModule):
                 image_size=self.image_size,
                 aug_transform=aug,
                 test_transform=build_test(self.image_size, self.imagenet_norm, geo_aug=True,
-                                          strong_aug=self.strong_aug)
+                                          strong_aug=self.strong_aug, no_crop=self.no_crop)
                 if (self.geo_aug or self.strong_aug) and set_name == "train" else test,
                 multicrop_transform=multicrop_tf if set_name == "train" else None,
             )
@@ -256,6 +272,7 @@ class ParasiteDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             persistent_workers=self.persistent_workers and self.num_workers > 0,
+            prefetch_factor=self.prefetch_factor if self.num_workers > 0 else None,
             drop_last=drop_last,
         )
 

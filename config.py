@@ -42,8 +42,12 @@ Filenames encode the class label as the first field (1-indexed),
 e.g. "000002_00000042.png" → class index 1 (after subtracting 1).
 """
 
+import json
 import os
 import re
+from functools import lru_cache
+
+from core.constants import ORGANIZED, ORGANIZED_ROOT
 
 # ---------------------------------------------------------------------------
 # Root of the project (resolved relative to this file so it works regardless
@@ -92,6 +96,34 @@ DATASETS: dict[str, dict[str, str]] = {
         ],
     },
 }
+
+
+# Os 12 de organized/. Fora de DATASETS["parasito"]: `get_parasito_split_paths` agrega
+# aquela lista inteira. Sem mascara de proposito, em nenhuma etapa.
+ORGANIZED_CLASSES: list[dict] = [
+    {
+        "name": name,
+        "images": f"{ORGANIZED_ROOT}/{name}/{images}",
+        "masks": None,
+        "splits": f"{ORGANIZED_ROOT}/{name}/splits",
+        "splits_incremental": f"{ORGANIZED_ROOT}/{name}/splits_incremental",
+        "manifest": f"{ORGANIZED_ROOT}/{name}/manifest.json",
+    }
+    for name, (images, _) in ORGANIZED.items()
+]
+
+
+@lru_cache(maxsize=None)
+def _manifest_labels(path: str | None) -> dict[str, int] | None:
+    """Arquivo -> classe 0-based do manifest; None sem manifest (a classe e o prefixo).
+
+    Em Eggs e Protozoan o prefixo tem 16 e 12 classes: as 9 e 7, com a impureza como
+    classe, so existem aqui. Os *_subgroup nao tem manifest.
+    """
+    if path is None or not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return {item["file"]: item["class_id"] - 1 for item in json.load(f)["items"]}
 
 
 def get_dataset_paths(dataset_name: str) -> dict[str, str]:
@@ -177,7 +209,7 @@ def get_single_parasite_paths(
     # This allows splits 1/2/3 to all resolve to the same image/split paths
     # regardless of which variant is registered in DATASETS.
     base_name = re.sub(r"_split_\d+$", "", parasite_name)
-    classes = DATASETS["parasito"]["classes"]
+    classes = DATASETS["parasito"]["classes"] + ORGANIZED_CLASSES
     cls = next((c for c in classes if c["name"] == parasite_name), None)
     if cls is None:
         cls = next(
@@ -204,6 +236,7 @@ def get_single_parasite_paths(
         "images_dir": cls["images"],
         "masks_dir": cls["masks"],
         "split_json": json_path,
+        "labels": _manifest_labels(cls.get("manifest")),
     }]
 
 

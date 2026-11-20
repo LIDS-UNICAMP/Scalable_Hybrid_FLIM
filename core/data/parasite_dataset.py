@@ -36,6 +36,11 @@ from core.data.loaders import ift_lab_loader, pil_loader
 logger = logging.getLogger(__name__)
 
 
+def image_cache_path(root, dataset, size, no_crop):
+    """Pasta do cache de um dataset: `tools/build_image_cache.py` escreve, o dataset le."""
+    return os.path.join(root, dataset, f"{size}_{'nocrop' if no_crop else 'crop'}")
+
+
 class ParasiteDataset(Dataset):
     """
     Dataset que agrega as 3 classes do new_split_parasito
@@ -53,15 +58,21 @@ class ParasiteDataset(Dataset):
         path_dataset: When provided, restricts loading to this single
             parasite name (e.g. ``"helminth-eggs_split_2"``).  Legacy multi-parasite
             behavior is preserved when *path_dataset* is ``None``.
+        cache_dir: Pasta de :func:`image_cache_path`. O ``.npy`` e o uint8 que ``build_test``
+            produz antes do float, e no tamanho final resize, pad e crop nao fazem nada;
+            so vale com ``build_test``. Arquivo ausente cai na leitura normal.
     """
     def __init__(self, set_name, split, percentage, transform=None, loader="ift_lab",
-                 path_dataset=None):
+                 path_dataset=None, cache_dir=None):
         self.set_name = set_name
         self.split = split
         self.percentage = percentage
         self.transform = transform
         self.loader = loader
         self.path_dataset = path_dataset
+        self.cache_dir = cache_dir
+        if cache_dir and not os.path.isdir(cache_dir):
+            logger.warning("[ParasiteDataset] sem cache em %s: leitura normal", cache_dir)
 
         if path_dataset is not None:
             # Single-parasite mode: load only the requested parasite.
@@ -83,6 +94,7 @@ class ParasiteDataset(Dataset):
             class_infos = get_parasito_split_paths(split, percentage)
 
         self.samples = []
+        self.labels = {}  # arquivo -> classe, quando o prefixo do nome nao e a classe
         for cls_info in class_infos:
             json_path = cls_info["split_json"]
             images_dir = cls_info["images_dir"]
@@ -96,6 +108,7 @@ class ParasiteDataset(Dataset):
             filenames = data[self.set_name]
             for fname in filenames:
                 self.samples.append(os.path.join(images_dir, fname))
+            self.labels.update(cls_info.get("labels") or {})
 
     def __len__(self):
         return len(self.samples)
@@ -103,9 +116,12 @@ class ParasiteDataset(Dataset):
     def __getitem__(self, idx):
         path = self.samples[idx]
         img_name = os.path.basename(path)
-        label = int(img_name.split("_")[0]) - 1
+        label = self.labels.get(img_name, int(img_name.split("_")[0]) - 1)
 
-        if self.loader == "ift_lab":
+        cached = self.cache_dir and os.path.join(self.cache_dir, img_name + ".npy")
+        if cached and os.path.exists(cached):
+            img = torch.from_numpy(np.load(cached))
+        elif self.loader == "ift_lab":
             img = ift_lab_loader(path)
             # ift_lab_loader devolve numpy (H, W, 3) float em [0,1].
             # As transforms do torchvision esperam PIL Image ou Tensor (C, H, W),

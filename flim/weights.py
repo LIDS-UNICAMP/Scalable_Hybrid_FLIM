@@ -45,7 +45,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from flim.arch import parse_architecture
+from flim.arch import Branches, Whiten, parse_architecture
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -113,6 +113,18 @@ def load_FLIM_encoder(model: nn.Module, arch_json: str, weights_path: str,
             model_block = getattr(model, f"conv{n}")
 
         weights_dir = Path(weights_path)
+        if (weights_dir / f"conv{n}-whiten.npz").exists():  # `whiten_between`: entrada da conv n, fim do bloco n-1
+            fold = np.load(weights_dir / f"conv{n}-whiten.npz")
+            getattr(model.encoder if hasattr(model, "encoder") else model, f"conv{n - 1}").append(
+                Whiten(torch.from_numpy(fold["shift"]).to(DEVICE), torch.from_numpy(fold["gain"]).to(DEVICE)))
+
+        if isinstance(model_block[0], Branches):  # Inception: o .npy guarda o KxK equivalente, cada ramo recorta o seu
+            kernel_size = arch_description[f"layer{n}"]["conv"]["kernel_size"]
+            weights = get_weights(weights_dir / f"conv{n}-kernels.npy", (kernel_size[0], kernel_size[1]), in_channels)
+            model_block[0].load_full(torch.from_numpy(weights).float().to(DEVICE),
+                                     torch.from_numpy(get_bias(weights_dir / f"conv{n}-bias.txt")).float().to(DEVICE))
+            in_channels = channels[n]
+            continue
 
         # Load bias
         bias_path = weights_dir / f"conv{n}-bias.txt"

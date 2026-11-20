@@ -20,8 +20,24 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 import torch
 from torchvision.transforms import v2
+
+
+# RGB preto depois do ift_lab_loader, em uint8. Medido: zero nos tres canais nao e preto.
+LAB_BLACK: tuple[int, int, int] = (0, 119, 136)
+
+
+def letterbox(img: torch.Tensor, size: int, fill: tuple[int, int, int]) -> torch.Tensor:
+    """Lado maior vira `size`, sem corte nem distorcao; o que sobra do quadrado e `fill`."""
+    h, w = img.shape[-2:]
+    scale = size / max(h, w)
+    h, w = round(h * scale), round(w * scale)
+    top, left = (size - h) // 2, (size - w) // 2
+    return v2.functional.pad(v2.functional.resize(img, [h, w]),
+                             [left, top, size - w - left, size - h - top], fill=list(fill))
 
 
 def build_aug(image_size: int, imagenet_norm: bool = True) -> v2.Compose:
@@ -67,12 +83,12 @@ def _strong(img: torch.Tensor) -> torch.Tensor:
 
 
 def build_test(image_size: int, imagenet_norm: bool = True, geo_aug: bool = False,
-               strong_aug: bool = False) -> v2.Compose:
+               strong_aug: bool = False, no_crop: bool = False) -> v2.Compose:
     steps = [
         v2.ToImage(),
         v2.ToDtype(torch.uint8, scale=True),  # Convert to uint8 for consistency
-        v2.Resize(image_size),
-        v2.CenterCrop(image_size),
+        *([v2.Lambda(partial(letterbox, size=image_size, fill=LAB_BLACK))] if no_crop
+          else [v2.Resize(image_size), v2.CenterCrop(image_size)]),
         v2.ToDtype(torch.float32, scale=True),
     ]
     # Flip H/V + rotacao de 90 graus: o parasito nao tem orientacao canonica na lamina.

@@ -62,9 +62,32 @@ _ROOT = Path(PROJECT_ROOT)
 # Origem: scripts/constants.py:81 == src/evaluate/constants.py:69 (identicos).
 DATASETS: list[str] = ["eggs", "larvae", "protozoan"]
 
+# Os 12 datasets de organized/, pelo nome da pasta: (pasta das imagens, classes).
+# Eggs, Protozoan e Larvae leem raw/orig: os nomes dos splits so existem la. Nome
+# de pasta tambem e a chave curta. Fora de DATASETS: grade sem eixo nao os pega.
+ORGANIZED_ROOT: str = "/dados/home/moliveira/datasets/organized"
+ORGANIZED: dict[str, tuple[str, int]] = {
+    "Eggs": ("raw/orig", 9),
+    "Protozoan": ("raw/orig", 7),
+    "Larvae": ("raw/orig", 2),
+    "Eggs_subgroup": ("images", 9),
+    "Protozoan_subgroup": ("images", 7),
+    "Larvae_subgroup": ("images", 2),
+    "aid": ("orig", 30),
+    "flowers": ("orig", 5),
+    "remote_sensing": ("orig", 14),
+    "helminth_eggs": ("orig", 9),
+    "helminth_larvae": ("orig", 2),
+    "protozoan_cysts": ("orig", 7),
+    "coconut_trees": ("orig", 2),
+    "food101": ("orig", 101),
+    "ham10000": ("orig", 7),
+}
+
 # Numero de classes por chave curta. Origem: scripts/constants.py:106
 # (copia identica vive em src/modules/autoencoder_flim_module.py:850).
-NUM_CLASSES: dict[str, int] = {"eggs": 9, "larvae": 2, "protozoan": 7}
+NUM_CLASSES: dict[str, int] = {"eggs": 9, "larvae": 2, "protozoan": 7,
+                               **{name: n for name, (_, n) in ORGANIZED.items()}}
 
 # Numero de classes por chave longa, mais o agregado "parasito".
 # Origem: src/evaluate/constants.py:54 (copia identica e orfa em
@@ -74,6 +97,7 @@ DATASET_NUM_CLASSES: dict[str, int] = {
     "helminth-larvae": 2,
     "protozoan-cysts": 7,
     "parasito": 9,
+    **{name: n for name, (_, n) in ORGANIZED.items()},
 }
 
 # Registry de caminhos de dataset. Origem: config.py:64, onde o nome era
@@ -158,6 +182,10 @@ FLIM_WEIGHTS_BASE: dict[str, str] = {
     "larvae": str(_ROOT / "data/to_mateus/model/ch24_32_48_a0.5_f5/larvae"),
     "protozoan": str(_ROOT / "data/to_mateus/model/ch24_32_48_a0.5_f5/protozoan"),
 }
+# Dataset novo nao tem FLIM proprio: o `grow` so usa o JSON de eggs como molde e a
+# L1 nasce do zero. `layerwise_from_flim` nesses datasets herdaria pesos de eggs.
+FLIM_ARCH_BASE |= dict.fromkeys(ORGANIZED, FLIM_ARCH_BASE["eggs"])
+FLIM_WEIGHTS_BASE |= dict.fromkeys(ORGANIZED, FLIM_WEIGHTS_BASE["eggs"])
 
 # --- Nomes de arquivo e subdiretorio ----------------------------------------
 
@@ -165,6 +193,7 @@ ARCH_JSON_FILENAME: str = "architecture.json"       # scripts/constants.py:171
 MODELS_SUBDIR: str = "models"                       # scripts/constants.py:172
 CHECKPOINTS_SUBDIR: str = "checkpoints"             # scripts/constants.py:173
 RUN_METADATA_FILENAME: str = "run_metadata.json"    # scripts/constants.py:175
+EPOCH_METRICS_FILENAME: str = "epoch_metrics.csv"   # model.init_args.epoch_probe, junto do run_metadata
 
 # O que e removido do .ckpt quando o teacher e descartado.
 # Origem: scripts/constants.py:303.
@@ -193,4 +222,5 @@ PARASITE_NAME: dict[str, str] = {
     "eggs": "helminth-eggs_split_2",
     "larvae": "helminth-larvae_split_2",
     "protozoan": "protozoan-cysts_split_2",
+    **{name: name for name in ORGANIZED},
 }
