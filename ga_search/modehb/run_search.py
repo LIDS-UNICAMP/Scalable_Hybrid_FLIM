@@ -379,6 +379,28 @@ class _CappedLoader:
             yield b
 
 
+class _SplitLoader:
+    """v4 OOM fallback: every batch of ``loader`` split into ``div`` smaller batches."""
+
+    def __init__(self, loader, div):
+        self.loader, self.div = loader, int(div)
+        self.dataset = loader.dataset
+
+    def __len__(self):
+        return len(self.loader) * self.div
+
+    def __iter__(self):
+        for b in self.loader:
+            if torch.is_tensor(b):
+                yield from b.chunk(self.div)
+                continue
+            parts = [t.chunk(self.div) if torch.is_tensor(t) else None for t in b]
+            n = min(len(p) for p in parts if p is not None)
+            for i in range(n):
+                yield type(b)(p[i] if p is not None else t for p, t in zip(parts, b)) \
+                    if isinstance(b, (list, tuple)) else b
+
+
 def _amp_dtype(name, device):
     """``train.amp_dtype`` -> torch dtype of the training autocast (None = fp32, the default).
     Only bf16 (no GradScaler needed); CPU runs and GPUs without bf16 stay fp32."""
@@ -552,6 +574,13 @@ class Evaluator:
         readout = str(kw.get("readout", "head"))
         if readout == "cov_head":            # second-order readout (pooling_head.CovReadout)
             return self._embed_cov(encoder, head)
+        if readout in ("so2_4096", "so2_1280"):   # v4: the REPORTED readout (readout_x so2_*_pca), fp32
+            from ga_search.modehb.so2_readout import So2Readout
+            r = So2Readout(D=int(readout.split("_")[1]), n_px=int(kw.get("so2_n_px", 64)), seed=0)
+            bs = int(kw.get("so2_batch_size", 16))
+            r.fit(encoder, self.svm_train_x, self.device, bs)
+            return (r.embed(encoder, self.svm_train_x, self.device, bs).numpy(),
+                    r.embed(encoder, self.val_x, self.device, bs).numpy())
         tr = self._embed(encoder, head, self.svm_train_x, tta=tta, readout=readout).numpy()
         va = self._embed(encoder, head, self.val_x, tta=tta, readout=readout).numpy()
         return tr, va
@@ -571,6 +600,26 @@ class Evaluator:
         with _blas_threads(self._fitness_speed()["svm_blas_threads"]):
             return self._svm_score(*self._svm_features(encoder, head))
 
+    def _apply_mem_fallback(self, fb):
+        """v4 OOM ladder level for ONE evaluation: ``amp_dtype: bf16`` (training autocast) and
+        ``batch_div: d`` (each training batch split in d chunks -> d x more, smaller steps; recorded
+        in the result). Returns what ``_restore_mem_fallback`` needs."""
+        if not fb:
+            return None
+        saved = (self.amp_dtype, self.train_loader)
+        if fb.get("amp_dtype"):
+            self.amp_dtype = _amp_dtype(fb["amp_dtype"], self.device)
+        d = int(fb.get("batch_div", 1) or 1)
+        if d > 1:
+            self.train_loader = _SplitLoader(self.train_loader, d)
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
+        return saved
+
+    def _restore_mem_fallback(self, saved):
+        if saved is not None:
+            self.amp_dtype, self.train_loader = saved
+
     # ---- one evaluation
     def __call__(self, genome, fidelity, ctx):
         t0 = time.time()
@@ -581,6 +630,7 @@ class Evaluator:
         cand_dir = self.out / "candidates" / ctx["cand_id"] / f"f{int(fidelity)}"
         cand_dir.mkdir(parents=True, exist_ok=True)
         run = self._start_run(genome, fidelity, ctx)
+        saved = self._apply_mem_fallback(ctx.get("mem_fallback"))   # v4 OOM ladder (None = unchanged)
         try:
             result = self._evaluate(genome, fidelity, ctx, cand_dir, run)
         except Exception as exc:
@@ -593,6 +643,10 @@ class Evaluator:
                 if self.device.type == "cuda":     # e.g. OOM under the process cap -> infeasible
                     torch.cuda.empty_cache()
             raise
+        finally:
+            self._restore_mem_fallback(saved)
+        if ctx.get("mem_fallback"):
+            result["mem_fallback"] = dict(ctx["mem_fallback"])
         hours = (time.time() - t0) / 3600.0
         result["wall_hours"] = hours
         if self.device.type == "cuda":

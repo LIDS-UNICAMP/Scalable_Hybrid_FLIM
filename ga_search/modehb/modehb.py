@@ -724,6 +724,10 @@ class MODEHB:
         # opt-in parameter-stratified search (YAML ``stratified:``); None = original MO-DEHB
         self.strat = S.strat_config(sc) if sc.get("enabled") else None
         self.param_fn = param_fn or S.param_estimate
+        # v4 ``stratified.cap_count: spifil_ops``: param_cap on strata.param_count_built (>= the measured
+        # params) BEFORE training; absent = the ConvBlock estimate, cap checked only after training (v3)
+        self._cap_built = (self.strat or {}).get("cap_count") == "spifil_ops"
+        self.cap_fn = S.param_count_built if self._cap_built else self.param_fn
         self.evaluate_fn = evaluate
         self.out = Path(output_dir)
         self.out.mkdir(parents=True, exist_ok=True)
@@ -850,8 +854,8 @@ class MODEHB:
             why = None
             if ES.active_layers(g) != ES.active_layers(g0):
                 why = "changed by repair"
-            elif self.strat is not None and self.param_fn(g) > self.strat["param_cap"]:
-                why = f"params {self.param_fn(g)} > cap {self.strat['param_cap']}"
+            elif self.strat is not None and self.cap_fn(g) > self.strat["param_cap"]:
+                why = f"params {self.cap_fn(g)} > cap {self.strat['param_cap']}"
             elif self.strat is not None and self.strat.get("memory_budget_gb") and S.mem_estimate_gb(
                     g, int(self.cfg["image_size"]), n_classes=n_cls or None, seeds_per_image=spp,
                     pool_sizes=pools) > float(self.strat["memory_budget_gb"]):
@@ -1164,7 +1168,8 @@ class MODEHB:
             g = S.mem_repair(g, float(mb), lambda x: repair(x, **self.repair_kw),
                              image_size=int(self.cfg["image_size"]), min_spatial=int(self.cfg["min_spatial"]),
                              n_classes=n_cls or None, seeds_per_image=spp, pool_sizes=pools,
-                             spifil_choices=self.repair_kw["spifil_images_choices"])
+                             spifil_choices=self.repair_kw["spifil_images_choices"],
+                             scale=float((self.strat or {}).get("mem_scale", 1.0) or 1.0))
             g = _images(g)                            # no-op unless a width repair broke N > D
         return g
 
@@ -1189,6 +1194,13 @@ class MODEHB:
         names = S.names(self.strat)
         k = int(self.state.get("strata_rr", 0))
         self.state["strata_rr"] = k + 1
+        if self.strat.get("band_quota"):      # v4: most under-represented band of THIS bracket
+            counts = {}
+            for j in self.state["jobs"][getattr(self, "_bracket_job0", 0):]:
+                op = j.get("op") or {}
+                if j["role"] == "search" and j["status"] == "ok" and op.get("type") not in ("promotion", "extension"):
+                    counts[j.get("stratum")] = counts.get(j.get("stratum"), 0) + 1
+            return S.next_band(counts, self.strat)
         return names[k % len(names)]
 
     def _quality_path(self, cand_id):
@@ -1199,6 +1211,16 @@ class MODEHB:
         """[(index into prev, exploratory?)]. Stratified: protected quotas (strata.py)."""
         sc = self.strat
         pb = None if sc is None else sc.get("protected_brackets")
+        if sc is not None and sc.get("promotion") == "per_band":   # v4: Pareto inside each band, always
+            from ga_search.modehb import strata as S
+            from ga_search.modehb.strata import learning_slope
+            cands = [{"F": r["F"], "stratum": r.get("stratum") or S.names(sc)[0],
+                      "slope": learning_slope(self._quality_path(r["cand_id"]))} for r in prev]
+            counts = self.state.setdefault("promo_counts", {}).setdefault(str(fid_prev), {})
+            idx = S.band_promotions(cands, n, sc, lambda Fs, k: select_promotions(Fs, k, self.cfg["tie_breaker"]))
+            for i in idx:
+                counts[cands[i]["stratum"]] = counts.get(cands[i]["stratum"], 0) + 1
+            return [(i, j >= n) for j, i in enumerate(idx)]
         if sc is None or (pb is not None and b >= int(pb)):
             return [(i, False) for i in select_promotions(F, n, self.cfg["tie_breaker"])]
         from ga_search.modehb import strata as S
@@ -1314,6 +1336,8 @@ class MODEHB:
         if not sp:
             return []
         F = np.array([m["F"] for m in sp])
+        if (self.strat or {}).get("parent_select") == "quality":   # v4: no FLOPs pressure on DE parents
+            return [np.asarray(sp[i]["vector"], float) for i in np.argsort(F[:, 0], kind="stable")[:min(n, len(sp))]]
         return [np.asarray(sp[i]["vector"], float) for i in select_promotions(F, min(n, len(sp)),
                                                                               self.cfg["tie_breaker"])]
 
@@ -1356,9 +1380,27 @@ class MODEHB:
                and (fidelity is None or j["fidelity"] == fidelity) and (role is None or j["role"] == role)]
         return out
 
+    def _cap_project(self, genome, vector):
+        """v4 hard cap BEFORE training: a genome whose ``cap_fn`` count is above ``param_cap`` is shrunk
+        by ``strata.enforce_cap`` (top band, then widths x0.9) with an rng drawn from the genome, so a
+        restart replays it; a job logged with the raw genome (search started before this fix, e.g.
+        remote_sensing c00015) replays raw. Still above the cap: rejected untrained in ``_call``."""
+        from ga_search.modehb import strata as S
+        if self.cap_fn(genome) <= self.strat["param_cap"]:
+            return genome, vector
+        k, log = len(self.state["jobs"]), getattr(self, "_replay", [])
+        if k < len(log) and log[k]["arch_hash"] == arch_hash(genome):
+            return genome, vector
+        rng = np.random.default_rng([int(self.cfg["seed"]), int(arch_hash(genome)[:8], 16), 0xCA9])
+        g = S.enforce_cap(genome, self.strat, self._rep, rng, count=self.cap_fn)
+        print(f"[modehb] cap: {self.cap_fn(genome)} -> {self.cap_fn(g)} params (built count), reprojected", flush=True)
+        return g, None
+
     def _evaluate(self, genome, fid, *, parent_id, generation, rung, cand_id=None, vector=None,
                   role="search", twin_of=None, twin_source=None, inherit=None, extra_ctx=None):
         genome = repair(genome, **self.repair_kw)
+        if getattr(self, "_cap_built", False) and inherit is None:   # v4: hard cap before training
+            genome, vector = self._cap_project(genome, vector)
         cached = self._find(genome, fid, role=role)
         lower = [j for j in self._find(genome, role=role) if j["fidelity"] < fid and j["status"] == "ok"
                  and j["result"].get("checkpoint")]
@@ -1383,7 +1425,7 @@ class MODEHB:
         if self.strat is not None:
             from ga_search.modehb import strata as S
             p_est = self.param_fn(genome)
-            p_meas = result.get("params") if result.get("status", "ok") == "ok" else None
+            p_meas = result.get("params") if result.get("status", "ok") == "ok" or result.get("not_trained") else None
             stratum = S.stratum_of(p_meas if p_meas is not None else p_est, self.strat)
             if result.get("status", "ok") == "ok" and p_meas is not None and int(p_meas) > self.strat["param_cap"]:
                 result = {**result, "status": "failed", "infeasible": "param_cap",
@@ -1418,6 +1460,13 @@ class MODEHB:
                 raise ReplayMismatch(f"job {k}: logged {old['arch_hash']}@{old['fidelity']} "
                                      f"vs {arch_hash(genome)}@{fid}")
             return old["result"]
+        if getattr(self, "_cap_built", False) and self.cap_fn(genome) > self.strat["param_cap"]:
+            n = int(self.cap_fn(genome))              # v4: never trained above the cap
+            return {"status": "failed", "infeasible": "param_cap", "not_trained": True, "params": n,
+                    "gpu_hours": 0.0, "error": f"params {n} > cap {self.strat['param_cap']} (built count, before training)"}
+        ladder = list((getattr(self, "strat", None) or {}).get("oom_fallback") or [])
+        if ladder:
+            return self._call_oom_ladder(genome, fid, ctx, ladder)
         attempt = 0
         while True:
             try:
@@ -1440,6 +1489,43 @@ class MODEHB:
                 break
         result.setdefault("status", "ok")
         return result
+
+    def _call_oom_ladder(self, genome, fid, ctx, ladder):
+        """v4 OOM handling: ``oom_fast_retries`` transient retries (shared GPU), then the
+        ``oom_fallback`` levels in order (ctx["mem_fallback"] = level, e.g. bf16, then bf16 + batch/2);
+        every attempt is recorded in ``result["oom_attempts"]`` and the level that worked in
+        ``result["mem_fallback"]``. Still OOM after the ladder: ``status=failed``,
+        ``infeasible="oom"``, ``penalize=False`` (not a bad model: never a sub-population member, the
+        band stays under-represented and is re-targeted)."""
+        sc = self.strat or {}
+        fast = int(sc.get("oom_fast_retries") if sc.get("oom_fast_retries") is not None else 1)
+        sleep_s = float(sc.get("oom_retry_sleep_s") if sc.get("oom_retry_sleep_s") is not None else 60)
+        levels = [None] * (1 + fast) + [dict(l) for l in ladder]
+        attempts = []
+        for lvl in levels:
+            c = dict(ctx)
+            if lvl is not None:
+                c["mem_fallback"] = lvl
+            try:
+                result = dict(self.evaluate_fn(genome, fid, c))
+                result.setdefault("status", "ok")
+                if attempts:
+                    result["oom_attempts"] = attempts
+                if lvl is not None:
+                    result["mem_fallback"] = lvl
+                return result
+            except Exception as exc:
+                if _fatal_cuda(exc):
+                    raise
+                if not _is_oom(exc):
+                    return {"status": "failed", "error": f"{type(exc).__name__}: {exc}",
+                            **({"oom_attempts": attempts} if attempts else {})}
+                attempts.append({"mem_fallback": lvl, "error": f"{type(exc).__name__}: {str(exc)[:160]}"})
+                print(f"[modehb] OOM on {ctx.get('cand_id')} (level {lvl}); next level", flush=True)
+                if lvl is None and sleep_s > 0:
+                    time.sleep(sleep_s)
+        return {"status": "failed", "infeasible": "oom", "penalize": False, "oom_attempts": attempts,
+                "error": attempts[-1]["error"] if attempts else "OOM"}
 
     def _evaluate_twin(self, rec):
         """Random twin along the SPiFiL candidate's fidelity path, same seed and budgets."""
@@ -1469,6 +1555,8 @@ class MODEHB:
             member["stratum"] = rec.get("stratum")
         if any(m["cand_id"] == rec["cand_id"] for m in sp):
             return
+        if rec["status"] != "ok" and (self.strat or {}).get("skip_failed_in_subpop"):
+            return   # v4: an OOM/infeasible big model is not a "bad" member (no FAIL_OBJ slot, no DE target)
         if len(sp) < self._max_pop[fid]:
             sp.append(member)
             return
@@ -1741,7 +1829,7 @@ class MODEHB:
         pc = self.pnas
         return PC.fit_level(base, alpha, beta, PC.budget_of(pc, level), self._count,
                             self._rep if fresh else self._pnas_rep,
-                            cap_params=int(self.strat["param_cap"]), cap_count=self.param_fn,
+                            cap_params=int(self.strat["param_cap"]), cap_count=self.cap_fn,
                             feasible=None if fresh else self._pnas_mem_ok, tol=float(pc["tolerance"]),
                             max_depth=int(self.cfg["max_depth"]),
                             cmax=int((self.repair_kw.get("channel_space") or {}).get("max", 1024)),
@@ -1755,7 +1843,7 @@ class MODEHB:
         from ga_search.modehb import strata as S
         fit = self._pnas_fit(base, alpha, beta, level, fresh=True)
         if fit is None:                       # nothing admissible: the old repairs (memory + cap) on the base
-            g = S.enforce_cap(self._rep(base), self.strat, self._rep, self.rng, count=self.param_fn)
+            g = S.enforce_cap(self._rep(base), self.strat, self._rep, self.rng, count=self.cap_fn)
             g, info = self._rep(g), {"phi": 0.0, "within_tol": False, "params_est": int(self._count(g))}
         else:
             g, info = fit
@@ -1970,7 +2058,7 @@ class MODEHB:
                 if m is None:
                     continue
                 child = self._pnas_rep(m[0])
-                if (arch_hash(child) != arch_hash(par["genome"]) and int(self.param_fn(child)) <= int(self.strat["param_cap"])
+                if (arch_hash(child) != arch_hash(par["genome"]) and int(self.cap_fn(child)) <= int(self.strat["param_cap"])
                         and self._pnas_mem_ok(child)):
                     found = (op, par, m[1], child)
                     break

@@ -64,7 +64,7 @@ NONNEG_ACTS = ("relu", "relu6")
 N_EXTRA_GENES = 2          # alpha, beta appended to the MO-DEHB vector
 
 DEFAULTS = dict(enabled=False, dataset=None, budgets=list(DEFAULT_BUDGETS), level_names=list(LEVEL_NAMES),
-                tolerance=0.10, cap_factor=1.05, alphas=list(ALPHAS), betas=list(BETAS),
+                tolerance=0.10, cap_factor=1.05, param_cap=None, alphas=list(ALPHAS), betas=list(BETAS),
                 seed_alpha=1.2, seed_beta=1.1, deepen="auto", residual_activation="silu", plain_grid=True,
                 grow_prob=0.4, mutate_prob=0.3,
                 mutations=list(MUTATIONS), widen_factors=[1.25, 1.5], inherit_fidelity="le_child",
@@ -112,7 +112,9 @@ def pnas_config(cfg: Optional[dict]) -> Optional[dict]:
 
 
 def cap(pc: dict) -> int:
-    """Hard parameter cap (budget of the last level x cap_factor)."""
+    """Hard parameter cap: ``param_cap`` when set (v4: 5.5M), else budget of the last level x cap_factor."""
+    if pc.get("param_cap"):
+        return int(pc["param_cap"])
     return int(round(pc["budgets"][-1] * float(pc["cap_factor"])))
 
 

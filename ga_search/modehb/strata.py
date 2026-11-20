@@ -30,7 +30,19 @@ DEFAULT_STRAT = dict(enabled=False, strata=None, param_cap=3_500_000, tiny_floor
                      min_share=0.25, protected_brackets=None, cross_category_prob=0.3,
                      projection_prob=0.7, explore_extra=1, explore_min_slope=0.0,
                      explore_strata=["medium", "huge"], calibration=True,
-                     extension_fidelities=[], extension_min_gain=0.01, extension_max_per_bracket=2)
+                     extension_fidelities=[], extension_min_gain=0.01, extension_max_per_bracket=2,
+                     # --- v4 (search_v4.yaml; all opt-in, the defaults keep the v3 behaviour) ---
+                     band_weights=None,          # {band: weight}: generation quota AND promotion share per band
+                     band_quota=False,           # True: next target band = most under-represented (count/weight)
+                     promotion="quota",          # "per_band": Pareto INSIDE each band, every bracket (no global FLOPs)
+                     promote_min_per_band=0,     # >=1: every band with valid candidates gets this many slots
+                     parent_select="front",      # "quality": DE parent pool ranked by quality only (no FLOPs)
+                     skip_failed_in_subpop=False,  # True: failed/infeasible never occupy a sub-population slot
+                     mem_scale=1.0,              # calibration of mem_estimate_gb (measured peak/est, 1699 jobs)
+                     oom_fallback=[],            # OOM ladder: [{amp_dtype: bf16}, {amp_dtype: bf16, batch_div: 2}]
+                     oom_fast_retries=None,      # with oom_fallback: transient retries before the ladder
+                     oom_retry_sleep_s=None,
+                     cap_count="estimate")       # "spifil_ops": param_cap checked BEFORE training on param_count_built
 
 
 def strat_config(cfg: Optional[dict]) -> dict:
@@ -38,7 +50,7 @@ def strat_config(cfg: Optional[dict]) -> dict:
     raw = out.get("strata") or DEFAULT_STRATA
     if isinstance(raw, dict):   # YAML {tiny: [0, 300000], ...}
         raw = [(k, v[0], v[1]) for k, v in raw.items()]
-    strata = [(str(n), int(lo), int(hi)) for n, lo, hi in raw]
+    strata = sorted([(str(n), int(lo), int(hi)) for n, lo, hi in raw], key=lambda t: t[1])   # JSON sorts keys
     for (_, _, hi), (_, lo, _) in zip(strata, strata[1:]):
         if hi != lo:
             raise ValueError("strata must be contiguous (hi of one = lo of the next)")
@@ -78,6 +90,27 @@ def param_estimate(genome: dict) -> int:
             cin = int(L["channels"])
         head = EmbeddingHead(cin, int(genome["embed_dim"]), genome["pooling"])
         n += sum(p.numel() for p in head.parameters())
+    return int(n)
+
+
+def param_count_built(genome: dict) -> int:
+    """Upper bound of the MEASURED ``result["params"]`` (encoder + EmbeddingHead) with ``spifil_ops``:
+    the blocks the evaluator builds (SpifilOpsBlock: conv bias + 1x1 residual projection) at the
+    requested widths (SPiFiL only builds fewer), every residual counted as a projection (when SPiFiL
+    narrows the previous layer an identity skip becomes one). ``param_estimate`` (ConvBlock) skips
+    both: remote_sensing v4 c00015 = 5,251,641 estimated, 5,612,872 measured, 5,797,782 here."""
+    import torch
+    from ga_search.modehb.pooling_head import EmbeddingHead
+    from ga_search.modehb.spifil_ops import SpifilOpsBlock, to_ops_spec
+    n, cin = 0, 3
+    with torch.device("meta"):
+        for i in range(int(genome["depth"])):
+            spec = to_ops_spec(genome["layers"][i], cin)
+            if spec["residual"]:
+                spec["skip"] = "project"
+            n += sum(p.numel() for p in SpifilOpsBlock(spec).parameters())
+            cin = int(spec["channels"])
+        n += sum(p.numel() for p in EmbeddingHead(cin, int(genome["embed_dim"]), genome["pooling"]).parameters())
     return int(n)
 
 
@@ -195,6 +228,75 @@ def stratified_promotions(cands: Sequence[dict], n: int, sc: dict, select: Calla
     return chosen
 
 
+def band_weights(sc: dict) -> Dict[str, float]:
+    """Per-band weight (v4). Absent = equal weights (v3 round-robin)."""
+    w = sc.get("band_weights") or {}
+    return {n: float(w.get(n, 1.0)) for n in names(sc)}
+
+
+def next_band(counts: Dict[str, int], sc: dict) -> str:
+    """Directed sampling (v4): the band with the smallest count/weight; ties -> the LARGER band.
+    ``counts`` = valid candidates already generated per band in the current bracket, so a band
+    whose offspring failed or landed in another band stays under-represented and is re-targeted."""
+    w = band_weights(sc)
+    order = names(sc)
+    return min(order, key=lambda n: (counts.get(n, 0) / max(w[n], 1e-9), -order.index(n)))
+
+
+def band_promotions(cands: Sequence[dict], n: int, sc: dict, select: Callable) -> List[int]:
+    """v4 promotion BY BAND. ``cands``: dicts with ``F`` (1-quality, flops) and ``stratum``.
+
+    * slots per band proportional to ``band_weights`` over the bands that have candidates
+      (largest remainder, larger bands first), at least ``promote_min_per_band`` each, so the
+      large bands get >= the small ones and n < #bands never starves a band;
+    * inside a band: ``select`` (non-dominated sort on (1-q, flops) + crowding): the Pareto is
+      taken WITHIN the band, so FLOPs only compares models of similar size;
+    * slots a band cannot fill go to the other bands by in-band quality (largest band first);
+    * ``explore_extra`` still-improving large models (slope > min) as in v3.
+    Returns indices into ``cands``; may exceed ``n`` by the per-band minimum."""
+    if n <= 0 or not cands:
+        return []
+    order = names(sc)
+    w = band_weights(sc)
+    present = [s for s in order if any(c["stratum"] == s for c in cands)]
+    mn = int(sc.get("promote_min_per_band", 0) or 0)
+    n_eff = max(n, mn * len(present))
+    tot = sum(w[s] for s in present) or 1.0
+    raw = {s: n_eff * w[s] / tot for s in present}
+    k = {s: max(mn, int(math.floor(raw[s]))) for s in present}
+    rem = n_eff - sum(k.values())
+    for s in sorted(present, key=lambda s: (-(raw[s] - math.floor(raw[s])), -order.index(s))):
+        if rem <= 0:
+            break
+        k[s] += 1
+        rem -= 1
+    chosen: List[int] = []
+    left = 0
+    for s in sorted(present, key=lambda s: -order.index(s)):
+        idx = [i for i, c in enumerate(cands) if c["stratum"] == s]
+        kk = min(k[s], len(idx))
+        left += k[s] - kk
+        if kk:
+            F = np.array([cands[i]["F"] for i in idx])
+            chosen.extend(idx[j] for j in select(F, kk))
+    while left > 0:
+        rest = [i for i, c in enumerate(cands) if i not in chosen]
+        if not rest:
+            break
+        rest.sort(key=lambda i: (cands[i]["F"][0], -order.index(cands[i]["stratum"])
+                                 if cands[i]["stratum"] in order else 0))
+        chosen.append(rest[0])
+        left -= 1
+    extra = int(sc.get("explore_extra", 0))
+    if extra > 0:
+        thr = float(sc.get("explore_min_slope", 0.0))
+        pool = [i for i, c in enumerate(cands) if i not in chosen and c["stratum"] in sc["explore_strata"]
+                and c.get("slope") is not None and c["slope"] > thr]
+        pool.sort(key=lambda i: -cands[i]["slope"])
+        chosen.extend(pool[:extra])
+    return chosen
+
+
 # ─── GPU-memory model (measured on jaci 14/11/2026: Evaluator._evaluate instrumented per phase,
 # batch 64 @224, torch.cuda.max_memory_allocated; small widths, linear fit in channels) ─────────
 # Unit: GB per OUTPUT channel of a stride-1 layer at FULL 224x224 input resolution; a layer whose
@@ -300,18 +402,22 @@ def mem_phases_gb(genome: dict, image_size: int = 224, ref_size: int = 224, *,
 
 def mem_estimate_gb(genome: dict, image_size: int = 224, ref_size: int = 224, *,
                     n_classes: Optional[int] = None, seeds_per_image: int = 100,
-                    pool_sizes: Optional[Sequence[int]] = None, softhebb_chunked: bool = False) -> float:
-    """Estimated peak GPU memory (GB, allocated, x MEM_MARGIN) of one evaluation: max over phases."""
+                    pool_sizes: Optional[Sequence[int]] = None, softhebb_chunked: bool = False,
+                    scale: float = 1.0) -> float:
+    """Estimated peak GPU memory (GB, allocated, x MEM_MARGIN) of one evaluation: max over phases.
+    ``scale`` (v4 ``stratified.mem_scale``): calibration measured on 1699 finished jobs of the v3
+    searches (jaci, 18/11): real peak / estimate = 0.62 median, 0.77 p90, 1.11 p99 -> 0.8 keeps the
+    big models that fit; the rare under-estimates are caught by the OOM fallback ladder."""
     ph = mem_phases_gb(genome, image_size, ref_size, n_classes=n_classes, seeds_per_image=seeds_per_image,
                        pool_sizes=pool_sizes, softhebb_chunked=softhebb_chunked)
-    return float(MEM_MARGIN * max(ph.values()))
+    return float(MEM_MARGIN * float(scale) * max(ph.values()))
 
 
 def mem_repair(genome: dict, budget_gb: float, repair: Callable[[dict], dict], *,
                image_size: int = 224, min_spatial: int = 6, max_iter: int = 64,
                n_classes: Optional[int] = None, seeds_per_image: int = 100,
                spifil_choices: Optional[Sequence[int]] = None, pool_sizes: Optional[Sequence[int]] = None,
-               softhebb_chunked: bool = False) -> dict:
+               softhebb_chunked: bool = False, scale: float = 1.0) -> dict:
     """Make the genome fit ``budget_gb`` (real GB). Training phases over budget: (1) add
     max-pooling to the earliest active layer without pooling that still has room (downsampling
     before widening, as a CNN stem); (2) if no layer can pool, shrink the costliest layer (and
@@ -322,6 +428,7 @@ def mem_repair(genome: dict, budget_gb: float, repair: Callable[[dict], dict], *
     kw = dict(n_classes=n_classes, seeds_per_image=seeds_per_image, pool_sizes=pool_sizes,
               softhebb_chunked=softhebb_chunked)
     g = repair(genome)
+    budget_gb = float(budget_gb) / max(float(scale), 1e-6)   # v4 calibration (scale 1.0 = v3)
     for _ in range(max_iter):
         ph = mem_phases_gb(g, image_size, **kw)
         if MEM_MARGIN * max(ph.values()) <= budget_gb:

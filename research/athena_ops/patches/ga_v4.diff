@@ -1,0 +1,856 @@
+diff --git a/ga_search/config/modehb/search_v4.yaml b/ga_search/config/modehb/search_v4.yaml
+new file mode 100644
+index 0000000..1b093e6
+--- /dev/null
++++ b/ga_search/config/modehb/search_v4.yaml
+@@ -0,0 +1,203 @@
++# search_v4 = search_v3 (run A, hybrid) + correções do GA preso em modelos pequenos (research/spifil_b0b4/ga_v4/diagnostico.md).
++# Muda: faixas B0–B4 até 5.5M, quotas/projeção/promoção por faixa, OOM sem punição, memória calibrada, fitness so2_4096 + SVM C=100 sem scaler.
++# Progressive MO-DEHB NAS (prompt §7.4, §12, §14). Busca sem rótulo: só a validation de cada dataset.
++# Valores antes marcados "MEASURED_IN_Q1" foram medidos no Q1 (jaci, 13/11/2026); ver comentários em resources.
++project: progressive_mo_dehb
++entity: ophira-ai
++seed: 42
++seeds: [42, 43, 44]            # repetições independentes da busca; ablações usam os mesmos
++dataset_config_dir: ga_search/config/modehb/datasets
++datasets: [larvae, remote_sensing, flowers, ham10000, aid, eggs, coconut_trees, protozoan]   # food101 removido (tempo)
++split: 1
++val_max_samples: null           # validação INTEIRA (null). O default antigo 512 cortava a val ordenada por classe (coconut só via a classe 1)
++search_split_key: validation   # NUNCA train/test na busca; rótulos não são lidos
++image_size: 224
++# SPiFiL estendido (ga_search/modehb/spifil_ops.py): true = SPiFiL também para kernel 1/7, pointwise,
++# depthwise, dwsep, gelu/selu/prelu/leaky_relu, avgpool, norms e residual (aproximações marcadas em
++# provenance["spifil_variant"]). false (default) = comportamento atual: repair_for_spifil + fit_new_block.
++spifil_ops: true
++# Nº de imagens de TREINO por classe usadas pelo SPiFiL para aprender os kernels: gene global
++# `spifil_images_per_class` do genoma (escolhido entre estes valores). Pool estratificado e fixo
++# por seed do dataset, só do split de treino; subconjuntos aninhados (k=2 ⊂ k=4 ...); k=1 = protocolo antigo.
++spifil_images_choices: [1, 2, 4, 8, 16, 32]
++# Espaço de filtros por camada (v3, opt-in): qualquer INTEIRO em [min, max] (escala log, para
++# explorar bem larguras pequenas), com regra monotônica c1 <= c2 <= ... <= c_depth aplicada ao
++# GENOMA (repair por máximo corrente nas camadas ativas). Ausente = grade discreta antiga
++# (modehb.CHANNELS). O SPiFiL pode construir MENOS canais que o pedido (effective_spec); o
++# resultado registra `effective_monotonic`. stages.stage1.space.channels abaixo é só documental.
++channel_space:
++  type: int_range
++  min: 1
++  max: 1024
++  scale: log
++  monotonic: true
++
++# --- DEHB: fidelidade = épocas (AE + SSL na razão 1:2) ---
++fidelities: [5, 15, 45, 100, 200]        # orçamento total de épocas por fidelidade (usuário, 14/11)
++max_brackets: 10              # rodadas do MO-DEHB (brackets Hyperband)
++eta: 3
++fidelity_split:
++  ae: 1                        # AE:SSL = 1:2 → 5 = (≈2 AE, 3 SSL) arredondado para baixo no AE
++  ssl: 2
++  rounding: floor_ae
++
++# Experimento SÓ SPiFiL (decisão do usuário, 14/11): sem baseline random (sem gêmeas, sem filhos
++# random, população inicial só init=spifil). Operadores buscados DESDE O INÍCIO junto com o SPiFiL
++# (sem adiar para o stage 2) e vocabulário por gene lido de stages.stage2.space abaixo.
++operators_from_start: true     # = stage1_brackets 0: todos os genes mutáveis desde o bracket 0
++search_space_from_yaml: true   # decode/repair restritos a stages.stage2.space (ausente = vocab do código)
++
++population:
++  random_baseline: false       # false = só SPiFiL (default do código = true, comportamento antigo)
++  initial_operators: sampled   # sementes: larguras/profundidades em pirâmide + operadores amostrados (estratificado) do espaço
++  initial_size: 20             # 4 sementes por faixa B0–B4 (projetadas round-robin)
++  initial_grid:
++    filters: [16, 32, 64, 128]
++    init: [spifil]
++    depth: [2, 3]
++    pyramid_growth: 2.0          # população inicial em PIRÂMIDE: camada i = filtros × 2^i (ex.: 16→32→64); 1.0 = larguras iguais
++  spifil_offspring_share: 1.0  # só SPiFiL (ignorado com random_baseline: false)
++  random_twin_at_max_fidelity: false  # sem gêmeas random neste experimento
++  exploration_epsilon: 0.1     # prob. de amostra uniforme do espaço em vez de mutação/crossover DE
++  de:
++    mutation_factor: 0.5
++    crossover_prob: 0.5
++    strategy: rand1_bin
++
++stages:
++  stage1:
++    name: macro
++    search: [channels, depth, embed_dim]
++    space:
++      channels: [16, 32, 64, 128]
++      depth: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
++      embed_dim: [48, 128, 256, 512]
++    fixed: {operator: conv, kernel: 3, activation: relu, pooling: gap, batchnorm: true}
++  stage2:
++    name: operators
++    search: [operator, softhebb, kernel, activation, norm, pool, residual, pooling]
++    space:                       # lido pelo código (search_space_from_yaml: true)
++      operator: [conv, dwsep, inception]      # tipo de conv por camada
++      softhebb: [true, false]                 # softhebb_conv: gene booleano por camada
++      kernel: [3, 5, 7]
++      activation: [relu, gelu, silu, selu]
++      norm: [none, batch, zca, dbn, batch_zca, batch_dbn]   # batchnorm × whitening
++      pool: [none, max, avg]                  # pooling intermediário por camada
++      residual: [true, false]
++      pooling: [gap, gem, moments]            # pooling final
++      protect: [full, lowlr, freeze]          # Hybrid SPiFiL: kernels SPiFiL livres / lr×0.01 / congelados no backprop
++      projector: [true, false]                # perdas SSL num projetor separado (não no embedding do SVM)
++      ae_schedule: [decoder_first, joint]     # por camada: SPiFiL -> congela e treina só o decoder -> depois backprop no bloco
++    inherit_from: none           # operators_from_start: buscado junto com o macro desde o bracket 0
++
++# --- MO-DEHB estratificado por PARÂMETROS (ga_search/modehb/strata.py; 14/11) ---
++# Categoria = nº total de parâmetros do encoder + projeção final 1x1 (medido após avaliar;
++# estimado estruturalmente antes). MACs/FLOPs/latência seguem só como métricas/objetivo.
++stratified:
++  enabled: true
++  strata:                      # (lo, hi] em parâmetros (encoder + projeção 1x1). Faixas da missão B0–B4
++    B0: [0, 300000]
++    B1: [300000, 800000]
++    B2: [800000, 1500000]
++    B3: [1500000, 3000000]
++    B4: [3000000, 5500000]
++  param_cap: 5500000           # teto DURO (medido > 5.5M = infeasible param_cap)
++  tiny_floor: 5000
++  # v4: quotas por faixa em CADA bracket; as grandes valem mais (B4 >= B3 >= B2 >= B1 = B0)
++  band_weights: {B0: 1.0, B1: 1.0, B2: 1.25, B3: 1.5, B4: 1.75}
++  band_quota: true             # alvo = faixa mais sub-representada no bracket (contagem/peso); falha/OOM não conta
++  projection_prob: 0.95        # filho do DE projetado para a faixa-alvo (v3: 0.7)
++  cross_category_prob: 0.15    # DE com pais de outra faixa (v3: 0.3)
++  parent_select: quality       # pool de pais do DE pela quality (v3: frente κ×FLOPs global, favorecia pequenos)
++  promotion: per_band          # promoção: Pareto (κ, FLOPs) DENTRO de cada faixa, em todos os brackets
++  promote_min_per_band: 1      # toda faixa com candidato válido sobe >= 1 por rung (v3: n=1/3 deixava faixa sem vaga)
++  min_share: 0.25              # (só v3 / promotion: quota)
++  protected_brackets: null     # v4: proteção sempre ligada
++  skip_failed_in_subpop: true  # OOM/infeasible não ocupa vaga com FAIL_OBJ nem vira alvo do DE
++  explore_extra: 1
++  explore_min_slope: 0.0
++  explore_strata: [B3, B4]
++  calibration: false           # v4: sem a calibração (5 faixas × 5 fidelidades, incl. B4 @200 = ~1/3 do bracket 0)
++  extension_fidelities: []
++  extension_min_gain: 0.01
++  extension_max_per_bracket: 2
++  memory_budget_gb: 60         # GB REAIS; a fila (fila_v4.json) sobrescreve conforme a GPU
++  mem_scale: 0.8               # estimador calibrado: pico real/estimativa = 0.62 mediana, 0.77 p90 (1699 jobs v3)
++  oom_fast_retries: 1          # 1 re-tentativa igual (pico transitório da GPU compartilhada), 60 s
++  oom_retry_sleep_s: 60
++  oom_fallback:                # depois: escada registrada em result.oom_attempts / result.mem_fallback
++    - {amp_dtype: bf16}
++    - {amp_dtype: bf16, batch_div: 2}
++    - {amp_dtype: bf16, batch_div: 4}
++  spifil_seeds_per_image: 100
++
++# --- Objetivos multiobjetivo ---
++objectives:
++  - {name: quality, direction: max}
++  - {name: flops, direction: min, unit: gflops}
++  # - {name: latency_ms, direction: min}   # adicionado depois (fase posterior)
++hypervolume:
++  # Ponto de referência no espaço (quality, flops), dominado por todo candidato válido:
++  # quality ∈ [0,1] → ref 0.0 (pior possível); flops → 1.1 × max_flops do espaço (folga de 10%).
++  # HV é calculado após normalizar flops por max_flops, logo ref = (0.0, 1.1) fixo entre datasets.
++  reference_point: {quality: 0.0, flops: 1.1}
++  flops_normalizer: max_flops_in_space
++  max_flops_in_space: 1.0e+11   # Q1: = modehb.FLOPS_HI (MACs, log-normalised); medido 2.83e10 p/ 5x256ch k5 @224
++
++fitness:                       # quality sem rótulo
++  knn_view_consistency: 0.5    # concordância de k-NN entre duas views aumentadas
++  clustering_stability: 0.5    # ARI médio entre reclusterizações bootstrap
++  knn_k: 10
++  clustering_bootstrap: 5
++
++fitness_mode: svm_kappa   # critério supervisionado: quality = 0.75·κ + 0.25·F1 (SVM linear C=100, treino→validação)
++# Hybrid SPiFiL (14/11, agentes F/C): leitura de 2ª ordem cov_head (covariância por bloco, PCA k=64 em
++# pixels de treino, sem rótulo) + head; signed-sqrt+L2 por grupo, StandardScaler, C=100 (SVM padrão do repo, ordem do usuário 15/11). Medido em 7
++# checkpoints do remote_sensing: κ de teste médio 0.51 -> 0.61 (c00306: 0.534 -> 0.639).
++# wise_alphas: WiSE-FT — pesos (1-a)·SPiFiL(+AE) + a·SSL, a escolhido pelo κ (a=0 = SPiFiL puro: o
++# backprop só soma). Os FMs de referência usam SVM C=100 sem scaler na cabeça (régua diferente).
++svm_fitness: {C: 100, scaler: none, max_train: 4000, kappa_weight: 1.0, solver: libsvm,
++              readout: so2_4096, so2_n_px: 64, so2_batch_size: 16, tta: 1, whiten: none,
++              wise_alphas: [0.0, 0.25, 0.5, 0.75, 1.0]}
++# v4: fitness = SVM ORIGINAL do repo (linear, C=100, SEM scaler) sobre a leitura REPORTADA so2_4096_pca
++# (research/spifil_b0b4/readout_x; ga_search/modehb/so2_readout.py). A v3 usava cov_head+StandardScaler,
++# com ρ 0,09 contra o κ reportado.
++
++collapse:                      # candidato com colapso → quality = 0, não entra na frente
++  min_embedding_std: 1.0e-4
++  min_effective_rank_frac: 0.05   # rank efetivo / embed_dim
++  max_mean_cosine: 0.95
++  nan_is_collapse: true
++
++tta:
++  search: 1                    # FIXO durante a busca; 4/8 só na ablação de TTA
++training:
++  batch_size: 64               # FIXO; nunca autoajustado
++  max_images_per_epoch: 2048   # 1 "época" = ≤2048 imagens de treino sorteadas (32 passos). Sem isso o protozoan
++                               # (26k imgs) levava 25 h só para levar 1 rede Tiny a 200 épocas. remote/flowers/larvae não mudam
++  lr_new: 1.0e-3               # camadas novas do bloco progressivo
++  lr_old: 1.0e-4               # camadas herdadas
++  auto_adjust_batch_size: false
++  auto_adjust_lr: false
++  optimizer: adamw
++  weight_decay: 1.0e-4
++  ssl: lejepa
++  local_ae: true
++
++spectral_every: 5              # diagnóstico espectral (rank efetivo / espectro) a cada N épocas
++
++resources:
++  host: jaci
++  gpu_memory_target_gb: {min: 88, max: 91}   # total na GPU do jaci (monitor_gpu.py)
++  # Q1 (13/11, jaci): decode IFT-LAB satura em ~800-900 img/s com 32-96 workers; 120 piora (590 img/s).
++  num_workers: 64
++  # cache float32 = 0.60 MB/img @224 -> food101 42.6 GB (+2x transitório no torch.cat); RAM livre ~235 GB.
++  ram_cache_gb: 96
++  max_concurrent_trials: 1     # MO-DEHB síncrono; 1 processo/GPU (5x256ch k5 sozinho: 58 GB alloc, 82 GB reservado)
++  gpu_process_cap_gb: 76       # 91 GB alvo - ~13 GB do root - contexto CUDA; acima disso o candidato vira OOM/infeasible
++
++paths:
++  state_dir: "artifacts/modehb_v4/{dataset}/state"          # estado do DEHB (retomável)
++  checkpoint_dir: "artifacts/modehb_v4/{dataset}/checkpoints"
++  log_dir: "artifacts/modehb_v4/{dataset}/logs"
++  pareto_dir: "artifacts/modehb_v4/{dataset}/pareto"
+diff --git a/ga_search/modehb/modehb.py b/ga_search/modehb/modehb.py
+index dd4b807..0233026 100644
+--- a/ga_search/modehb/modehb.py
++++ b/ga_search/modehb/modehb.py
+@@ -1164,7 +1164,8 @@ class MODEHB:
+             g = S.mem_repair(g, float(mb), lambda x: repair(x, **self.repair_kw),
+                              image_size=int(self.cfg["image_size"]), min_spatial=int(self.cfg["min_spatial"]),
+                              n_classes=n_cls or None, seeds_per_image=spp, pool_sizes=pools,
+-                             spifil_choices=self.repair_kw["spifil_images_choices"])
++                             spifil_choices=self.repair_kw["spifil_images_choices"],
++                             scale=float((self.strat or {}).get("mem_scale", 1.0) or 1.0))
+             g = _images(g)                            # no-op unless a width repair broke N > D
+         return g
+ 
+@@ -1189,6 +1190,13 @@ class MODEHB:
+         names = S.names(self.strat)
+         k = int(self.state.get("strata_rr", 0))
+         self.state["strata_rr"] = k + 1
++        if self.strat.get("band_quota"):      # v4: most under-represented band of THIS bracket
++            counts = {}
++            for j in self.state["jobs"][getattr(self, "_bracket_job0", 0):]:
++                op = j.get("op") or {}
++                if j["role"] == "search" and j["status"] == "ok" and op.get("type") not in ("promotion", "extension"):
++                    counts[j.get("stratum")] = counts.get(j.get("stratum"), 0) + 1
++            return S.next_band(counts, self.strat)
+         return names[k % len(names)]
+ 
+     def _quality_path(self, cand_id):
+@@ -1199,6 +1207,16 @@ class MODEHB:
+         """[(index into prev, exploratory?)]. Stratified: protected quotas (strata.py)."""
+         sc = self.strat
+         pb = None if sc is None else sc.get("protected_brackets")
++        if sc is not None and sc.get("promotion") == "per_band":   # v4: Pareto inside each band, always
++            from ga_search.modehb import strata as S
++            from ga_search.modehb.strata import learning_slope
++            cands = [{"F": r["F"], "stratum": r.get("stratum") or S.names(sc)[0],
++                      "slope": learning_slope(self._quality_path(r["cand_id"]))} for r in prev]
++            counts = self.state.setdefault("promo_counts", {}).setdefault(str(fid_prev), {})
++            idx = S.band_promotions(cands, n, sc, lambda Fs, k: select_promotions(Fs, k, self.cfg["tie_breaker"]))
++            for i in idx:
++                counts[cands[i]["stratum"]] = counts.get(cands[i]["stratum"], 0) + 1
++            return [(i, j >= n) for j, i in enumerate(idx)]
+         if sc is None or (pb is not None and b >= int(pb)):
+             return [(i, False) for i in select_promotions(F, n, self.cfg["tie_breaker"])]
+         from ga_search.modehb import strata as S
+@@ -1314,6 +1332,8 @@ class MODEHB:
+         if not sp:
+             return []
+         F = np.array([m["F"] for m in sp])
++        if (self.strat or {}).get("parent_select") == "quality":   # v4: no FLOPs pressure on DE parents
++            return [np.asarray(sp[i]["vector"], float) for i in np.argsort(F[:, 0], kind="stable")[:min(n, len(sp))]]
+         return [np.asarray(sp[i]["vector"], float) for i in select_promotions(F, min(n, len(sp)),
+                                                                               self.cfg["tie_breaker"])]
+ 
+@@ -1418,6 +1438,9 @@ class MODEHB:
+                 raise ReplayMismatch(f"job {k}: logged {old['arch_hash']}@{old['fidelity']} "
+                                      f"vs {arch_hash(genome)}@{fid}")
+             return old["result"]
++        ladder = list((self.strat or {}).get("oom_fallback") or [])
++        if ladder:
++            return self._call_oom_ladder(genome, fid, ctx, ladder)
+         attempt = 0
+         while True:
+             try:
+@@ -1441,6 +1464,43 @@ class MODEHB:
+         result.setdefault("status", "ok")
+         return result
+ 
++    def _call_oom_ladder(self, genome, fid, ctx, ladder):
++        """v4 OOM handling: ``oom_fast_retries`` transient retries (shared GPU), then the
++        ``oom_fallback`` levels in order (ctx["mem_fallback"] = level, e.g. bf16, then bf16 + batch/2);
++        every attempt is recorded in ``result["oom_attempts"]`` and the level that worked in
++        ``result["mem_fallback"]``. Still OOM after the ladder: ``status=failed``,
++        ``infeasible="oom"``, ``penalize=False`` (not a bad model: never a sub-population member, the
++        band stays under-represented and is re-targeted)."""
++        sc = self.strat or {}
++        fast = int(sc.get("oom_fast_retries") if sc.get("oom_fast_retries") is not None else 1)
++        sleep_s = float(sc.get("oom_retry_sleep_s") if sc.get("oom_retry_sleep_s") is not None else 60)
++        levels = [None] * (1 + fast) + [dict(l) for l in ladder]
++        attempts = []
++        for lvl in levels:
++            c = dict(ctx)
++            if lvl is not None:
++                c["mem_fallback"] = lvl
++            try:
++                result = dict(self.evaluate_fn(genome, fid, c))
++                result.setdefault("status", "ok")
++                if attempts:
++                    result["oom_attempts"] = attempts
++                if lvl is not None:
++                    result["mem_fallback"] = lvl
++                return result
++            except Exception as exc:
++                if _fatal_cuda(exc):
++                    raise
++                if not _is_oom(exc):
++                    return {"status": "failed", "error": f"{type(exc).__name__}: {exc}",
++                            **({"oom_attempts": attempts} if attempts else {})}
++                attempts.append({"mem_fallback": lvl, "error": f"{type(exc).__name__}: {str(exc)[:160]}"})
++                print(f"[modehb] OOM on {ctx.get('cand_id')} (level {lvl}); next level", flush=True)
++                if lvl is None and sleep_s > 0:
++                    time.sleep(sleep_s)
++        return {"status": "failed", "infeasible": "oom", "penalize": False, "oom_attempts": attempts,
++                "error": attempts[-1]["error"] if attempts else "OOM"}
++
+     def _evaluate_twin(self, rec):
+         """Random twin along the SPiFiL candidate's fidelity path, same seed and budgets."""
+         twin = make_twin(rec["genome"])
+@@ -1469,6 +1529,8 @@ class MODEHB:
+             member["stratum"] = rec.get("stratum")
+         if any(m["cand_id"] == rec["cand_id"] for m in sp):
+             return
++        if rec["status"] != "ok" and (self.strat or {}).get("skip_failed_in_subpop"):
++            return   # v4: an OOM/infeasible big model is not a "bad" member (no FAIL_OBJ slot, no DE target)
+         if len(sp) < self._max_pop[fid]:
+             sp.append(member)
+             return
+diff --git a/ga_search/modehb/run_search.py b/ga_search/modehb/run_search.py
+index 04e2330..d081a09 100644
+--- a/ga_search/modehb/run_search.py
++++ b/ga_search/modehb/run_search.py
+@@ -379,6 +379,28 @@ class _CappedLoader:
+             yield b
+ 
+ 
++class _SplitLoader:
++    """v4 OOM fallback: every batch of ``loader`` split into ``div`` smaller batches."""
++
++    def __init__(self, loader, div):
++        self.loader, self.div = loader, int(div)
++        self.dataset = loader.dataset
++
++    def __len__(self):
++        return len(self.loader) * self.div
++
++    def __iter__(self):
++        for b in self.loader:
++            if torch.is_tensor(b):
++                yield from b.chunk(self.div)
++                continue
++            parts = [t.chunk(self.div) if torch.is_tensor(t) else None for t in b]
++            n = min(len(p) for p in parts if p is not None)
++            for i in range(n):
++                yield type(b)(p[i] if p is not None else t for p, t in zip(parts, b)) \
++                    if isinstance(b, (list, tuple)) else b
++
++
+ def _amp_dtype(name, device):
+     """``train.amp_dtype`` -> torch dtype of the training autocast (None = fp32, the default).
+     Only bf16 (no GradScaler needed); CPU runs and GPUs without bf16 stay fp32."""
+@@ -551,6 +573,13 @@ class Evaluator:
+         readout = str(kw.get("readout", "head"))
+         if readout == "cov_head":            # second-order readout (pooling_head.CovReadout)
+             return self._embed_cov(encoder, head)
++        if readout in ("so2_4096", "so2_1280"):   # v4: the REPORTED readout (readout_x so2_*_pca), fp32
++            from ga_search.modehb.so2_readout import So2Readout
++            r = So2Readout(D=int(readout.split("_")[1]), n_px=int(kw.get("so2_n_px", 64)), seed=0)
++            bs = int(kw.get("so2_batch_size", 16))
++            r.fit(encoder, self.svm_train_x, self.device, bs)
++            return (r.embed(encoder, self.svm_train_x, self.device, bs).numpy(),
++                    r.embed(encoder, self.val_x, self.device, bs).numpy())
+         tr = self._embed(encoder, head, self.svm_train_x, tta=tta, readout=readout).numpy()
+         va = self._embed(encoder, head, self.val_x, tta=tta, readout=readout).numpy()
+         return tr, va
+@@ -570,6 +599,26 @@ class Evaluator:
+         with _blas_threads(self._fitness_speed()["svm_blas_threads"]):
+             return self._svm_score(*self._svm_features(encoder, head))
+ 
++    def _apply_mem_fallback(self, fb):
++        """v4 OOM ladder level for ONE evaluation: ``amp_dtype: bf16`` (training autocast) and
++        ``batch_div: d`` (each training batch split in d chunks -> d x more, smaller steps; recorded
++        in the result). Returns what ``_restore_mem_fallback`` needs."""
++        if not fb:
++            return None
++        saved = (self.amp_dtype, self.train_loader)
++        if fb.get("amp_dtype"):
++            self.amp_dtype = _amp_dtype(fb["amp_dtype"], self.device)
++        d = int(fb.get("batch_div", 1) or 1)
++        if d > 1:
++            self.train_loader = _SplitLoader(self.train_loader, d)
++        if self.device.type == "cuda":
++            torch.cuda.empty_cache()
++        return saved
++
++    def _restore_mem_fallback(self, saved):
++        if saved is not None:
++            self.amp_dtype, self.train_loader = saved
++
+     # ---- one evaluation
+     def __call__(self, genome, fidelity, ctx):
+         t0 = time.time()
+@@ -580,6 +629,7 @@ class Evaluator:
+         cand_dir = self.out / "candidates" / ctx["cand_id"] / f"f{int(fidelity)}"
+         cand_dir.mkdir(parents=True, exist_ok=True)
+         run = self._start_run(genome, fidelity, ctx)
++        saved = self._apply_mem_fallback(ctx.get("mem_fallback"))   # v4 OOM ladder (None = unchanged)
+         try:
+             result = self._evaluate(genome, fidelity, ctx, cand_dir, run)
+         except Exception as exc:
+@@ -592,6 +642,10 @@ class Evaluator:
+                 if self.device.type == "cuda":     # e.g. OOM under the process cap -> infeasible
+                     torch.cuda.empty_cache()
+             raise
++        finally:
++            self._restore_mem_fallback(saved)
++        if ctx.get("mem_fallback"):
++            result["mem_fallback"] = dict(ctx["mem_fallback"])
+         hours = (time.time() - t0) / 3600.0
+         result["wall_hours"] = hours
+         if self.device.type == "cuda":
+diff --git a/ga_search/modehb/so2_readout.py b/ga_search/modehb/so2_readout.py
+new file mode 100644
+index 0000000..8d89585
+--- /dev/null
++++ b/ga_search/modehb/so2_readout.py
+@@ -0,0 +1,122 @@
++"""Second-order readout ``so2_4096_pca`` for the GA fitness (v4, opt-in ``svm_fitness.readout: so2_4096``).
++
++The SAME computation as ``research/spifil_b0b4/readout_x/eval_backbone_head.py`` (head
++``so2_4096_pca``, the readout that is REPORTED): on the map X of the LAST encoder block,
++``z = Norm(pad_4096([mu(PX), sigma(PX), triu(sqrtm Cov(PX))]))`` with P = PCA of the channels fitted
++ONLY on train pixels (``n_px`` pixels per train image, seeded per image), k = 88
++(88+88+88*89/2 = 4092 + 4 zeros), Norm = signed-sqrt + L2. fp32 forward, no autocast, fp64 moments.
++Followed by the repo SVM (linear, C=100, NO scaler) -- the v3 fitness used cov_head + StandardScaler,
++whose kappa had rho 0.09 with the reported number. Nothing here sees validation/test labels.
++The pure functions are copied (not imported) so the GA does not depend on the research tree;
++``tests/modehb/test_so2_readout.py`` checks they are bitwise equal to the reference ones.
++"""
++from __future__ import annotations
++
++import torch
++
++SO2_K = {1280: 48, 4096: 88}
++PCA_SEED = 0
++
++
++def so2_dim(k: int) -> int:
++    return 2 * k + k * (k + 1) // 2
++
++
++def pad_to(z, D: int):
++    if z.shape[1] > D:
++        raise ValueError(f"vetor {z.shape[1]} > {D}")
++    return torch.cat([z, z.new_zeros(z.shape[0], D - z.shape[1])], 1)
++
++
++def norm_ssqrt_l2(z):
++    z = z.sign() * z.abs().sqrt()
++    return z / z.norm(dim=1, keepdim=True).clamp_min(1e-12)
++
++
++def _sqrtm_psd(C):
++    C = (C + C.transpose(1, 2)) / 2
++    w, U = torch.linalg.eigh(C)
++    return (U * w.clamp(min=0).sqrt()[:, None, :]) @ U.transpose(1, 2)
++
++
++def _flat(x):
++    return x.detach().double().cpu().permute(0, 2, 3, 1).reshape(x.shape[0], -1, x.shape[1])
++
++
++def so2_vector(fmap, mu, V, D: int):
++    Y = (_flat(fmap) - mu) @ V
++    m = Y.mean(1)
++    Yc = Y - m[:, None, :]
++    cov = Yc.transpose(1, 2) @ Yc / Y.shape[1]
++    sd = cov.diagonal(dim1=1, dim2=2).clamp(min=0).sqrt()
++    S = _sqrtm_psd(cov)
++    k = V.shape[1]
++    iu = torch.triu_indices(k, k)
++    z = torch.cat([m, sd, S[:, iu[0], iu[1]]], 1)
++    return norm_ssqrt_l2(pad_to(z, D)).float()
++
++
++class PixelMoments:
++    def __init__(self, n_px: int = 64, seed: int = PCA_SEED):
++        self.n_px, self.seed = int(n_px), int(seed)
++        self.s1 = self.s2 = None
++        self.n = 0
++
++    def add(self, fmap, img_ids):
++        f = fmap.detach().permute(0, 2, 3, 1).reshape(fmap.shape[0], -1, fmap.shape[1])
++        rows = []
++        for b, gid in enumerate(img_ids):
++            g = torch.Generator().manual_seed(self.seed * 1_000_003 + int(gid))
++            hw = f.shape[1]
++            idx = torch.randperm(hw, generator=g)[: min(self.n_px, hw)]
++            rows.append(f[b, idx.to(f.device)].double().cpu())
++        P = torch.cat(rows)
++        if self.s1 is None:
++            self.s1 = torch.zeros(P.shape[1], dtype=torch.float64)
++            self.s2 = torch.zeros(P.shape[1], P.shape[1], dtype=torch.float64)
++        self.s1 += P.sum(0)
++        self.s2 += P.T @ P
++        self.n += P.shape[0]
++
++    def pca(self, k: int):
++        mu = self.s1 / self.n
++        cov = (self.s2 - self.n * torch.outer(mu, mu)) / max(self.n - 1, 1)
++        cov = (cov + cov.T) / 2
++        _, V = torch.linalg.eigh(cov)
++        V = V.flip(1)[:, : min(k, V.shape[1])]
++        sgn = V.gather(0, V.abs().argmax(0, keepdim=True)).sign()
++        return mu, (V * torch.where(sgn == 0, torch.ones_like(sgn), sgn)).contiguous()
++
++
++@torch.no_grad()
++def _last_block(encoder, x):
++    h = x
++    for blk in encoder:
++        h = blk(h)
++    return h.float()
++
++
++class So2Readout:
++    """fit(encoder, x_train) on TRAIN pixels only, then __call__/embed -> [N, D] fp32."""
++
++    def __init__(self, D: int = 4096, n_px: int = 64, seed: int = PCA_SEED):
++        self.D, self.k, self.n_px, self.seed = int(D), SO2_K[int(D)], int(n_px), int(seed)
++        self.mu = self.V = None
++
++    @torch.no_grad()
++    def fit(self, encoder, x_train, device, bs: int = 16):
++        encoder.eval()
++        mom = PixelMoments(self.n_px, self.seed)
++        for i0 in range(0, x_train.shape[0], bs):
++            xb = x_train[i0:i0 + bs].to(device)
++            mom.add(_last_block(encoder, xb), list(range(i0, i0 + xb.shape[0])))
++        self.mu, self.V = mom.pca(self.k)
++        return self
++
++    @torch.no_grad()
++    def embed(self, encoder, x, device, bs: int = 16):
++        assert self.V is not None, "So2Readout.fit (train) first"
++        encoder.eval()
++        out = [so2_vector(_last_block(encoder, x[i0:i0 + bs].to(device)), self.mu, self.V, self.D)
++               for i0 in range(0, x.shape[0], bs)]
++        return torch.cat(out)
+diff --git a/ga_search/modehb/strata.py b/ga_search/modehb/strata.py
+index 9ad3e73..6b6a3ab 100644
+--- a/ga_search/modehb/strata.py
++++ b/ga_search/modehb/strata.py
+@@ -30,7 +30,18 @@ DEFAULT_STRAT = dict(enabled=False, strata=None, param_cap=3_500_000, tiny_floor
+                      min_share=0.25, protected_brackets=None, cross_category_prob=0.3,
+                      projection_prob=0.7, explore_extra=1, explore_min_slope=0.0,
+                      explore_strata=["medium", "huge"], calibration=True,
+-                     extension_fidelities=[], extension_min_gain=0.01, extension_max_per_bracket=2)
++                     extension_fidelities=[], extension_min_gain=0.01, extension_max_per_bracket=2,
++                     # --- v4 (search_v4.yaml; all opt-in, the defaults keep the v3 behaviour) ---
++                     band_weights=None,          # {band: weight}: generation quota AND promotion share per band
++                     band_quota=False,           # True: next target band = most under-represented (count/weight)
++                     promotion="quota",          # "per_band": Pareto INSIDE each band, every bracket (no global FLOPs)
++                     promote_min_per_band=0,     # >=1: every band with valid candidates gets this many slots
++                     parent_select="front",      # "quality": DE parent pool ranked by quality only (no FLOPs)
++                     skip_failed_in_subpop=False,  # True: failed/infeasible never occupy a sub-population slot
++                     mem_scale=1.0,              # calibration of mem_estimate_gb (measured peak/est, 1699 jobs)
++                     oom_fallback=[],            # OOM ladder: [{amp_dtype: bf16}, {amp_dtype: bf16, batch_div: 2}]
++                     oom_fast_retries=None,      # with oom_fallback: transient retries before the ladder
++                     oom_retry_sleep_s=None)
+ 
+ 
+ def strat_config(cfg: Optional[dict]) -> dict:
+@@ -38,7 +49,7 @@ def strat_config(cfg: Optional[dict]) -> dict:
+     raw = out.get("strata") or DEFAULT_STRATA
+     if isinstance(raw, dict):   # YAML {tiny: [0, 300000], ...}
+         raw = [(k, v[0], v[1]) for k, v in raw.items()]
+-    strata = [(str(n), int(lo), int(hi)) for n, lo, hi in raw]
++    strata = sorted([(str(n), int(lo), int(hi)) for n, lo, hi in raw], key=lambda t: t[1])   # JSON sorts keys
+     for (_, _, hi), (_, lo, _) in zip(strata, strata[1:]):
+         if hi != lo:
+             raise ValueError("strata must be contiguous (hi of one = lo of the next)")
+@@ -195,6 +206,75 @@ def stratified_promotions(cands: Sequence[dict], n: int, sc: dict, select: Calla
+     return chosen
+ 
+ 
++def band_weights(sc: dict) -> Dict[str, float]:
++    """Per-band weight (v4). Absent = equal weights (v3 round-robin)."""
++    w = sc.get("band_weights") or {}
++    return {n: float(w.get(n, 1.0)) for n in names(sc)}
++
++
++def next_band(counts: Dict[str, int], sc: dict) -> str:
++    """Directed sampling (v4): the band with the smallest count/weight; ties -> the LARGER band.
++    ``counts`` = valid candidates already generated per band in the current bracket, so a band
++    whose offspring failed or landed in another band stays under-represented and is re-targeted."""
++    w = band_weights(sc)
++    order = names(sc)
++    return min(order, key=lambda n: (counts.get(n, 0) / max(w[n], 1e-9), -order.index(n)))
++
++
++def band_promotions(cands: Sequence[dict], n: int, sc: dict, select: Callable) -> List[int]:
++    """v4 promotion BY BAND. ``cands``: dicts with ``F`` (1-quality, flops) and ``stratum``.
++
++    * slots per band proportional to ``band_weights`` over the bands that have candidates
++      (largest remainder, larger bands first), at least ``promote_min_per_band`` each, so the
++      large bands get >= the small ones and n < #bands never starves a band;
++    * inside a band: ``select`` (non-dominated sort on (1-q, flops) + crowding): the Pareto is
++      taken WITHIN the band, so FLOPs only compares models of similar size;
++    * slots a band cannot fill go to the other bands by in-band quality (largest band first);
++    * ``explore_extra`` still-improving large models (slope > min) as in v3.
++    Returns indices into ``cands``; may exceed ``n`` by the per-band minimum."""
++    if n <= 0 or not cands:
++        return []
++    order = names(sc)
++    w = band_weights(sc)
++    present = [s for s in order if any(c["stratum"] == s for c in cands)]
++    mn = int(sc.get("promote_min_per_band", 0) or 0)
++    n_eff = max(n, mn * len(present))
++    tot = sum(w[s] for s in present) or 1.0
++    raw = {s: n_eff * w[s] / tot for s in present}
++    k = {s: max(mn, int(math.floor(raw[s]))) for s in present}
++    rem = n_eff - sum(k.values())
++    for s in sorted(present, key=lambda s: (-(raw[s] - math.floor(raw[s])), -order.index(s))):
++        if rem <= 0:
++            break
++        k[s] += 1
++        rem -= 1
++    chosen: List[int] = []
++    left = 0
++    for s in sorted(present, key=lambda s: -order.index(s)):
++        idx = [i for i, c in enumerate(cands) if c["stratum"] == s]
++        kk = min(k[s], len(idx))
++        left += k[s] - kk
++        if kk:
++            F = np.array([cands[i]["F"] for i in idx])
++            chosen.extend(idx[j] for j in select(F, kk))
++    while left > 0:
++        rest = [i for i, c in enumerate(cands) if i not in chosen]
++        if not rest:
++            break
++        rest.sort(key=lambda i: (cands[i]["F"][0], -order.index(cands[i]["stratum"])
++                                 if cands[i]["stratum"] in order else 0))
++        chosen.append(rest[0])
++        left -= 1
++    extra = int(sc.get("explore_extra", 0))
++    if extra > 0:
++        thr = float(sc.get("explore_min_slope", 0.0))
++        pool = [i for i, c in enumerate(cands) if i not in chosen and c["stratum"] in sc["explore_strata"]
++                and c.get("slope") is not None and c["slope"] > thr]
++        pool.sort(key=lambda i: -cands[i]["slope"])
++        chosen.extend(pool[:extra])
++    return chosen
++
++
+ # ─── GPU-memory model (measured on jaci 14/11/2026: Evaluator._evaluate instrumented per phase,
+ # batch 64 @224, torch.cuda.max_memory_allocated; small widths, linear fit in channels) ─────────
+ # Unit: GB per OUTPUT channel of a stride-1 layer at FULL 224x224 input resolution; a layer whose
+@@ -300,18 +380,22 @@ def mem_phases_gb(genome: dict, image_size: int = 224, ref_size: int = 224, *,
+ 
+ def mem_estimate_gb(genome: dict, image_size: int = 224, ref_size: int = 224, *,
+                     n_classes: Optional[int] = None, seeds_per_image: int = 100,
+-                    pool_sizes: Optional[Sequence[int]] = None, softhebb_chunked: bool = False) -> float:
+-    """Estimated peak GPU memory (GB, allocated, x MEM_MARGIN) of one evaluation: max over phases."""
++                    pool_sizes: Optional[Sequence[int]] = None, softhebb_chunked: bool = False,
++                    scale: float = 1.0) -> float:
++    """Estimated peak GPU memory (GB, allocated, x MEM_MARGIN) of one evaluation: max over phases.
++    ``scale`` (v4 ``stratified.mem_scale``): calibration measured on 1699 finished jobs of the v3
++    searches (jaci, 18/11): real peak / estimate = 0.62 median, 0.77 p90, 1.11 p99 -> 0.8 keeps the
++    big models that fit; the rare under-estimates are caught by the OOM fallback ladder."""
+     ph = mem_phases_gb(genome, image_size, ref_size, n_classes=n_classes, seeds_per_image=seeds_per_image,
+                        pool_sizes=pool_sizes, softhebb_chunked=softhebb_chunked)
+-    return float(MEM_MARGIN * max(ph.values()))
++    return float(MEM_MARGIN * float(scale) * max(ph.values()))
+ 
+ 
+ def mem_repair(genome: dict, budget_gb: float, repair: Callable[[dict], dict], *,
+                image_size: int = 224, min_spatial: int = 6, max_iter: int = 64,
+                n_classes: Optional[int] = None, seeds_per_image: int = 100,
+                spifil_choices: Optional[Sequence[int]] = None, pool_sizes: Optional[Sequence[int]] = None,
+-               softhebb_chunked: bool = False) -> dict:
++               softhebb_chunked: bool = False, scale: float = 1.0) -> dict:
+     """Make the genome fit ``budget_gb`` (real GB). Training phases over budget: (1) add
+     max-pooling to the earliest active layer without pooling that still has room (downsampling
+     before widening, as a CNN stem); (2) if no layer can pool, shrink the costliest layer (and
+@@ -322,6 +406,7 @@ def mem_repair(genome: dict, budget_gb: float, repair: Callable[[dict], dict], *
+     kw = dict(n_classes=n_classes, seeds_per_image=seeds_per_image, pool_sizes=pool_sizes,
+               softhebb_chunked=softhebb_chunked)
+     g = repair(genome)
++    budget_gb = float(budget_gb) / max(float(scale), 1e-6)   # v4 calibration (scale 1.0 = v3)
+     for _ in range(max_iter):
+         ph = mem_phases_gb(g, image_size, **kw)
+         if MEM_MARGIN * max(ph.values()) <= budget_gb:
+diff --git a/tests/modehb/test_ga_v4.py b/tests/modehb/test_ga_v4.py
+new file mode 100644
+index 0000000..8bb3eb8
+--- /dev/null
++++ b/tests/modehb/test_ga_v4.py
+@@ -0,0 +1,159 @@
++"""GA v4 (search_v4.yaml): bands B0-B4, directed quotas, per-band promotion, OOM ladder, mem scale, so2 readout."""
++import importlib.util
++from pathlib import Path
++
++import numpy as np
++import pytest
++import torch
++import yaml
++
++from ga_search.modehb import modehb as M
++from ga_search.modehb import strata as S
++
++ROOT = Path(__file__).resolve().parents[2]
++V4 = ROOT / "ga_search/config/modehb/search_v4.yaml"
++
++
++def sc():
++    return S.strat_config(yaml.safe_load(V4.read_text())["stratified"])
++
++
++def test_v4_bands_and_cap():
++    c = sc()
++    assert [n for n, _, _ in c["strata"]] == ["B0", "B1", "B2", "B3", "B4"]
++    assert c["param_cap"] == 5_500_000 and c["strata"][-1][2] == 5_500_000
++    w = S.band_weights(c)
++    assert w["B4"] >= w["B3"] >= w["B2"] >= w["B1"] >= w["B0"]
++    raw = yaml.safe_load(V4.read_text())
++    assert raw["svm_fitness"]["C"] == 100 and raw["svm_fitness"]["scaler"] == "none"
++    assert raw["svm_fitness"]["readout"] == "so2_4096"
++
++
++def test_strata_sorted_from_json_order():
++    c = S.strat_config({"strata": {"huge": [1500000, 3500000], "medium": [800000, 1500000],
++                                   "small": [300000, 800000], "tiny": [0, 300000]}})
++    assert S.names(c) == ["tiny", "small", "medium", "huge"]
++
++
++def test_next_band_targets_underrepresented_large_first():
++    c = sc()
++    assert S.next_band({}, c) == "B4"                      # tie -> largest band
++    counts = {"B0": 2, "B1": 2, "B2": 2, "B3": 3, "B4": 1}
++    assert S.next_band(counts, c) == "B4"
++    # a failed big model is not counted -> the band stays the target
++    assert S.next_band({"B0": 5, "B1": 5, "B2": 5, "B3": 5, "B4": 0}, c) == "B4"
++
++
++def _sel(F, k):
++    return [int(i) for i in M.select_promotions(F, k)]
++
++
++def test_band_promotions_inside_band_and_min_per_band():
++    c = {**sc(), "promote_min_per_band": 1, "explore_extra": 0}
++    rng = np.random.default_rng(0)
++    cands = []
++    for b, q0, fl in [("B0", .60, .1), ("B1", .62, .3), ("B2", .64, .5), ("B3", .66, .7), ("B4", .68, .9)]:
++        for _ in range(4):
++            cands.append({"F": [1 - (q0 + rng.normal(0, .01)), fl + rng.uniform(0, .05)], "stratum": b})
++    # global Pareto would pick only small/cheap ones; per band every band gets >= 1 even with n=1
++    got = S.band_promotions(cands, 1, c, _sel)
++    assert {cands[i]["stratum"] for i in got} == {"B0", "B1", "B2", "B3", "B4"}
++    got = S.band_promotions(cands, 12, c, _sel)
++    per = {b: sum(cands[i]["stratum"] == b for i in got) for b in S.names(c)}
++    assert per["B4"] >= per["B3"] >= per["B0"] and per["B4"] >= per["B1"]
++    assert len(set(got)) == len(got)
++
++
++def test_mem_scale_admits_bigger_models():
++    g = M.initial_population(0, (64,), (4,), image_size=224, min_spatial=6)[0]
++    e1 = S.mem_estimate_gb(g, 224)
++    assert S.mem_estimate_gb(g, 224, scale=0.8) == pytest.approx(0.8 * e1)
++    rep = lambda x: M.repair(x, image_size=224, min_spatial=6)
++    big = rep({**g, "layers": [{**L, "channels": 512} for L in g["layers"]], "depth": 4})
++    budget = 0.9 * S.mem_estimate_gb(big, 224)
++    a = S.mem_repair(big, budget, rep, scale=1.0)
++    b = S.mem_repair(big, budget, rep, scale=0.8)
++    assert S.mem_estimate_gb(a, 224) <= budget + 1e-6
++    assert S.mem_estimate_gb(b, 224, scale=0.8) <= budget + 1e-6
++    assert b == big and a != big          # calibrated: the big model fits untouched
++
++
++class _OOM(RuntimeError):
++    pass
++
++
++_OOM.__name__ = "OutOfMemoryError"
++
++
++def _bare(ladder):
++    m = M.MODEHB.__new__(M.MODEHB)
++    m.strat = {"oom_fallback": ladder, "oom_fast_retries": 1, "oom_retry_sleep_s": 0}
++    m.state = {"jobs": []}
++    m._replay = []
++    return m
++
++
++def test_oom_ladder_bf16_then_ok():
++    calls = []
++
++    def ev(g, f, ctx):
++        calls.append(ctx.get("mem_fallback"))
++        if (ctx.get("mem_fallback") or {}).get("batch_div", 1) < 2:
++            raise _OOM("CUDA out of memory")
++        return {"quality": .7}
++    m = _bare([{"amp_dtype": "bf16"}, {"amp_dtype": "bf16", "batch_div": 2}])
++    m.evaluate_fn = ev
++    r = m._call({}, 5.0, {"cand_id": "c1", "role": "search"})
++    assert r["status"] == "ok" and r["mem_fallback"] == {"amp_dtype": "bf16", "batch_div": 2}
++    assert len(r["oom_attempts"]) == 3 and calls[:2] == [None, None]
++
++
++def test_oom_ladder_exhausted_is_not_penalized():
++    def ev(g, f, ctx):
++        raise _OOM("CUDA out of memory")
++    m = _bare([{"amp_dtype": "bf16"}])
++    m.evaluate_fn = ev
++    r = m._call({}, 5.0, {"cand_id": "c1", "role": "search"})
++    assert r["status"] == "failed" and r["infeasible"] == "oom" and r["penalize"] is False
++
++
++def test_failed_never_enters_subpop_v4():
++    m = M.MODEHB.__new__(M.MODEHB)
++    m.strat = {"skip_failed_in_subpop": True}
++    m.state = {"subpops": {"5.0": []}}
++    m._max_pop = {5.0: 10}
++    m.fidelities = [5.0]
++    m._insert(5.0, {"role": "search", "status": "failed", "cand_id": "c9", "vector": [], "F": [2, 2],
++                    "genome": {}, "job": 0, "stratum": "B4"}, None)
++    assert m.state["subpops"]["5.0"] == []
++
++
++def test_split_loader():
++    from ga_search.modehb.run_search import _SplitLoader
++    dl = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(torch.arange(16.).view(16, 1)), batch_size=8)
++    out = list(_SplitLoader(dl, 2))
++    assert len(out) == 4 and all(b[0].shape[0] == 4 for b in out)
++    assert torch.cat([b[0] for b in out]).flatten().tolist() == list(range(16))
++
++
++def test_so2_readout_matches_reported_reference():
++    ref_p = ROOT / "research/spifil_b0b4/readout_x/eval_backbone_head.py"
++    if not ref_p.exists():
++        pytest.skip("readout_x not present")
++    spec = importlib.util.spec_from_file_location("ebh", ref_p)
++    ref = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(ref)
++    from ga_search.modehb import so2_readout as R
++    torch.manual_seed(0)
++    enc = torch.nn.Sequential(torch.nn.Sequential(torch.nn.Conv2d(3, 96, 3, padding=1), torch.nn.ReLU()),
++                              torch.nn.Sequential(torch.nn.Conv2d(96, 120, 3, stride=2, padding=1), torch.nn.ReLU()))
++    xtr, xva = torch.randn(12, 3, 16, 16), torch.randn(5, 3, 16, 16)
++    r = R.So2Readout(D=4096, n_px=16).fit(enc, xtr, "cpu", bs=4)
++    mom = ref.PixelMoments(16, 0)
++    with torch.no_grad():
++        for i0 in range(0, 12, 4):
++            mom.add(enc(xtr[i0:i0 + 4]), list(range(i0, i0 + 4)))
++        mu, V = mom.pca(88)
++        z_ref = ref.so2_vector(enc(xva), mu, V, 4096)
++    z = r.embed(enc, xva, "cpu", bs=2)
++    assert z.shape == (5, 4096) and torch.allclose(z, z_ref, atol=1e-6)
