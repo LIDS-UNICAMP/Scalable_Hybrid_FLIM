@@ -14,6 +14,7 @@ uma vez só (o checkpoint guarda uma cópia duplicada).
 | spifil_bckprop_L1…L3 | 3 (larvae para na L2) | 3×3 | SLIC (100) |
 | spifil_bckprop5_L1…L5 | 5 (larvae para na L2) | 3×3 | SLIC (100) |
 | spifil_flim_L1…L5 | 5 | 5×5 | DISF (50) |
+| disc_bp01w64c1280_L1…L4 e disc_bp01w64c1280_ssl100_L1…L4 | 4 | 5×5 (L1–L3), 1×1 (L4) | DISF (50) |
 | I-JEPA | ViT | — | — |
 
 **O que muda entre eles**
@@ -22,6 +23,24 @@ uma vez só (o checkpoint guarda uma cópia duplicada).
   vetor de 27.648 números. Só os pesos mudam, pelo backprop.
 - **flim × bckprop5:** o flim usa kernel 5×5 em vez de 3×3 e tem mais filtros. Na L5 ele tem
   290 mil parâmetros, contra 50 mil do bckprop5: quase 6 vezes mais.
+- **disc_bp01w64c1280: uma rede, dois modelos.** São 4 camadas: L1–L3 com kernel 5×5 e max-pool
+  3×3/2 (32, 48 e 64 filtros em eggs e larvae; 30, 48 e 60 no protozoan) e uma L4 de kernel 1×1, sem
+  pooling, com 1280 filtros (400 do SPiFiL em eggs, 100 em larvae, 300 em protozoan, completados com
+  filtros aleatórios até 1280). O encoder tem 200.944 parâmetros (188.468 no protozoan). O **melhor**
+  (`disc_bp01w64c1280`) treina o encoder em cada porcentagem de dados; o **justo**
+  (`disc_bp01w64c1280_ssl100`) treina o encoder sem rótulo em 100% das imagens (o backprop não usa rótulo, mas o SPiFiL que inicializa cada layer usa 1 imagem por classe com máscara), e o SVM recebe só 1%, 5%
+  ou 25% dos rótulos (a porcentagem da tabela é a dos rótulos; o justo não tem 50%, 75% nem 100%).
+  Treino layer por layer, com decoder **novo** a cada layer: conferido nos runs (estágio, checkpoint e
+  run do W&B separados; o decoder é descartado ao carregar a layer seguinte, só `model.encoder.*`
+  passa). Mas as layers antigas **não ficam congeladas**: `layerwise_backprop: 0.1` as treina com
+  learning rate 10 vezes menor, e os pesos mudam de 0,04% a 21% entre estágios, mediana 3,7%. E o checkpoint final
+  **não** vem sem decoder: o da L4 ainda guarda o decoder da L4 (o SVM só lê o encoder, então isso não
+  afeta os resultados). Ressalvas: (i) `protozoan_split3_pct100` parou na época 177 de 200 e foi
+  retomado do checkpoint até a 200 (Lightning, mesmos hiperparâmetros), best final na época 196;
+  (ii) os números são reavaliação pela main: 15 de 53 células L4 diferem do CSV antigo da discovery
+  (até 0,0022) com o mesmo checkpoint, e o código original rodado hoje reproduz o valor novo, então a
+  diferença é da rodada de 02/11, muito provavelmente em Jaci (outra GPU); (iii) a leitura é `gem_tta_pw`, não flatten nem
+  avgpool2d, então comparar com as outras linhas mistura modelo e leitura.
 - **Na L4 e na L5 não há pooling.** No bckprop5 o nº de filtros também não muda (45), então o
   vetor do SVM fica igual ao da L3. No flim os filtros sobem (64, 96), e o vetor cresce junto.
 
@@ -79,21 +98,48 @@ protozoan 7.
 | Pooling | Global average pooling | 96 |
 | Classifier | Linear SVM | N_CLASSES |
 
+**disc_bp01w64c1280** (melhor e justo): os dois modelos dividem a mesma rede, então uma tabela
+serve para os dois; muda só o encoder treinado (em cada porcentagem, ou em 100% sem rótulo) e os
+rótulos que o SVM vê. Cada layer nasce do SPiFiL (DISF 50, uma imagem por classe, com máscara) sobre
+a saída da anterior (a L1, sobre o LAB) e depois é ajustada por backprop; cada uma tem seu decoder
+novo, que reconstrói o LAB por BCE por pixel (fundo com peso 0,1), treinado até 200 épocas por layer, com early stopping de paciência 50 (AdamW, lr 5e-4,
+batch 32, seed 42; 27 de 216 estágios do melhor pararam antes, nas épocas 114 a 196, todos com pct ≤ 75; no justo todos chegaram a 200). Decoders (eggs e larvae | protozoan): L1 19.427 | 17.133 parâmetros, L2 44.131 |
+39.753, L3 95.779 | 89.481, L4 952.099 | 890.121 (parâmetros reais, sem buffers de BatchNorm). Checkpoint pela menor `probe/val_recon_loss`.
+Formas do eggs; no protozoan os filtros são 30-48-60-1280. Depois do whitening PCA o vetor do SVM tem
+min(n_treino, 1280) dimensões; em eggs, de 1% a 100%: 24 / 124 / 636 / 1276 / 1280 / 1280.
+
+| Stage | Operation | Output Shape |
+|---|---|---|
+| Input | LAB image ([0, 1]) | 200 × 200 × 3 |
+| Block 1 | SPiFiL convolution 5×5 + ReLU + max-pool 3×3/2 (backprop) | 99 × 99 × 32 |
+| Block 2 | SPiFiL convolution 5×5 + ReLU + max-pool 3×3/2 (backprop) | 49 × 49 × 48 |
+| Block 3 | SPiFiL convolution 5×5 + ReLU + max-pool 3×3/2 (backprop) | 24 × 24 × 64 |
+| Block 4 | SPiFiL + random convolution 1×1 + ReLU (backprop) | 24 × 24 × 1280 |
+| Pooling | GeM (p=3) over 8 views (flip × rot90) + PCA whitening + L2 (`gem_tta_pw`) | min(n_treino, 1280) |
+| Classifier | Linear SVM | N_CLASSES |
+
 O `layerwise5_flim` está completo no eval flatten (269 camadas). Sem a trava, o larvae chega
 até a L5.
 
 **Leitura rápida**
 
-- **L4 e L5 não ajudam.** Em 100% a L5 fica um pouco abaixo da L3 (eggs 0,927 contra 0,935;
+- **L4 e L5 não ajudam** (nos métodos anteriores ao `disc_bp01w64c1280`). Em 100% a L5 fica um pouco abaixo da L3 (eggs 0,927 contra 0,935;
   protozoan 0,864 contra 0,874). Com pouco dado piora: eggs 5% cai de 0,734 (L1) para 0,546 (L5).
 - **A L1–L3 do layerwise5 repete o layerwise3** (mesmo processo, mesma semente): os números batem
   na terceira casa.
-- **SPiFiL + backprop (estrela vermelha)** fica perto da melhor camada: em eggs 5%, 0,675 contra
+- **SPiFiL + backprop (estrela vermelha)** fica perto da melhor camada dos métodos anteriores ao `disc_bp01w64c1280`: em eggs 5%, 0,675 contra
   0,734 da L1; em protozoan 5% é o melhor dos SPiFiL (0,675).
-- **Com 25% ou mais, SPiFiL + backprop é o melhor dos SPiFiL em eggs e protozoan** (eggs 75%:
+- **Com 25% ou mais, SPiFiL + backprop é o melhor dos SPiFiL em eggs e protozoan, sem contar o `disc_bp01w64c1280`** (eggs 75%:
   0,938 contra 0,930 da flim_L3; protozoan 75%: 0,881 contra 0,877). Em 1% perde feio no eggs
   (0,275 contra 0,436 da L1), e no larvae fica atrás da flim_L3/L4 a partir de 25%.
-- **I-JEPA continua na frente** em todas as células.
+- **I-JEPA continua na frente** de todos os métodos anteriores a `disc_bp01w64c1280`, em todas as células.
+- **disc_bp01w64c1280 passa o I-JEPA com a L4** (leitura `gem_tta_pw`, não comparável 1 para 1). Em
+  100% o melhor tem L4 com eggs 0,967 contra 0,957 do I-JEPA, larvae 0,981 contra 0,950 e protozoan
+  0,952 contra 0,892; em 75% também nos três (0,960, 0,979, 0,942). Com pouco dado perde: em 1% a L4
+  tem eggs 0,268 contra 0,661. O justo (rótulos de 25%) chega a eggs 0,932, larvae 0,961 e protozoan
+  0,908 contra 0,917, 0,919 e 0,831 do I-JEPA, e fica acima do melhor com 25% (0,889, 0,930, 0,897);
+  em 5% passa o I-JEPA em larvae (0,908 contra 0,881) e protozoan (0,823 contra 0,725), mas não em
+  eggs (0,812 contra 0,864). Por isso o negrito muda de linha onde o disc passou o I-JEPA.
 
 ### Gráficos (κ)
 
@@ -108,6 +154,10 @@ até a L5.
 5 camadas, como o FLIM:
 
 ![layerwise5_flim](figs/layerwise5_flim/kappa.png)
+
+4 camadas, rede discovery (`disc_bp01w64c1280`, melhor e justo):
+
+![disc_bp01w64c1280](figs/disc_bp01w64c1280/kappa.png)
 
 ### 1% dos dados
 
@@ -128,6 +178,14 @@ até a L5.
 | spifil_flim_L3 | 0.2878 ± 0.0337 | 0.3536 ± 0.0896 | 0.4808 ± 0.0088 |
 | spifil_flim_L4 | 0.2154 ± 0.0462 | 0.4278 ± 0.1063 | 0.4571 ± 0.0100 |
 | spifil_flim_L5 | 0.1897 ± 0.0255 | 0.4451 ± 0.1660 | 0.4435 ± 0.0088 |
+| disc_bp01w64c1280_L1 | 0.2850 ± 0.0864 | 0.5630 ± 0.0966 | 0.4312 ± 0.0489 |
+| disc_bp01w64c1280_L2 | 0.2858 ± 0.0565 | 0.6602 ± 0.0832 | 0.5210 ± 0.0349 |
+| disc_bp01w64c1280_L3 | 0.2735 ± 0.0859 | 0.5936 ± 0.0888 | 0.4721 ± 0.0285 |
+| disc_bp01w64c1280_L4 | 0.2681 ± 0.0880 | 0.6059 ± 0.0658 | 0.4854 ± 0.0225 |
+| disc_bp01w64c1280_ssl100_L1 | 0.2559 ± 0.0652 | 0.5748 ± 0.0627 | 0.4339 ± 0.0189 |
+| disc_bp01w64c1280_ssl100_L2 | 0.3198 ± 0.1244 | 0.7042 ± 0.1207 | 0.5232 ± 0.0610 |
+| disc_bp01w64c1280_ssl100_L3 | 0.4534 ± 0.0624 | 0.6849 ± 0.1065 | 0.5535 ± 0.0616 |
+| disc_bp01w64c1280_ssl100_L4 | 0.3932 ± 0.0938 | 0.7749 ± 0.0909 | 0.5837 ± 0.0849 |
 | I-JEPA | **0.6608 ± 0.0273** | **0.8216 ± 0.0825** | **0.5855 ± 0.0273** |
 
 ### 5% dos dados
@@ -149,7 +207,15 @@ até a L5.
 | spifil_flim_L3 | 0.6498 ± 0.0593 | 0.6134 ± 0.1152 | 0.6485 ± 0.0361 |
 | spifil_flim_L4 | 0.5768 ± 0.0353 | 0.6321 ± 0.1081 | 0.6270 ± 0.0384 |
 | spifil_flim_L5 | 0.5424 ± 0.0349 | 0.6478 ± 0.1265 | 0.6215 ± 0.0457 |
-| I-JEPA | **0.8639 ± 0.0135** | **0.8807 ± 0.0251** | **0.7251 ± 0.0098** |
+| disc_bp01w64c1280_L1 | 0.6008 ± 0.0483 | 0.7887 ± 0.0372 | 0.5760 ± 0.0506 |
+| disc_bp01w64c1280_L2 | 0.6093 ± 0.0145 | 0.8735 ± 0.0245 | 0.6970 ± 0.0182 |
+| disc_bp01w64c1280_L3 | 0.6326 ± 0.0233 | 0.7989 ± 0.1158 | 0.6654 ± 0.0056 |
+| disc_bp01w64c1280_L4 | 0.6758 ± 0.0306 | 0.8217 ± 0.1045 | 0.7280 ± 0.0090 |
+| disc_bp01w64c1280_ssl100_L1 | 0.6251 ± 0.0526 | 0.8522 ± 0.0414 | 0.6524 ± 0.0337 |
+| disc_bp01w64c1280_ssl100_L2 | 0.6685 ± 0.0459 | 0.8925 ± 0.0468 | 0.7096 ± 0.0353 |
+| disc_bp01w64c1280_ssl100_L3 | 0.7694 ± 0.0189 | 0.9012 ± 0.0260 | 0.7525 ± 0.0170 |
+| disc_bp01w64c1280_ssl100_L4 | 0.8122 ± 0.0180 | **0.9083 ± 0.0133** | **0.8227 ± 0.0226** |
+| I-JEPA | **0.8639 ± 0.0135** | 0.8807 ± 0.0251 | 0.7251 ± 0.0098 |
 
 ### 25% dos dados
 
@@ -170,7 +236,15 @@ até a L5.
 | spifil_flim_L3 | 0.8657 ± 0.0102 | 0.8416 ± 0.0485 | 0.8066 ± 0.0056 |
 | spifil_flim_L4 | 0.8371 ± 0.0208 | 0.8499 ± 0.0598 | 0.7790 ± 0.0158 |
 | spifil_flim_L5 | 0.8213 ± 0.0188 | 0.8373 ± 0.0683 | 0.7718 ± 0.0218 |
-| I-JEPA | **0.9171 ± 0.0138** | **0.9190 ± 0.0005** | **0.8307 ± 0.0023** |
+| disc_bp01w64c1280_L1 | 0.7444 ± 0.0170 | 0.8940 ± 0.0125 | 0.6843 ± 0.0572 |
+| disc_bp01w64c1280_L2 | 0.7820 ± 0.0108 | 0.8926 ± 0.0303 | 0.8037 ± 0.0132 |
+| disc_bp01w64c1280_L3 | 0.8224 ± 0.0109 | 0.9142 ± 0.0166 | 0.8308 ± 0.0059 |
+| disc_bp01w64c1280_L4 | 0.8887 ± 0.0157 | 0.9303 ± 0.0434 | 0.8973 ± 0.0023 |
+| disc_bp01w64c1280_ssl100_L1 | 0.7522 ± 0.0170 | 0.8935 ± 0.0368 | 0.7619 ± 0.0350 |
+| disc_bp01w64c1280_ssl100_L2 | 0.8090 ± 0.0217 | 0.9281 ± 0.0351 | 0.8278 ± 0.0034 |
+| disc_bp01w64c1280_ssl100_L3 | 0.8658 ± 0.0117 | 0.9400 ± 0.0103 | 0.8527 ± 0.0116 |
+| disc_bp01w64c1280_ssl100_L4 | **0.9323 ± 0.0130** | **0.9605 ± 0.0106** | **0.9083 ± 0.0082** |
+| I-JEPA | 0.9171 ± 0.0138 | 0.9190 ± 0.0005 | 0.8307 ± 0.0023 |
 
 ### 50% dos dados
 
@@ -191,7 +265,11 @@ até a L5.
 | spifil_flim_L3 | 0.9094 ± 0.0098 | 0.8474 ± 0.0068 | 0.8544 ± 0.0074 |
 | spifil_flim_L4 | 0.8995 ± 0.0114 | 0.8440 ± 0.0118 | 0.8425 ± 0.0069 |
 | spifil_flim_L5 | 0.8959 ± 0.0063 | 0.8411 ± 0.0167 | 0.8336 ± 0.0079 |
-| I-JEPA | **0.9397 ± 0.0081** | **0.9433 ± 0.0115** | **0.8636 ± 0.0032** |
+| disc_bp01w64c1280_L1 | 0.7986 ± 0.0180 | 0.9149 ± 0.0029 | 0.7230 ± 0.0394 |
+| disc_bp01w64c1280_L2 | 0.8365 ± 0.0086 | 0.9161 ± 0.0334 | 0.8485 ± 0.0181 |
+| disc_bp01w64c1280_L3 | 0.8734 ± 0.0158 | 0.9340 ± 0.0225 | 0.8731 ± 0.0162 |
+| disc_bp01w64c1280_L4 | 0.9333 ± 0.0163 | **0.9681 ± 0.0084** | **0.9278 ± 0.0056** |
+| I-JEPA | **0.9397 ± 0.0081** | 0.9433 ± 0.0115 | 0.8636 ± 0.0032 |
 
 ### 75% dos dados
 
@@ -212,7 +290,11 @@ até a L5.
 | spifil_flim_L3 | 0.9304 ± 0.0051 | 0.8890 ± 0.0180 | 0.8768 ± 0.0082 |
 | spifil_flim_L4 | 0.9212 ± 0.0024 | 0.8946 ± 0.0077 | 0.8596 ± 0.0055 |
 | spifil_flim_L5 | 0.9170 ± 0.0013 | 0.8898 ± 0.0054 | 0.8527 ± 0.0086 |
-| I-JEPA | **0.9455 ± 0.0087** | **0.9410 ± 0.0094** | **0.8817 ± 0.0049** |
+| disc_bp01w64c1280_L1 | 0.8124 ± 0.0319 | 0.9112 ± 0.0195 | 0.7697 ± 0.0261 |
+| disc_bp01w64c1280_L2 | 0.8796 ± 0.0121 | 0.9508 ± 0.0108 | 0.8700 ± 0.0113 |
+| disc_bp01w64c1280_L3 | 0.9044 ± 0.0196 | 0.9438 ± 0.0118 | 0.8933 ± 0.0066 |
+| disc_bp01w64c1280_L4 | **0.9598 ± 0.0055** | **0.9786 ± 0.0014** | **0.9423 ± 0.0016** |
+| I-JEPA | 0.9455 ± 0.0087 | 0.9410 ± 0.0094 | 0.8817 ± 0.0049 |
 
 ### 100% dos dados
 
@@ -233,7 +315,11 @@ até a L5.
 | spifil_flim_L3 | 0.9410 ± 0.0024 | 0.9242 ± 0.0139 | 0.8759 ± 0.0048 |
 | spifil_flim_L4 | 0.9373 ± 0.0053 | 0.9278 ± 0.0126 | 0.8664 ± 0.0014 |
 | spifil_flim_L5 | 0.9320 ± 0.0048 | 0.9353 ± 0.0204 | 0.8652 ± 0.0005 (n=2) |
-| I-JEPA | **0.9574 ± 0.0067** | **0.9495 ± 0.0065** | **0.8917 ± 0.0024** |
+| disc_bp01w64c1280_L1 | 0.8100 ± 0.0092 | 0.9316 ± 0.0136 | 0.7965 ± 0.0324 |
+| disc_bp01w64c1280_L2 | 0.8904 ± 0.0093 | 0.9541 ± 0.0103 | 0.8755 ± 0.0105 |
+| disc_bp01w64c1280_L3 | 0.9219 ± 0.0095 | 0.9457 ± 0.0087 | 0.8946 ± 0.0105 |
+| disc_bp01w64c1280_L4 | **0.9672 ± 0.0055** | **0.9810 ± 0.0054** | **0.9519 ± 0.0040** |
+| I-JEPA | 0.9574 ± 0.0067 | 0.9495 ± 0.0065 | 0.8917 ± 0.0024 |
 
 ## SPiFiL + I-JEPA com avgpool2d
 

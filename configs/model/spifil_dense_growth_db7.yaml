@@ -1,0 +1,103 @@
+# Rede densa (skip + concat) crescida passo a passo pelo SPiFiL — variante com DB7.
+# S..DB6 vem prontos (init_from) dos runs de eggs do spifil_dense_growth.yaml; o H antigo
+# sai, e cresce DB5-DB6-DB7-H: DB7 (k=160, +32 como 96->128) e um H novo sobre 512 canais.
+# Consumido por: python -m src.modules.spifil_dense_growth_module --config <este arquivo>
+#
+# Cada passo nasce do SPiFiL sobre as features da rede congelada ate ali; os passos
+# com train=true ganham um decoder descartavel de resolucao equivalente e treinam
+# so a conv nova + decoder. O encoder de cada estagio e salvo; o decoder nunca.
+#
+# type: stem | dense | transition | head
+#   dense      -> concat(entrada, relu(conv_kxk(entrada)))   out = in + k
+#   stem/transition/head -> relu(conv(entrada)), sem concat     out = out_channels
+architecture:
+  - {name: S,   type: stem,       kernel_size: 3, stride: 2, out_channels: 24}
+  - {name: DB1, type: dense,      kernel_size: 3, stride: 1, growth: 24}
+  - {name: DB2, type: dense,      kernel_size: 3, stride: 1, growth: 32}
+  - {name: TL1, type: transition, kernel_size: 1, stride: 2, out_channels: 64}
+  - {name: DB3, type: dense,      kernel_size: 3, stride: 1, growth: 48}
+  - {name: DB4, type: dense,      kernel_size: 3, stride: 1, growth: 64}
+  - {name: TL2, type: transition, kernel_size: 1, stride: 2, out_channels: 128}
+  - {name: DB5, type: dense,      kernel_size: 3, stride: 1, growth: 96}
+  - {name: DB6, type: dense,      kernel_size: 3, stride: 1, growth: 128}
+  - {name: DB7, type: dense,      kernel_size: 3, stride: 1, growth: 160}
+  - {name: H,   type: head,       kernel_size: 1, stride: 1, out_channels: 1280}
+
+# (canais de saida, resolucao) que a rede montada TEM de reproduzir — checado no build.
+expected_table:
+  S: [24, 100]
+  DB1: [48, 100]
+  DB2: [80, 100]
+  TL1: [64, 50]
+  DB3: [112, 50]
+  DB4: [176, 50]
+  TL2: [128, 25]
+  DB5: [224, 25]
+  DB6: [352, 25]
+  DB7: [512, 25]
+  H: [1280, 25]
+
+# S e so SPiFiL (o protocolo comeca a treinar no DB1).
+train_steps: [DB1, DB2, TL1, DB3, DB4, TL2, DB5, DB6, DB7, H]
+
+# S..DB6 copiados (congelados, sem refit) do experimento base; so DB7 e H crescem aqui.
+init_from:
+  output_root: artifacts/spifil_dense_growth
+  name_suffix: ""
+  upto: DB6
+name_suffix: _db7             # runs: spifil_dense_db7_<ds>_split<s>_pct50
+
+grid:
+  datasets: [eggs]
+  splits: [1, 2, 3]
+  percentage: 50
+
+spifil:
+  # Imagens do treino (50%) por classe de onde sai cada passo. larvae tem 2 classes e
+  # objetos finos: precisa de mais imagens para o H (1280 filtros) achar candidatos.
+  images_per_class: {eggs: 40, larvae: 150, protozoan: 40}
+  # Impurezas ficam fora, como no SPiFiL (README: "excluding impurities").
+  exclude_classes: {eggs: [9], larvae: [], protozoan: [7]}
+  superpixels: disf            # disf (paper) | slic
+  n_superpixels: 50
+  max_candidates: 10000        # teto do conjunto pontuado (Fisher e O(N^2))
+  alpha: 0.5                   # DiversitySelector
+  pool_factor: 3
+  stdev_factor: 0.01
+
+train:
+  batch_size: 32               # M1 (RTX 5080 16 GB): pico 7.9 GB no H com expandable_segments; 64 deixa 6% livre; 128 estoura
+  num_workers: 16
+  max_epochs: 1000
+  patience: 50
+  lr: 5.0e-4
+  weight_decay: 5.0e-2
+  image_size: 200
+  seed: 42
+
+output_root: artifacts/spifil_dense_growth_db7
+
+# Um run W&B por celula (id = nome + hash da config: mesma config continua o run, config nova abre outro).
+# Metricas por estagio: <ESTAGIO>/{train,val}_recon_loss contra <ESTAGIO>/epoch.
+wandb:
+  enabled: true
+  project: journal_02_2026_hybrid_FLIM
+  entity: ophira-ai
+  tags: [journal_02_2026_hybrid_FLIM, spifil_dense_growth, unsupervised, db7]
+
+# Avaliacao: python -m src.evaluate.svm_spifil_dense --config <este arquivo>
+# SVM linear (fit_svm do repo) no GAP de cada estagio salvo; fit no treino (grid.percentage),
+# score no teste. So celulas com run_metadata status ok; linhas ja no CSV sao puladas.
+evaluate:
+  datasets: [eggs]
+  out_csv: results/svm_spifil_dense_db7_results.csv
+  max_iter: -1                 # -1 = solver convergido, como eval_avg_pooling_48d
+  batch_size: 64
+  num_workers: 8
+
+# Execucao da grade (python -m src.modules.spifil_dense_growth_module --config <este arquivo>):
+# uma celula por subprocesso, log em <log_dir>/<dataset>_split<s>.log.
+run:
+  log_dir: logs/spifil_dense_db7
+  concurrency: 1               # M1: 2 celulas = cada epoca 2x mais lenta, sem ganho
+  cuda_alloc_conf: expandable_segments:True   # M1: pico do H 10.6 -> 7.9 GB, mesma velocidade

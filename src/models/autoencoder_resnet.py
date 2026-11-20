@@ -37,6 +37,7 @@ around the embedding, removing exactly the pressure this experiment is testing.
 
 from __future__ import annotations
 
+import math
 from typing import List, Optional, Tuple
 
 import torch
@@ -118,6 +119,35 @@ class ResNetDecoder(nn.Module):
 
         # Emits logits — BCEWithLogitsLoss applies the sigmoid internally.
         self.to_image = nn.Conv2d(channels[1], out_channels, 3, padding=1)
+
+    @classmethod
+    def from_resolution(
+        cls,
+        in_channels: int,
+        in_size: int,
+        out_channels: int = 3,
+        out_size: Tuple[int, int] = (200, 200),
+        min_width: int = 16,
+        max_width: int = 128,
+    ) -> "ResNetDecoder":
+        """Same decoder, starting from an ``in_channels x in_size x in_size`` map.
+
+        One ×2 up-block per halving between ``in_size`` and ``out_size`` (100 -> 1,
+        50 -> 2, 25 -> 3), each halving the width, clamped to ``[min_width, max_width]``.
+        The final ``interpolate`` in ``forward`` absorbs any off-by-one in the sizes.
+        """
+        n_up = max(1, round(math.log2(out_size[0] / in_size)))
+        widths = [in_channels] + [
+            max(min_width, min(max_width, in_channels // 2 ** (i + 1))) for i in range(n_up)
+        ]
+        self = cls.__new__(cls)
+        nn.Module.__init__(self)
+        self.out_size = out_size
+        self.blocks = nn.Sequential(*[
+            ResidualUpBlock(widths[i], widths[i + 1], scale=2) for i in range(n_up)
+        ])
+        self.to_image = nn.Conv2d(widths[-1], out_channels, 3, padding=1)
+        return self
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         out = self.blocks(z)
