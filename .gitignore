@@ -161,3 +161,19 @@ A_reports/2026/august/report_auditoria_figura_kappa_2026-08-03.md
 # Verificado: os 112 YAMLs que moraram em configs/evaluate/mlp/ sao byte-identicos
 # ao que o gerador produz hoje (git log --diff-filter=R mostra o move).
 configs/generated/
+
+# athena 20/11 (higiene): tensores, caches, logs, resultados e backups locais ficam fora do git
+# (pesos *.pt/*.pth/*.ckpt/*.safetensors, *.npy/*.npz/*.pkl, *.log, logs/, wandb/ e /artifacts ja estao acima)
+*.memmap
+*.mmap
+readout_x_cache/
+cache/
+data_cache/
+mlruns/
+*.jsonl
+*.lock
+*.antes_*
+*.stash_*
+*.jaci_ff_*
+*.bak*
+*.com_8M
