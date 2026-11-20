@@ -22,8 +22,9 @@ def main():
     ap.add_argument("--cache", default=str(REPO / "artifacts" / "readout_x_cache"))
     ap.add_argument("--logs", default=str(HERE / "results" / "ga_best_logs"))
     ap.add_argument("--bases", nargs="*", default=ORDER)
+    ap.add_argument("--list", default=str(HERE / "ga_best_list.json"))
     a = ap.parse_args()
-    L = json.loads((HERE / "ga_best_list.json").read_text())
+    L = json.loads(Path(a.list).read_text())
     todo = [(ds, m) for ds in a.bases for m in L["bases"].get(ds, {}).get("models", [])]
     done_ids = set()
     if Path(a.out).is_file():

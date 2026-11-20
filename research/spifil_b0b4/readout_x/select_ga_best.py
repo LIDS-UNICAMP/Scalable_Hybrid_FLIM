@@ -29,13 +29,22 @@ def find(d, k):
     return None
 
 
-def results(search, ds):
-    st = REPO / "artifacts" / search / ds / "state" / "seed42"
+def results(search, ds, st=None, upto=None):
+    # st: pasta do state (padrao .../state/seed42); upto: so os upto primeiros jobs do search_state (fim de bracket)
+    st = Path(st) if st else REPO / "artifacts" / search / ds / "state" / "seed42"
     cfg = st / "config_resolved.yaml"
     if not cfg.is_file():
         return None, []
     c = yaml.safe_load(cfg.read_text())
     strata = find(c, "strata")
+    pc = find(c, "pnas_cs")
+    if strata is None and pc:   # pnas_cs_v4: niveis P0-P4 (faixa so de fallback; vale o estrato do job)
+        b = [0] + list(pc["budgets"])
+        strata = {n: (b[i], b[i + 1]) for i, n in enumerate(pc["level_names"])}
+    ss = st / "search_state.json"   # v4: o estrato e o que a busca gravou no job
+    jobs = json.loads(ss.read_text()).get("jobs", []) if ss.is_file() else []
+    jobs = jobs[:upto] if upto is not None else jobs
+    jst = {(j["cand_id"], int(j["fidelity"])): j.get("stratum") for j in jobs if j.get("status") == "ok"}
     svm_c = (c.get("eval", {}).get("svm_fitness") or {}).get("C")
     rows = []
     for rj in sorted(glob.glob(str(st / "candidates" / "c*" / "*" / "result.json"))):
@@ -48,8 +57,12 @@ def results(search, ds):
         if r.get("status") != "ok" or r.get("fitness_kappa") is None or not enc.is_file():
             continue
         p = int(r["params"])
-        stratum = next((s for s, (lo, hi) in strata.items() if lo <= p < hi), "fora")
         fid = int(rp.parent.name.lstrip("f"))
+        key = (rp.parent.parent.name, fid)
+        if upto is not None and key not in jst:
+            continue
+        stratum = jst.get(key) if jst.get(key) in strata else \
+            next((s for s, (lo, hi) in strata.items() if lo <= p < hi), "fora")
         rows.append({"search": search, "dataset": ds, "cand": rp.parent.parent.name, "fid": fid,
                      "stratum": stratum, "params": p, "kappa_val_search": float(r["fitness_kappa"]),
                      "f1_val_search": r.get("fitness_macro_f1"), "svm_C_search": svm_c,
