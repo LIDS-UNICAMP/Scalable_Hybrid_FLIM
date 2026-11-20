@@ -189,3 +189,9 @@ mlruns/
 *.bak*
 *.stash_*
 *.jaci_ff_*
+
+# imagens geradas (heatmaps, visualizações do GA, curvas W&B, previews)
+preview_crops/
+research/spifil_b0b4/heatmaps_athena/**/*.png
+research/spifil_b0b4/visualize_GA_copia/
+research/spifil_b0b4/wandb_curvas/figures/*.png
