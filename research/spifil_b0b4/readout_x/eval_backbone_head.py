@@ -67,10 +67,7 @@ DISCOVERY = Path("/dados/home/moliveira/Scalable_Hybrid_FLIM_discovery")
 HEADS = ("gap1280", "so2_1280_pca", "so2_4096_pca", "so2_1280_rnd", "so2_4096_rnd",
          "xb_1280_pca", "xb_4096_pca")
 TTA_HEAD = "so2_4096_pca_tta8"            # so com --tta8 (coluna extra; as outras nao mudam)
-TTA2H_HEAD = "so2_4096_pca_tta2h"         # so com --tta2h: identidade + flip horizontal (sem rotacao)
-TTA_BASE = {TTA_HEAD: "so2_4096_pca", TTA2H_HEAD: "so2_4096_pca"}  # cabeca TTA -> cabeca cuja PCA/SVM (treino) ela usa
-# bases com orientacao natural (a foto tem "em pe"): rot90 muda a semantica; o TTA certo e so o flip horizontal
-ORIENTED_DATASETS = {"flowers"}
+TTA_BASE = {TTA_HEAD: "so2_4096_pca"}     # cabeca TTA -> cabeca cuja PCA/SVM (treino) ela usa
 SO2_K = {1280: 48, 4096: 88}          # k + k + k(k+1)/2 <= D (maior k): 1272 / 4092
 RND_SEED = 12345
 PCA_SEED = 0
@@ -108,7 +105,7 @@ def _sqrtm_psd(C):
     return (U * w.clamp(min=0).sqrt()[:, None, :]) @ U.transpose(1, 2)
 
 
-_SO2_DEV = os.environ.get("READOUT_SO2_DEVICE", "cpu")  # "cuda": momentos/cov/eigh em fp64 na GPU (mesma conta, mesma precisão)
+_SO2_DEV = os.environ.get("READOUT_SO2_DEVICE", "cpu")  # "cuda": momentos/cov/eigh em fp64 na GPU (mesma conta, mesma precisão; patch da Jaci 19/11)
 
 
 def _flat(x):
@@ -246,15 +243,6 @@ class Readouts:
                 out[f"xb_{D}_pca"] = xb_vector(blocks, self.pca, D)
         return out
 
-    def tta2h(self, blocks_fn, x, D: int = 4096, blocks_id=None):
-        """so2_{D}_pca com TTA de orientacao preservada: media de 2 vistas (identidade + flip horizontal),
-        mesma PCA e mesma SVM da cabeca so2_{D}_pca. Para bases com orientacao natural (ORIENTED_DATASETS)."""
-        import torch
-        mu, V = self.so2[(D, "pca")]
-        b0 = blocks_id if blocks_id is not None else blocks_fn(x)
-        acc = so2_vector(b0[-1], mu, V, D).double() + so2_vector(blocks_fn(torch.flip(x, dims=(3,)))[-1], mu, V, D).double()
-        return (acc / 2).float()
-
     def tta8(self, blocks_fn, x, D: int = 4096, blocks_id=None):
         """so2_{D}_pca com TTA8: media dos vetores das 8 vistas (rot90 k=0..3 x flip horizontal),
         com a MESMA PCA (treino, sem TTA). A SVM (linear) e a da cabeca so2_{D}_pca; para
@@ -283,6 +271,14 @@ class Wrapped:
             kind, blocks_fn, official_fn, modules, meta)
 
 
+def _free_gpu(model):
+    """19/11: extracao na GPU, SVM na CPU -- solta a memoria da GPU antes das SVMs (as features ja estao em numpy)."""
+    import torch
+    for m in getattr(model, "modules", None) or []:
+        if hasattr(m, "cpu"): m.cpu()
+    if torch.cuda.is_available(): torch.cuda.empty_cache()
+
+
 def _seq_blocks(mods):
     def run(x):
         outs = []
@@ -309,9 +305,25 @@ def file_digest(path, algo="md5"):
     return h.hexdigest()
 
 
-def load_model(kind, ckpt: Path, device):
+def load_model(kind, ckpt: Path, device, init=None):
     import torch
     import torch.nn.functional as F
+    if init == "spifil":           # variante so-SPiFiL: mesma arquitetura, sem treino (spifil_init.py)
+        import spifil_init as SI
+        if kind == "modehb":
+            enc, head, (n0, n1) = SI.spifil_init_modehb(ckpt, device)
+            mods, official = list(enc), (lambda bl: head(bl[-1]))
+        elif kind == "growth":
+            model, (n0, n1) = SI.spifil_init_growth(ckpt, device)
+            mods, official = list(model.blocks), (lambda bl: model.head(bl[-1]))
+        else:
+            enc, (n0, n1) = SI.spifil_init_hybrid(ckpt, device)
+            mods = [getattr(enc, f"conv{n}") for n in range(1, getattr(enc, "n_layers", 3) + 1)]
+            official = lambda bl: F.adaptive_avg_pool2d(bl[-1], 1).flatten(1)
+        if n0 != n1:
+            raise ValueError(f"{ckpt}: arquitetura so-SPiFiL difere do treinado ({n0} != {n1} params)")
+        return Wrapped(kind, _seq_blocks(mods), official, mods, {"variant": "spifil_init", "params": n0,
+                       "exact_width": getattr(mods[0] if kind != "modehb" else enc, "spifil_exact_width", None)})
     if kind == "growth":
         from ga_search.backbones.checkpoint import load_backbone
         res = ckpt.parent / "result.json"
@@ -425,49 +437,15 @@ def load_splits(kind, ckpt: Path, args):
                 "test": (ds.get("eval") or {}).get("final_test_key", "test")}
         size, inorm = int(d.get("image_size", 224)), bool(d.get("imagenet_norm", False))
         out = {}
-        tp = getattr(args, "train_pct", None)
         for s, key in keys.items():
-            if s == "train" and tp:
-                # SVM ajustada em p% do treino (encoder congelado): descritor splits_incremental; val/teste do split da busca
-                dsi = dict(ds, split_json=str(Path(ds["root"]) / "splits_incremental" / f"split{split}" / f"data_descriptor_perc{tp}.json"))
-                samples = existing_data._samples(dsi, tp, split, "train")
-                # só imagens do TREINO da busca (em ham10000 o descritor inclui a val da busca)
-                _full = existing_data._samples(ds, pct, split, key)
-                _tr = {x.name for x in _full}
-                _inc = samples
-                samples = [x for x in _inc if x.name in _tr]
-                if len(samples) < 0.95 * len(_inc):
-                    # nomes da busca dos *_raw = <classe:06d>_<nome raw> (splits/split1_modehb_raw_build.py): casa sem o prefixo
-                    import re as _re
-                    _strip = lambda n: _re.sub(r"^\d{6}_", "", n)
-                    _map = {_strip(x.name): x for x in _full}
-                    # o prefixo de classe só existe nos nomes da BUSCA; o descritor pode já ter o seu próprio prefixo (grupo fino)
-                    _m = [_map[x.name] if x.name in _map else _map[_strip(x.name)] for x in _inc
-                          if x.name in _map or _strip(x.name) in _map]
-                    if len(_m) >= 0.95 * len(_inc):
-                        samples = _m
-                        print(f"[train-pct] descritor mapeado (sem prefixo de classe): {len(samples)}/{len(_inc)}", flush=True)
-                if len(samples) < 0.95 * len(_inc):
-                    # ADAPTAÇÃO: o descritor splits_incremental não é o split da busca (parasitas): amostra
-                    # estratificada semeada (seed 42) de p% do TREINO da busca, por classe, mín. 1 por classe
-                    import random as _rnd
-                    _by = {}
-                    for x in _full: _by.setdefault(x.label, []).append(x)
-                    _g = _rnd.Random(42 + split); samples = []
-                    for _lab in sorted(_by):
-                        _xs = sorted(_by[_lab], key=lambda z: z.name); _g.shuffle(_xs)
-                        samples += _xs[:max(1, round(len(_xs) * tp / 100))]
-                    print(f"[train-pct] ADAPTAÇÃO amostra estratificada {tp}% do treino da busca: {len(samples)}/{len(_full)}", flush=True)
-            else:
-                samples = existing_data._samples(ds, pct, split, key)
+            samples = existing_data._samples(ds, pct, split, key)
             base = ReconstructionDataset(samples, size, inorm)
             if getattr(args, "data_cache", None):
                 base = _Cached(base, Path(args.data_cache))
             out[s] = _Indexed(base, _subset(len(samples), args.max_images))
         sj = ds["split_json"].format(split=split, pct=pct)
-        if tp:
-            split_name = None
-        split_name = (f"{ds.get('name', d.get('dataset'))}/split{split}/pct{tp or pct} "
+        args.inc_dir = Path(ds.get("root", "")) / "splits_incremental" / f"split{split}"   # --train-pcts
+        split_name = (f"{ds.get('name', d.get('dataset'))}/split{split}/pct{pct} "
                       f"[{os.path.relpath(sj, ds.get('root', '/'))} md5={file_digest(sj)[:12]}; "
                       f"cfg={cfg_path.name}]")
         n_classes = int(ds.get("n_classes") or 0) or None
@@ -479,10 +457,33 @@ def load_splits(kind, ckpt: Path, args):
     from core.constants import IMAGE_SIZE, NUM_CLASSES
     from core.data.parasite_dataset import ParasiteDataset
     from core.data.transforms import build_test
-    m = re.search(r"(eggs|larvae|protozoan)_split(\d+)_pct(\d+)", str(ckpt))
+    m = re.search(r"(eggs|larvae|protozoan|flowers|remote_sensing|ham10000|aid|coconut_trees)"
+                  r"_split(\d+)_pct(\d+)", str(ckpt))
     if not m:
         raise ValueError(f"{ckpt}: nao achei <ds>_split<s>_pct<p> no caminho")
     short, split, pct = m[1], int(m[2]), int(m[3])
+    if short not in PARASITE:
+        # bloco copiado de exps/oct_hybrid/code/.../eval_backbone_head.py (precisa --code-root
+        # oct_hybrid/code): mesmas imagens/split 1 das buscas, sha256 conferido; ParasiteDataset/
+        # build_test/ift_lab do treino do hibrido.
+        from oct_hybrid import bases as _oct
+        tf = build_test(IMAGE_SIZE, imagenet_norm=False)
+        out = {}
+        for s in ("train", "validation", "test"):
+            base = ParasiteDataset(set_name=s, split=split, percentage=pct, transform=tf,
+                                   loader="ift_lab", path_dataset=short)
+            out[s] = _Indexed(base, _subset(len(base), args.max_images))
+        sj = get_single_parasite_paths(short, split, pct)[0]["split_json"]
+        sha = file_digest(sj, "sha256")
+        if sha != _oct.BASES[short][2]:
+            raise ValueError(f"{sj}: sha256 != split_sha256 da busca ({short})")
+        args.inc_dir = Path(_oct.search_split_json(short)).parents[1] / "splits_incremental" / f"split{split}"
+        split_name = (f"{short}/split{split}/pct{pct} [busca:{_oct.search_split_json(short)} "
+                      f"sha256={sha[:12]} (=busca)]")
+        with open(sj) as fh:
+            js = json.load(fh)
+        vt = set(js["train"]) == set(js["validation"])
+        return out, short, split_name, NUM_CLASSES[short], vt
     name = PARASITE[short]
     tf = build_test(IMAGE_SIZE, imagenet_norm=False)
     out = {}
@@ -491,6 +492,7 @@ def load_splits(kind, ckpt: Path, args):
                                loader="ift_lab", path_dataset=name)
         out[s] = _Indexed(base, _subset(len(base), args.max_images))
     sj = get_single_parasite_paths(name, split, pct)[0]["split_json"]
+    args.inc_dir = Path(sj).parent                     # --train-pcts: o proprio splits_incremental/split<s> do split
     md5 = file_digest(sj)
     rel = sj.split("data/to_modules/")[-1]
     disc = DISCOVERY / "data" / "to_modules" / rel
@@ -537,8 +539,6 @@ def extract(model: Wrapped, splits, device, args, log=print):
                 out.update(ro(bl, heads))
                 if getattr(args, "tta8", False) and s != "train":   # treino nunca ve TTA
                     out[TTA_HEAD] = ro.tta8(model.blocks, x, blocks_id=bl)
-                if getattr(args, "tta2h", False) and s != "train":
-                    out[TTA2H_HEAD] = ro.tta2h(model.blocks, x, blocks_id=bl)
                 for h, v in out.items():
                     acc.setdefault(h, []).append(v)
                 ys.append(torch.as_tensor(y))
@@ -580,6 +580,130 @@ def score(feats, labels, n_classes=None):
                 rt["svm_s"] = 0.0
                 rows[ht] = rt
     return rows
+
+
+def extract_pct(model, splits, device, args):
+    """% de treino, protocolo da Jaci (--train-pct dela), com UM forward para todos os p: por p, treino =
+    data_descriptor_perc<p>.json (splits_incremental) ∩ treino da busca, em ordem ordenada (= _samples);
+    PCA da so2 SO nesse p% (ultimo bloco, semente de pixel = posicao no subconjunto, como no Readouts);
+    SVM so nesse p%; val/teste = SEMPRE os da busca. -> ({f"{h}@p{p}": linha}, canais)."""
+    import torch
+    base = splits["train"].base
+    names = [os.path.basename(str(getattr(s, "image_path", s))) for s in base.samples]
+    assert splits["train"].keep == list(range(len(base))) and names == sorted(names) or args.kind_hybrid
+    S, sub = set(names), {}
+    for p in args.train_pcts:
+        f = Path(args.inc_dir or "") / f"data_descriptor_perc{p}.json"
+        if not f.is_file():
+            print(f"  [PCT] sem {f}")
+            continue
+        d = set(json.loads(f.read_text())["train"])
+        # treino_p (regra alinhada com a Jaci, 19/11): 1) nomes exatos, se >= 95% do esperado; 2) sem o prefixo
+        # <classe:06d>_ dos *_raw de Eggs/Protozoan (splits/split1_modehb_raw_build.py), se >= 95%; 3) fallback
+        exp = 0.95 * p / 100 * len(names)
+        m, src = np.array([n in d for n in names]), "descritor"
+        if m.sum() < exp:
+            m2 = np.array([re.sub(r"^\d{6}_(?=\d{6}_)", "", n) in d for n in names])
+            if m2.sum() >= exp: m, src = m2, "descritor_mapeado_raw"
+        if m.sum() < exp and hasattr(base.samples[0], "label"):
+            # ADAPTACAO (= Jaci): descritor nao e o split da busca -> amostra estratificada semeada Random(42+split)
+            # de p% do TREINO da busca, por classe, min. 1 por classe; val/teste da busca
+            import random as _rnd
+            by = {}
+            for j, x in enumerate(base.samples): by.setdefault(x.label, []).append((x.name, j))
+            g = _rnd.Random(42 + int(Path(args.inc_dir).name.removeprefix("split"))); m = np.zeros(len(names), bool)
+            for lab in sorted(by):
+                xs = sorted(by[lab]); g.shuffle(xs)
+                m[[j for _n, j in xs[:max(1, round(len(xs) * p / 100))]]] = True
+            src = "fallback_estratificado"
+            print(f"  [PCT] ADAPTACAO p={p}: amostra estratificada {int(m.sum())}/{len(names)} do treino da busca")
+        sub[p] = (m, np.cumsum(m) - 1, f, len(d), src)
+    mom, chans, D = {}, None, 4096
+    with torch.no_grad():
+        for x, _y, idx in _loader(splits["train"], args):            # passe 1: momentos por p
+            bl = model.blocks(x.to(device).float())
+            chans = [b.shape[1] for b in bl]
+            for p, (m, pos, _f, _n, _s) in sub.items():
+                k = [j for j, i in enumerate(idx.tolist()) if m[i]]
+                if k:
+                    mom.setdefault(p, PixelMoments(args.n_px, PCA_SEED + len(bl) - 1)).add(
+                        bl[-1][k], [int(pos[int(idx[j])]) for j in k])
+        pca = {p: mo.pca(max(SO2_K.values())) for p, mo in mom.items()}    # = Readouts.fit (k=88)
+        feats, labels = {}, {}
+        for s in ("train", "validation", "test"):                          # passe 2: cabecas por p
+            acc, ys = {}, []
+            for x, y, _idx in _loader(splits[s], args):
+                x = x.to(device).float()
+                bl = model.blocks(x)
+                acc.setdefault("gap1280", []).append(model.official(bl).float().cpu())
+                for p, (mu, V) in pca.items():
+                    acc.setdefault(f"so2_4096_pca@p{p}", []).append(so2_vector(bl[-1], mu, V[:, :SO2_K[D]], D))
+                if getattr(args, "tta8", False) and s != "train":   # = Readouts.tta8, uma vista por vez p/ todos os p
+                    tacc = {}
+                    for flip in (False, True):
+                        xf = torch.flip(x, dims=(3,)) if flip else x
+                        for k in range(4):
+                            bv = bl if (k == 0 and not flip) else model.blocks(torch.rot90(xf, k, dims=(2, 3)))
+                            for p, (mu, V) in pca.items():
+                                z = so2_vector(bv[-1], mu, V[:, :SO2_K[D]], D).double()
+                                tacc[p] = z if p not in tacc else tacc[p] + z
+                    for p, z in tacc.items():
+                        acc.setdefault(f"{TTA_HEAD}@p{p}", []).append((z / 8).float())
+                ys.append(torch.as_tensor(y))
+            feats[s] = {h: torch.cat(v).numpy() for h, v in acc.items()}
+            labels[s] = torch.cat(ys).numpy()
+    del pca, mom
+    _free_gpu(model)
+    out = {}
+    for p, (m, _pos, f, n_desc, src) in sub.items():
+        ix = np.flatnonzero(m)
+        hk = {"gap1280": "gap1280", "so2_4096_pca": f"so2_4096_pca@p{p}", TTA_HEAD: f"{TTA_HEAD}@p{p}"}
+        sf = {s: {h: feats[s][k][ix] if s == "train" else feats[s][k] for h, k in hk.items() if k in feats[s]}
+              for s in feats}
+        sl = {s: labels[s][ix] if s == "train" else labels[s] for s in labels}
+        try:
+            res = score(sf, sl)
+        except Exception as e:                 # ex.: 1 classe so no p=1
+            print(f"  [PCT] p={p} falhou: {e!r}")
+            continue
+        for h, r in res.items():
+            out[f"{h}@p{p}"] = {**r, "head": h, "pct": p, "n_train": len(ix), "n_desc": n_desc,
+                                "desc": str(f), "desc_md5": file_digest(f), "pct_source": src}
+    return out, chans
+
+
+FM_SPLIT = {"ham10000": "split1_modehb.json"}             # split da busca (o resto: split1.json)
+ORGANIZED = Path("/dados/home/moliveira/datasets/organized")
+
+
+def fm_pct(npz, args):
+    """Foundation model (DINOv2/I-JEPA/AIMv2/ConvNeXt/ResNet-50): embedding congelado JA extraido pelo
+    benchmark da discovery (/exps/moliveira/benchmark/emb/<modelo>/<ds>.npz: X, y, names). So a leitura
+    nativa do FM ("fm_emb": CLS/GAP do proprio modelo); sem mapas -> sem so2. Mesmo protocolo de %:
+    treino = descritor ∩ treino da busca (ordenado), val/teste = os da busca, SVM original."""
+    z = np.load(npz)
+    ds = npz.stem
+    sj = ORGANIZED / ds / "splits" / FM_SPLIT.get(ds, "split1.json")
+    busca = json.loads(sj.read_text())
+    row = {str(n): i for i, n in enumerate(z["names"])}
+    pick = lambda ns: np.array([row[n] for n in sorted(ns)])
+    feats = {s: {"fm_emb": z["X"][pick(busca[s])]} for s in ("validation", "test")}
+    labels = {s: z["y"][pick(busca[s])] for s in ("validation", "test")}
+    tr = set(busca["train"])
+    out = {}
+    for p in args.train_pcts:
+        f = ORGANIZED / ds / "splits_incremental" / "split1" / f"data_descriptor_perc{p}.json"
+        if not f.is_file():
+            continue
+        d = set(json.loads(f.read_text())["train"])
+        ix = pick(d & tr)
+        res = score({"train": {"fm_emb": z["X"][ix]}, **feats}, {"train": z["y"][ix], **labels})
+        for h, r in res.items():
+            out[f"{h}@p{p}"] = {**r, "head": h, "pct": p, "n_train": len(ix), "n_desc": len(d),
+                                "desc": str(f), "desc_md5": file_digest(f)}
+    split_name = f"{ds}/split1 [{sj.name} md5={file_digest(sj)[:12]}; emb={npz}]"
+    return out, ds, split_name, {s: [0] * n for s, n in (("train", len(tr)), ("validation", len(labels["validation"])),
+                                                          ("test", len(labels["test"])))}
 
 
 # ───────────────────────────────────────────────────────────── presets
@@ -711,36 +835,43 @@ def main(argv=None):
     ap.add_argument("--n-px", type=int, default=64, help="pixels amostrados por imagem de treino (PCA)")
     ap.add_argument("--max-images", type=int, default=None, help="SO smoke: limita cada split")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--train-pct", type=int, default=None, help="SVM ajustada em p%% do treino (splits_incremental); val/teste fixos")
     ap.add_argument("--heads", nargs="*", default=None,
                     help="subconjunto de HEADS a calcular (default: todas, como antes)")
-    ap.add_argument("--tta2h", action="store_true",
-                    help=f"acrescenta {TTA2H_HEAD}: so2_4096_pca com TTA identidade+flip horizontal (sem rotacao), "
-                         "o TTA correto para bases com orientacao natural (ex.: flowers)")
     ap.add_argument("--tta8", action="store_true",
                     help=f"acrescenta {TTA_HEAD}: so2_4096_pca com TTA8 (rot90 x flip) so em val/teste; "
                          "PCA e SVM do treino sem TTA (as outras cabecas nao mudam)")
     ap.add_argument("--data-cache", default=None, help="dir de cache memmap fp32 dos splits (modehb/growth)")
+    ap.add_argument("--train-pcts", nargs="*", type=int, default=None,
+                    help="SVM em p%% do treino (splits_incremental); grava so as linhas por pct")
     args = ap.parse_args(argv)
     if args.heads:
         bad = set(args.heads) - set(HEADS)
         if bad:
             raise SystemExit(f"--heads desconhecidas: {sorted(bad)}")
     args.heads_active = tuple(args.heads) if args.heads else None
-    want = list(args.heads_active or HEADS) + ([TTA_HEAD] if args.tta8 else []) + ([TTA2H_HEAD] if getattr(args, "tta2h", False) else [])
-    if args.tta8 and "so2_4096_pca" not in want:
+    want = list(args.heads_active or HEADS) + ([TTA_HEAD] if args.tta8 else [])
+    if args.train_pcts:
+        want = [f"{h}@p{p}" for p in args.train_pcts for h in want]
+    if args.tta8 and "so2_4096_pca" not in (args.heads_active or HEADS):
         raise SystemExit("--tta8 exige a cabeca so2_4096_pca")
 
     if args.table:
         write_table(Path(args.out), Path(args.table_md))
         return
     _setup_path(Path(args.code_root))
+    # SIGSEGV no jemalloc_bg_thd do libarrow (vem com o sklearn->pandas) nas variantes so-SPiFiL:
+    # desliga a thread de fundo do jemalloc do arrow (antes do import do sklearn)
+    os.environ.setdefault("JE_ARROW_MALLOC_CONF", "background_thread:false")
     import torch
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.manual_seed(0)
+    if (socket.gethostname() == "athena" and os.environ.get("CUDA_VISIBLE_DEVICES") in ("2", "3")
+            and args.device.startswith("cuda")):   # athena 2/3 dividem placa com treino: teto duro
+        # 12 GiB: pico medido ate ~9 GB (fit SPiFiL da variante 8,7; ham10000 growth B1g0c00 > 8)
+        torch.cuda.set_per_process_memory_fraction(12 * 2**30 / torch.cuda.get_device_properties(0).total_memory)
 
     items = [parse_item(s) for s in args.item] + (preset_table(args) if args.preset else [])
     if args.only:
@@ -760,7 +891,8 @@ def main(argv=None):
         for l in out.read_text().splitlines():
             if l.strip():
                 r = json.loads(l)
-                done.add((r["backbone_id"], r["ckpt"], r.get("max_images"), r["head"]))
+                done.add((r["backbone_id"], r["ckpt"], r.get("max_images"),
+                          r["head"] + (f"@p{r['pct']}" if "pct" in r else "")))
     device = torch.device(args.device)
     gpu = torch.cuda.get_device_name(device) if device.type == "cuda" else ""
     for it in items:
@@ -771,14 +903,26 @@ def main(argv=None):
         t0 = time.time()
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
-        model = load_model(it["kind"], ckpt, device)
-        splits, dataset, split_name, n_classes, val_is_train = load_splits(it["kind"], ckpt, args)
-        if val_is_train:
-            print(f"  [AVISO] {it['id']}: validation == train no descritor -> kappa_val e de TREINO")
-        print(f"[RUN] {it['id']} | {dataset} | {split_name} | n="
-              f"{[len(splits[s]) for s in ('train', 'validation', 'test')]}")
-        feats, labels, chans = extract(model, splits, device, args)
-        res = score(feats, labels, n_classes)
+        if it["kind"] == "fm":                                 # embedding de FM ja extraido (so CPU)
+            res, dataset, split_name, labels = fm_pct(ckpt, args)
+            want = [f"fm_emb@p{p}" for p in args.train_pcts]
+            model, feats, chans, val_is_train = type("M", (), {"meta": {"fm": ckpt.parent.name}})(), None, None, False
+        else:
+            model = load_model(it["kind"], ckpt, device, it.get("init"))
+        if it["kind"] != "fm":
+            splits, dataset, split_name, n_classes, val_is_train = load_splits(it["kind"], ckpt, args)
+            if val_is_train:
+                print(f"  [AVISO] {it['id']}: validation == train no descritor -> kappa_val e de TREINO")
+            print(f"[RUN] {it['id']} | {dataset} | {split_name} | n="
+                  f"{[len(splits[s]) for s in ('train', 'validation', 'test')]}")
+            if args.train_pcts:
+                args.kind_hybrid = it["kind"] == "hybrid"
+                res, chans = extract_pct(model, splits, device, args)
+                feats, labels = None, {s: [0] * len(splits[s]) for s in splits}
+            else:
+                feats, labels, chans = extract(model, splits, device, args)
+                _free_gpu(model)
+                res = score(feats, labels, n_classes)
         peak = torch.cuda.max_memory_allocated(device) / 1e9 if device.type == "cuda" else 0.0
         md5 = file_digest(ckpt)
         with out.open("a") as fh:
@@ -786,12 +930,13 @@ def main(argv=None):
                 if h not in res or (it["id"], str(ckpt), args.max_images, h) in done:
                     continue
                 r = res[h]
-                row = {"backbone_id": it["id"], "kind": it["kind"], "dataset": dataset,
-                       "split_name": split_name, "head": h, "dim": r["dim"],
+                row = {"backbone_id": it["id"].removesuffix("__pct") + (f"_p{r['pct']}" if "pct" in r else ""),
+                       "kind": it["kind"], "dataset": dataset,
+                       "split_name": split_name, "head": r.get("head", h), "dim": r["dim"],
                        "kappa_val": r["kappa_val"], "f1_val": r["f1_val"],
                        "kappa_test": r["kappa_test"], "f1_test": r["f1_test"],
                        "acc_val": r["acc_val"], "acc_test": r["acc_test"],
-                       "n_train": len(labels["train"]), "n_val": len(labels["validation"]),
+                       "n_train": r.get("n_train", len(labels["train"])), "n_val": len(labels["validation"]),
                        "n_test": len(labels["test"]), "ckpt": str(ckpt), "md5": md5,
                        "torch": torch.__version__, "host": socket.gethostname(), "gpu": gpu,
                        "tempo": round(time.time() - t0, 1), "pico_gpu_gb": round(peak, 3),
@@ -800,7 +945,12 @@ def main(argv=None):
                        "svm_from_head": r.get("svm_from_head"),
                        "precision": "fp32_noautocast_notf32", "max_images": args.max_images,
                        "val_is_train": bool(val_is_train),
-                       "never_feeds_fitness": True, "meta": model.meta}
+                       "never_feeds_fitness": True, "meta": model.meta,
+                       "item": {k: v for k, v in it.items() if k not in ("id", "kind", "ckpt")}}
+                if "pct" in r:
+                    row.update(pct=r["pct"], n_train_descritor=r["n_desc"], descritor=r["desc"],
+                               descritor_md5=r["desc_md5"], split=1 if "split1" in r["desc"] else None,
+                               pct_source=r.get("pct_source", "descritor"))
                 fh.write(json.dumps(row, default=str) + "\n")
                 print(f"  [RESULT] {it['id']} {h:<13} dim={r['dim']:<5} "
                       f"k_val={r['kappa_val']:+.4f} k_test={r['kappa_test']:+.4f} "

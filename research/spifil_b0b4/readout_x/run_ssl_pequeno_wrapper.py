@@ -3,7 +3,7 @@ import sys, runpy, builtins, os, numpy as np
 R='/dados/home/moliveira/Scalable_Hybrid_FLIM/artifacts/external_ssl_pequeno'
 _open=builtins.open
 def fix(f):
-    if isinstance(f,(str,os.PathLike)) and os.fspath(f).startswith('/exps/moliveira/encoders/ssl_pequeno/'):
+    if isinstance(f,(str,os.PathLike)) and os.fspath(f).startswith('/exps/moliveira/encoders/ssl_pequeno/') and not os.path.exists(f):  # athena: o original existe
         f=os.fspath(f); import re as _re; m=_re.search(r'/([a-z0-9_]+_split\d+_pct\d+)/(.*)$',f); return f"{R}/{m.group(1)}/L0/{m.group(2)}"
     return f
 def op(f,*a,**k):
